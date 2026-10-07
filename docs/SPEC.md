@@ -856,7 +856,8 @@ eventually pin (T1).
   README, guide and issue templates and the example fleets in place. It
   never writes into a directory that is not empty, and `--check` runs the
   written tree's own suite. The tree carries the Apache License 2.0 verbatim,
-  a NOTICE and CONTRIBUTING.md, or the scan refuses it (D68).
+  a NOTICE, CONTRIBUTING.md, a CODEOWNERS naming the owner and a workflow
+  that runs the suite on every pull request, or the scan refuses it (D68).
 
 ## R — the readout
 
