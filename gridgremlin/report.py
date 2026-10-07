@@ -764,6 +764,17 @@ def settle_quote(venue, symbol):
                  if str(symbol).endswith(c)), 'quote')
 
 
+def money_units(venue, market_type, symbol):
+    """U53: {quote, margin_coin} — the coin a bot's money figures are in
+    (capital, notional, loss, P&L) and the coin the venue's margin on its
+    position is in. Linear and spot: the settle quote for both. Inverse:
+    dollars for the money ($1 contracts, A4), the base coin for margin."""
+    if market_type == 'inverse':
+        return {'quote': 'USD', 'margin_coin': base_coin(symbol)}
+    q = settle_quote(venue, symbol)
+    return {'quote': q, 'margin_coin': q}
+
+
 def _market_for(key_of, venue_of, now_ms):
     """D67: the newest kept market reading beside each bot; a store that
     cannot be read is said once and the cards carry nothing."""
@@ -923,7 +934,12 @@ def main(argv):
                         'strategy': cfg.get('strategy', 'grid'),
                         'spot_borrow': bool(cfg.get('spot_borrow')),
                         'multiplier': cfg.get('order_size_multiplier'),
-                        'add_ons': cfg.get('max_averaging_orders')}
+                        'add_ons': cfg.get('max_averaging_orders'),
+                        # U53: what the money is counted in — an inverse
+                        # row's capital and notional are dollars ($1
+                        # contracts) and its margin is the coin itself
+                        **money_units(cfg['venue'], cfg['market_type'],
+                                      cfg['symbol'])}
         if cfg.get('strategy') == 'martingale':          # U52: the ladder's sum
             from .ladder import ladder_summary
             terms[botid]['ladder'] = ladder_summary(cfg)

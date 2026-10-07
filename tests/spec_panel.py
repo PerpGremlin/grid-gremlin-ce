@@ -614,9 +614,9 @@ def spec_U50_the_exchange_boxes_ride_in_a_strip_pinned_to_the_top():
     strip = strip.split('<div class="hero">', 1)[1]
     assert strip.count('<div class="fleet">') == 2 and strip.index('>demo<') < strip.index('>hl<')
     demo, hl = strip.split('<div class="fleet">')[1:]
-    assert 'href="#fleet0"' in demo and '<span class="big num neg">-1.86</span>' in demo
+    assert 'href="#fleet0"' in demo and '<span class="big num neg">-1.86 <span class="dim">USDT</span></span>' in demo
     assert '>1 bots</span><span></span><span class="dim">leverage —</span>' in demo
-    assert 'href="#fleet1"' in hl and '<span class="big num pos">+13.10</span>' in hl
+    assert 'href="#fleet1"' in hl and '<span class="big num pos">+13.10 <span class="dim">USDT</span></span>' in hl
     assert '<b class="neg num">1 dead</b><span class="dim">leverage 2.78x</span>' in hl
     assert '.hero{display:grid;grid-template-columns:repeat(6,max-content)' in CSS   # squared
     assert '.hero .fleet{display:contents}' in CSS
@@ -685,6 +685,51 @@ def spec_U52_a_dca_card_folds_its_ladder_and_says_the_drop_it_covers():
     assert page.index('<summary>the numbers') < page.index('<summary>the ladder')
     assert '<tr><td>the ladder</td>' in KEY
     assert ':ladder"' not in render([('demo', CONTRACT)])         # a grid has none
+
+
+def spec_U53_every_money_figure_names_its_coin():
+    """The owner, reading PEPE's card: "investment 2,000 at 50x · up to
+    96,000 in the market" — in what? Every money figure says: the settle
+    coin for linear and spot, dollars and the coin for an inverse row."""
+    import copy
+    from gridgremlin.report import money_units
+    from panel.server import render, units_of, venue_money
+    assert money_units('bybit', 'linear', 'BTCUSDT') == {'quote': 'USDT', 'margin_coin': 'USDT'}
+    assert money_units('bybit', 'linear', 'BTCPERP') == {'quote': 'USDC', 'margin_coin': 'USDC'}
+    assert money_units('hyperliquid', 'linear', 'BTC') == {'quote': 'USDC', 'margin_coin': 'USDC'}
+    assert money_units('bybit', 'inverse', 'BTCUSD') == {'quote': 'USD', 'margin_coin': 'BTC'}
+    assert money_units('bybit', 'spot', 'ADAUSDT') == {'quote': 'USDT', 'margin_coin': 'USDT'}
+    assert units_of('linBTCl', {'quote': 'USDC', 'margin_coin': 'USDC'}) == ('USDC', 'USDC')
+    assert units_of('spoADAUSDTl', None) == ('USDT', 'USDT')      # from the name
+    assert units_of('invBTCUSDl', None) == ('USD', 'BTC')
+    c = copy.deepcopy(CONTRACT)
+    c['terms'] = {'spoADAUSDTl': {'capital': 3000.0, 'leverage': 1.0, 'market_type': 'spot',
+                                  'strategy': 'grid', 'quote': 'USDT', 'margin_coin': 'USDT'}}
+    c['watchdog']['belief']['bots']['spoADAUSDTl'] = {
+        'alive': True, 'position': 910.57, 'loss': {'limit': 50.0, 'result': -12.4},
+        'margin': {'im': 300.0, 'mm': 15.0, 'leverage': 1.0, 'liq': None}}
+    page = render([('demo', c)])
+    assert '<span class="big neg">-1.86</span> USDT <span class="dim">after fees' in page
+    assert 'worth 183.662 USDT' in page and 'cost 188.488 USDT' in page
+    assert 'margin IM 300.00 USDT · MM 15.00 USDT' in page
+    assert 'investment 3,000 USDT' in page
+    assert 'loss limit: down 12.40 of 50 USDT' in page
+    assert 'this exchange</span> <span class="big neg">-1.86</span> USDT <span' in page
+    assert '<span class="big num neg">-1.86 <span class="dim">USDT</span></span>' in page
+    inv = copy.deepcopy(CONTRACT)                 # a margin held in the coin itself
+    inv['bots']['invBTCUSDl'] = dict(inv['bots'].pop('spoADAUSDTl'), inverse=True,
+                                     position=11424.0, avg_cost=84696.5, mark=85000.0)
+    inv['watchdog']['belief']['bots']['invBTCUSDl'] = {
+        'alive': True, 'position': 11424.0,
+        'margin': {'im': 0.013488, 'mm': 0.001214, 'leverage': 10.0, 'liq': None}}
+    assert 'margin IM 0.013488 BTC · MM 0.001214 BTC' in render([('demo', inv)])
+    assert venue_money({'terms': {'a': {'quote': 'USDT'}, 'b': {'quote': 'USDC'}}}) == 'USDC/USDT'
+    assert venue_money({'bots': {'linBTCl': None}, 'terms': {'linBTCl': {'quote': 'USDC'}}}) == 'USDC'
+    assert 'size and committed in USDT' in render([('demo', dict(
+        CONTRACT, terms={'spoADAUSDTl': {'strategy': 'martingale', 'quote': 'USDT',
+                                         'ladder': [{'step': 0, 'fill_pct': 0.0, 'notional': 1.0,
+                                                     'committed': 1.0, 'avg_pct': 0.0,
+                                                     'to_tp_pct': 0.01}]}}))])
 
 
 def spec_V10_a_card_says_when_the_price_has_left_the_range():
@@ -796,12 +841,12 @@ def spec_X14_the_card_shows_how_much_of_the_loss_limit_is_used():
     c.setdefault('watchdog', {}).setdefault('belief', {}).setdefault(
         'bots', {})['spoADAUSDTl'] = row['bots']['spoADAUSDTl']
     html = render([('demo', c)])
-    assert 'loss limit: down 12.40 of 50 (25% used)' in html
+    assert 'loss limit: down 12.40 of 50 USDT (25% used)' in html
     c['watchdog']['belief']['bots']['spoADAUSDTl']['loss']['result'] = -40.0
-    assert '<div class="neg">loss limit: down 40.00 of 50 (80% used)' \
+    assert '<div class="neg">loss limit: down 40.00 of 50 USDT (80% used)' \
         in render([('demo', c)])
     c['watchdog']['belief']['bots']['spoADAUSDTl']['loss']['result'] = 7.0
-    assert 'loss limit: down 0.00 of 50 (0% used)' in render([('demo', c)])
+    assert 'loss limit: down 0.00 of 50 USDT (0% used)' in render([('demo', c)])
     assert 'loss limit' not in render([('demo', CONTRACT)])
 
 
@@ -1026,17 +1071,17 @@ def spec_U16_a_card_states_its_investment_and_leverage():
     c['terms'] = {'spoADAUSDTl': {'capital': 3000.0, 'leverage': 1.0,
                                   'notional': 3000.0}}
     page = render([('demo', c)])
-    assert ('investment 3,000 · up to 3,000 in the market') in page
+    assert ('investment 3,000 USDT · up to 3,000 USDT in the market') in page
     assert 'x</b>' not in page                        # 1x is not said
     c['terms']['spoADAUSDTl'] = {'capital': 2000.0, 'leverage': 10.0,
                                  'notional': 20000.0}
     page = render([('demo', c)])
-    assert 'investment 2,000 at <b>10x</b> · up to 20,000 in the market' \
+    assert 'investment 2,000 USDT at <b>10x</b> · up to 20,000 USDT in the market' \
         in page
     assert 'investment' not in render([('demo', CONTRACT)])   # no terms: none
     c['terms']['spoADAUSDTl'] = {'capital': 46600.0, 'leverage': 75.0,
                                  'notional': 3495000.0}
-    assert 'investment 46,600 at <b>75x</b> · up to 3,495,000 in the market' \
+    assert 'investment 46,600 USDT at <b>75x</b> · up to 3,495,000 USDT in the market' \
         in render([('demo', c)])                      # never 3.5e+06
 
 
@@ -1058,11 +1103,11 @@ def spec_V14_a_card_shows_the_exchanges_margin_on_the_position():
     c.setdefault('watchdog', {}).setdefault('belief', {}).setdefault(
         'bots', {})['spoADAUSDTl'] = row['bots']['spoADAUSDTl']
     page = render([('demo', c)])
-    assert 'margin IM 1,842.50 · MM 92.10 · at 10x on the exchange' in page
+    assert 'margin IM 1,842.50 USDT · MM 92.10 USDT · at 10x on the exchange' in page
     B.margin_view = {'im': 300.0, 'mm': None, 'leverage': None}   # HL's shape
     row = snapshot_row([B()], {'equity': 1.0, 'mm_rate': 0.0}, 0)
     c['watchdog']['belief']['bots']['spoADAUSDTl'] = row['bots']['spoADAUSDTl']
-    assert '>margin IM 300.00</div>' in render([('demo', c)])
+    assert '>margin IM 300.00 USDT</div>' in render([('demo', c)])
     B.margin_view = None                                          # flat
     assert 'margin' not in snapshot_row([B()], {'equity': 1.0,
                                                 'mm_rate': 0.0}, 0)['bots'][
@@ -1078,11 +1123,11 @@ def spec_U44_a_holding_is_said_in_coins_value_and_cost():
     assert coin_of('invETHUSDl') == 'ETH' and coin_of('linSOLl') == 'SOL'
     assert coin_of('linFARTCOINUSDTl') == 'FARTCOIN'
     h = holding_html(2.0, 80000.0, 85000.0, 'linBTCUSDTl')
-    assert '2 BTC' in h and 'worth 170,000' in h and 'cost 160,000' in h
+    assert '2 BTC' in h and 'worth 170,000 USDT' in h and 'cost 160,000 USDT' in h
     s = holding_html(-1.5, 2700.0, 2800.0, 'linETHUSDTs')
-    assert '-1.5 ETH' in s and 'worth 4,200' in s
+    assert '-1.5 ETH' in s and 'worth 4,200 USDT' in s
     inv = holding_html(8000.0, 80000.0, 100000.0, 'invBTCUSDl', inverse=True)
-    assert '0.08 BTC' in inv and 'worth 8,000' in inv and '(0.1 BTC)' in inv
+    assert '0.08 BTC' in inv and 'worth 8,000 USD' in inv and '(0.1 BTC)' in inv
     assert holding_html(0.0, 0.0, 1.0, 'linBTCUSDTl') == 'holding nothing'
     page = render([])
     assert "ggSize('coin')" in page and '<h3>size in</h3>' in page
