@@ -538,6 +538,15 @@ eventually pin (T1).
   fills' net, the wallet's balance of the coin) unless the row states
   `assumed_avg_entry`; an unexplained rise of half a lot freezes orders until
   the fill is listed (G26's class), and past RUNGS_LAG_CYCLES is said once.
+- **V6c** A stated holding is the book's start (D76): with `holding` and
+  `holding_since` (together, spot only, `holding_since_ms` derived), the
+  bot's own count is that figure plus its link-attributed fills from that
+  moment, never the thirty-day walk; the wallet stays the ceiling; it wins
+  over `assumed_avg_entry`'s adoption of the wallet. The readout carries, per
+  such bot, the wallet balance, the book, the difference, the inverse books'
+  coin P&L less fees since the moment (from the kept ledger) and the
+  unexplained rest; the card says it, red when more than half is
+  unexplained. The form stamps the moment when the holding is set.
 - **V14** The truth carries the venue's own margin on a position: `position_im`
   and `position_mm` (Bybit's positionIM / positionMM; Hyperliquid's marginUsed as
   the initial figure and no maintenance figure, which is said as None). The bot
@@ -879,6 +888,32 @@ eventually pin (T1).
   written tree's own suite. The tree carries the Apache License 2.0 verbatim,
   a NOTICE, CONTRIBUTING.md, a CODEOWNERS naming the owner and a workflow
   that runs the suite on every pull request, or the scan refuses it (D68).
+  The testers' runbook (`docs/public/RUNBOOK.md`) stands where the private
+  one does, so F28 holds in the exported tree too.
+- **F24** The dead-man's switch (D74). At the end of every completed watchdog
+  run — breached or not, paged or not — one GET to `DEADMAN_URL` when `.env`
+  names it; the outside check alarms when the pings stop. A failed ping is
+  one printed line and never a failed run; no URL, no ping.
+- **F25** A filling disk is a breach (D74). The watchdog judges the used
+  fraction of the volume its snapshot lives on against `disk_used_max`, 85%
+  unless the config says otherwise, before it reads the snapshot at all; an
+  unknown usage judges nothing. It pages and re-pages like every breach.
+- **F26** Retention (D74). A log under `logs/archive/` not modified within a
+  day is compressed in place, the .gz replacing it only once written whole;
+  kept, never deleted; anything that is not a log is left alone. Snapshot
+  files stay one history, never rotated (F11); the disk alarm (F25) is what
+  watches their growth.
+- **F27** The pull backup (D74), on the workstation: once a day, over the ssh
+  alias already in use, `logs/`, `configs/` and `.env` (mode kept) into
+  `DEST/<UTC date>/`, hard-linked against `DEST/latest` so an unchanged file
+  costs nothing; `latest` moves; the newest `KEEP` days stay; the destination
+  is the owner's alone (mode 700). Settings come from one file and never from
+  the script, which refuses to run without them.
+- **F28** The runbook (`docs/RUNBOOK.md`, D75) names what exists: every unit
+  the templates in `ops/systemd/` render (by its `grid-gremlin3-` or `gg-`
+  name), every timer, every phone command the phone answers, the close tool,
+  the promote tool, the dead-man and the backup — or the suite fails, so the
+  page cannot drift from the box.
 
 ## R — the readout
 

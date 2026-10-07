@@ -764,6 +764,36 @@ def settle_quote(venue, symbol):
                  if str(symbol).endswith(c)), 'quote')
 
 
+def coin_pnl_since(fills, base, since_ms):
+    """D76: what the inverse books on `base` realised in the coin itself,
+    fees paid, from `since_ms` — the explained part of what a shared wallet
+    holds beyond a spot bot's book. Funding is settled in the coin too but
+    is not a fill; it is not counted here and the card says so."""
+    book = new_book()
+    for f in sorted((f for f in fills
+                     if f.get('market_type') == 'inverse'
+                     and base_coin(f.get('symbol')) == base
+                     and int(f.get('time_ms') or 0) >= since_ms),
+                    key=lambda f: int(f.get('time_ms') or 0)):
+        apply_fill(book, f['side'], float(f['price']), float(f['qty']),
+                   float(f.get('fee') or 0.0), inverse=True)
+    return book['realized'] - book['fees']
+
+
+def spot_reconcile(wallet, book, explained):
+    """D76, pure: a spot bot's wallet against its book — the coins that
+    are not this bot's, how much of that the inverse books on the coin
+    account for, and what is left unexplained (an outside hand, interest,
+    funding). None in, None out."""
+    if wallet is None or book is None:
+        return None
+    outside = wallet - book
+    out = {'wallet': wallet, 'book': book, 'outside': outside,
+           'explained': explained}
+    out['unexplained'] = None if explained is None else outside - explained
+    return out
+
+
 def money_units(venue, market_type, symbol):
     """U53: {quote, margin_coin} — the coin a bot's money figures are in
     (capital, notional, loss, P&L) and the coin the venue's margin on its
@@ -939,7 +969,11 @@ def main(argv):
                         # row's capital and notional are dollars ($1
                         # contracts) and its margin is the coin itself
                         **money_units(cfg['venue'], cfg['market_type'],
-                                      cfg['symbol'])}
+                                      cfg['symbol']),
+                        # D76: the stated holding, for the card and the form
+                        **({'holding': cfg['holding'],
+                            'holding_since': cfg.get('holding_since')}
+                           if cfg.get('holding_since_ms') else {})}
         if cfg.get('strategy') == 'martingale':          # U52: the ladder's sum
             from .ladder import ladder_summary
             terms[botid]['ladder'] = ladder_summary(cfg)
@@ -979,6 +1013,34 @@ def main(argv):
             print(f'[warn] {venue}: account figures unread — {e}',
                   file=sys.stderr)
             account[venue] = None
+    # D76: a spot bot with a stated holding — the wallet against its book,
+    # the inverse books' coin P&L since the statement explaining the rest
+    anchored = [c for c in fleet['bots']
+                if c['market_type'] == 'spot' and c.get('holding_since_ms')]
+    if anchored:
+        belief = ((_watchdog_view(fleet) or {}).get('belief') or {}).get('bots') or {}
+        try:
+            from .kept_fills import load, store_path
+            kept_fills = load(store_path(argv[0]))['fills']
+        except (RuntimeError, OSError, ValueError):
+            kept_fills = None
+        coins = {}
+        try:
+            from .exchange.bybit.client import Client
+            from .exchange.bybit.truth import read_wallet
+            coins = read_wallet(Client().wallet_balance()).get('coins') or {}
+        except (VenueError, OSError, KeyError, ValueError, TypeError) as e:
+            print(f'[warn] bybit: wallet coins unread — {e}', file=sys.stderr)
+        for cfg in anchored:
+            b = make_botid(cfg['market_type'], cfg['symbol'], cfg['side'])
+            base = base_coin(cfg['symbol'])
+            wallet = (coins.get(base) or {}).get('wallet_balance')
+            pos = (belief.get(b) or {}).get('position')
+            explained = (coin_pnl_since(kept_fills, base, cfg['holding_since_ms'])
+                         if kept_fills is not None else None)
+            terms[b]['spot'] = spot_reconcile(
+                wallet, None if pos is None else abs(float(pos)), explained)
+            terms[b]['coin'] = base
     rounders = {b for b, s in strat_of.items() if s == 'martingale'}
     books = ledger(fills, botids, inverse_ids, entry_sides, closers, grids,
                    rounders=rounders)

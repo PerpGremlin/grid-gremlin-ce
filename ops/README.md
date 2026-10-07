@@ -5,6 +5,9 @@ box holds the filled-in copies; this directory holds the shape, so the setup
 survives the box. Placeholder paths only — the hygiene rule (written as if public) bars
 real ones.
 
+The one-page **runbook** — pages → what to do, how to stop everything,
+where everything is — is `docs/RUNBOOK.md`.
+
 ## The layers
 
 What runs, from the inside out:
@@ -20,10 +23,13 @@ What runs, from the inside out:
    unit success (`SuccessExitStatus=1`); only a crash or an undelivered page
    fails the unit. Each fleet's watchdog takes its own minute slot (`*:4/5`,
    `*:1/5`, …) so ticks never queue behind each other on a small box.
-4. **Log rotation** (`ops/logrotate.conf`, hourly, F11) — 100 MB cap, five
-   kept, compressed, `copytruncate` because the writer is never restarted for
-   it. Snapshot files are not rotated: the watchdog and every post-mortem read
-   them as one history.
+4. **Log rotation and retention** (`ops/logrotate.conf`, hourly, F11/F26) —
+   fleet logs at 100 MB, five kept, compressed, `copytruncate` because the
+   writer is never restarted for it. Snapshot files are not rotated: the
+   watchdog and every post-mortem read them as one history; the disk alarm
+   watches their growth. The same unit then compresses, in place, any log
+   under `logs/archive/` older than a day — kept, never deleted
+   (`gridgremlin.retention`).
 5. **The kept ledger** (`gridgremlin.kept_fills`, hourly at :27, R18) — every
    fill of each fleet, once, in `logs/fills/<fleet>.json`; the first run
    backfills 90 days (Hyperliquid answers only its newest ~10,000 fills). The
@@ -45,6 +51,16 @@ What runs, from the inside out:
     from public endpoints, kept in `logs/market.jsonl` beside the day's
     readout; a report paged at the session opens (00, 08, 16 UTC) by
     `market-report.timer`. Read-only, keyless; nothing acts on it.
+11. **The dead-man's switch** (F24/D74) — every completed watchdog run ends
+    with one GET to `DEADMAN_URL` (an outside uptime check such as
+    healthchecks.io, expecting a ping every 5 minutes with a 10-minute
+    grace). The check's own alarm — email, Telegram — is what says the box
+    is dead, which nothing on the box can. The watchdog also pages when the
+    disk passes 85% (`disk_used_max`, F25).
+12. **The pull backup** (F27/D74) — on the workstation, not the box:
+    `ops/workstation/` pulls `logs/`, `configs/` and `.env` nightly over the
+    ssh alias already in use, dated and hard-linked, thirty days kept. Its
+    README has the install, and the rebuild recipe.
 
 > **Retired: the box-side Claude** — triage on failure, the Telegram relay
 > and the daily range review, now in `ops/retired/` (its README says why).
@@ -103,6 +119,11 @@ ends it. To undo, remove the file and restart `systemd-logind`.
 
 `ops/logrotate.conf.template` takes the same `{{REPO_DIR}}`; save it as
 `ops/logrotate.conf` (gitignored, box-local like the rendered units).
+
+**The dead-man's switch** (F24): make a check on an uptime service (period
+5 min, grace 10 min, alerting to your email and Telegram), then on the box
+append `DEADMAN_URL=<its ping URL>` to `.env`. The next watchdog run pings
+it; silence it by removing the line.
 
 **Deploying.** The repo is private. The box carries its own SSH key,
 registered on the repo as a **read-only deploy key** (a push from the box is

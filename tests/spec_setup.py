@@ -1405,6 +1405,23 @@ def spec_U19_a_typed_whole_number_is_written_whole():
     assert bot_from_form(form, 'hyperliquid')['venue'] == 'hyperliquid'
 
 
+def spec_D76_the_form_stamps_the_holdings_moment():
+    """As D47's limit: set a holding and the moment is filled in; clear
+    the moment to restate from now; a blank holding stamps nothing."""
+    from panel.setup import bot_from_form, fields, form_from_bot
+    names = [f[0] for f in fields('grid')]
+    assert 'holding' in names and 'holding_since' in names
+    row = {'market_type': 'spot', 'symbol': 'ADAUSDT', 'side': 'long', 'capital': 1500,
+           'lower': 0.155, 'upper': 0.23, 'rungs': 16}
+    form = form_from_bot(row)
+    form['holding'] = '300'
+    bot = bot_from_form(form, 'bybit')
+    assert bot['holding'] == 300.0 and bot['holding_since'].endswith('Z')
+    form['holding_since'] = '2026-10-08T13:10:00Z'
+    assert bot_from_form(form, 'bybit')['holding_since'] == '2026-10-08T13:10:00Z'
+    assert 'holding_since' not in bot_from_form(form_from_bot(row), 'bybit')
+
+
 def spec_U22_every_cards_numbers_open_or_close_at_once():
     """Owner 2026-10-03: "can we have a show all button … open/close all the
     numbers". The cards page carries show all · hide all; the table and the

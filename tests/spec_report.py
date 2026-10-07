@@ -676,6 +676,32 @@ def spec_U16_the_contract_carries_each_bots_terms():
     assert abs(sol['ladder'][-1]['committed'] - 1800.0) < 1e-9
 
 
+def spec_D76_the_wallet_is_reconciled_against_the_book():
+    """The coin P&L of the inverse books on the same coin, from the
+    statement's moment, explains what a shared wallet holds beyond a spot
+    bot's book; the rest is said as unexplained."""
+    from gridgremlin.report import coin_pnl_since, spot_reconcile
+    fills = [
+        {'market_type': 'inverse', 'symbol': 'ETHUSD', 'side': 'buy', 'price': 2000.0,
+         'qty': 1000.0, 'fee': 0.0005, 'time_ms': 2_000},
+        {'market_type': 'inverse', 'symbol': 'ETHUSD', 'side': 'sell', 'price': 2500.0,
+         'qty': 1000.0, 'fee': 0.0005, 'time_ms': 3_000},
+        {'market_type': 'inverse', 'symbol': 'ETHUSD', 'side': 'sell', 'price': 2500.0,
+         'qty': 1000.0, 'fee': 0.0, 'time_ms': 500},                 # before: not counted
+        {'market_type': 'inverse', 'symbol': 'BTCUSD', 'side': 'buy', 'price': 60000.0,
+         'qty': 1000.0, 'fee': 0.0, 'time_ms': 2_500},               # another coin
+        {'market_type': 'spot', 'symbol': 'ETHUSDT', 'side': 'buy', 'price': 2500.0,
+         'qty': 1.0, 'fee': 0.0, 'time_ms': 2_500}]                   # not inverse
+    # 1000 $1 contracts: 1000/2000 - 1000/2500 = 0.1 ETH realised, 0.001 fees
+    assert abs(coin_pnl_since(fills, 'ETH', 1_000) - 0.099) < 1e-12
+    assert coin_pnl_since(fills, 'ETH', 5_000) == 0.0
+    r = spot_reconcile(2.018, 1.424, 0.6)
+    assert r == {'wallet': 2.018, 'book': 1.424, 'outside': 2.018 - 1.424,
+                 'explained': 0.6, 'unexplained': 2.018 - 1.424 - 0.6}
+    assert spot_reconcile(2.0, 1.0, None)['unexplained'] is None
+    assert spot_reconcile(None, 1.0, 0.1) is None and spot_reconcile(2.0, None, 0.1) is None
+
+
 def spec_R14_a_shorts_partial_window_widens_on_the_venues_holding():
     """2026-10-05 cross-check: every long matched the exchange; every short
     showed the window's partial book — the mid-round sign test cannot see

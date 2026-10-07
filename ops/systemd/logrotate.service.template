@@ -5,4 +5,7 @@ Description=Grid Gremlin v3 log rotation — the fleet logs, size-capped (F11)
 Type=oneshot
 WorkingDirectory={{REPO_DIR}}
 # user-level: its own state file, no root, no /etc
+Nice=10
 ExecStart=/usr/sbin/logrotate --state {{REPO_DIR}}/logs/.logrotate.state {{REPO_DIR}}/ops/logrotate.conf
+# F26: then compress what the archive holds uncompressed and older than a day
+ExecStart=/usr/bin/python3 -m gridgremlin.retention {{REPO_DIR}}/logs/archive

@@ -275,6 +275,37 @@ def spec_D58_a_spot_bot_holds_its_own_coins_not_the_shared_wallet():
     assert [o for o in venue.orders if o['side'] == 'Sell'], 'no exit'
 
 
+def spec_D76_a_stated_holding_is_the_books_start_bounded_by_the_wallet():
+    """A spot ETH grid read a wallet an inverse ETH grid settles into, and
+    its thirty-day walk overshot it (2026-10-08). With a stated holding the
+    book starts there and takes only the bot's own fills since; the wallet
+    stays the ceiling; a fill before the moment, an inverse settlement, the
+    operator's own coins — none of them are this bot's."""
+    import time as _t
+    since = int(_t.time() * 1000) - 600_000                 # ten minutes ago
+    stamp = _t.strftime('%Y-%m-%dT%H:%M:%SZ', _t.gmtime(since / 1000))
+    venue, lines = FakeSpotVenue(mark=0.1950, base=2000.0), []     # a fat shared wallet
+    bot = _spot_bot(venue, lines, holding=300.0, holding_since=stamp)
+    venue.fill_log.append({'side': 'buy', 'price': 0.19, 'qty': 500.0, 'fee': 0.0,
+                           'time_ms': since - 3_600_000, 'link_id': 'spoADAUSDTl-3-old',
+                           'venue_closed': False, 'venue_kind': '', 'market_type': 'spot'})
+    bot.cycle()
+    assert bot._last_pos == 300.0                       # stated, not 2000, not 800
+    venue.base += 40.0                                  # an inverse settlement: not ours
+    bot.cycle()
+    assert bot._last_pos == 300.0
+    top = max((o for o in venue.orders if o['side'] == 'Buy'), key=lambda o: o['price'])
+    venue.fill_order(top)                               # OUR fill, listed
+    bot.cycle()
+    assert abs(bot._last_pos - (300.0 + float(top['qty']))) < 1e-9
+    venue.base = 100.0                                  # the wallet short of the book
+    bot.cycle()
+    assert bot._last_pos == 100.0                       # the ceiling holds
+    plain = _spot_bot(FakeSpotVenue(mark=0.1950, base=2000.0), [])
+    plain.cycle()
+    assert plain._last_pos in (None, 0.0)               # D58 as before: no fills, nothing
+
+
 def spec_D58_our_buy_in_flight_freezes_orders_until_it_is_listed():
     """G26's class on a shared wallet: our buy filled — the order left the
     book, the wallet rose — but the fill list has not caught up. Nothing is

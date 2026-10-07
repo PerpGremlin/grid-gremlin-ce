@@ -21,7 +21,8 @@ STOP_WATCHES = ('mark_price', 'account_equity', 'position_sl')
 UNBOUNDED = 'unbounded'
 
 COMMON_KEYS = ('venue', 'market_type', 'symbol', 'side', 'strategy', 'capital',
-               'leverage', 'stop', 'max_loss', 'max_loss_since', 'risk_profile')
+               'leverage', 'stop', 'max_loss', 'max_loss_since', 'risk_profile',
+               'holding', 'holding_since')
 # D57: what a risk profile may set — the limits and guards, never what a
 # bot IS (identity, lattice, sizes); a key outside this list is refused
 RISK_KEYS = ('leverage', 'stop', 'max_loss', 'max_rounds', 'max_hold_seconds',
@@ -431,6 +432,7 @@ def validate_grid(row, where='row'):
     cfg['stop'] = _validate_stop(cfg.get('stop'), where,
                                  slide=bool(cfg.get('slide')))
     _validate_max_loss(cfg, where)
+    _validate_holding(cfg, where)                                 # D76
     if (cfg['stop'] and cfg['stop']['server_side']
             and (cfg['market_type'] == 'spot'
                  or cfg['venue'] == 'hyperliquid')):
@@ -511,6 +513,26 @@ def _validate_max_loss(cfg, where):
         cfg['max_loss'] = ml
         cfg['max_loss_since_ms'] = _utc_ms(since, f"{where}: "
                                            "'max_loss_since'")
+
+
+def _validate_holding(cfg, where):
+    """D76: what a spot bot holds, stated — the coins it owns at a stated
+    moment; its book is that plus its own fills since. The pair travels
+    together, as D47's does; spot only (a derivative venue states the
+    position itself)."""
+    h = _num(cfg, 'holding', where, least=0.0)
+    since = cfg.get('holding_since')
+    if (h is None) != (since is None):
+        _refuse(f"{where}: 'holding' and 'holding_since' travel together — "
+                'the coins this bot owns at a stated moment (UTC, like '
+                "'2026-10-08T13:10:00Z'); its book is that plus its own fills "
+                'since; the panel stamps it (D76)')
+    if h is not None:
+        if cfg['market_type'] != 'spot':
+            _refuse(f"{where}: 'holding' applies to market_type 'spot' only — "
+                    'a derivative venue states the position itself (D76)')
+        cfg['holding'] = h
+        cfg['holding_since_ms'] = _utc_ms(since, f"{where}: 'holding_since'")
 
 
 def hosts_position_stop(cfg):
@@ -676,6 +698,7 @@ def validate_martingale(row, where='row'):
     cfg['start_order_expire_seconds'] = ex
     cfg['stop'] = _validate_stop(cfg.get('stop'), where, martingale=True)
     _validate_max_loss(cfg, where)
+    _validate_holding(cfg, where)                                 # D76
     stop = cfg['stop'] or {}
     if stop.get('from_base_pct') is not None and stop['from_base_pct'] <= _cum:
         _refuse(f"{where}.stop: from_base_pct {stop['from_base_pct']:.4%} sits "

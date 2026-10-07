@@ -817,6 +817,29 @@ def spec_D70_a_capped_bot_says_so_on_its_card():
     assert 'waiting:' not in render([('demo', CONTRACT)]) and 'capped:' not in render([('demo', CONTRACT)])
 
 
+def spec_D76_a_spot_card_says_wallet_book_and_what_is_not_its():
+    import copy
+    from panel.server import KEY, render
+    c = copy.deepcopy(CONTRACT)
+    c['terms'] = {'spoADAUSDTl': {'capital': 1500, 'leverage': 2.0, 'market_type': 'spot',
+                                  'strategy': 'grid', 'quote': 'USDT', 'margin_coin': 'USDT',
+                                  'holding': 300.0, 'holding_since': '2026-10-08T13:10:00Z',
+                                  'coin': 'ADA',
+                                  'spot': {'wallet': 2040.0, 'book': 910.57, 'outside': 1129.43,
+                                           'explained': 1100.0, 'unexplained': 29.43}}}
+    page = render([('demo', c)])
+    assert ("<div class=\"dim\">wallet 2,040 ADA · this bot's book 910.57 · 1,129.43 not this "
+            "bot's — the inverse books' P&amp;L and fees since 2026-10-08 account for 1,100; "
+            '29.43 unexplained (funding not counted)') in page
+    c['terms']['spoADAUSDTl']['spot'].update(explained=100.0, unexplained=1029.43)
+    assert '<div class="neg">wallet 2,040 ADA' in render([('demo', c)])      # mostly unexplained: red
+    c['terms']['spoADAUSDTl']['spot'] = {'wallet': 2040.0, 'book': 910.57, 'outside': 1129.43,
+                                         'explained': None, 'unexplained': None}
+    page = render([('demo', c)])
+    assert "1,129.43 not this bot's</div>" in page and 'account for' not in page   # no ledger: no claim
+    assert "<tr><td>wallet · this bot's book · not this bot's</td>" in KEY
+
+
 def spec_X14_the_card_shows_how_much_of_the_loss_limit_is_used():
     """The engine's own count rides its snapshot; the card says it, red
     from three quarters."""

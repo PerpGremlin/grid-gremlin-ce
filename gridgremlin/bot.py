@@ -698,7 +698,7 @@ class Bot:
             else basis * (1.0 - pct)
         return self.adapter.round_price(raw)
 
-    def _own_fills(self, days=HISTORY_WINDOW_DAYS):
+    def _own_fills(self, days=HISTORY_WINDOW_DAYS, since_ms=None):
         """M12/M13: this bot's venue fills over the last HISTORY_WINDOW_DAYS,
         link-attributed — the exchange is the state, so scale and cooldown
         survive restarts. Bounded: an epoch-0 pull was ~3,000 requests (the
@@ -708,7 +708,8 @@ class Bot:
         if hist is None:
             return []
         now_ms = int(self._now() * 1000)
-        since_ms = now_ms - days * 86_400_000
+        if since_ms is None:
+            since_ms = now_ms - days * 86_400_000
         fills = hist(self.cfg['market_type'], self.cfg['symbol'], since_ms,
                      now_ms)
         if len(fills) >= 2000 and not self._history_capped_warned:
@@ -2118,13 +2119,18 @@ class Bot:
         lesson: a filled order neither resting nor listed is re-bought).
         Past RUNGS_LAG_CYCLES the rise is said once as coins from an outside
         hand, which are not ours. Returns (held, lagging)."""
+        # D76: a stated holding is the book's start — the coins this bot
+        # owned at `holding_since`, plus its own fills from that moment;
+        # without one, the thirty-day walk of its fills (D58)
+        anchor = self.cfg.get('holding_since_ms')
         try:
-            fills = self._own_fills()
+            fills = (self._own_fills(since_ms=anchor) if anchor
+                     else self._own_fills())
         except (VenueError, OSError):
             prev = self._spot_seen
             return (min(wallet_size, prev[1]) if prev else wallet_size), True
         entry = self._entry_side.lower()
-        own = 0.0
+        own = float(self.cfg.get('holding') or 0.0) if anchor else 0.0
         for f in fills:
             q = abs(f['qty'])
             own += q if str(f.get('side', '')).lower() == entry else -q
@@ -2223,9 +2229,11 @@ class Bot:
         held, basis = self._held(truth)
         spot_lag = False
         if (cfg['market_type'] == 'spot' and held is not None
-                and cfg.get('assumed_avg_entry') is None):
+                and (cfg.get('assumed_avg_entry') is None
+                     or cfg.get('holding_since_ms'))):
             # D58 — unless the row ADOPTS the wallet's coins: a stated
-            # assumed_avg_entry declares them this bot's (V6)
+            # assumed_avg_entry declares them this bot's (V6); a stated
+            # holding (D76) is the book's start and wins over adoption
             held, spot_lag = self._spot_own_holding(held)
         mark = truth.get('mark') or 0.0
         q = abs(held or 0.0)                 # D56: what this bot carries

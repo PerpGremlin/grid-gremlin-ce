@@ -1,0 +1,8 @@
+[Unit]
+Description=grid-gremlin nightly pull backup of the box (F27)
+
+[Service]
+Type=oneshot
+# the script is linked here at install; its settings live in
+# ~/.config/gg-backup.env (REMOTE, DEST, KEEP) — nothing in this unit names a host
+ExecStart=%h/.local/bin/gg-backup

@@ -1,0 +1,10 @@
+[Unit]
+Description=grid-gremlin nightly pull backup — once a day, early, local time
+
+[Timer]
+OnCalendar=*-*-* 04:10:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
