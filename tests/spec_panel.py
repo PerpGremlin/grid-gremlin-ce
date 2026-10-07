@@ -598,6 +598,65 @@ def spec_U45_the_money_sits_in_its_own_box_per_bot_and_per_exchange():
     assert 'open <b class="neg">-4.83</b>' in head         # flat adds nothing
 
 
+def spec_U50_the_exchange_boxes_ride_in_a_strip_pinned_to_the_top():
+    """The owner, ten cards down the page: the exchange boxes "get lost
+    while scrolling". A strip pinned to the top carries each fleet's name,
+    network, total after fees, bots and dead count, leverage now — the same
+    numbers as the box, from the same contract — and jumps to the box."""
+    import copy
+    from panel.server import CSS, render
+    c2 = copy.deepcopy(CONTRACT)
+    c2['bots']['spoADAUSDTl']['realized'] = 20.0
+    c2['watchdog']['belief']['bots']['linDOGEs']['alive'] = False
+    c2['account'] = {'bybit': {'equity': 1000.0, 'notional': 2780.0, 'collateral': 1000.0}}
+    html = render([('demo', CONTRACT), ('hl', c2)])
+    strip, rest = html.split('</div><div class="page">', 1)
+    strip = strip.split('<div class="hero">', 1)[1]
+    assert strip.count('<div class="fleet">') == 2 and strip.index('>demo<') < strip.index('>hl<')
+    demo, hl = strip.split('<div class="fleet">')[1:]
+    assert 'href="#fleet0"' in demo and '<span class="big num neg">-1.86</span>' in demo
+    assert '>1 bots</span><span></span><span class="dim">leverage —</span>' in demo
+    assert 'href="#fleet1"' in hl and '<span class="big num pos">+13.10</span>' in hl
+    assert '<b class="neg num">1 dead</b><span class="dim">leverage 2.78x</span>' in hl
+    assert '.hero{display:grid;grid-template-columns:repeat(6,max-content)' in CSS   # squared
+    assert '.hero .fleet{display:contents}' in CSS
+    assert 'this exchange</span> <span class="big pos">+13.10</span>' in rest   # the box agrees
+    assert '<h1 id="fleet0">' in rest and '<h1 id="fleet1">' in rest
+    assert '.hero{position:sticky;top:0' in CSS
+    assert '<h1 id="fleet0">' in render([('demo', CONTRACT)], table=True)      # the table too
+    static = render([('demo', CONTRACT)], static='2026-10-07')
+    assert static.index('class="hero"') < static.index('<h1 id="fleet0">')
+
+
+def spec_U51_every_link_and_switch_sits_in_one_side_panel():
+    """The owner: the links across the bottom and the switches at the top
+    "may be better as a side panel nav bar". One panel beside the cards,
+    pinned while the page scrolls: pages, arrange, numbers (cards only),
+    size in, leverage, theme. The export, having no actions, has none."""
+    from panel.server import CSS, render
+    cards = render([('demo', CONTRACT)])
+    assert cards.count('<nav class="side">') == 1
+    nav = cards.split('<nav class="side">', 1)[1].split('</nav>', 1)[0]
+    for h in ('pages', 'arrange', 'numbers', 'size in', 'leverage'):
+        assert f'<h3>{h}</h3>' in nav, h
+    for href in ('/table', '/control', '/setup', '/rehearse', '/export', '/key'):
+        assert f'href="{href}"' in nav, href
+    assert '<b class="on">as listed</b>' in nav and 'ggAll(true)' in nav
+    assert 'data-size="coin"' in nav and 'data-lev="filled"' in nav
+    assert nav.endswith('>theme</button>')
+    assert cards.index('<nav class="side">') < cards.index('<h1 id="fleet0">')
+    assert 'arrange: ' not in cards and '&rarr;</a> ·' not in cards     # gone from top and bottom
+    table = render([('demo', CONTRACT)], table=True, view='side')
+    tnav = table.split('<nav class="side">', 1)[1].split('</nav>', 1)[0]
+    assert 'href="/?view=side"' in tnav and '<h3>numbers</h3>' not in tnav
+    static = render([('demo', CONTRACT)], static='2026-10-07')
+    assert '<nav' not in static and 'class="page"' not in static
+    assert '.page{display:grid;grid-template-columns:14em' in CSS
+    assert 'nav.side{position:sticky;top:0' in CSS and '@media(max-width:60em){.page{display:block}' in CSS
+    assert "nav.style.top=hero.offsetHeight+'px'" in cards
+    assert '--gap:1em;--gap-s:.5em' in CSS and '.cards{display:grid;gap:var(--gap)' in CSS
+
+
 def spec_V10_a_card_says_when_the_price_has_left_the_range():
     from panel.server import render
     c = json.loads(json.dumps(CONTRACT))
@@ -966,7 +1025,7 @@ def spec_U44_a_holding_is_said_in_coins_value_and_cost():
     assert '0.08 BTC' in inv and 'worth 8,000' in inv and '(0.1 BTC)' in inv
     assert holding_html(0.0, 0.0, 1.0, 'linBTCUSDTl') == 'holding nothing'
     page = render([])
-    assert "ggSize('coin')" in page and 'size in:' in page
+    assert "ggSize('coin')" in page and '<h3>size in</h3>' in page
     assert '.only-coin .u-value' in CSS
 
 

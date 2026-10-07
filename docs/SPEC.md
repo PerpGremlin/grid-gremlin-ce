@@ -1352,6 +1352,18 @@ eventually pin (T1).
   typed again before the file is written (D64). The check reads the readout
   the page was drawn from and never starts one; an unknown network asks
   nothing more.
+- **U50** The exchange boxes ride in a strip pinned to the top of the page:
+  one line per fleet — name (a jump to its box), network, total after fees,
+  bots and how many are dead, the account's leverage now — read from the
+  same contract as the box, so the two never disagree; one grid, so every
+  column lines up whatever the words' lengths. Cards, table and the static
+  export alike.
+- **U51** Every page link and every view switch sits in one side panel beside
+  the cards — pages, arrange, numbers (cards only), size in, leverage, theme
+  — 14em wide, pinned under the strip while the page
+  scrolls, folding into a row under it at phone width. The export, having no actions, has none. Spacing comes
+  from one scale (`--gap`, `--gap-s`) shared by cards, boxes, pills and
+  buttons.
 
 ## P — the panel's boundary and the keys
 
