@@ -855,7 +855,8 @@ eventually pin (T1).
   path or name of the owner's own, the edition flag set, the testers'
   README, guide and issue templates and the example fleets in place. It
   never writes into a directory that is not empty, and `--check` runs the
-  written tree's own suite.
+  written tree's own suite. The tree carries the Apache License 2.0 verbatim,
+  a NOTICE and CONTRIBUTING.md, or the scan refuses it (D68).
 
 ## R — the readout
 

@@ -642,7 +642,12 @@ stands unless the owner corrects it.
   Testers are shown setup by a doctor (`python3 -m gridgremlin.doctor`) that
   says what is missing and what is next, by the panel's own first run, and
   by a short guide; findings come as issues in the shapes the README asks
-  for. Source-available, no licence granted beyond testing; both exchanges.
+  for. Both exchanges. **Licensed Apache-2.0** the same day: offered the
+  shapes, the owner — *"im just a nerd who likes building… i wana let these
+  other nerds do their thing if they want"* — chose the permissive one:
+  use it, change it, build on it, keep the notice; contributions come under
+  the same licence by its section 5, each commit signed off (DCO). The
+  NOTICE says what it is and is not: software, not advice and not a service.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
