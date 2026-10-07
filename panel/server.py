@@ -29,7 +29,8 @@ CACHE_TTL_S = 30.0       # the readout reads the venues; 10 s fed the rate limit
 WATCHDOG_OFF_S = 3600   # no sweep for an hour: it is off, not late (D39)
 
 CSS = """:root{--bg:#14161a;--fg:#d6dae0;--dim:#7a828c;--line:#262a30;
---pos:#5dbb7c;--neg:#d4756b;--accent:#8ab4d8;--accent-soft:#8ab4d82e}
+--pos:#5dbb7c;--neg:#d4756b;--accent:#8ab4d8;--accent-soft:#8ab4d82e;
+--gap:1em;--gap-s:.5em}
 :root.light{--bg:#f5f4f0;--fg:#232629;--dim:#6f6a60;--line:#ddd8d0;
 --pos:#2e7d4f;--neg:#b04a40;--accent:#3a6ea5;--accent-soft:#3a6ea524}
 body{background:var(--bg);color:var(--fg);font:14px/1.5 monospace;margin:2em}
@@ -38,20 +39,21 @@ table{border-collapse:collapse}td,th{padding:.35em .8em;
 text-align:right;border-bottom:1px solid var(--line)}
 th{color:var(--dim);font-weight:normal}td:first-child,th:first-child
 {text-align:left}.pos{color:var(--pos)}.neg{color:var(--neg)}
-.dim{color:var(--dim)}h1{font-size:1.1em;color:var(--accent)}
+.dim{color:var(--dim)}h1{font-size:1.1em;color:var(--accent);margin:var(--gap) 0 var(--gap-s)}
+p{margin:var(--gap-s) 0}
 input.derived{color:var(--dim);font-style:italic}
 .refusal{border:2px solid var(--neg);color:var(--neg);padding:.7em 1em;
 margin:0 0 1em;max-width:62em;font-size:1.1em}
 .refusal a{color:var(--accent)}
 a{color:var(--accent)}
-a[href]{display:inline-block;padding:.1em .6em;margin:.1em .05em;background:var(--accent-soft);border:1px solid var(--accent);border-radius:4px;color:var(--fg);text-decoration:none;line-height:1.5}a[href]:hover,a.pick{background:var(--accent);color:var(--bg)}b.on{display:inline-block;padding:.1em .6em;margin:.1em .05em;background:var(--accent);border:1px solid var(--accent);border-radius:4px;color:var(--bg)}a[href*='mode=remove'],a[href^='/close']{border-color:var(--neg)}
+a[href]{display:inline-block;padding:.2em .7em;margin:.15em .2em;background:var(--accent-soft);border:1px solid var(--accent);border-radius:4px;color:var(--fg);text-decoration:none;line-height:1.5}a[href]:hover,a.pick{background:var(--accent);color:var(--bg)}b.on{display:inline-block;padding:.2em .7em;margin:.15em .2em;background:var(--accent);border:1px solid var(--accent);border-radius:4px;color:var(--bg)}a[href*='mode=remove'],a[href^='/close']{border-color:var(--neg)}
 .grp{grid-column:1/-1;color:var(--dim);text-align:left;padding-top:.6em;
 border-bottom:1px solid var(--line)}
 button{background:var(--accent);color:var(--bg);border:0;border-radius:4px;
-padding:.5em 1.2em;margin:.5em .4em .5em 0;font:inherit;font-weight:bold;
+padding:.45em 1.1em;margin:var(--gap-s) var(--gap-s) var(--gap-s) 0;font:inherit;font-weight:bold;
 cursor:pointer}button:hover{filter:brightness(1.15)}
 button.quiet{background:var(--accent-soft);border:1px solid var(--accent);color:var(--fg)}
-button.theme{float:right}
+button.theme{margin:var(--gap) 0 0}
 details td.wide{text-align:left;white-space:normal;width:auto;padding-top:.4em}
 .st{cursor:help;border-bottom:1px dotted var(--dim)}.st-holding{color:var(--accent)}
 .st-dead{color:var(--neg)}.st-not-started{color:var(--pos)}.st-resting,.st-flat{color:var(--dim)}
@@ -64,15 +66,33 @@ vertical-align:middle}.side.long{background:var(--pos)}
 .side.short{background:var(--neg)}
 .card.long{border-left:4px solid var(--pos)}
 .card.short{border-left:4px solid var(--neg)}
-.cards{display:grid;gap:1em;
+.cards{display:grid;gap:var(--gap);
 grid-template-columns:repeat(auto-fill,minmax(21em,1fr))}
 .card{border:1px solid var(--line);border-radius:6px;padding:.8em 1em}
-.card>div{margin:.25em 0}.big{font-size:1.5em}
+.card>div{margin:var(--gap-s) 0}.big{font-size:1.5em}
 .pnl{border:1px solid var(--line);border-radius:5px;padding:.45em .75em;
-background:color-mix(in srgb,var(--line) 40%,transparent);margin:.4em 0}
+background:color-mix(in srgb,var(--line) 40%,transparent);margin:var(--gap-s) 0}
 .pnl.pos{border-color:var(--pos)}.pnl.neg{border-color:var(--neg)}
 .tier{font-size:.55em;padding:.1em .45em;border-radius:3px;text-decoration:none;
 vertical-align:middle;border:1px solid var(--line)}
+.hero{position:sticky;top:0;z-index:5;background:var(--bg);margin:-2em -2em var(--gap);
+padding:.45em 2em;border-bottom:1px solid var(--line)}
+.hero{display:grid;grid-template-columns:repeat(6,max-content);gap:0 var(--gap);
+align-items:baseline}.hero .fleet{display:contents}.hero .num{text-align:right}
+.hero .tier{font-size:.75em}.hero .big{font-size:1.15em}
+.page{display:grid;grid-template-columns:14em minmax(0,1fr);gap:0 calc(var(--gap)*1.5)}
+nav.side{position:sticky;top:0;align-self:start;max-height:100vh;overflow:auto;
+padding-right:var(--gap-s);border-right:1px solid var(--line)}
+nav.side h3{font-size:1em;font-weight:normal;color:var(--dim);margin:var(--gap) 0 var(--gap-s)}
+nav.side h3:first-child{margin-top:var(--gap-s)}
+nav.side a[href],nav.side b.on,nav.side a{display:block;margin:.15em var(--gap-s) .15em 0}
+@media(max-width:60em){.page{display:block}nav.side{position:static;max-height:none;
+border-right:0;border-bottom:1px solid var(--line);margin-bottom:var(--gap);padding:0 0 var(--gap-s)}
+nav.side h3{display:inline-block;margin:var(--gap-s) var(--gap-s) var(--gap-s) 0}
+nav.side h3::after{content:':'}nav.side a[href],nav.side b.on,nav.side a{display:inline-block}
+nav.side button.theme{margin:var(--gap-s) 0 0}}
+@media(max-width:40em){body{margin:1em}.hero{margin:-1em -1em var(--gap);padding:.4em 1em;
+grid-template-columns:repeat(3,max-content)}}
 .tier-test{color:var(--dim)}.tier-main{color:#fff;background:var(--neg);
 border-color:var(--neg);font-weight:700}
 .pnl .parts{color:var(--dim);font-size:.92em}.pnl .parts b{font-weight:normal}
@@ -1028,6 +1048,33 @@ def tier_badge(contract):
     return ' '.join(out)
 
 
+def hero_strip(labelled):
+    """U50 (the owner: the exchange boxes "get lost while scrolling"): a
+    strip pinned to the top of the page, one row per fleet — its name and
+    network, the exchange's total after fees, bots and how many are dead,
+    the account's leverage now — read from the same contract as the box
+    below, so the two can never disagree; the name jumps to the box."""
+    from gridgremlin.report import account_leverage
+    lines = []
+    for idx, (label, c) in enumerate(labelled):
+        live = [b for b in c['bots'].values() if b is not None]
+        total = sum(card_total(b) for b in live)
+        belief = ((c.get('watchdog') or {}).get('belief') or {}).get('bots', {})
+        dead = sum(1 for bl in belief.values() if bl.get('alive') is False)
+        levs = [a['now'] for a in account_leverage(c).values()]
+        lev = ('leverage —' if not levs or any(v is None for v in levs) else
+               'leverage ' + ' · '.join(f'{v:.2f}x' for v in levs))
+        # six cells per fleet in one grid, so every column lines up whatever
+        # the words' lengths (the owner: "so it looks squared")
+        lines.append(
+            f'<div class="fleet"><a href="#fleet{idx}">{label}</a>{tier_badge(c)}'
+            f'<span class="big num {_num_cls(total)}">{total:+,.2f}</span>'
+            f'<span class="dim num">{len(c["bots"])} bots</span>'
+            + (f'<b class="neg num">{dead} dead</b>' if dead else '<span></span>')
+            + f'<span class="dim">{lev}</span></div>')
+    return '<div class="hero">' + ''.join(lines) + '</div>'
+
+
 def cards_section(idx, label, contract, view='all'):
     age = max(0, int(time.time() - contract['generated_ms'] / 1000))
     belief = ((contract.get('watchdog') or {}).get('belief')
@@ -1046,7 +1093,7 @@ def cards_section(idx, label, contract, view='all'):
                   for botid, b in rows)
         for title, rows in grouped(contract, view))
     # U45: the exchange's money in a box of its own, under its name
-    return (f"<h1>{label} {tier_badge(contract)} — {len(contract['bots'])} bots "
+    return (f"<h1 id=\"fleet{idx}\">{label} {tier_badge(contract)} — {len(contract['bots'])} bots "
             f'{sweep_note(contract)} <span class="dim">(read {age}s ago; '
             f'refreshes every {REFRESH_S}s)</span></h1>'
             f'<div class="pnl {_num_cls(total)}"><span class="dim">this '
@@ -1141,7 +1188,7 @@ def section(idx, label, contract, view='all'):
             f"remove</a> <a href='/setup?fleet={idx}&copy={botid}'>copy</a>"
             "</td></tr>")
     return f"""
-<h1>{label} {tier_badge(contract)} — last {contract['window_hours']:g}h {sweep_note(contract)}
+<h1 id="fleet{idx}">{label} {tier_badge(contract)} — last {contract['window_hours']:g}h {sweep_note(contract)}
 <span class="dim">(read {age}s ago; refreshes every {REFRESH_S}s)</span></h1>
 <table class="fleet">{COLS}
 <tr><th>bot</th><th>state</th><th>fills</th><th>realized</th>
@@ -1373,11 +1420,48 @@ new MutationObserver(function(){
  else S.removeItem('gg-light');}).observe(root,{attributes:true});
 window.ggAll=function(on){document.querySelectorAll('details[data-k]')
  .forEach(function(d){d.open=on;});};
+var nav=document.querySelector('nav.side'),hero=document.querySelector('.hero');
+function top(){if(nav&&hero)nav.style.top=hero.offsetHeight+'px';}
+top();window.addEventListener('resize',top);
 var y=S.getItem('gg-y:'+location.pathname);
 if(y)window.scrollTo(0,Number(y));
 window.addEventListener('pagehide',function(){
  S.setItem('gg-y:'+location.pathname,String(window.scrollY));});
 })();</script>"""
+
+
+def nav_panel(table, view):
+    """U51 (the owner: the links at the bottom and the switches at the top
+    "may be better as a side panel"): every page link and every view
+    switch in one panel beside the cards, pinned while the page scrolls —
+    pages, arrange, numbers (cards only: nothing folds in the table),
+    size in, leverage, theme. The live page only; the export has no
+    actions to offer."""
+    here = '/table' if table else '/'
+    q = '' if view == 'all' else f'?view={view}'
+    pages = ((f'<a href="/{q}">cards</a>' if table else
+              f'<a href="/table{q}">table</a>')
+             + '<a href="/control">control</a><a href="/setup">set up a bot</a>'
+               '<a href="/rehearse">rehearse a grid</a><a href="/export">export '
+               'snapshot</a><a href="/key">key</a>')
+    arrange = ''.join(
+        f'<b class="on">{words}</b>' if key == view else
+        f'<a href="{here}{"" if key == "all" else "?view=" + key}">{words}</a>'
+        for key, words in VIEWS)
+    # U22 (owner: "show all … open/close all the numbers"): every card's
+    # numbers at once; each box still remembers itself
+    numbers = ('' if table else '<h3>numbers</h3><a href="javascript:ggAll(true)">'
+               'show all</a><a href="javascript:ggAll(false)">hide all</a>')
+    # U44: what a holding is said in, as Bybit's preference
+    size = ''.join(f'<a href="javascript:ggSize(\'{k}\')" data-size="{k}">{w}</a>'
+                   for k, w in SIZE_VIEWS)
+    # R19: the account's leverage now, or as if every order filled
+    lev = ('<a href="javascript:ggLev(\'now\')" data-lev="now">now</a>'
+           '<a href="javascript:ggLev(\'filled\')" data-lev="filled">if all filled</a>')
+    return (f'<nav class="side"><h3>pages</h3>{pages}<h3>arrange</h3>{arrange}'
+            f'{numbers}<h3>size in</h3>{size}<h3>leverage</h3>{lev}'
+            '<button class="quiet theme" onclick="document.documentElement.'
+            'classList.toggle(\'light\')">theme</button></nav>')
 
 
 def render(labelled, static=None, table=False, view='all'):
@@ -1389,48 +1473,18 @@ def render(labelled, static=None, table=False, view='all'):
     face = section if table else cards_section
     if view not in dict(VIEWS):
         view = 'all'
-    here = '/table' if table else '/'
-    q = '' if view == 'all' else f'?view={view}'
     body = ''.join(face(i, lb, c, view) for i, (lb, c) in enumerate(labelled))
-    if not static:
-        body = ('<p class="dim">arrange: ' + ' · '.join(
-            f'<b class="on">{words}</b>' if key == view else
-            f'<a href="{here}{"" if key == "all" else "?view=" + key}">'
-            f'{words}</a>' for key, words in VIEWS)
-            + ('' if table else
-               # U22 (owner: "show all … open/close all the numbers"): every
-               # card's numbers at once; each box still remembers itself
-               ' &nbsp; numbers: <a href="javascript:ggAll(true)">show all'
-               '</a> · <a href="javascript:ggAll(false)">hide all</a>'
-               # U44: what a holding is said in, as Bybit's preference
-               ' &nbsp; size in: ' + ' · '.join(
-                   f'<a href="javascript:ggSize(\'{k}\')" data-size="{k}">'
-                   f'{w}</a>' for k, w in SIZE_VIEWS)
-               # R19: the account's leverage now, or as if every order filled
-               + ' &nbsp; leverage: <a href="javascript:ggLev(\'now\')" '
-               'data-lev="now">now</a> · <a href="javascript:ggLev(\'filled\')"'
-               ' data-lev="filled">if all filled</a>')
-            + '</p>') + body
-    notes = ''
     if static:
-        chrome = notes + (f'<p class="dim">exported {static} — a snapshot, '
-                          'not a live view; the fleet has moved since.</p>')
         head = ''
-    else:
+        chrome = (f'<p class="dim">exported {static} — a snapshot, '
+                  'not a live view; the fleet has moved since.</p>')
+    else:                                        # U51: the side panel
         head = f'<meta http-equiv="refresh" content="{REFRESH_S}">'
-        notes = KEEP_JS
-        chrome = notes + (
-            '<p><a href="/rehearse">rehearse a draft grid &rarr;</a> ·'
-                  '\n<a href="/setup">set up a bot &rarr;</a> ·'
-                  '\n<a href="/control">control &rarr;</a> ·'
-                  '\n<a href="/export">export snapshot &darr;</a> ·'
-            + (f'\n<a href="/{q}">cards</a> ·' if table else
-               f'\n<a href="/table{q}">table</a> ·') +
-            '\n<a href="/key">key</a></p>')
+        body = f'<div class="page">{nav_panel(table, view)}<main>{body}</main></div>'
+        chrome = KEEP_JS
     return f"""<!doctype html><meta charset="utf-8">
 <title>grid-gremlin</title><style>{CSS}</style>
-{head}<button class="quiet theme" onclick="document.documentElement.classList.toggle('light')">
-theme</button>{body}
+{head}{hero_strip(labelled)}{body}
 {chrome}
 <p class="dim">this page renders the engine's own readout contract — it
 cannot disagree with the terminal. It holds no keys; venue writes are the

@@ -1411,7 +1411,7 @@ def spec_U22_every_cards_numbers_open_or_close_at_once():
     export do not (nothing folds there)."""
     from panel.server import render
     live = render([], table=False)
-    assert 'numbers: <a href="javascript:ggAll(true)">show all</a>' in live
+    assert '<h3>numbers</h3><a href="javascript:ggAll(true)">show all</a>' in live
     assert 'ggAll(false)">hide all</a>' in live
     assert 'window.ggAll=function' in live            # the script defines it
     assert 'ggAll(' not in render([], table=True)     # the table folds nothing
