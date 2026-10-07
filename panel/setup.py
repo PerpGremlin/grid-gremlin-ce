@@ -148,6 +148,13 @@ GRID = {
         ('assumed_avg_entry', 'assumed_avg_entry', 'num',
          'Your average cost (spot only)',
          'for coins you already hold and the exchange cannot price'),
+        ('holding', 'holding', 'num', 'What this bot holds now (spot only)',
+         'the coins this bot owns at this moment, in the coin. Its book is '
+         'this plus its own fills from now on, never the shared wallet; '
+         'blank = the smaller of its own fills and the wallet'),
+        ('holding_since', 'holding_since', 'text', 'Holding counted since',
+         'filled in for you when you set the holding above. Clear it to '
+         'restate from now'),
         ('spot_borrow', 'spot_borrow', 'switch', 'Margin spot (borrow)',
          'spot only: lets a spot bot go short or use leverage'),
         ('spot_leverage', 'spot_leverage', 'num', 'Spot leverage',
@@ -163,6 +170,13 @@ MARTINGALE = {
          'spot only: buys on borrowed money up to the spot leverage'),
         ('spot_leverage', 'spot_leverage', 'num', 'Spot leverage',
          '1 to 10, only with margin spot'),
+        ('holding', 'holding', 'num', 'What this bot holds now (spot only)',
+         'the coins this bot owns at this moment, in the coin. Its book is '
+         'this plus its own fills from now on, never the shared wallet; '
+         'blank = the smaller of its own fills and the wallet'),
+        ('holding_since', 'holding_since', 'text', 'Holding counted since',
+         'filled in for you when you set the holding above. Clear it to '
+         'restate from now'),
     ],
     'The orders': [
         ('base_order_size', 'base_order_size', 'num', 'First order size',
@@ -482,6 +496,9 @@ def bot_from_form(form, venue):
     if bot.get('max_loss') and not bot.get('max_loss_since'):      # D47
         bot['max_loss_since'] = time.strftime('%Y-%m-%dT%H:%M:%SZ',
                                               time.gmtime())
+    if bot.get('holding') is not None and not bot.get('holding_since'):   # D76
+        bot['holding_since'] = time.strftime('%Y-%m-%dT%H:%M:%SZ',
+                                             time.gmtime())
     if bot.get('max_rounds') and not bot.get('max_rounds_since'):
         # D41: the count starts when the limit is set, as 3Commas' does;
         # an edit carries the stamp, so only a cleared box restarts it
@@ -882,7 +899,8 @@ _MINIMAL_BLOCKS = {'slide': {'trigger_rungs': 1, 'max_rungs': 1,
                              'confirm_seconds': 0},
                    'stop': {'watch': 'mark_price', 'level': 50}}
 _DERIVED = {'spacing_pct', 'venue', 'strategy', 'ladder_notional',
-            'ladder_total_notional', 'max_rounds_since_ms', 'max_loss_since_ms'}
+            'ladder_total_notional', 'max_rounds_since_ms', 'max_loss_since_ms',
+            'holding_since_ms'}
 
 
 def engine_defaults(strategy):

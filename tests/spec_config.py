@@ -416,6 +416,23 @@ def spec_D55_the_offset_needs_the_ladder_and_stays_below_the_first_step():
             raise AssertionError(f'{bad} was accepted')
 
 
+def spec_D76_a_stated_holding_travels_with_its_moment_and_is_spot_only():
+    """The owner: "each bot can just have a field where we could put what
+    it is meant to be." The pair as D47's: together, spot only, zero
+    allowed (a bot that starts owning nothing)."""
+    spot = dict(ROW, market_type='spot', leverage=None)
+    spot.pop('leverage')
+    ok = validate_config(dict(spot, holding=1.42, holding_since='2026-10-08T13:10:00Z'))
+    assert ok['holding'] == 1.42 and ok['holding_since_ms'] == 1791465000000
+    assert validate_config(dict(spot, holding=0, holding_since='2026-10-08T13:10:00Z'))['holding'] == 0.0
+    _refused(dict(spot, holding=1.0), 'travel together')
+    _refused(dict(spot, holding_since='2026-10-08T13:10:00Z'), 'travel together')
+    _refused(dict(spot, holding=-1.0, holding_since='2026-10-08T13:10:00Z'), '>=')
+    _refused(dict(spot, holding=1.0, holding_since='yesterday'), 'holding_since')
+    _refused(_row(holding=1.0, holding_since='2026-10-08T13:10:00Z'), "'spot' only")
+    assert 'holding' not in validate_config(spot)
+
+
 def spec_D69_the_activation_arms_alone_and_sits_below_the_target():
     """v2's activation %: the stop arms once the round is N% up, with one
     target or with steps; one arming rule, one protection; below the

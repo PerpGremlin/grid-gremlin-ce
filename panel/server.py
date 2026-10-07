@@ -899,6 +899,23 @@ def card(idx, botid, b, contract, belief):
                  + (f' at <b>{lev:g}x</b>' if lev != 1 else '')
                  + (f' · up to {amount(terms["notional"])} {money_coin} in the market'
                     if terms.get('notional') else ''))
+    rec = (terms or {}).get('spot')
+    if rec:
+        # D76: the shared wallet against this bot's book — what is not
+        # this bot's, how much the inverse books on the coin account for,
+        # and what is left that nothing explains
+        coin = terms.get('coin') or coin_of(botid)
+        def c(v):
+            return '—' if v is None else f'{v:,.6g}'
+        line = (f"wallet {c(rec['wallet'])} {coin} · this bot's book {c(rec['book'])}"
+                f" · {c(rec['outside'])} not this bot's")
+        if rec.get('explained') is not None:
+            line += (f" — the inverse books' P&amp;L and fees since "
+                     f"{terms.get('holding_since', '')[:10]} account for "
+                     f"{c(rec['explained'])}; {c(rec['unexplained'])} unexplained"
+                     ' (funding not counted)')
+        bad = rec.get('unexplained') is not None and abs(rec['unexplained']) > abs(rec['outside']) * 0.5 + 1e-9
+        held += f'</div><div class="{"neg" if bad else "dim"}">{line}'
     where = ''
     if rng and mark:
         lo, hi = rng['lower'], rng['upper']
@@ -1292,6 +1309,14 @@ names its coin (U53): a linear or spot bot's money is its settle coin
 (Bybit USDT or USDC, Hyperliquid USDC); an inverse bot's capital, notional,
 loss and P&amp;L are dollars ($1 contracts) and its margin is the coin
 itself. An exchange's total joins the coins its bots use.</td></tr>
+<tr><td>wallet · this bot's book · not this bot's</td><td class="dim">a spot
+bot with a stated holding (D76): the coin's whole wallet balance, what this
+bot's book says it owns (the stated holding plus its own fills since), and
+the difference — coins that are not its. Where the kept ledger can say,
+how much of that the inverse bots on the same coin realised there, and what
+is left unexplained; red when more than half is unexplained (an outside
+hand, or a ledger behind). Funding settles in the coin too and is not
+counted.</td></tr>
 <tr><td>the ladder</td><td class="dim">a DCA card's own sum (U52): for
 each step, where it fills from the base price, its size, what is then
 committed, the average entry, and how far the price must come back from

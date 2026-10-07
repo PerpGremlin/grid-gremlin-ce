@@ -216,6 +216,68 @@ def spec_D70_the_holding_cap_holds_flat_bots_back_and_lets_holders_run():
     assert holding_verdict({'holding_max': 1}, bots) == 'bots holding 2 >= 1'
 
 
+def spec_F24_the_watchdog_pings_the_deadman_after_every_completed_run():
+    """A box that dies pages nobody, because the pager is on the box. One
+    GET to an outside uptime check at the end of each run; the check's
+    own alarm says when the pings stop. A failed ping never fails a run."""
+    import json
+    import os
+    import tempfile
+    from pathlib import Path
+    import gridgremlin.watchdog as wd
+    got = []
+    assert wd.ping_deadman('https://hc.example/p/1', get=lambda u, timeout: got.append((u, timeout)) or type('R', (), {'read': lambda s: b'OK'})()) is True
+    assert got == [('https://hc.example/p/1', 10)]
+
+    def down(u, timeout):
+        raise OSError('no route')
+    assert wd.ping_deadman('https://hc.example/p/1', get=down) is False      # said, not raised
+    assert wd.ping_deadman('', get=down) is None and wd.ping_deadman(None) is None
+    d = Path(tempfile.mkdtemp())
+    snap, state = d / 'snap.jsonl', d / 'state.json'
+    snap.write_text(json.dumps({'t': 10**10, 'equity': 5000.0, 'mm_rate': 0.1,
+                                'bots': {}}) + '\n')
+    (d / 'wd.json').write_text(json.dumps(dict(WD, snapshot=str(snap), state=str(state), positions={})))
+    pinged, saved = [], (wd.send_telegram, wd.load_env, wd.time.time, wd.ping_deadman)
+    try:
+        wd.send_telegram, wd.load_env = (lambda t: None), (lambda: None)
+        wd.time.time, wd.ping_deadman = (lambda: 10**10), (lambda url, get=None: pinged.append(url))
+        os.environ['DEADMAN_URL'] = 'https://hc.example/p/2'
+        assert wd.main([str(d / 'wd.json')]) == 0
+        os.environ.pop('DEADMAN_URL')
+        wd.main([str(d / 'wd.json')])
+    finally:
+        wd.send_telegram, wd.load_env, wd.time.time, wd.ping_deadman = saved
+        os.environ.pop('DEADMAN_URL', None)
+    assert pinged == ['https://hc.example/p/2', None]        # pinged after the run; none without the URL
+
+
+def spec_F25_a_filling_disk_is_a_breach_on_by_default():
+    """2.3 GB of one archived log on a box with 9 GB free and no alarm
+    (2026-10-08). The volume the snapshot lives on, 85% unless the config
+    says otherwise; a full disk ends the log and the fleet's state."""
+    import tempfile
+    import gridgremlin.watchdog as wd
+    from gridgremlin.config import ConfigError
+    cfg = wd.validate_watchdog(dict(WD))
+    assert cfg['disk_used_max'] == 0.85                           # on by default
+    assert wd.validate_watchdog(dict(WD, disk_used_max=0.95))['disk_used_max'] == 0.95
+    for bad in (0, 1.5, 'x'):
+        try:
+            wd.validate_watchdog(dict(WD, disk_used_max=bad))
+        except ConfigError:
+            continue
+        raise AssertionError(f'{bad} was accepted')
+    row = {'t': 10**10, 'equity': 5000.0, 'mm_rate': 0.1, 'bots': {}}
+    assert 'disk' not in wd.evaluate(cfg, row, 10**10, 5000.0, disk_used=0.5)
+    assert 'disk' not in wd.evaluate(cfg, row, 10**10, 5000.0)              # unknown: no
+    b = wd.evaluate(cfg, row, 10**10, 5000.0, disk_used=0.9)
+    assert b['disk'].startswith('disk 90% used >= 85%')
+    assert set(wd.evaluate(cfg, None, 10**10, None, disk_used=0.9)) == {'disk', 'nosnap'}
+    used = wd.disk_used(tempfile.gettempdir())
+    assert 0.0 <= used < 1.0 and wd.disk_used('/no/such/path/here') is not None   # climbs to a parent
+
+
 def spec_F14_a_torn_watchdog_state_heals_and_says_so():
     """Audit 2026-10-05: the state was written in place and read with a
     bare json.loads; one torn write and every later tick failed, the fleet

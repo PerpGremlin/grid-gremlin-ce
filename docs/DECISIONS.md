@@ -677,6 +677,60 @@ stands unless the owner corrects it.
   before), the holding still covered whole, said once; and a venue refusing
   one exit's order no longer stops the others — the rest are written, then
   the refusal is said. Both venues; a lone tranche is left as it is.
+- **D72 — Options live in a subaccount; nothing is built for them
+  (2026-10-08).** The owner, on the two standing decisions: *"options remain
+  a subaccunt thing, and we can always build an algo for that as well,
+  becasue, why not?"* The 2026-10-06 measurements stand: a bought option's
+  mark value sits in Bybit's totalEquity, a sold option's margin comes out of
+  the available the grids place with — so options never share a grid
+  account, and the engine neither displays nor corrects for them. An options
+  algorithm, if ever, is its own project on its own account with its own
+  D-number; Deribit as a futures venue would be one more adapter, unrelated.
+- **D73 — A short outside a range regime is a bet, and the row may be gated
+  by the regime, opt-in, once the readings have earned it (2026-10-08).**
+  The replay (JOURNAL 2026-09-28): every rally short loses, `direction: both`
+  loses more; on a fall the mirror holds. The owner agrees with the shape:
+  a row may opt in to the regimes it runs in (`only_in`, from D67's hourly
+  reading), held back as a cap holds it — entries withdrawn, exits run, the
+  card saying why — and released when the regime returns. Built only after
+  the first readings-vs-results look (~2026-10-14) shows the regime word
+  leads the losses; measured, not assumed. Until then shorts run as the
+  owner configures them, as the stress test they are.
+- **D74 — The box is watched and backed up from outside (2026-10-08).** The
+  owner, asked what had been forgotten, on the three that matter now: *"do 1,
+  2 and 3 now … i understand these decisions and i agree with them all. on
+  you."* (1) A dead-man's switch: the watchdog pings an outside uptime check
+  at the end of every completed run (`DEADMAN_URL` in `.env`), so a dead box
+  or a stopped watchdog is noticed by something not on the box (F24). (2) A
+  nightly pull backup to the workstation — logs, configs, the keys file —
+  dated, hard-linked, thirty days kept, over the ssh alias already in use;
+  nothing new on the box (F27); with it, the rebuild recipe written down.
+  (3) A disk alarm in the watchdog, on by default at 85% (F25), and archived
+  logs compressed in place after a day, kept, never deleted (F26); snapshot
+  files stay one unrotated history, as F11 has it. The fourth and fifth of the list —
+  an expiry calendar, a one-page runbook — follow as their own work.
+- **D75 — A one-page runbook, kept true by the suite (2026-10-08).** The
+  fifth of the owner's list, for their own memory first: where everything
+  is, what runs, what each page means and what to do, how to stop and start,
+  how to change a bot, what happens when the PC is off, the dates. One page
+  of pointers, never a second copy of the detail. A spec holds it to the
+  system: every unit a template renders, every timer, every phone command
+  and every tool it names must exist, and the page must name them (F28).
+- **D76 — A spot bot's holding is stated, and its book runs from there
+  (2026-10-08).** The warning: a spot ETH grid's "fills do not account for
+  the change in the position" (G26), 31 times — the wallet it reads is the
+  one an inverse ETH grid settles its P&L, fees and funding into, and D58's
+  thirty-day walk of its own fills overshot the wallet, so it held the
+  wallet. The owner: *"each bot can just have a field where we could put
+  what it is meant to be"* — and *"build D76 then, the full thing."* A spot
+  row may state `holding` with `holding_since` (together, spot only, the
+  panel stamps the moment, as D47's pair): the book is that figure plus the
+  bot's own fills since, bounded by the wallet; it wins over adopting the
+  wallet. The readout reconciles for the card — wallet, book, what is not
+  this bot's, how much of that the inverse books on the coin realised since
+  the statement, what is left unexplained — display only, nothing acts on
+  it; funding is not counted and the card says so. Without a statement,
+  D58 stands.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

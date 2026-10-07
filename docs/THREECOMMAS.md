@@ -110,7 +110,7 @@ pending; **absent by decision** = we chose not to, D-number cited.
 | 3Commas | grid-gremlin v3 | status |
 |---|---|---|
 | Server-side TP/SL/trailing held by 3Commas; only futures-DCA SL is exchange-native | venue-hosted wherever the venue can (X3, D21, D23); bot-side only as fallback | ours ahead — a dead process leaves the stop resting |
-| **No portfolio guard**: no drawdown switch, no equity floor, no pause on disconnect | watchdog: staleness, mm_rate, equity floor, drawdown from peak, per-bot bounds (F1–F9); opt-in account caps (D56), a holding cap (D70) and risk profiles (D57) | ours ahead |
+| **No portfolio guard**: no drawdown switch, no equity floor, no pause on disconnect | watchdog: staleness, mm_rate, equity floor, drawdown from peak, per-bot bounds (F1–F9); opt-in account caps (D56), a holding cap (D70) and risk profiles (D57); a regime gate per row decided (D73), built after the readings earn it | ours ahead |
 | Telegram: every event + commands (`/stop_all_long_bots`, `/my_stats`, …) | the phone carries emergencies, startup and urgent or persisting warnings (D60); read commands `/pnl`, `/positions`, … (D61); a daily digest (D62). Write commands wait for the agentic phase (D46) | reads **copied**; writes deferred (D46) |
 | Fleet on/off by direction; close-all-and-stop per bot; Sell All per spot account | systemd unit per fleet; panel control start/stop/restart; no per-direction switch | partial |
 | Dashboard, per-bot stats, event log, CSV/XLSX | the panel (View, rehearse, create/edit, control) + `report` readout | comparable |
