@@ -1,0 +1,10 @@
+[Unit]
+Description=Grid Gremlin v3 log rotation — hourly size check
+
+[Timer]
+# hourly, off every watchdog slot and the range review
+OnCalendar=*-*-* *:52:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

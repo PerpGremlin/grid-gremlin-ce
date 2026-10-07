@@ -1,0 +1,10 @@
+[Unit]
+Description=Grid Gremlin v3 market report — Asia, Europe and US opens (00, 08, 16 UTC)
+
+[Timer]
+# three a day, by the owner's word (D67): 08:03, 16:03 and 00:03 Perth.
+# :03 keeps clear of the watchdog slots; the reading is taken fresh.
+OnCalendar=*-*-* 00,08,16:03:00
+
+[Install]
+WantedBy=timers.target

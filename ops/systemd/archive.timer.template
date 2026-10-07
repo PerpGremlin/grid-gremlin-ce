@@ -1,0 +1,11 @@
+[Unit]
+Description=Grid Gremlin v3 daily results archive — once a day, near UTC midnight
+
+[Timer]
+# off every watchdog slot and the logrotate minute; Persistent catches a
+# day missed while the box was down
+OnCalendar=*-*-* 23:56:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

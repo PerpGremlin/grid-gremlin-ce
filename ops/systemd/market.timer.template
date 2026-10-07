@@ -1,0 +1,11 @@
+[Unit]
+Description=Grid Gremlin v3 market readings — hourly, beside the day's readout
+
+[Timer]
+# :33 is off every watchdog slot (*:1/5, *:4/5), the ledger (:27), logrotate
+# (:52), the archive (23:56) and the digest (23:58). Not Persistent: a
+# reading missed while the box was down is a gap, not a late reading.
+OnCalendar=*-*-* *:33:00
+
+[Install]
+WantedBy=timers.target

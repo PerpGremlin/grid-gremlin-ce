@@ -1,0 +1,12 @@
+[Unit]
+Description=Grid Gremlin v3 kept ledger — hourly, so the readout's window always overlaps it
+
+[Timer]
+# off every watchdog slot (*:1/5, *:4/5), logrotate (:52) and the archive
+# (23:56); hourly keeps collection inside the readout's 24 h window with
+# a day of slack. Persistent catches a run missed while the box was down
+OnCalendar=*-*-* *:27:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

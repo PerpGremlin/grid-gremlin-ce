@@ -1,0 +1,194 @@
+{
+  "_note": "Example fleet for Bybit Demo Trading (D68): small sizes, every mechanic shown once. Copy to configs/fleet.demo.json and change the rows, or start from the panel's set-up form.",
+  "watchdog": "configs/watchdog.demo.json",
+  "poll_seconds": 1,
+  "bots": [
+    {
+      "_note": "a long grid that slides both ways with the price (D28, D34): the adverse slide buys beyond capital, opt-in; the stop sits three rungs beyond the window (X8)",
+      "symbol": "BTCUSDT",
+      "side": "long",
+      "capital": 300,
+      "leverage": 5,
+      "market_type": "linear",
+      "lower": 70000,
+      "upper": 90000,
+      "rungs": 21,
+      "slide": {
+        "direction": "both",
+        "trigger_rungs": 2,
+        "confirm_seconds": 900,
+        "max_rungs": 20,
+        "ref_position": 0.5
+      },
+      "stop": {
+        "watch": "mark_price",
+        "rungs_beyond": 3
+      },
+      "max_position_base": "unbounded"
+    },
+    {
+      "_note": "a sliding long grid, 41 fine grids on a 1,000-wide range, no stop: the slide follows the price and the loss limit or the watchdog are the guards",
+      "symbol": "ETHUSDT",
+      "side": "long",
+      "capital": 300,
+      "leverage": 5,
+      "market_type": "linear",
+      "lower": 2200,
+      "upper": 3200,
+      "rungs": 41,
+      "slide": {
+        "trigger_rungs": 2,
+        "confirm_seconds": 900,
+        "max_rungs": 20,
+        "ref_position": 0.5
+      }
+    },
+    {
+      "_note": "the other half of a hedge: a short grid on the same market with a fixed stop above it (it does not slide)",
+      "symbol": "ETHUSDT",
+      "side": "short",
+      "capital": 200,
+      "leverage": 5,
+      "market_type": "linear",
+      "lower": 2200,
+      "upper": 3200,
+      "rungs": 16,
+      "stop": {
+        "watch": "mark_price",
+        "level": 3400
+      }
+    },
+    {
+      "_note": "a grid with a loss limit (D47): past max_loss, counted from the venue's fills since max_loss_since, the bot stands down",
+      "symbol": "XRPUSDT",
+      "side": "long",
+      "capital": 150,
+      "leverage": 3,
+      "market_type": "linear",
+      "lower": 1.2,
+      "upper": 1.8,
+      "rungs": 20,
+      "max_loss": 40,
+      "max_loss_since": "2026-10-07T00:00:00Z"
+    },
+    {
+      "_note": "a short grid spaced by percent rather than a count: spacing_pct derives the rungs (G2)",
+      "symbol": "LTCUSDT",
+      "side": "short",
+      "capital": 120,
+      "leverage": 3,
+      "market_type": "linear",
+      "lower": 60,
+      "upper": 90,
+      "spacing_pct": 0.02
+    },
+    {
+      "_note": "a stop that leaves the position instead of flattening it (D43), and a stop confirmed only after 5 minutes beyond the level (X9)",
+      "symbol": "DOTUSDT",
+      "side": "long",
+      "capital": 100,
+      "leverage": 3,
+      "market_type": "linear",
+      "lower": 1,
+      "upper": 1.6,
+      "rungs": 15,
+      "stop": {
+        "watch": "mark_price",
+        "level": 0.9,
+        "confirm_seconds": 300,
+        "action": "leave_position"
+      }
+    },
+    {
+      "_note": "an inverse (coin-margined) grid: sizes are $1 contracts, profit is counted in the coin (A4)",
+      "symbol": "BTCUSD",
+      "side": "long",
+      "capital": 200,
+      "leverage": 3,
+      "market_type": "inverse",
+      "lower": 70000,
+      "upper": 90000,
+      "rungs": 15
+    },
+    {
+      "_note": "a DCA (martingale) bot that repeats: base order, four safety orders 1.5x apart, 1.5% take-profit, a 10-minute cooldown between rounds",
+      "strategy": "martingale",
+      "symbol": "SOLUSDT",
+      "side": "long",
+      "capital": 250,
+      "leverage": 3,
+      "market_type": "linear",
+      "base_order_size": 30,
+      "safety_order_size": 30,
+      "order_size_multiplier": 1.5,
+      "max_averaging_orders": 4,
+      "deviation_pct": 0.012,
+      "take_profit_avg_pct": 0.015,
+      "repeat": true,
+      "repeat_cooldown_seconds": 600
+    },
+    {
+      "_note": "a DCA bot with two take-profit tranches and the breakeven ladder (D38): after the first tranche fills, a stop rests at breakeven",
+      "strategy": "martingale",
+      "symbol": "DOGEUSDT",
+      "side": "long",
+      "capital": 150,
+      "leverage": 3,
+      "market_type": "linear",
+      "base_order_size": 25,
+      "safety_order_size": 25,
+      "order_size_multiplier": 1.4,
+      "max_averaging_orders": 3,
+      "deviation_pct": 0.015,
+      "take_profit_tranches": [
+        {
+          "at_avg_pct": 0.01,
+          "share": 0.5
+        },
+        {
+          "at_avg_pct": 0.02,
+          "share": 0.5
+        }
+      ],
+      "breakeven_ladder": true,
+      "repeat": true
+    },
+    {
+      "_note": "a short DCA bot that stops after three rounds (D41) and closes a round held longer than two days (D44)",
+      "strategy": "martingale",
+      "symbol": "ADAUSDT",
+      "side": "short",
+      "capital": 120,
+      "leverage": 3,
+      "market_type": "linear",
+      "base_order_size": 20,
+      "safety_order_size": 20,
+      "order_size_multiplier": 1.5,
+      "max_averaging_orders": 3,
+      "deviation_pct": 0.015,
+      "take_profit_avg_pct": 0.015,
+      "repeat": true,
+      "max_hold_seconds": 172800,
+      "max_rounds": 3,
+      "max_rounds_since": "2026-10-07T00:00:00Z"
+    },
+    {
+      "_note": "a DCA bot whose base order rests as a maker order at the best bid (D37), expiring unfilled after an hour",
+      "strategy": "martingale",
+      "symbol": "AVAXUSDT",
+      "side": "long",
+      "capital": 100,
+      "leverage": 3,
+      "market_type": "linear",
+      "base_order_size": 20,
+      "start_order_type": "maker",
+      "start_order_expire_seconds": 3600,
+      "safety_order_size": 20,
+      "order_size_multiplier": 1.5,
+      "max_averaging_orders": 2,
+      "deviation_pct": 0.015,
+      "take_profit_avg_pct": 0.015,
+      "repeat": true
+    }
+  ]
+}

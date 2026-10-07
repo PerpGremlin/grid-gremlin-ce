@@ -1,0 +1,15 @@
+# Grid Gremlin v3 fleet logs (F11). systemd appends to these files and the
+# fleet writes a line a second, so they grow without bound (the 48-day run:
+# one fleet log reached 2.4 GB). Run by the user-level logrotate timer
+# (ops/systemd/logrotate.*.template); copytruncate because the writer holds
+# the file open in O_APPEND and is never restarted for a rotation.
+# One stanza covers every fleet: the glob matches each fleet-<tag>.log.
+{{REPO_DIR}}/logs/fleet-*.log {
+    size 100M
+    rotate 5
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

@@ -1,0 +1,107 @@
+{
+  "_note": "Example fleet for Hyperliquid Testnet (D68): small sizes. Testnet USDC comes from the faucet at app.hyperliquid-testnet.xyz. Books are thin outside BTC and ETH.",
+  "watchdog": "configs/watchdog.hl.testnet.json",
+  "poll_seconds": 2,
+  "bots": [
+    {
+      "_note": "a long grid that slides; the stop three rungs beyond the window is engine-watched on Hyperliquid (no hosted stop)",
+      "venue": "hyperliquid",
+      "symbol": "BTC",
+      "side": "long",
+      "capital": 200,
+      "leverage": 5,
+      "market_type": "linear",
+      "lower": 70000,
+      "upper": 90000,
+      "rungs": 15,
+      "slide": {
+        "trigger_rungs": 2,
+        "confirm_seconds": 900,
+        "max_rungs": 20,
+        "ref_position": 0.5
+      },
+      "stop": {
+        "watch": "mark_price",
+        "rungs_beyond": 3
+      }
+    },
+    {
+      "_note": "a short grid with a fixed stop above it",
+      "venue": "hyperliquid",
+      "symbol": "ETH",
+      "side": "short",
+      "capital": 150,
+      "leverage": 5,
+      "market_type": "linear",
+      "lower": 2200,
+      "upper": 3200,
+      "rungs": 15,
+      "stop": {
+        "watch": "mark_price",
+        "level": 3400
+      }
+    },
+    {
+      "_note": "a plain long grid with an account-equity stop: it flattens if the whole account falls below the level (X2)",
+      "venue": "hyperliquid",
+      "symbol": "SOL",
+      "side": "long",
+      "capital": 100,
+      "leverage": 3,
+      "market_type": "linear",
+      "lower": 90,
+      "upper": 150,
+      "rungs": 15,
+      "stop": {
+        "watch": "account_equity",
+        "level": 100
+      }
+    },
+    {
+      "_note": "a DCA bot with the engine-watched trailing stop (D31): arms 0.8% up, trails 0.4% behind the best mark",
+      "venue": "hyperliquid",
+      "strategy": "martingale",
+      "symbol": "DOGE",
+      "side": "long",
+      "capital": 120,
+      "leverage": 3,
+      "market_type": "linear",
+      "base_order_size": 30,
+      "safety_order_size": 30,
+      "order_size_multiplier": 1.5,
+      "max_averaging_orders": 2,
+      "deviation_pct": 0.012,
+      "take_profit_avg_pct": 0.02,
+      "trailing_stop_pct": 0.004,
+      "trailing_activation_pct": 0.008,
+      "repeat": true
+    },
+    {
+      "_note": "a DCA bot with two tranches resting as reduce-only exits (D23) and the breakeven ladder the engine watches (D38)",
+      "venue": "hyperliquid",
+      "strategy": "martingale",
+      "symbol": "SUI",
+      "side": "long",
+      "capital": 100,
+      "leverage": 3,
+      "market_type": "linear",
+      "base_order_size": 25,
+      "safety_order_size": 25,
+      "order_size_multiplier": 1.4,
+      "max_averaging_orders": 2,
+      "deviation_pct": 0.015,
+      "take_profit_tranches": [
+        {
+          "at_avg_pct": 0.006,
+          "share": 0.5
+        },
+        {
+          "at_avg_pct": 0.012,
+          "share": 0.5
+        }
+      ],
+      "breakeven_ladder": true,
+      "repeat": true
+    }
+  ]
+}
