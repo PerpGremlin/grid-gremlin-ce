@@ -648,6 +648,35 @@ stands unless the owner corrects it.
   use it, change it, build on it, keep the notice; contributions come under
   the same licence by its section 5, each commit signed off (DCO). The
   NOTICE says what it is and is not: software, not advice and not a service.
+- **D69 — The breakeven stop arms on profit, v2's activation (2026-10-08).**
+  Granted on the "not built" list — *"D69 D70 D71 all granted. i like your
+  ideas."* D38 built the ladder, which arms on the first tranche and so
+  needs tranches; a single-target DCA round had no breakeven protection at
+  all. `breakeven_activation_pct`: once the round is that far in profit, the
+  stop arms at the ladder's first step (D55's offset, else G6's fee floor)
+  and stays — one target or steps alike. The same stop machinery (M17:
+  Bybit's partial stop-loss, HL mark-watched, firing ends the round). One
+  arming rule and one protection per round, as D38: refused with the
+  ladder, with a trailing stop, and with a server-side, emergency or
+  position_sl stop; refused at or beyond the take-profit (it would never
+  arm) and with the offset at or beyond it (it would fire at once).
+- **D70 — A holding cap: the most bots that may hold at once (2026-10-08).**
+  Granted with D69. 3Commas' "max active deals", fleet-wide: D56 caps the
+  account's margin and notional, not how many bots may be in a position
+  together, and in a dump every long loads its ladder at once. `holding_max`
+  joins `account_caps`: at the cap a flat bot opens nothing — no base order,
+  no seed, no entry — and says so on its card; the bots holding keep their
+  safeties and exits, so the count falls by their own closing, never a forced
+  close (D56's shape). Reached and cleared are each said once. Dead bots do
+  not count; the three legs are independent and any one caps.
+- **D71 — A sliver tranche folds; a refused exit does not abort the rest
+  (2026-10-08).** Granted with D69. M25's open half: on 2026-10-05 the half
+  under HL's minimum was asked for and refused 286 times, and the refusal
+  aborted the loop, so the other exit was not written either. Now a tranche
+  under the venue's minimum folds into the next target out (else the one
+  before), the holding still covered whole, said once; and a venue refusing
+  one exit's order no longer stops the others — the rest are written, then
+  the refusal is said. Both venues; a lone tranche is left as it is.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

@@ -924,6 +924,9 @@ def main(argv):
                         'spot_borrow': bool(cfg.get('spot_borrow')),
                         'multiplier': cfg.get('order_size_multiplier'),
                         'add_ons': cfg.get('max_averaging_orders')}
+        if cfg.get('strategy') == 'martingale':          # U52: the ladder's sum
+            from .ladder import ladder_summary
+            terms[botid]['ladder'] = ladder_summary(cfg)
         exit_side = 'sell' if cfg['side'] == 'long' else 'buy'
         closers[(cfg['market_type'], cfg['symbol'], exit_side)] = botid
         if cfg['market_type'] == 'inverse':

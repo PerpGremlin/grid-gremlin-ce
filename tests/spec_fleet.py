@@ -164,7 +164,8 @@ def spec_D56_the_account_cap_is_opt_in_and_judged_on_mm_rate_and_notional():
     assert validate_fleet({'bots': [row]})['account_caps'] is None
     f = validate_fleet({'bots': [row], 'account_caps': {'mm_rate_max': 0.3,
                                                         'notional_max': 50000}})
-    assert f['account_caps'] == {'mm_rate_max': 0.3, 'notional_max': 50000.0}
+    assert f['account_caps'] == {'mm_rate_max': 0.3, 'notional_max': 50000.0,
+                                 'holding_max': None}
     for bad in ({}, {'mm_rate_max': 1.5}, {'notional_max': 0},
                 {'margin': 0.3}, {'notional_max': float('nan')}):
         try:
@@ -182,6 +183,37 @@ def spec_D56_the_account_cap_is_opt_in_and_judged_on_mm_rate_and_notional():
     assert cap_verdict({'notional_max': 60000}, None, bots) is None   # dead skip
     assert 'maintenance margin' in cap_verdict({'mm_rate_max': 0.3}, 0.31, bots)
     assert cap_verdict({'mm_rate_max': 0.3}, None, bots) is None   # unknown: no
+
+
+def spec_D70_the_holding_cap_holds_flat_bots_back_and_lets_holders_run():
+    """3Commas' max active deals, fleet-wide: `holding_max` in account_caps.
+    At the cap a flat bot opens nothing; the bots holding keep their
+    safeties and exits, and the count falls by their own closing."""
+    from gridgremlin.config import validate_fleet, ConfigError
+    from gridgremlin.main import holding_verdict
+    row = {'market_type': 'linear', 'symbol': 'BTCUSDT', 'side': 'long',
+           'capital': 1000, 'lower': 80000, 'upper': 90000, 'rungs': 11}
+    f = validate_fleet({'bots': [row], 'account_caps': {'holding_max': 3}})
+    assert f['account_caps'] == {'mm_rate_max': None, 'notional_max': None,
+                                 'holding_max': 3}
+    for bad, frag in (({'holding_max': 0}, '>='), ({'holding_max': 2.5}, 'whole number'),
+                      ({'holding_max': 'x'}, 'holding_max')):
+        try:
+            validate_fleet({'bots': [row], 'account_caps': bad})
+        except ConfigError as e:
+            assert frag in str(e), (bad, str(e))
+        else:
+            raise AssertionError(f'{bad} was accepted')
+
+    class B:
+        def __init__(self, pos, alive=True):
+            self._last_pos, self.alive = pos, alive
+    bots = [B(1.0), B(-2.0), B(0.0), B(None), B(9.0, alive=False)]
+    assert holding_verdict(None, bots) is None                          # opt-in
+    assert holding_verdict({'mm_rate_max': 0.3}, bots) is None          # not this leg
+    assert holding_verdict({'holding_max': 3}, bots) is None            # 2 < 3
+    assert holding_verdict({'holding_max': 2}, bots) == 'bots holding 2 >= 2'
+    assert holding_verdict({'holding_max': 1}, bots) == 'bots holding 2 >= 1'
 
 
 def spec_F14_a_torn_watchdog_state_heals_and_says_so():

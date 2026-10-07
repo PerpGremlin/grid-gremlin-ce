@@ -885,6 +885,41 @@ def spec_D56_at_the_cap_entries_pause_and_exits_keep_working():
     assert mg.cycle() == {'round_started': 1}
 
 
+def spec_D69_the_stop_arms_once_the_round_is_in_profit_and_only_tightens():
+    """v2's activation on a single-target round: nothing rests until the
+    mark is the activation in profit; then the first step's level (G6's
+    floor, or D55's offset) rests venue-side, sized to the holding, and
+    never loosens; the mark falling through it ends the round."""
+    venue, lines = FakeVenue(), []
+    bot = _bot(venue, lines, breakeven_activation_pct=0.005)
+    bot.cycle()
+    bot.cycle()
+    assert not _sl_book(venue)                     # in profit 0%: nothing
+    venue.mark = 60240.0                           # +0.4%: still nothing
+    bot.cycle()
+    assert not _sl_book(venue)
+    venue.mark = 60300.0                           # +0.5%: armed
+    bot.cycle()
+    sl = _sl_book(venue)
+    assert len(sl) == 1 and float(sl[0]['triggerPrice']) == 60060.0   # avg + G6
+    assert any('breakeven stop steps to 60060 — the round is 0.50% in profit (D69)'
+               in ln for ln in lines)
+    venue.mark = 60200.0                           # back under the activation:
+    n = len(venue.sl_calls)                        # the stop stays, unmoved
+    bot.cycle()
+    assert float(_sl_book(venue)[0]['triggerPrice']) == 60060.0 and len(venue.sl_calls) == n
+    venue.mark = 60050.0                           # through it: the round ends
+    out = bot.cycle()
+    assert out == {'round': 'breakeven'}
+    v2, l2 = FakeVenue(), []
+    b2 = _bot(v2, l2, breakeven_activation_pct=0.005, breakeven_offset_pct=-0.002)
+    b2.cycle()
+    b2.cycle()
+    v2.mark = 60300.0
+    b2.cycle()
+    assert float(_sl_book(v2)[0]['triggerPrice']) == 59880.0           # D55's offset
+
+
 def spec_D55_the_first_step_sits_where_the_owner_chose():
     """Owner 2026-10-05: breakeven offsets "should be an option, the user
     should be able to choose how to take the hit." The first step from the
@@ -1070,6 +1105,53 @@ def spec_M25_a_filled_tranche_is_done_while_the_mark_lags_it():
     exits = [(o['price'], o['qty']) for o in venue.orders if o['reduce_only']]
     assert exits == [(61200.0, '0.008')]           # t1 not re-placed; t2 whole
     assert bot._be_level == 60060.0                # and the ladder stepped
+
+
+def spec_D71_a_sliver_tranche_folds_into_its_neighbour():
+    """M25's open half: a tranche under the venue's minimum is folded into
+    the next target out (else the one before), the holding still covered
+    whole, said once — never asked for and refused every cycle."""
+    tight = LinearAdapter({'symbol': 'BTCUSDT', 'qty_step': 0.001,
+                           'price_tick': 0.1, 'min_qty': 0.001,
+                           'min_notional': 100.0, 'settle_coin': 'USDT'})
+    three = [{'at_avg_pct': 0.01, 'share': 0.1}, {'at_avg_pct': 0.02, 'share': 0.45},
+             {'at_avg_pct': 0.03, 'share': 0.45}]
+    venue, lines = FakeHLRound(), []
+    bot = Bot(_tranche_cfg(venue='hyperliquid', take_profit_tranches=three),
+              tight, venue, Notifier(sink=lines.append), gen_seed=1)
+    bot.cycle()
+    bot.cycle()                      # 0.016 held: 10% = 0.001 = 60.6 USDT < 100
+    exits = sorted((o['price'], o['qty']) for o in venue.orders if o['reduce_only'])
+    assert exits == [(61200.0, '0.008'), (61800.0, '0.008')]      # t1 into t2
+    assert sum(1 for ln in lines if 'folded into the one at 61200' in ln) == 1
+    bot.cycle()
+    assert sum(1 for ln in lines if 'folded into' in ln) == 1       # said once
+    # the last one short: it folds into the one before
+    bot2 = Bot(_tranche_cfg(venue='hyperliquid', take_profit_tranches=[
+        {'at_avg_pct': 0.01, 'share': 0.9}, {'at_avg_pct': 0.02, 'share': 0.1}]),
+        tight, FakeHLRound(), Notifier(sink=lambda l: None), gen_seed=1)
+    assert bot2._fold_slivers([(60600.0, 0.015), (61200.0, 0.001)]) == [(60600.0, 0.016)]
+    assert bot2._fold_slivers([(60600.0, 0.001)]) == [(60600.0, 0.001)]   # lone: left
+
+
+def spec_D71_one_refused_exit_does_not_leave_the_others_unwritten():
+    """M25's other half: a venue refusing one tranche's order used to abort
+    the loop — the bot's other exits were not written that cycle."""
+    from gridgremlin.exchange.errors import VenueError
+
+    class Refusing(FakeHLRound):
+        def place_order(self, category, symbol, side, qty, price, link_id, *a, **kw):
+            if kw.get('reduce_only') and float(price) == 60600.0:
+                raise VenueError('refused by the venue', kind='other')
+            return super().place_order(category, symbol, side, qty, price, link_id, *a, **kw)
+    venue, lines = Refusing(), []
+    bot = Bot(_tranche_cfg(venue='hyperliquid'), ADAPTER, venue,
+              Notifier(sink=lines.append), gen_seed=1)
+    bot.cycle()
+    bot.cycle()
+    exits = [(o['price'], o['qty']) for o in venue.orders if o['reduce_only']]
+    assert exits == [(61200.0, '0.008')]              # t2 rests although t1 was refused
+    assert any('tp: refused by the venue' in ln for ln in lines)   # and it is said
 
 
 def spec_M17_a_restart_that_fires_at_once_still_ends_a_round():

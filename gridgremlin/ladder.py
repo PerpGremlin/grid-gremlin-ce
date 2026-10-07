@@ -490,6 +490,33 @@ def martingale_schedule(cfg):
     return out
 
 
+def ladder_summary(cfg):
+    """U52 (the ledger's DCA summary box): what the ladder adds up to,
+    step by step, as fractions of the base price — so it is true before a
+    round opens and whatever the price. Row i: where the step fills
+    (`fill_pct`, signed: a long's steps fill below), its `notional`, the
+    quote `committed` once it has filled, the average entry then
+    (`avg_pct`, signed), and how far the price must move from that fill
+    for the whole position to reach take-profit (`to_tp_pct`). Row 0 is
+    the base order. The take-profit is the single target, else the first
+    tranche's."""
+    sign = -1.0 if cfg['side'] == 'long' else 1.0
+    tp = cfg.get('take_profit_avg_pct')
+    if tp is None:
+        tp = (cfg.get('take_profit_tranches') or [{}])[0].get('at_avg_pct')
+    rows, committed, coins = [], 0.0, 0.0
+    for i, (notional, cumdev) in enumerate(martingale_schedule(cfg)):
+        price = 1.0 + sign * cumdev
+        committed += notional
+        coins += notional / price
+        avg = committed / coins
+        target = avg * (1.0 - sign * tp) if tp is not None else None
+        rows.append({'step': i, 'fill_pct': price - 1.0, 'notional': notional,
+                     'committed': committed, 'avg_pct': avg - 1.0,
+                     'to_tp_pct': None if target is None else target / price - 1.0})
+    return rows
+
+
 def anchor_from_rung(cfg, price, rung):
     """M15: invert the deviation schedule — a resting safety order at
     rung n was priced anchor x (1 +/- cumdev_n), so the anchor is

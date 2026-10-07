@@ -41,7 +41,8 @@ class Bot:
     # _trail_basis (M21: the trail starts again from the mark a new process
     # finds, so a restart can only loosen it by what the price gave back),
     # _round_hwm_basis (M22: the average the round's gauge belongs to),
-    # _round_hwm_held (M25: the holding it last saw; a shrink asks the fills).
+    # _round_hwm_held (M25: the holding it last saw; a shrink asks the fills),
+    # _folded (D71: the slivers folded this round, said once).
     # Everything else the bot knows
     # comes from the venue each cycle — except the two stated durable local
     # facts: `tombs` (X7) and `offset`, the slide window (G22).
@@ -110,6 +111,7 @@ class Bot:
         self._round_hwm = None         # M10: best mark seen this round
         self._round_hwm_basis = None   # M22: ...for THIS average
         self._round_hwm_held = None    # M25: ...and the holding it last saw
+        self._folded = ()              # D71: the slivers folded, said once
         self._be_level = None          # D38: the breakeven stop, round-scoped
         self._basis_cache = None       # G15: (held, basis) from fills
         self._rungs_cache = None       # G23: (held, [rung per lot]) from fills
@@ -1127,7 +1129,39 @@ class Bot:
                 q = adapter.round_qty(abs(held) * sh / total)
                 used += q
             out.append((p, q))
-        return out
+        return self._fold_slivers(out)
+
+    def _fold_slivers(self, targets):
+        """D71: a tranche under the venue's minimum folds into its
+        neighbour — the next target out, else the one before — instead of
+        being asked for and refused every cycle (HL, 2026-10-05: the half
+        under the minimum was refused 286 times with no exit resting). The
+        holding is still covered whole; a lone tranche is left as it is,
+        there being nowhere to fold it. Said once per change."""
+        adapter = self.adapter
+        out = [list(t) for t in targets]
+        folded = []
+        i = 0
+        while len(out) > 1 and i < len(out):
+            p, q = out[i]
+            if q > 0 and adapter.meets_minimum(q, p):
+                i += 1
+                continue
+            j = i + 1 if i + 1 < len(out) else i - 1
+            out[j][1] = adapter.nearest_qty(out[j][1] + q)
+            folded.append((p, q, out[j][0]))
+            out.pop(i)
+            if j < i:
+                i = j                      # the one before may now be last
+        key = tuple((p, q) for p, q, _ in folded)
+        if key != self._folded:
+            self._folded = key
+            if folded:
+                self.notify.event('tp', self.botid, '; '.join(
+                    f'tranche at {p:.10g} ({q:.10g}) folded into the one at '
+                    f'{to:.10g}: under the venue\'s minimum (D71)'
+                    for p, q, to in folded))
+        return [tuple(t) for t in out]
 
     def _seed_round_hwm(self, held):
         """D38/M10 across a restart: the round's best mark lived in memory,
@@ -1170,7 +1204,8 @@ class Bot:
                self.cfg['take_profit_tranches'][fired - 2]['at_avg_pct'])
         return self.adapter.round_price(basis * (1.0 + sign * pct))
 
-    def _maintain_breakeven(self, truth, basis, held, idx, hosted, fired):
+    def _maintain_breakeven(self, truth, basis, held, idx, hosted, fired,
+                            reason=None):
         """D38: the stop steps up the tranche ladder and only ever
         tightens. Venue first — Bybit's partial stop-loss, sized to what is
         still held, survives this process; on a venue that cannot host it
@@ -1198,8 +1233,9 @@ class Bot:
             return None
         if want != self._be_level:
             self.notify.event('tp', self.botid,
-                              f'breakeven stop steps to {want:.10g} after '
-                              f'{fired} tranche(s) filled (D38)')
+                              f'breakeven stop steps to {want:.10g} '
+                              + (reason or f'after {fired} tranche(s) filled '
+                                           '(D38)'))
         self._be_level = want
         lv_s, qty_s = adapter.fmt_price(want), adapter.fmt_qty(abs(held))
         resting = [o for o in book
@@ -1361,18 +1397,29 @@ class Bot:
                 except VenueError as e:
                     if e.kind != 'gone':
                         raise
-        placed = 0
+        placed, refused = 0, None
         for p, q in targets:
             key = (adapter.fmt_price(p), adapter.fmt_qty(q))
             if q <= 0 or key in have or not clear(p):
                 continue
-            self.client.set_trading_stop(cfg['market_type'], cfg['symbol'],
-                                         idx, take_profit=adapter.fmt_price(p),
-                                         tp_size=adapter.fmt_qty(q))
+            try:
+                self.client.set_trading_stop(
+                    cfg['market_type'], cfg['symbol'], idx,
+                    take_profit=adapter.fmt_price(p),
+                    tp_size=adapter.fmt_qty(q))
+            except VenueError as e:
+                # D71: one refused tranche must not leave the others
+                # unwritten this cycle — write the rest, then say it
+                if e.kind == 'flat':
+                    raise
+                refused = refused or e
+                continue
             placed += 1
         if placed:
             self.notify.event('tp', self.botid,
                               f'{placed} tranche TP(s) resting venue-side')
+        if refused:
+            raise refused
 
     def _maintain_resting_exits(self, truth, targets):
         """D23 on the hostless venue: the tranche ladder IS several D21
@@ -1394,21 +1441,32 @@ class Bot:
                 except VenueError as e:
                     if e.kind != 'gone':
                         raise
-        placed = 0
+        placed, refused = 0, None
         for p, q in targets:
             key = (adapter.fmt_price(p), adapter.fmt_qty(q))
             if q <= 0 or key in have:
                 continue
             self._gen += 1
-            self.client.place_order(
-                cfg['market_type'], cfg['symbol'], self._exit_side,
-                adapter.fmt_qty(q), adapter.fmt_price(p), self._make_link(0),
-                adapter.position_idx(self._exit_side, True) or 0,
-                reduce_only=True, post_only=False, borrow=self._borrow)
+            try:
+                self.client.place_order(
+                    cfg['market_type'], cfg['symbol'], self._exit_side,
+                    adapter.fmt_qty(q), adapter.fmt_price(p),
+                    self._make_link(0),
+                    adapter.position_idx(self._exit_side, True) or 0,
+                    reduce_only=True, post_only=False, borrow=self._borrow)
+            except VenueError as e:
+                # D71: one refused exit must not leave the others unwritten
+                # this cycle — write the rest, then say it
+                if e.kind == 'flat':
+                    raise
+                refused = refused or e
+                continue
             placed += 1
         if placed:
             self.notify.event('tp', self.botid,
                               f'{placed} tranche exit(s) resting')
+        if refused:
+            raise refused
 
     def _maintain_trailing(self, truth, basis, held, idx, armed=True):
         """D23: trailing rides the venue or does not exist. Set once per
@@ -1551,6 +1609,7 @@ class Bot:
                 self._round_hwm_basis = None    # M22: and its average
                 self._round_hwm_held = None     # M25: and its holding
                 self._be_level = None           # D38: so is the ladder
+                self._folded = ()               # D71: and the folds
                 self._stop_since = self._stop_base = None    # X9/X10 too
                 self._round_t0 = None                        # and M19
                 self._round_rungs = set()                    # and M24
@@ -1696,6 +1755,29 @@ class Bot:
             if stray:
                 return self._end_round_after_venue_stop(truth, held, idx,
                                                         stray)
+        act = cfg.get('breakeven_activation_pct')
+        if act is not None and basis is not None and held:
+            # D69, v2's activation: the stop arms once the round is this far
+            # in profit, whatever the take-profit's shape, at the ladder's
+            # first step (D55's offset, else G6's floor); armed, it only
+            # tightens — the latch is _be_level, or the venue's own row
+            is_long = cfg['side'] == 'long'
+            mark = truth['mark']
+            armed = self._be_level is not None or (
+                mark is not None and (mark >= basis * (1.0 + act) if is_long
+                                      else mark <= basis * (1.0 - act)))
+            if armed:
+                try:
+                    out = self._maintain_breakeven(
+                        truth, basis, held, idx, hosted, 1,
+                        reason=f'— the round is {act:.2%} in profit (D69)')
+                except VenueError as e:
+                    out = None
+                    if e.kind != 'flat':         # the round just closed
+                        self.notify.event('warn', self.botid,
+                                          f'breakeven stop: {e}', urgent=True)
+                if out:
+                    return out
         if self.cfg.get('take_profit_tranches'):
             targets = self._round_targets(basis, held, truth['mark'])
             # M11: a tranche has fired iff fewer targets remain than configured

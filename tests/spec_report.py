@@ -672,6 +672,8 @@ def spec_U16_the_contract_carries_each_bots_terms():
     assert sol['capital'] == 4000.0 and sol['leverage'] == 2.0
     assert abs(sol['notional'] - 1800.0) < 1e-9        # the ladder's total,
                                                         # not capital x lev
+    assert len(sol['ladder']) == 6 and 'ladder' not in btc          # U52
+    assert abs(sol['ladder'][-1]['committed'] - 1800.0) < 1e-9
 
 
 def spec_R14_a_shorts_partial_window_widens_on_the_venues_holding():

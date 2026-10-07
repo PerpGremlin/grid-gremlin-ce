@@ -91,7 +91,7 @@ pending; **absent by decision** = we chose not to, D-number cited.
 | SL % from the **base order price**, must sit beyond the last SO; action close, or close & stop bot | X2 `mark_price` / `account_equity` / `position_sl`; X1 flattens and kills; X3 server-side where hosted | same for "close & stop bot"; "close deal, keep the bot" is `stop.action: end_round` with `from_base_pct` (X10/X11, D42) |
 | SL timeout (price must stay beyond for N s) | `stop.confirm_seconds` (X9); a recovery resets the clock | **copied (D33)** |
 | Trailing SL (% of the highest price) | `trailing_stop_pct` (+ `trailing_activation_pct`): venue-hosted where it can be, engine-watched on HL (M21, D31) — proven live 2026-10-03 | **copied (D31)** |
-| **SL to breakeven** ladder: TP1 → breakeven, TP2 → TP1, … | `breakeven_ladder` (M17): venue partial SL on Bybit, mark-watched on HL; firing ends the round | **copied (D38)** |
+| **SL to breakeven** ladder: TP1 → breakeven, TP2 → TP1, … | `breakeven_ladder` (M17): venue partial SL on Bybit, mark-watched on HL; firing ends the round; `breakeven_activation_pct` (M17c) arms it on profit instead, any take-profit shape | **copied (D38, D69)** |
 | Reinvest 0–100 % of profit into next deal's orders; never below initial | M12 toggle: factor 1 + realized/capital over 30 days, floored 0, capped 1.2 | same in spirit; percentage absent |
 | Risk reduction: shrink orders after losses, back to normal on profit | the same M12 factor goes below 1 on losses | same — one factor covers both |
 | Cooldown between deals | M13 `repeat_cooldown_seconds`, anchored to the venue's TP-fill time | same, ours restart-proof |
@@ -110,7 +110,7 @@ pending; **absent by decision** = we chose not to, D-number cited.
 | 3Commas | grid-gremlin v3 | status |
 |---|---|---|
 | Server-side TP/SL/trailing held by 3Commas; only futures-DCA SL is exchange-native | venue-hosted wherever the venue can (X3, D21, D23); bot-side only as fallback | ours ahead — a dead process leaves the stop resting |
-| **No portfolio guard**: no drawdown switch, no equity floor, no pause on disconnect | watchdog: staleness, mm_rate, equity floor, drawdown from peak, per-bot bounds (F1–F9); opt-in account caps (D56) and risk profiles (D57) | ours ahead |
+| **No portfolio guard**: no drawdown switch, no equity floor, no pause on disconnect | watchdog: staleness, mm_rate, equity floor, drawdown from peak, per-bot bounds (F1–F9); opt-in account caps (D56), a holding cap (D70) and risk profiles (D57) | ours ahead |
 | Telegram: every event + commands (`/stop_all_long_bots`, `/my_stats`, …) | the phone carries emergencies, startup and urgent or persisting warnings (D60); read commands `/pnl`, `/positions`, … (D61); a daily digest (D62). Write commands wait for the agentic phase (D46) | reads **copied**; writes deferred (D46) |
 | Fleet on/off by direction; close-all-and-stop per bot; Sell All per spot account | systemd unit per fleet; panel control start/stop/restart; no per-direction switch | partial |
 | Dashboard, per-bot stats, event log, CSV/XLSX | the panel (View, rehearse, create/edit, control) + `report` readout | comparable |
@@ -141,8 +141,9 @@ its specs. Signals (item 13) stay deferred by D15/D26 until the owner says so.
 2. **SL to breakeven ladder** (DCA §2). **Built 2026-10-02 as D38 / M17,
    copied:** TP1 → average entry plus G6's fee floor, TP n → TP n-1, never
    loosening; Bybit's partial stop-loss, HL bot-side; firing ends the round,
-   not the bot. D55 places the first step with an offset; v2's activation %
-   (arm only once the round is N% up) is still not in it.
+   not the bot. D55 places the first step with an offset; **D69 adds v2's
+   activation %** (`breakeven_activation_pct`, M17c): the stop arms once the
+   round is N% up, one target or steps alike.
 3. **SL timeout and max trade iterations** (DCA §2). **Built 2026-10-02 as
    X9 and M18 (D33, D41), copied**, with 3Commas' "close deal, keep the bot"
    stop beside them (X10/X11, D42) and D33's cooldown after a stop. Never run
@@ -238,10 +239,10 @@ available, V2 continues to receive updates."*
 | SL from base; timeout; native on-exchange SL for futures | SL market on ask touch; **timeout removed; on-exchange SL custody removed** | do not copy |
 | move-to-breakeven after TP1 | **activation % and execution %** ("SL to $1,020 after a 3 % gain, accounting for fees") | copy into item 2: the breakeven ladder gets an activation and an execution offset |
 | trailing TP by deviation from the high | a **Trailing Stop object**: activation price, then a fixed-distance trail; "if the activation price is not reached, your strategy will not have a stop level"; "if Stop Loss and Trailing Stop share the same price level, Stop Loss takes priority" | clean, testable semantics — the shape for item 9 |
-| per-bot max active deals | **global max open positions** across all bots; the offending bot is "declined, and the bot will be stopped" | a fleet-level cap with refusal — fits F-series; candidate |
+| per-bot max active deals | **global max open positions** across all bots; the offending bot is "declined, and the bot will be stopped" | **D70** `holding_max` in `account_caps` (F15b): a flat bot waits and its card says why; holders run on; nothing is stopped |
 | QFL, TradingView screener, CQS, indicator close conditions, signal-triggered SOs | removed; TradingView custom signals and manual/API moved to the Signal Bot; up to 5 indicators AND-ed on 15 m / 60 m closed candles | signals — deferred |
 | reinvest, risk reduction, cooldown, min profit, close-after-timeout, custom ladder, profit currency | **all removed** | we keep M12/M13; the ledger's items stand |
-| — | the **DCA summary box**: required capital closed-form, max drop covered, capital-weighted break-even, with declared caveats | M2 already refuses over-capital; the readout could print the box |
+| — | the **DCA summary box**: required capital closed-form, max drop covered, capital-weighted break-even, with declared caveats | M2 refuses over-capital; **U52** the card folds the ladder: each step's fill, size, committed, average and the bounce to take-profit; the move covered in one line |
 
 **Order custody, the material change.** Classic v1 rested TPs as limits and, on
 Binance/Bybit/Gate futures, placed the SL on the exchange. v2 monitors bid/ask

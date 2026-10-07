@@ -368,6 +368,15 @@ eventually pin (T1).
   `breakeven_offset_pct` from the average — negative, zero or positive —
   else G6's fee floor; later steps unchanged. Validated below the first
   tranche's target and only with the ladder.
+- **M17c** The stop arms on profit (D69): with `breakeven_activation_pct`, no
+  stop rests until the mark is that far in profit from the average; then the
+  ladder's first step (M17b's level) rests, sized to the holding, and only
+  tightens — the mark falling back under the activation does not lift it; the
+  mark falling through it ends the round. One target or tranches alike; refused
+  with the ladder (one arming rule), with a trailing stop or a venue-row stop
+  (one protection), at or beyond the take-profit, and with the offset at or
+  beyond it. Unhosted, a restart re-arms when the mark is next in profit by
+  the activation (M21's shape).
 - **M26** A DCA bot on margin spot (D59): long, Bybit, `spot_borrow` with
   `spot_leverage` as its leverage; the round's exit rests as a plain sell
   recognised by its link (spot has no reduce-only and no position TP); base
@@ -446,6 +455,12 @@ eventually pin (T1).
   holding shrinks within a round, the round's own exit fills (M17's restart
   walk) are prices it reached and fold into the gauge; a fill list still
   lagging the position answers nothing and is asked again next cycle.
+- **M25b** A sliver folds; a refusal does not abort (D71). A tranche whose
+  quantity is under the venue's minimum folds into the next target out, else
+  the one before — the holding covered whole, said once per change; a lone
+  tranche stays. In either placement loop a venue refusing one order leaves
+  the others written; the first refusal is raised after the loop (a `flat`
+  refusal still stops it: the round just closed).
 
 ## S — start states
 
@@ -753,6 +768,12 @@ eventually pin (T1).
   rests or is placed — entries withdrawn, no seed, no new round — and exits
   run. Reached and cleared are each said once. Unknown mm_rate judges
   nothing on that leg; absent caps, nothing changes.
+- **F15b** The holding cap (D70). With `holding_max` set, each cycle the venue's
+  living bots holding a position are counted; at or past the cap every FLAT
+  living bot on that venue is capped — no base order, no seed, no entry — and
+  the holding ones are not held back by this leg. The snapshot carries each
+  capped bot's reason and the card says it: a flat bot waits, a holding one
+  adds nothing. Reached and cleared are each said once.
 - **F14** The watchdog's memory survives a torn write. Its state is written
   atomically (temp, fsync, rename, fsync the directory); an unreadable state
   file starts the memory again and pages once saying so — the cost is a
@@ -1364,6 +1385,12 @@ eventually pin (T1).
   scrolls, folding into a row under it at phone width. The export, having no actions, has none. Spacing comes
   from one scale (`--gap`, `--gap-s`) shared by cards, boxes, pills and
   buttons.
+- **U52** A DCA card folds its ladder: for each step, where it fills from
+  the base price, its size, what is then committed, the average entry and
+  how far the price must come back for take-profit; the summary line says
+  the move the ladder covers. From the engine's own schedule, carried in the
+  contract's terms as fractions of the base price, so it holds before a round
+  and during one. A grid card has none.
 
 ## P — the panel's boundary and the keys
 
