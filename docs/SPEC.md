@@ -1391,6 +1391,14 @@ eventually pin (T1).
   the move the ladder covers. From the engine's own schedule, carried in the
   contract's terms as fractions of the base price, so it holds before a round
   and during one. A grid card has none.
+- **U53** Every money figure names its coin. The contract's terms carry each
+  bot's `quote` (the coin its capital, notional, loss and P&L are in) and
+  `margin_coin` (the coin the venue's margin on its position is in): the
+  settle quote for linear and spot, dollars and the base coin for inverse. The
+  card's total, holding worth and cost, margin, investment, loss limit and
+  ladder say it; the exchange's total and the strip join the coins its bots
+  use. A contract without terms answers from the bot's own name. A margin in
+  a dollar coin shows two decimals; one held in the coin itself, six figures.
 
 ## P — the panel's boundary and the keys
 

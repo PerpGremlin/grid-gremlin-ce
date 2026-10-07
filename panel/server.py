@@ -16,7 +16,7 @@ from pathlib import Path
 import urllib.parse
 import html
 
-from gridgremlin.report import card_total
+from gridgremlin.report import card_total, money_units
 import json
 import re
 import secrets
@@ -631,7 +631,7 @@ def ladder_box(idx, botid, terms):
             '<th>fills at</th><th>size</th><th>committed</th><th>average</th>'
             f'<th>to take-profit</th></tr>{body}</table>'
             '<div class="dim">from the base price; size and committed in '
-            'quote</div></details>')
+            f'{(terms or {}).get("quote") or "quote"}</div></details>')
 
 
 def kind_line(terms):
@@ -747,6 +747,7 @@ def card(idx, botid, b, contract, belief):
     the rest folds under 'the numbers'."""
     rng = (contract.get('ranges') or {}).get(botid)
     ceil = ((contract.get('watchdog') or {}).get('ceilings') or {}).get(botid)
+    money_coin, margin_coin = units_of(botid, (contract.get('terms') or {}).get(botid))   # U53
     links = (f"<a href='/edit?fleet={idx}&bot={botid}'>edit</a> · "
              f"<a href='/setup?fleet={idx}&copy={botid}'>copy</a> · "
              f"<a href='/edit?fleet={idx}&bot={botid}&mode=remove'>remove"
@@ -806,13 +807,13 @@ def card(idx, botid, b, contract, belief):
         # U45: the money in its own box — the total, then what it is made of
         net = b['realized'] - b['fees']
         head = (f'<div class="pnl {_num_cls(total)}">'
-                f'<span class="big {_num_cls(total)}">{total:+,.2f}</span>'
-                f'{coin} <span class="dim">after fees, {span}</span>'
+                f'<span class="big {_num_cls(total)}">{total:+,.2f}</span> '
+                f'{money_coin}{coin} <span class="dim">after fees, {span}</span>'
                 f'<div class="parts">'
                 f'{pnl_parts(net, b["unreal_at_mark"], b.get("funding"))}'
                 f'</div>{since_first_line(contract, botid)}</div>')
         held = holding_html(pos, b['avg_cost'], mark, botid,
-                            bool(b.get('inverse')))               # U44
+                            bool(b.get('inverse')), quote=money_coin)   # U44/U53
         floor = (contract.get('fee_floors') or {}).get(botid)
         unreal = b['unreal_at_mark']
         limit = (f'{abs(pos) / ceil * 100:.0f}% of {ceil:,.4g}' if ceil
@@ -875,10 +876,13 @@ def card(idx, botid, b, contract, belief):
         # V14: the exchange's own margin on this position, from the
         # engine's last snapshot
         parts = []
+        # U53: two decimals for a dollar coin; a margin held in the coin
+        # itself is small (MM 0.0012 BTC read as 0.00) — six figures
+        fmt = ',.2f' if margin_coin in ('USDT', 'USDC', 'USD') else ',.6g'
         if mv.get('im') is not None:
-            parts.append(f"IM {mv['im']:,.2f}")
+            parts.append(f"IM {mv['im']:{fmt}} {margin_coin}")
         if mv.get('mm') is not None:
-            parts.append(f"MM {mv['mm']:,.2f}")
+            parts.append(f"MM {mv['mm']:{fmt}} {margin_coin}")
         if mv.get('leverage'):
             parts.append(f"at {mv['leverage']:g}x on the exchange")
         held += '</div><div class="dim">margin ' + ' · '.join(parts)
@@ -891,9 +895,9 @@ def card(idx, botid, b, contract, belief):
         lev = terms.get('leverage') or 1.0
         def amount(v):                 # 46,600 and 3,495,000, never 3.5e+06
             return f'{v:,.0f}' if abs(v) >= 1000 else f'{v:,.6g}'
-        held += (f'</div><div class="dim">investment {amount(terms["capital"])}'
+        held += (f'</div><div class="dim">investment {amount(terms["capital"])} {money_coin}'
                  + (f' at <b>{lev:g}x</b>' if lev != 1 else '')
-                 + (f' · up to {amount(terms["notional"])} in the market'
+                 + (f' · up to {amount(terms["notional"])} {money_coin} in the market'
                     if terms.get('notional') else ''))
     where = ''
     if rng and mark:
@@ -918,7 +922,7 @@ def card(idx, botid, b, contract, belief):
         used = down / loss['limit']
         held += (f'</div><div class="{"neg" if used >= 0.75 else "dim"}">'
                  f"loss limit: down {down:,.2f} of {loss['limit']:,.6g} "
-                 f'({used:.0%} used)')
+                 f'{money_coin} ({used:.0%} used)')
     cls = 'neg' if state == 'DEAD' else 'dim'
     side = 'short' if botid.endswith('s') else 'long'
     flat = (abs(pos) <= 1e-12 if b is not None else
@@ -1105,11 +1109,23 @@ def hero_strip(labelled):
         # the words' lengths (the owner: "so it looks squared")
         lines.append(
             f'<div class="fleet"><a href="#fleet{idx}">{label}</a>{tier_badge(c)}'
-            f'<span class="big num {_num_cls(total)}">{total:+,.2f}</span>'
+            f'<span class="big num {_num_cls(total)}">{total:+,.2f} '
+            f'<span class="dim">{venue_money(c)}</span></span>'
             f'<span class="dim num">{len(c["bots"])} bots</span>'
             + (f'<b class="neg num">{dead} dead</b>' if dead else '<span></span>')
             + f'<span class="dim">{lev}</span></div>')
     return '<div class="hero">' + ''.join(lines) + '</div>'
+
+
+def venue_money(contract):
+    """U53: what an exchange's total is counted in — its bots' money
+    coins, joined when they differ (USDT/USDC at par is the venue's own
+    convention on a unified account)."""
+    terms = (contract.get('terms') or {}).values()
+    coins = sorted({t['quote'] for t in terms if t and t.get('quote')})
+    if not coins:
+        coins = sorted({units_of(b, None)[0] for b in contract.get('bots') or {}})
+    return '/'.join(coins) if coins else 'quote'
 
 
 def cards_section(idx, label, contract, view='all'):
@@ -1135,8 +1151,8 @@ def cards_section(idx, label, contract, view='all'):
             f'refreshes every {REFRESH_S}s)</span></h1>'
             f'<div class="pnl {_num_cls(total)}"><span class="dim">this '
             'exchange</span> <span class="big '
-            f'{_num_cls(total)}">{total:+,.2f}</span> <span class="dim">'
-            'after fees, each bot counted as its card says</span>'
+            f'{_num_cls(total)}">{total:+,.2f}</span> {venue_money(contract)} '
+            '<span class="dim">after fees, each bot counted as its card says</span>'
             f'<div class="parts">'
             f'{pnl_parts(net, sum(opened) if opened else None, funding)}'
             f'</div>{exchange_since_first(contract)}{exchange_leverage(contract)}</div>'
@@ -1271,6 +1287,11 @@ again.</td></tr>
 <tr><td>fees</td><td class="dim">what the venue charged for every fill
 in the window — already excluded from nothing: total = realized − fees
 + funding + unreal.</td></tr>
+<tr><td>USDT · USDC · USD · BTC …</td><td class="dim">every money figure
+names its coin (U53): a linear or spot bot's money is its settle coin
+(Bybit USDT or USDC, Hyperliquid USDC); an inverse bot's capital, notional,
+loss and P&amp;L are dollars ($1 contracts) and its margin is the coin
+itself. An exchange's total joins the coins its bots use.</td></tr>
 <tr><td>the ladder</td><td class="dim">a DCA card's own sum (U52): for
 each step, where it fills from the base price, its size, what is then
 committed, the average entry, and how far the price must come back from
@@ -1399,7 +1420,17 @@ def coin_of(botid):
     return core
 
 
-def holding_html(pos, avg, mark, botid, inverse=False):
+def units_of(botid, terms):
+    """U53: (money coin, margin coin) for a card — from the contract's
+    terms; a contract without them answers from the bot's own name."""
+    if terms and terms.get('quote'):
+        return terms['quote'], terms.get('margin_coin') or terms['quote']
+    mt = {'lin': 'linear', 'inv': 'inverse', 'spo': 'spot'}.get(botid[:3], 'linear')
+    u = money_units(None, mt, botid[3:-1])
+    return u['quote'], u['margin_coin']
+
+
+def holding_html(pos, avg, mark, botid, inverse=False, quote=None):
     """U44 (owner 2026-10-05: "users can see the value, cost, asset … bybit
     lets you choose these as user preferences"): a holding said three ways
     at once — the coins, what they are worth at the mark, what they cost at
@@ -1423,9 +1454,12 @@ def holding_html(pos, avg, mark, botid, inverse=False):
         return '—' if v is None else (f'{v:,.0f}' if abs(v) >= 1000
                                       else f'{v:,.6g}')
     sign = '-' if pos < 0 else ''
+    if quote is None:                       # U53: from the bot's own name
+        quote = units_of(botid, None)[0]
+    q = f' {quote}' if quote else ''
     parts = [f'<span class="u-coin">{sign}{n(coins)} {coin}</span>',
-             f'<span class="u-value">worth {n(value)}</span>',
-             f'<span class="u-cost">cost {n(cost)}'
+             f'<span class="u-value">worth {n(value)}{q}</span>',
+             f'<span class="u-cost">cost {n(cost)}{q}'
              + (f' ({n(cost_coins)} {coin})' if cost_coins else '')
              + f' @ {avg:.6g}</span>']
     return 'holding ' + '<span class="u-sep"> · </span>'.join(parts)
