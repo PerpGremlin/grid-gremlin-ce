@@ -1,0 +1,12 @@
+[Unit]
+Description=Grid Gremlin v3 daily digest — 23:58 UTC (07:58 Perth), after the archive, before Tokyo
+
+[Timer]
+# two minutes after the archive (23:56) wrote the day's readout, before
+# Tokyo's open at 00:00 UTC; off every watchdog slot (*:1/5, *:4/5).
+# Persistent sends a digest missed while the box was down
+OnCalendar=*-*-* 23:58:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,8 @@
+[Unit]
+Description=Grid Gremlin v3 log rotation — the fleet logs, size-capped (F11)
+
+[Service]
+Type=oneshot
+WorkingDirectory={{REPO_DIR}}
+# user-level: its own state file, no root, no /etc
+ExecStart=/usr/sbin/logrotate --state {{REPO_DIR}}/logs/.logrotate.state {{REPO_DIR}}/ops/logrotate.conf

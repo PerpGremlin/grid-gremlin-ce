@@ -1,0 +1,9 @@
+[Unit]
+Description=Grid Gremlin v3 daily results archive (R17) — read-only
+
+[Service]
+Type=oneshot
+WorkingDirectory={{REPO_DIR}}
+EnvironmentFile={{REPO_DIR}}/.env
+Nice=10
+ExecStart=/usr/bin/python3 -m gridgremlin.archive configs/{{FLEET_CONFIG}} {{MORE_FLEET_CONFIGS}}

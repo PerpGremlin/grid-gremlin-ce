@@ -1,0 +1,14 @@
+[Unit]
+Description=grid-gremlin panel (read-only, loopback, holds no keys)
+
+[Service]
+WorkingDirectory={{REPO_DIR}}
+# loopback only; reached over an ssh LocalForward. The token file is the
+# panel's own (rotate by deleting it); the units are the ones its control
+# page may start/stop/restart.
+ExecStart=/usr/bin/python3 -m panel.server configs/{{FLEET_CONFIG}} {{MORE_FLEET_CONFIGS}} --hours 24 --port {{PANEL_PORT}} --token-file {{REPO_DIR}}/logs/.panel-token --units {{UNITS}}
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

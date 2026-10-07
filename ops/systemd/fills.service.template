@@ -1,0 +1,9 @@
+[Unit]
+Description=Grid Gremlin v3 kept ledger (R18) — every fill, once — read-only toward the venues
+
+[Service]
+Type=oneshot
+WorkingDirectory={{REPO_DIR}}
+EnvironmentFile={{REPO_DIR}}/.env
+Nice=10
+ExecStart=/usr/bin/python3 -m gridgremlin.kept_fills configs/{{FLEET_CONFIG}} {{MORE_FLEET_CONFIGS}}

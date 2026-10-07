@@ -1,0 +1,18 @@
+[Unit]
+Description=Grid Gremlin v3 reading commands over Telegram (F18, D61) — owner-only, read-only
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory={{REPO_DIR}}
+EnvironmentFile={{REPO_DIR}}/.env
+Nice=10
+# The channel's ONE getUpdates consumer: the relay timer must stay disabled
+# while this runs (both would steal each other's updates). It refuses to
+# start without TELEGRAM_OWNER_ID (fail closed).
+ExecStart=/usr/bin/python3 -m gridgremlin.phone configs/{{FLEET_CONFIG}} {{MORE_FLEET_CONFIGS}}
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target

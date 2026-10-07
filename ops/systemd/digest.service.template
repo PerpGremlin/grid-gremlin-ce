@@ -1,0 +1,11 @@
+[Unit]
+Description=Grid Gremlin v3 daily digest (F17, D62) — one message, read-only toward the venues
+
+[Service]
+Type=oneshot
+WorkingDirectory={{REPO_DIR}}
+EnvironmentFile={{REPO_DIR}}/.env
+Nice=10
+# the ledger first, so the day is whole to the minute (R18)
+ExecStartPre=/usr/bin/python3 -m gridgremlin.kept_fills configs/{{FLEET_CONFIG}} {{MORE_FLEET_CONFIGS}}
+ExecStart=/usr/bin/python3 -m gridgremlin.digest configs/{{FLEET_CONFIG}} {{MORE_FLEET_CONFIGS}}

@@ -1,0 +1,25 @@
+# Local working memory — never push
+CLAUDE.md
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Python
+__pycache__/
+*.pyc
+
+# Owner working notes — never commit
+docs/PerpGremlinResponse.txt
+
+# Secrets — never commit
+.env
+logs/
+
+# Rendered on the box from ops/logrotate.conf.template
+ops/logrotate.conf
+
+# Claude Code local state — never commit, any variant
+.claude/
+
+# The panel keeps a .bak beside each config it writes (§11)
+configs/*.bak

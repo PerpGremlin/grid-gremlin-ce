@@ -1,0 +1,13 @@
+{
+  "_note": "The watchdog's account guards (F1): it pages, never acts (D39). equity_min and the drawdown are the account's; per-bot bounds are opt-in (D32).",
+  "tag": "demo",
+  "snapshot": "logs/snapshots-demo.jsonl",
+  "state": "logs/watchdog-demo.state.json",
+  "staleness_seconds": 1000,
+  "mm_rate_max": 0.5,
+  "equity_min": 50,
+  "equity_drawdown_max": 0.5,
+  "re_alert_seconds": 86400,
+  "assumes_sole_actor": true,
+  "positions": {}
+}
