@@ -657,6 +657,36 @@ def spec_U51_every_link_and_switch_sits_in_one_side_panel():
     assert '--gap:1em;--gap-s:.5em' in CSS and '.cards{display:grid;gap:var(--gap)' in CSS
 
 
+def spec_U52_a_dca_card_folds_its_ladder_and_says_the_drop_it_covers():
+    """The owner: "what am I actually risking with this row" — the
+    3Commas summary box on the card, from the contract's terms."""
+    from panel.server import KEY, ladder_box, render
+    rows = [{'step': 0, 'fill_pct': 0.0, 'notional': 1500.0, 'committed': 1500.0,
+             'avg_pct': 0.0, 'to_tp_pct': 0.01},
+            {'step': 1, 'fill_pct': -0.015, 'notional': 1500.0, 'committed': 3000.0,
+             'avg_pct': -0.00756, 'to_tp_pct': 0.0176},
+            {'step': 6, 'fill_pct': -0.09, 'notional': 48000.0, 'committed': 96000.0,
+             'avg_pct': -0.0412, 'to_tp_pct': 0.0652}]
+    box = ladder_box(3, 'lin1000PEPEUSDTl', {'ladder': rows})
+    assert box.startswith('<details data-k="3:lin1000PEPEUSDTl:ladder"><summary>the ladder: '
+                          'covers a move of <b>-9.00%</b>, then 96,000 committed at an '
+                          'average of -4.12%</summary>')
+    assert '<tr><td>base</td><td>+0.00%</td><td>1,500</td><td>1,500</td><td>+0.00%</td><td>+1.00%</td></tr>' in box
+    assert '<tr><td>6</td><td>-9.00%</td><td>48,000</td><td>96,000</td><td>-4.12%</td><td>+6.52%</td></tr>' in box
+    assert ladder_box(0, 'x', {'capital': 1}) == '' and ladder_box(0, 'x', None) == ''
+    c = {'window_hours': 6.0, 'generated_ms': 0, 'unowned': {},
+         'bots': {'lin1000PEPEUSDTl': dict(CONTRACT['bots']['spoADAUSDTl'], strategy='martingale')},
+         'terms': {'lin1000PEPEUSDTl': {'capital': 2000, 'leverage': 50.0, 'market_type': 'linear',
+                                         'strategy': 'martingale', 'multiplier': 2.0, 'add_ons': 6,
+                                         'ladder': rows}},
+         'watchdog': {'belief': {'age_s': 2, 'bots': {}}}}
+    page = render([('demo', c)])
+    assert page.count(':ladder"><summary>the ladder:') == 1
+    assert page.index('<summary>the numbers') < page.index('<summary>the ladder')
+    assert '<tr><td>the ladder</td>' in KEY
+    assert ':ladder"' not in render([('demo', CONTRACT)])         # a grid has none
+
+
 def spec_V10_a_card_says_when_the_price_has_left_the_range():
     from panel.server import render
     c = json.loads(json.dumps(CONTRACT))
@@ -710,6 +740,36 @@ def spec_U10_a_refresh_does_not_shut_what_the_reader_opened():
     for word in ('fetch(', 'http://', 'https://', 'eval(', 'Math.',
                  'localStorage', 'cookie'):
         assert word not in KEEP_JS, word
+
+
+def spec_D70_a_capped_bot_says_so_on_its_card():
+    """The cap's reason rides the engine's snapshot (D56/D70); a flat bot
+    says it waits, a holding one that it adds nothing."""
+    import copy
+    from gridgremlin.main import snapshot_row
+    from panel.server import render
+
+    class B:
+        botid, alive, _last_pos, offset = 'spoADAUSDTl', True, 0.0, 0
+        cfg = {}
+        capped = 'bots holding 8 >= 8'
+    row = snapshot_row([B()], {'equity': 1.0, 'mm_rate': 0.0}, 0)
+    assert row['bots']['spoADAUSDTl']['capped'] == 'bots holding 8 >= 8'
+
+    class Free(B):
+        capped = None
+    assert 'capped' not in snapshot_row([Free()], {'equity': 1.0, 'mm_rate': 0.0}, 0)['bots']['spoADAUSDTl']
+    c = copy.deepcopy(CONTRACT)
+    c['bots']['spoADAUSDTl']['position'] = 0.0
+    c['watchdog']['belief']['bots']['spoADAUSDTl'] = {'alive': True, 'position': 0.0,
+                                                      'capped': 'bots holding 8 >= 8'}
+    page = render([('demo', c)])
+    assert '<div class="neg">waiting: bots holding 8 >= 8 — opens nothing until it clears' in page
+    c['bots']['spoADAUSDTl']['position'] = 910.57
+    c['watchdog']['belief']['bots']['spoADAUSDTl']['capped'] = 'notional 55,000 >= 50,000'
+    page = render([('demo', c)])
+    assert '<div class="neg">capped: notional 55,000 >= 50,000 — adds nothing, exits run' in page
+    assert 'waiting:' not in render([('demo', CONTRACT)]) and 'capped:' not in render([('demo', CONTRACT)])
 
 
 def spec_X14_the_card_shows_how_much_of_the_loss_limit_is_used():

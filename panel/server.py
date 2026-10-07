@@ -605,6 +605,35 @@ COLS = ('<colgroup><col style="width:10%"><col style="width:5%">'
         '<col style="width:6%"></colgroup>')
 
 
+def ladder_box(idx, botid, terms):
+    """U52 (the 3Commas summary box, owner: "what am I actually risking
+    with this row"): a DCA card folds a table of its ladder — each step's
+    fill, size, total committed, average entry and the bounce take-profit
+    then needs — and says, in one line, the drop the ladder covers. From
+    the contract's terms; percentages, so true before a round and after."""
+    rows = (terms or {}).get('ladder')
+    if not rows:
+        return ''
+    def pct(v):
+        return '—' if v is None else f'{v * 100:+.2f}%'
+    def amount(v):
+        return f'{v:,.0f}' if abs(v) >= 1000 else f'{v:,.6g}'
+    last = rows[-1]
+    body = ''.join(
+        f'<tr><td>{"base" if r["step"] == 0 else r["step"]}</td>'
+        f'<td>{pct(r["fill_pct"])}</td><td>{amount(r["notional"])}</td>'
+        f'<td>{amount(r["committed"])}</td><td>{pct(r["avg_pct"])}</td>'
+        f'<td>{pct(r["to_tp_pct"])}</td></tr>' for r in rows)
+    return (f'<details data-k="{idx}:{botid}:ladder"><summary>the ladder: '
+            f'covers a move of <b>{pct(last["fill_pct"])}</b>, then '
+            f'{amount(last["committed"])} committed at an average of '
+            f'{pct(last["avg_pct"])}</summary><table><tr><th>step</th>'
+            '<th>fills at</th><th>size</th><th>committed</th><th>average</th>'
+            f'<th>to take-profit</th></tr>{body}</table>'
+            '<div class="dim">from the base price; size and committed in '
+            'quote</div></details>')
+
+
 def kind_line(terms):
     """U36 (owner: "a lay person may just see a dca bot and not understand
     the mathematics of leverage and martingale-style mechanics"): what kind
@@ -817,6 +846,14 @@ def card(idx, botid, b, contract, belief):
                   f"{b['settle']['unreal']:+.6f}") + '</td></tr>'
                if b.get('settle') else '')
             + '</table></details>')
+    more += ladder_box(idx, botid, (contract.get('terms') or {}).get(botid))   # U52
+    capped = (belief.get(botid) or {}).get('capped')
+    if capped:
+        # D56/D70: the account's cap holds this bot back — a flat one
+        # opens nothing, a holding one adds nothing
+        held += ('</div><div class="neg">'
+                 + (f'capped: {capped} — adds nothing, exits run' if pos else
+                    f'waiting: {capped} — opens nothing until it clears'))
     mv = (belief.get(botid) or {}).get('margin')
     if mv and mv.get('liq') and mark:
         # V17: where the exchange says this position is liquidated, and how
@@ -1234,6 +1271,12 @@ again.</td></tr>
 <tr><td>fees</td><td class="dim">what the venue charged for every fill
 in the window — already excluded from nothing: total = realized − fees
 + funding + unreal.</td></tr>
+<tr><td>the ladder</td><td class="dim">a DCA card's own sum (U52): for
+each step, where it fills from the base price, its size, what is then
+committed, the average entry, and how far the price must come back from
+that fill for the whole position to reach take-profit. The summary line
+is the drop (a short: the rise) the ladder covers before it runs out.
+Percentages of the base price, so it holds before a round and during one.</td></tr>
 <tr><td>funding</td><td class="dim">what the bot's position paid (−) or
 received (+) in funding over the same window, from the exchange's own
 record (D63). A perp holds it; spot has none. — when it could not be

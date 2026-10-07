@@ -176,6 +176,8 @@ def spec_S6_the_reset_list_is_complete_and_documented():
                                    # finds
                   '_be_level',    # D38: re-adopted from the venue's stop,
                                   # or re-stepped from the round's exit fills
+                  '_folded',      # D71: the slivers folded, said once; a
+                                  # restart says them again
                   '_rungs_seen', '_rungs_lag'}   # G26: no baseline after a
     # restart, so the first derivation is not lag-checked — a restart within
     # seconds of an exit fill can still mis-pair once

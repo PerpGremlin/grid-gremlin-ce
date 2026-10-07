@@ -208,6 +208,12 @@ MARTINGALE = {
          'how you take the hit: from the average, -0.2 gives the trade room '
          'at a small loss, 0 is break-even before fees, 0.3 locks a little '
          'profit. Blank = break-even plus fees. Below the first step'),
+        ('breakeven_activation_pct', 'breakeven_activation_pct', 'pct',
+         'Move the stop to break-even after a gain of (%)',
+         'once the price is this far in profit from the average, a stop '
+         'goes to break-even (or where the field above puts it) and stays '
+         'there. Works with one target or with steps; not with the ladder '
+         'switch or a trailing stop'),
         ('trailing_stop_pct', 'trailing_stop_pct', 'pct',
          'Trailing stop (%)', 'a stop that follows the best price by this '
          'much. Bybit holds it on the exchange; on Hyperliquid this '
@@ -783,14 +789,18 @@ def sentence(cfg, mark=None):
                          f"{cfg['take_profit_avg_pct']:.2%} "
                          f"{'above' if long else 'below'} its average "
                          'price.')
+        off = cfg.get('breakeven_offset_pct')
+        at = ('break-even' if off is None else
+              'break-even before fees' if off == 0 else
+              f"{abs(off):.2%} {'above' if (off > 0) == long else 'below'} "
+              'the average')
         if cfg.get('breakeven_ladder'):
-            off = cfg.get('breakeven_offset_pct')
-            at = ('break-even' if off is None else
-                  'break-even before fees' if off == 0 else
-                  f"{abs(off):.2%} {'above' if (off > 0) == long else 'below'} "
-                  'the average')
             parts.append(f'Once the first step fills, a stop moves to {at} '
                          'and then climbs one step behind.')
+        if cfg.get('breakeven_activation_pct'):                   # D69
+            parts.append('Once the price is '
+                         f"{cfg['breakeven_activation_pct']:.2%} in profit, "
+                         f'a stop moves to {at} and stays there.')
         if cfg.get('trailing_stop_pct'):
             who = ('This program' if cfg.get('venue') == 'hyperliquid'
                    else 'The exchange')

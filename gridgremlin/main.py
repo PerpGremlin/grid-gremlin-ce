@@ -112,6 +112,10 @@ def snapshot_row(bots, wallet, now, tiers=None):
                                             'result': b._loss_now}}
                                   if b.alive and getattr(b, '_loss_now', None)
                                   is not None else {}),
+                               # D56/D70: held back by a cap, and why
+                               **({'capped': b.capped}
+                                  if b.alive and getattr(b, 'capped', None)
+                                  else {}),
                                # V14: the venue's margin on the position
                                **({'margin': b.margin_view}
                                   if b.alive and getattr(b, 'margin_view',
@@ -137,6 +141,20 @@ def cap_verdict(caps, mm_rate, bots):
     if (caps.get('mm_rate_max') is not None and mm_rate is not None
             and mm_rate >= caps['mm_rate_max']):
         return f"maintenance margin {mm_rate:.1%} >= {caps['mm_rate_max']:.1%}"
+    return None
+
+
+def holding_verdict(caps, bots):
+    """D70, pure: the reason no FLAT bot may open, or None — the venue's
+    living bots holding a position, counted against `holding_max`. Those
+    holding are not held back by this leg: their safeties and exits run,
+    and the count falls by their own closing."""
+    if not caps or caps.get('holding_max') is None:
+        return None
+    n = sum(1 for b in bots
+            if b.alive and abs(getattr(b, '_last_pos', 0.0) or 0.0) > 1e-12)
+    if n >= caps['holding_max']:
+        return f"bots holding {n} >= {caps['holding_max']}"
     return None
 
 
@@ -578,6 +596,7 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
         poll = poll_seconds or fleet['poll_seconds']
         n = 0
         capped_by = {}                 # D56: venue -> the cap reason
+        held_by = {}                   # D70: venue -> the holding cap's
         failing = 0
         lost_warn_t = 0.0
         from .reload import FleetWatch
@@ -626,8 +645,21 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
                                 'margin', 'fleet',
                                 'account cap cleared — entries resume (D56)')
                         capped_by[v] = why
+                        hold = holding_verdict(caps, mine)          # D70
+                        if hold and not held_by.get(v):
+                            _vn(notifier, v).event(
+                                'margin', 'fleet',
+                                f'holding cap reached: {hold} — flat bots '
+                                'wait, holding bots run on (D70)')
+                        elif held_by.get(v) and not hold:
+                            _vn(notifier, v).event(
+                                'margin', 'fleet',
+                                'holding cap cleared — flat bots may open '
+                                '(D70)')
+                        held_by[v] = hold
                         for b in mine:
-                            b.capped = why
+                            flat = not (b._last_pos or 0.0)
+                            b.capped = why or (hold if flat else None)
                 for bot in bots:
                     try:
                         counts = bot.cycle(

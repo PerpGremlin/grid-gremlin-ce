@@ -35,7 +35,7 @@ GRID_KEYS = COMMON_KEYS + (
     'spot_borrow', 'spot_leverage', 'seed', 'slide', 'exit_floor')
 MARTINGALE_KEYS = COMMON_KEYS + (
     'take_profit_tranches', 'trailing_stop_pct', 'breakeven_ladder',
-    'breakeven_offset_pct',
+    'breakeven_offset_pct', 'breakeven_activation_pct',
     'reinvest', 'repeat_cooldown_seconds', 'start_order_type',
     'start_order_requote_seconds', 'start_order_expire_seconds',
     'base_order_size', 'safety_order_size', 'order_size_multiplier',
@@ -710,15 +710,19 @@ def validate_martingale(row, where='row'):
     if mh is not None:
         cfg['max_hold_seconds'] = mh
     cfg['breakeven_ladder'] = _flag(cfg, 'breakeven_ladder')
+    act = _fraction(cfg, 'breakeven_activation_pct', where)       # D69
+    if act is not None:
+        cfg['breakeven_activation_pct'] = act
     off = _num(cfg, 'breakeven_offset_pct', where, least=-0.5, most=0.5)
     if off is not None:
         # D55: where the ladder's FIRST step sits, from the average — the
         # owner's choice of how to take the hit: below zero gives the trade
         # room at a small loss, zero is breakeven before fees, above zero
         # locks a minimum profit. Blank keeps the fee-covering default (G6).
-        if not cfg['breakeven_ladder']:
-            _refuse(f"{where}: 'breakeven_offset_pct' places the ladder's "
-                    "first step — it needs 'breakeven_ladder' (D55)")
+        if not cfg['breakeven_ladder'] and act is None:
+            _refuse(f"{where}: 'breakeven_offset_pct' places the breakeven "
+                    "stop — it needs 'breakeven_ladder' or "
+                    "'breakeven_activation_pct' (D55, D69)")
         first = (cfg['take_profit_tranches'] or [{}])[0].get('at_avg_pct')
         if first is not None and off >= first:
             _refuse(f"{where}: 'breakeven_offset_pct' {off:.4%} is at or "
@@ -743,6 +747,38 @@ def validate_martingale(row, where='row'):
                     'position_sl stop is the same order book row, and '
                     'neither could tell the other apart — not both, this '
                     'phase (D38)')
+
+    if act is not None:
+        # D69, v2's activation: the stop arms once the round is this far in
+        # profit, whatever the take-profit's shape. One arming rule and one
+        # protection per round, as D38 has it.
+        if cfg['breakeven_ladder']:
+            _refuse(f"{where}: 'breakeven_activation_pct' and "
+                    "'breakeven_ladder' are two arming rules for one stop — "
+                    'the ladder arms on the first tranche, the activation on '
+                    'profit; pick one (D69)')
+        if cfg.get('trailing_stop_pct') is not None:
+            _refuse(f"{where}: 'breakeven_activation_pct' and "
+                    "'trailing_stop_pct' are both the stop-loss of one "
+                    'position — pick one protection (D38, D69)')
+        if cfg['stop'] and (cfg['stop']['server_side']
+                            or cfg['stop'].get('emergency_pct') is not None
+                            or cfg['stop']['watch'] == 'position_sl'):
+            _refuse(f"{where}: 'breakeven_activation_pct' writes the "
+                    "position's stop-loss on the venue; a server-side, "
+                    'emergency or position_sl stop is the same order book '
+                    'row — not both (D38, D69)')
+        target = cfg['take_profit_avg_pct']
+        if target is None:
+            target = cfg['take_profit_tranches'][0]['at_avg_pct']
+        if act >= target:
+            _refuse(f"{where}: 'breakeven_activation_pct' {act:.4%} is at or "
+                    f"beyond the take-profit's {target:.4%} — the round would "
+                    'close before the stop ever armed (D69)')
+        if off is not None and off >= act:
+            _refuse(f"{where}: 'breakeven_offset_pct' {off:.4%} is at or "
+                    f"beyond the activation's {act:.4%} — the stop would arm "
+                    'where the price already is and fire at once (D69)')
 
     # M2: expand the series; refuse a ladder the capital cannot carry.
     k, n = cfg['order_size_multiplier'], cfg['max_averaging_orders']
@@ -826,19 +862,26 @@ def _validate_preflight(v, where):
 def _validate_caps(v, where):
     """D56, opt-in: the account may not go past these. mm_rate_max is the
     venue's maintenance-margin rate (0..1); notional_max the sum of every
-    bot's position at mark, in the quote coin. Either or both; none = no
-    cap. At the cap, entries pause and exits run."""
+    bot's position at mark, in the quote coin; `holding_max` (D70) the most
+    bots that may hold at once. Any of the three; none = no cap. At the cap,
+    entries pause and exits run."""
     if v is None:
         return None
     w = f'{where}.account_caps'
     if not isinstance(v, dict) or not v:
         _refuse(f'{w}: an object with mm_rate_max and/or notional_max')
-    _reject_unknown(v, ('mm_rate_max', 'notional_max'), w)
+    _reject_unknown(v, ('mm_rate_max', 'notional_max', 'holding_max'), w)
     out = {'mm_rate_max': _fraction(v, 'mm_rate_max', w),
            'notional_max': _num(v, 'notional_max', w, least=0.0,
-                                least_open=True)}
-    if out['mm_rate_max'] is None and out['notional_max'] is None:
-        _refuse(f'{w}: name mm_rate_max or notional_max (D56)')
+                                least_open=True),
+           # D70: the most bots that may hold a position at once
+           'holding_max': _num(v, 'holding_max', w, least=1.0)}
+    if out['holding_max'] is not None:
+        if not float(out['holding_max']).is_integer():
+            _refuse(f'{w}.holding_max: a whole number of bots (D70)')
+        out['holding_max'] = int(out['holding_max'])
+    if all(out[k] is None for k in out):
+        _refuse(f'{w}: name mm_rate_max, notional_max or holding_max (D56, D70)')
     return out
 
 

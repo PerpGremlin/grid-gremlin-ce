@@ -24,6 +24,36 @@ def _cfg(**over):
 
 # --- G1/G3: the lattice ------------------------------------------------------
 
+def spec_U52_the_ladder_summary_says_what_the_ladder_adds_up_to():
+    """The 3Commas DCA summary box, from the engine's own schedule:
+    1000 base, 1000 x2 safety orders at 1%, 2%, 4% (step x2)."""
+    from gridgremlin.ladder import ladder_summary
+    cfg = validate_config({
+        'strategy': 'martingale', 'market_type': 'linear', 'symbol': 'BTCUSDT',
+        'side': 'long', 'capital': 1000.0, 'leverage': 10,
+        'base_order_size': 1000.0, 'safety_order_size': 1000.0,
+        'order_size_multiplier': 2.0, 'deviation_pct': 0.01,
+        'deviation_step_multiplier': 2.0, 'max_averaging_orders': 3,
+        'take_profit_avg_pct': 0.01})
+    rows = ladder_summary(cfg)
+    assert [r['step'] for r in rows] == [0, 1, 2, 3]
+    assert [round(r['fill_pct'], 6) for r in rows] == [0.0, -0.01, -0.03, -0.07]
+    assert [r['notional'] for r in rows] == [1000.0, 1000.0, 2000.0, 4000.0]
+    assert [r['committed'] for r in rows] == [1000.0, 2000.0, 4000.0, 8000.0]
+    assert rows[0]['avg_pct'] == 0.0 and abs(rows[0]['to_tp_pct'] - 0.01) < 1e-12
+    # 8000 quote over 1000/1 + 1000/.99 + 2000/.97 + 4000/.93 coins
+    coins = 1000 + 1000 / .99 + 2000 / .97 + 4000 / .93
+    avg = 8000 / coins
+    assert abs(rows[3]['avg_pct'] - (avg - 1)) < 1e-12
+    assert abs(rows[3]['to_tp_pct'] - (avg * 1.01 / .93 - 1)) < 1e-12
+    short = ladder_summary(dict(cfg, side='short'))
+    assert short[3]['fill_pct'] > 0 and short[3]['avg_pct'] > 0 and short[3]['to_tp_pct'] < 0
+    tranches = ladder_summary(dict(cfg, take_profit_avg_pct=None,
+                                   take_profit_tranches=[{'at_avg_pct': 0.02, 'share': 0.5},
+                                                         {'at_avg_pct': 0.04, 'share': 0.5}]))
+    assert abs(tranches[0]['to_tp_pct'] - 0.02) < 1e-12          # the first tranche's
+
+
 def spec_G1_arithmetic_lattice_golden():
     rungs = grid_rungs(_cfg(), ADAPTER)
     assert rungs == [50000.0 + 1000.0 * i for i in range(21)]  # step = range/(N-1)

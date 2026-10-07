@@ -416,6 +416,38 @@ def spec_D55_the_offset_needs_the_ladder_and_stays_below_the_first_step():
             raise AssertionError(f'{bad} was accepted')
 
 
+def spec_D69_the_activation_arms_alone_and_sits_below_the_target():
+    """v2's activation %: the stop arms once the round is N% up, with one
+    target or with steps; one arming rule, one protection; below the
+    take-profit, with the offset below it."""
+    ok = validate_config(_mrow(take_profit_avg_pct=0.01, breakeven_activation_pct=0.004,
+                               breakeven_offset_pct=-0.002))
+    assert ok['breakeven_activation_pct'] == 0.004 and ok['breakeven_offset_pct'] == -0.002
+    two = [{'at_avg_pct': 0.01, 'share': 0.5}, {'at_avg_pct': 0.02, 'share': 0.5}]
+    assert validate_config(_mrow(take_profit_tranches=two,
+                                 breakeven_activation_pct=0.005))['breakeven_activation_pct'] == 0.005
+    for bad, frag in (({'breakeven_activation_pct': 0.0}, '>'),
+                      ({'take_profit_tranches': two, 'breakeven_ladder': True,
+                        'breakeven_activation_pct': 0.005}, 'pick one (D69)'),
+                      ({'breakeven_activation_pct': 0.005, 'trailing_stop_pct': 0.01},
+                       'pick one protection'),
+                      ({'breakeven_activation_pct': 0.005,
+                        'stop': {'watch': 'position_sl'}}, 'not both'),
+                      ({'breakeven_activation_pct': 0.01}, 'close before the stop ever armed'),
+                      ({'breakeven_activation_pct': 0.012}, 'close before the stop ever armed'),
+                      ({'breakeven_activation_pct': 0.005, 'breakeven_offset_pct': 0.005},
+                       'fire at once (D69)')):
+        row = _mrow(**({'take_profit_avg_pct': 0.01} | bad))
+        if 'take_profit_tranches' in bad:
+            row.pop('take_profit_avg_pct')
+        try:
+            validate_config(row)
+        except ConfigError as e:
+            assert frag in str(e), (bad, str(e))
+        else:
+            raise AssertionError(f'{bad} was accepted')
+
+
 def spec_M17_the_breakeven_ladder_needs_two_tranches_and_one_protection():
     two = [{'at_avg_pct': 0.01, 'share': 0.5},
            {'at_avg_pct': 0.02, 'share': 0.5}]
