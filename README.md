@@ -79,9 +79,12 @@ account figures or hostnames; redact them.
 - `docs/THREECOMMAS.md` — the mechanics ledger: what 3Commas does, what this does.
 - `ops/README.md` — running it unattended on a box (units, watchdog, pages).
 
-## Terms
+## Licence and terms
 
-Source-available for testing: you may clone and run it against demo and
-testnet accounts and report what you find. No other rights are granted.
-Trading carries risk of loss, more so with leverage; this edition cannot
-reach real money, and nothing here is advice.
+**Apache License 2.0** — `LICENSE` and `NOTICE`. Use it, change it, build on
+it, keep the notice. Contributions are welcome under the same licence:
+`CONTRIBUTING.md` says how (one change per pull request with its spec, the
+suite green, commits signed off).
+
+This is software, not advice and not a service. Trading carries risk of
+loss, more so with leverage; this edition cannot reach real money.
