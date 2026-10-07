@@ -18,6 +18,13 @@ is, and a pull request that carries one is the easiest to take.
 - **Nothing private.** No keys, account figures or hostnames in code, specs,
   fixtures or issues — redact them.
 
+## What happens to a pull request
+
+The suite runs on it automatically (the `specs` check); the owner reviews
+and merges — nothing merges without that review. An accepted change is
+then carried into the private edition this one is written from, so it
+survives the next release.
+
 ## Sign your commits
 
 Every commit carries a Developer Certificate of Origin sign-off, which
