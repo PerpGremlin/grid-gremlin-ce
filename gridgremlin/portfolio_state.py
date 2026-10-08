@@ -33,6 +33,12 @@ class PortfolioState:
     def get(self, botid):
         return dict(self._rows.get(botid) or {})
 
+    def forget(self, botid):
+        """The row's book removed, durably: the next start is a first sight."""
+        self._rows.pop(botid, None)
+        with locked(self.path):
+            write_json(self.path, self._rows)
+
     def set(self, botid, row):
         """Durable before returning — the next cycle reads what this one knew."""
         self._rows[botid] = dict(row)

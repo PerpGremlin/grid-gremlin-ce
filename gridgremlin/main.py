@@ -144,13 +144,35 @@ def lock_tag_for(clients, account='default'):
     return tag if account in (None, 'default') else f'{tag}.{account}'
 
 
-def fleet_running(fleet_path):
-    """F3's lock, asked rather than taken: does a fleet process hold any
-    lock beside this fleet file? The close command uses it on Hyperliquid,
-    where one process signs for a wallet at a time (X15b)."""
+def fleet_running(fleet_path, venues=None, account='default'):
+    """F3's lock, asked rather than taken: does a fleet process hold a lock
+    THIS fleet file would hold — its own prelock, or a venue lock of its
+    venues on its account? Any lock beside the file was the first answer,
+    and on a box with three fleets every fleet read as running (the carry
+    flatten, 2026-10-11). The close command uses it on Hyperliquid, where
+    one process signs for a wallet at a time (X15b)."""
     import glob
     lockdir = _logs_dir(fleet_path)
-    for p in glob.glob(str(lockdir / '*.lock')) + glob.glob(str(lockdir / '*.prelock')):
+    if venues is None:
+        try:
+            raw = json.loads(Path(fleet_path).read_text())
+            venues = {b.get('venue', 'bybit') for b in (raw.get('bots') or [])}
+            account = raw.get('account') or 'default'
+        except (OSError, ValueError, AttributeError):
+            venues = set()
+    mine = [str(lockdir / f'{Path(fleet_path).resolve().name}.prelock')]
+    for p in glob.glob(str(lockdir / '*.lock')):
+        name = Path(p).name[:-len('.lock')]
+        if name.endswith('.json'):
+            continue                                   # a durable file's lock (X7b), not a fleet's
+        parts = name.split('.')
+        tagged = len(parts) % 2 == 1                   # venue.env pairs, then an account name
+        if account != 'default':
+            if tagged and parts[-1] == account:
+                mine.append(p)
+        elif not tagged and any(v in parts for v in venues):
+            mine.append(p)
+    for p in mine:
         try:
             with open(p, 'a') as h:
                 try:
