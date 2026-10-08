@@ -1,4 +1,4 @@
-"""Research (2026-10-09): "profit by regime identification and disciplined
+"""Research (2026-10-08): "profit by regime identification and disciplined
 rebalancing" — the owner's thesis. Long spot, short the perp, lean the
 hedge ratio with the trend, rebalance on a drift threshold and on a clock.
 

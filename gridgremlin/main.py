@@ -149,7 +149,7 @@ def fleet_running(fleet_path, venues=None, account='default'):
     THIS fleet file would hold — its own prelock, or a venue lock of its
     venues on its account? Any lock beside the file was the first answer,
     and on a box with three fleets every fleet read as running (the carry
-    flatten, 2026-10-11). The close command uses it on Hyperliquid, where
+    flatten, 2026-10-08). The close command uses it on Hyperliquid, where
     one process signs for a wallet at a time (X15b)."""
     import glob
     lockdir = _logs_dir(fleet_path)

@@ -732,13 +732,13 @@ stands unless the owner corrects it.
   it; funding is not counted and the card says so. Without a statement,
   D58 stands.
 - **D77 — One signer per Hyperliquid wallet: the close command waits for the
-  fleet (2026-10-09).** From the fresh-eyes audit (docs/AUDIT-2026-10-09.md):
+  fleet (2026-10-08).** From the fresh-eyes audit (docs/AUDIT-2026-10-08.md):
   the panel's close button signs from a second process while the fleet is
   signing, and HL nonces are per wallet. The close command now asks F3's
   lock; held, it refuses on Hyperliquid before any client is built (X15b).
   Bybit is unaffected (its nonce is per request). The owner's grant: the
   audit's "on you".
-- **D78 — The portfolio row (2026-10-10).** The owner, after two days of
+- **D78 — The portfolio row (2026-10-08).** The owner, after two days of
   measured research: *"lets do it all."* A row that holds several coins on
   spot at target weights, hedges each with its own perpetual short at its
   own ratio, collects the funding, and rebalances weights and hedges on one
@@ -749,7 +749,7 @@ stands unless the owner corrects it.
   sub-account, which the engine learns to address (`vaultAddress`). The
   design is `docs/PORTFOLIO.md`; its invariants enter SPEC.md (family H)
   only with the specs that pin them (T1). Built after the owner has read it.
-  *Built 2026-10-10/11 (PRs #310–#321): H1–H7 end to end, margin on the
+  *Built 2026-10-08/11 (PRs #310–#321): H1–H7 end to end, margin on the
   stack included; soaking on the Bybit subaccount's demo at the margin
   floor by the owner's word ("as if a retail client uses it, teetering on
   the edge of stress, constantly"). The Hyperliquid leg waits for a

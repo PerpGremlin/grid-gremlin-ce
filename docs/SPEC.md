@@ -56,6 +56,14 @@ eventually pin (T1).
   ladder) is unchanged. *(measured on the box 2026-10-06: a Bybit truth read was
   five requests and 71 ms of CPU, 84% of it opening connections; a request on a
   kept connection costs about 1 ms)*
+- **E11** Writes are paced, reads are not. The Bybit write client holds a
+  floor of 120 ms between its posts, so a fleet's start spreads its ladders
+  over seconds instead of bursting them into the venue's per-second budget;
+  and it reads the venue's budget headers after every post — a spent budget
+  names its refill moment, and the next write waits for it (five seconds at
+  most, never a minute). The backoff (B7) still answers a refusal that gets
+  through. *(thirty orders in the carry sub's first minute met 10006,
+  2026-10-08; Hyperliquid's own weights are the open half)*
 
 ## A — contract maths (the adapter seam)
 
@@ -609,7 +617,7 @@ eventually pin (T1).
   engine and at the panel's gates alike. Unknown names and non-limit keys
   are refused by name. At the panel's whole-fleet gate a row the engine
   would set aside (D52) is a refusal, never a skip.
-- **C10** One vocabulary for the primitives (audit 2026-10-09). The float
+- **C10** One vocabulary for the primitives (audit 2026-10-08). The float
   parser (`fmt.float_or`), the UTC stamp (`fmt.utc_stamp`), the number words
   (`fmt.num`, `big`, `big_si`, `pct`) and the fee constants (`fees.py`: the
   maker and taker rates, G6's floors) exist once; every other module imports
@@ -644,7 +652,7 @@ eventually pin (T1).
   other (a revive undone by the next stop, or a stop's row lost to a revive's
   write). Engine, close command and panel find the file by one rule: the
   fleet's `tombstones` key, else logs/ beside its home. The slide state
-  writes the same durable way, under the lock. *(audit 2026-10-05, 2026-10-09)*
+  writes the same durable way, under the lock. *(audit 2026-10-05, 2026-10-08)*
 - **X7** A fired stop survives the process: the tombstone is durable BEFORE the
   flatten (a crash mid-stop stays dead), a tombstoned botid builds dead-and-visible
   (F4), and revival is a deliberate operator act — delete the entry, never automatic.
@@ -737,7 +745,7 @@ eventually pin (T1).
   are per wallet, and a second signer beside the running fleet collides with
   it. The command asks this fleet's own locks — its prelock, and the venue
   locks of its venues on its account, never another fleet's beside them
-  (on a three-fleet box every fleet read as running, 2026-10-11); held, it
+  (on a three-fleet box every fleet read as running, 2026-10-08); held, it
   refuses before any client is built — stop the fleet, or close by hand on
   the venue. The portfolio flatten (H4) asks the same way.
 - **F1** Every fleet names a watchdog config, and its account guards (staleness,

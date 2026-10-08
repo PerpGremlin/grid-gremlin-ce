@@ -1,4 +1,4 @@
-"""The fee table (C10, audit 2026-10-09): every fee constant the engine,
+"""The fee table (C10, audit 2026-10-08): every fee constant the engine,
 the rehearsal and the backtests assume, in one place. Rates are fractions
 per side; the floors are what an exit must clear (G6)."""
 

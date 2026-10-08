@@ -1,4 +1,4 @@
-"""Fibonacci structure, pure (research toward a signal layer, 2026-10-09).
+"""Fibonacci structure, pure (research toward a signal layer, 2026-10-08).
 
 The owner's design: read the trend on the daily, find the pivot where it
 flipped, draw retracements and extensions from that impulse; each lower

@@ -1,5 +1,5 @@
 # The loop with its guards (SPEC E2, E3, W1, B3-B7, T2). One bot, four files
-# (audit 2026-10-09): this one holds the construction, the grid cycle and its
+# (audit 2026-10-08): this one holds the construction, the grid cycle and its
 # churn guards; bot_stops.py the stops, bot_basis.py the book, bot_round.py
 # the martingale round. Mixins — every attribute is Bot's and is reset in
 # __init__ (S6); nothing is private to a file.

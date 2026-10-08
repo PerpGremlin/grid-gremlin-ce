@@ -856,7 +856,7 @@ def portfolio_card(idx, botid, contract, belief):
                 + '</table></details>')
     cls = 'neg' if state == 'DEAD' else 'dim'
     # H6: the portfolio's card spans the cards' row — six columns of assets
-    # and three money lines ran past a 21em card's border (the owner, 2026-10-11)
+    # and three money lines ran past a 21em card's border (the owner, 2026-10-08)
     return (f'<div class="card pfo"><div><span class="side pfo">PORTFOLIO</span> <b>{name}</b> '
             f'{state_tag(state, cls)}</div><div class="dim">{kind}</div>'
             f'<div>{head}</div>{body}<div class="dim">{botid} · {links}</div></div>')

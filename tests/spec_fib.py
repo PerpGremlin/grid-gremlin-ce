@@ -1,4 +1,4 @@
-"""The Fibonacci structure, pure (research 2026-10-09): known answers on
+"""The Fibonacci structure, pure (research 2026-10-08): known answers on
 hand-drawn series."""
 from gridgremlin.fib import (anchored_vwap, confluence, fib_levels, known_by,
                              retraced, rsi, structure, turned_down, turned_up,

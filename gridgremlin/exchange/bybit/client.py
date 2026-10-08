@@ -226,6 +226,11 @@ class WriteClient(Client):
     def post(self, path, body):
         if not self._synced:
             self._sync_clock()
+        pacer = getattr(self, '_pacer', None)
+        if pacer is None:
+            from ..pacer import Pacer
+            pacer = self._pacer = Pacer()
+        pacer.wait(venue_now_ms=int(self._ts()))             # E11: the write pacer
         ts = self._ts()
         payload = json.dumps(body)
         headers = {'X-BAPI-API-KEY': self.api_key,
@@ -237,6 +242,7 @@ class WriteClient(Client):
                                      headers=headers, method='POST')
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode())
+            pacer.learn(resp.headers)                        # E11: the venue's budget word
         code = int(data.get('retCode', -1))
         if code in NOT_MODIFIED_CODES or code == 0:
             return data.get('result', {})
@@ -341,7 +347,7 @@ class WriteClient(Client):
             # so qty stays base on both sides (V6). H2's cash buys say the
             # quote on purpose (`quote_qty`): a buy sized in coins is checked
             # against the balance at a buffered price and refused when it
-            # spends nearly all the cash (three restarts, 2026-10-10)
+            # spends nearly all the cash (three restarts, 2026-10-08)
             if quote_qty is not None:
                 body['marketUnit'] = 'quoteCoin'
                 body['qty'] = quote_qty

@@ -383,7 +383,7 @@ def spec_H6_the_tilt_line_is_the_shorts_excess_over_neutral_marked_each_read():
 
 
 def spec_H3_a_refused_leg_is_asked_again_at_the_next_read_not_the_next_day():
-    """The carry fleet's first minute (2026-10-10): the stack bought, both
+    """The carry fleet's first minute (2026-10-08): the stack bought, both
     inverse hedges refused (collateral off) — and the tick was stamped, so
     the row would have run a day long and naked."""
     venue, lines, clock = _venue(), [], Clock()
@@ -434,7 +434,7 @@ def spec_H2_the_build_switches_each_inverse_legs_coin_on_as_collateral_and_the_s
             self.hedge_mode.append(symbol)
     cat = Catalogue()
     tmp = Path(tempfile.mkdtemp())
-    cfg = validate_config(dict(ROW, risk={'max_loss': 500, 'max_loss_since': '2026-10-10T00:00:00Z'}))
+    cfg = validate_config(dict(ROW, risk={'max_loss': 500, 'max_loss_since': '2026-10-08T00:00:00Z'}))
     bot, _ = build_portfolio(cfg, cat, Notifier(sink=[].append), PortfolioState(tmp / 'p.json'),
                              Tombstones(tmp / 't.json'))
     assert cat.collateral == ['BTC', 'ETH'] and cat.hedge_mode == []
@@ -445,7 +445,7 @@ def spec_H2_the_build_switches_each_inverse_legs_coin_on_as_collateral_and_the_s
 
 
 def spec_H2_new_terms_on_a_restart_are_cash_to_spend_and_a_leg_to_add_planned_at_once():
-    """The owner, 2026-10-10: 'utilise some of the stablecoins to open a
+    """The owner, 2026-10-08: 'utilise some of the stablecoins to open a
     solana spot position, with its own hedge … as much of the account as
     possible' — a raised capital and a third coin on an edited fleet file,
     picked up at the restart, not a day later."""
@@ -547,7 +547,7 @@ def spec_H2_a_stated_holding_joins_the_book_and_is_hedged_and_rebalanced():
 
 
 def spec_H2_an_inverse_legs_funding_lands_in_the_book_as_coins_a_linear_legs_as_cash():
-    """Caught before the carry fleet's first settlement (2026-10-10): an
+    """Caught before the carry fleet's first settlement (2026-10-08): an
     inverse short is paid its funding in the coin — the wallet's BTC grows,
     no quote arrives — and the row was about to spend cash it did not have."""
     venue, lines, clock = _venue(), [], Clock()
@@ -654,7 +654,7 @@ def spec_H2_a_row_born_before_terms_were_kept_gets_a_baseline_and_a_new_quote_is
 
 
 def spec_H2_cash_is_bounded_by_the_wallet_and_sells_go_before_buys_in_a_tick():
-    """The carry fleet's second restart (2026-10-10): the cash step's SOL buy
+    """The carry fleet's second restart (2026-10-08): the cash step's SOL buy
     refused by a hair, the weight step bought it from the BTC sale — and the
     row kept believing in cash the wallet no longer held."""
     venue, lines, clock = _venue(), [], Clock()
@@ -814,7 +814,7 @@ def spec_H4_after_a_trim_the_row_aims_lower_and_eases_back_only_while_free_margi
 
 
 def spec_H2_a_levered_rows_quote_change_under_a_loan_reads_the_new_quotes_balance_as_the_loan():
-    """The owner swapped the debt's coin on the venue (USDC → USDT, 2026-10-11):
+    """The owner swapped the debt's coin on the venue (USDC → USDT, 2026-10-08):
     the row's new quote balance is the loan, not a fresh pot of capital —
     read as capital it would have levered a phantom 81k four times."""
     venue, lines, clock = _venue(), [], Clock()
@@ -845,7 +845,7 @@ def spec_H2_a_levered_rows_quote_change_under_a_loan_reads_the_new_quotes_balanc
 
 
 def spec_H4_the_owners_flatten_takes_every_leg_together_and_a_reset_makes_the_next_start_a_first_sight():
-    """The owner (2026-10-11): 'flatten the account and erase all debt first
+    """The owner (2026-10-08): 'flatten the account and erase all debt first
     … its just demo'. The loss limit's act, by hand; the sales repay the
     loan; --reset forgets the book and the tombstone."""
     venue, lines, clock = _venue(), [], Clock()

@@ -1,4 +1,4 @@
-"""Research (2026-10-09): does a multi-timeframe Fibonacci confluence entry
+"""Research (2026-10-08): does a multi-timeframe Fibonacci confluence entry
 beat the same ladder on fixed-percent levels? Pure measurement — nothing
 here touches a venue with a key or any running code.
 

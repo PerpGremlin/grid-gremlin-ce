@@ -44,7 +44,7 @@ What runs, from the inside out:
    F18/D61) — answers the owner's `/commands` from the snapshot, readout,
    ledger and logs. Owner-only (`TELEGRAM_OWNER_ID`, fail closed), read-only,
    and the channel's one getUpdates consumer.
-9. **The panel** (`panel.server`, `gg-panel`; since 2026-10-09 a façade over
+9. **The panel** (`panel.server`, `gg-panel`; since 2026-10-08 a façade over
    `panel/css.py`, `reference.py`, `render.py`, `forms.py`, `routes.py`) — the fleet on a screen
    (README §11), on a loopback port behind its token.
 10. **Market readings** (`gridgremlin.market`, hourly at :33, D67) — what a
