@@ -19,8 +19,8 @@ import json
 import os
 from pathlib import Path
 
-from .apply import make_botid
-from .config import market_rows, ConfigError, validate_fleet
+from .apply import make_botid, row_botid
+from .config import ConfigError, validate_fleet
 from .exchange.errors import VenueError
 
 HOT_KEYS = frozenset((
@@ -35,6 +35,12 @@ HOT_KEYS = frozenset((
     'min_position_base', 'max_position_base'))
 CARRIED = ('funding_interval_minutes', '_tier_mm_rate')   # the build's own
 SETTLE_SECONDS = 1.5          # an atomic write lands whole; wait it out
+
+
+def _portfolio_terms(cfg):
+    """What a portfolio row is, for the diff: everything the gate kept
+    except the account the fleet stamps on it."""
+    return {k: v for k, v in cfg.items() if not k.startswith('_') and k != 'account'}
 
 
 def _user_keys(cfg):
@@ -77,8 +83,7 @@ class FleetWatch:
                                 f'the fleet file changed but is refused ({e}) '
                                 '— running on with the terms it has (F12)', urgent=True)
             return {}
-        rows = {make_botid(c['market_type'], c['symbol'], c['side']): c
-                for c in market_rows(fleet)}
+        rows = {row_botid(c): c for c in fleet['bots']}     # a portfolio row by its own id (D78)
         out = {}
         by_id = {b.botid: b for b in self.bots}
         for botid in rows:
@@ -92,6 +97,16 @@ class FleetWatch:
                 self.notifier.event('warn', bot.botid,
                                     'removed from the file — nothing changes '
                                     'until the next restart (F12)', urgent=True)
+                continue
+            if new.get('strategy') == 'portfolio':
+                # H2: a portfolio row learns new terms at a restart, never live —
+                # its legs, book and clock are the restart's to re-read
+                if _portfolio_terms(bot.cfg) != _portfolio_terms(new):
+                    self.notifier.event('warn', bot.botid,
+                                        'the file changed the portfolio row — it learns new '
+                                        'terms at the next restart; nothing is applied live (H2)',
+                                        urgent=True)
+                    out[bot.botid] = 'restart'
                 continue
             old_u, new_u = _user_keys(bot.cfg), _user_keys(new)
             changed = {k for k in set(old_u) | set(new_u)

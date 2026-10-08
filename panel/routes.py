@@ -167,6 +167,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         if self.path.startswith('/close?'):
             return self._close_page()
+        if self.path.startswith('/position?'):
+            return self._position_page()
         if self.path.startswith('/edit?'):
             return self._edit_page()
         if self.path == '/create' or self.path.split('?')[0] == '/setup':
@@ -1038,6 +1040,18 @@ written config (§11).</p>
         except ValueError:
             return {'refused': 'the close command answered something '
                                'unreadable — look at the exchange directly'}
+
+    def _position_page(self):
+        """U56: one position, one page."""
+        from panel.render import position_page
+        q = dict(urllib.parse.parse_qsl(self.path.split('?', 1)[1]))
+        fi = min(int(_f(q.get('fleet')) or 0), len(self.fleets) - 1)
+        botid = q.get('bot', '')
+        contract = self._contract(self.fleets[fi])
+        belief = ((contract.get('watchdog') or {}).get('belief') or {}).get('bots', {})
+        if botid not in (contract.get('bots') or {}) and botid not in belief:
+            return self._deny(404, f'{botid}: not in this fleet')
+        return self._page(position_page(fi, self.labels[fi], botid, contract, belief))
 
     def _close_page(self):
         import html as _html

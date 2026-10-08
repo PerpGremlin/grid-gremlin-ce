@@ -43,6 +43,16 @@ CONTRACT = {'window_hours': 6.0, 'generated_ms': 0, 'unowned': {},
                 'side': 'long', 'strategy': 'grid', 'inverse': False}}}
 
 
+
+def _everything(c):
+    """U56: the fleet page and every position's page — the numbers moved to
+    the latter; a spec that pins a number reads both."""
+    from panel.render import position_page
+    from panel.server import render
+    belief = ((c.get('watchdog') or {}).get('belief') or {}).get('bots', {})
+    return render([('demo', c)]) + ''.join(position_page(0, 'demo', b, c, belief)
+                                           for b in sorted(set(c['bots']) | set(belief)))
+
 def spec_P1_no_cookie_no_page_and_wrong_host_is_refused():
     srv, base = _serve(CONTRACT)
     try:
@@ -76,10 +86,15 @@ def spec_P2_the_token_becomes_a_cookie_and_the_page_renders_the_contract():
         assert 'spoADAUSDTl' in html and 'HOLDING' in html
         assert '910.57' in html
         assert '<svg' in html and 'circle' in html      # the range strip
+        assert 'watchdog swept 41s ago' in html
+        # U56: the numbers are the position's own page, behind the same cookie
+        req = urllib.request.Request(f'{base}/position?fleet=0&bot=spoADAUSDTl',
+                                     headers={'Cookie': 'gg=tok123'})
+        html = op.open(req).read().decode()
+        assert 'as the exchange shows it' in html and '<td>0.207</td>' in html
         # settlement: 910.57 * 0.2017 * (1 - 0.0025) = 183.20
         assert '183.2' in html, 'stop-now estimate missing or wrong'
         assert '9% of 9,700' in html          # 910.57 / 9700 utilization
-        assert 'watchdog swept 41s ago' in html
         req = urllib.request.Request(f'{base}/data',
                                      headers={'Cookie': 'gg=tok123'})
         data = json.loads(op.open(req).read())
@@ -557,7 +572,7 @@ def spec_V10_a_card_says_the_bot_in_a_glance_and_keeps_every_number():
     where the price sits in its range; every number the row carried is
     still there, folded."""
     from panel.server import render
-    html = render([('demo', CONTRACT)])
+    html = _everything(CONTRACT)
     assert 'class="cards"' in html and '<table class="fleet">' not in html
     assert 'ADAUSDT long grid spot' in html          # the name a person says
     assert 'spoADAUSDTl' in html                     # the botid, for confirms
@@ -638,11 +653,11 @@ def spec_U51_every_link_and_switch_sits_in_one_side_panel():
     cards = render([('demo', CONTRACT)])
     assert cards.count('<nav class="side">') == 1
     nav = cards.split('<nav class="side">', 1)[1].split('</nav>', 1)[0]
-    for h in ('pages', 'arrange', 'numbers', 'size in', 'leverage'):
+    for h in ('pages', 'arrange', 'size in', 'leverage'):
         assert f'<h3>{h}</h3>' in nav, h
     for href in ('/table', '/control', '/setup', '/rehearse', '/export', '/key'):
         assert f'href="{href}"' in nav, href
-    assert '<b class="on">as listed</b>' in nav and 'ggAll(true)' in nav
+    assert '<b class="on">as listed</b>' in nav and 'ggAll(true)' not in nav   # U56: nothing folds
     assert 'data-size="coin"' in nav and 'data-lev="filled"' in nav
     assert nav.endswith('>theme</button>')
     assert cards.index('<nav class="side">') < cards.index('<h1 id="fleet0">')
@@ -681,9 +696,9 @@ def spec_U52_a_dca_card_folds_its_ladder_and_says_the_drop_it_covers():
                                          'strategy': 'martingale', 'multiplier': 2.0, 'add_ons': 6,
                                          'ladder': rows}},
          'watchdog': {'belief': {'age_s': 2, 'bots': {}}}}
-    page = render([('demo', c)])
+    page = _everything(c)
     assert page.count(':ladder"><summary>the ladder:') == 1
-    assert page.index('<summary>the numbers') < page.index('<summary>the ladder')
+    assert page.index('<h3>the numbers</h3>') < page.index('<summary>the ladder')
     assert '<tr><td>the ladder</td>' in KEY
     assert ':ladder"' not in render([('demo', CONTRACT)])         # a grid has none
 
@@ -709,7 +724,7 @@ def spec_U53_every_money_figure_names_its_coin():
     c['watchdog']['belief']['bots']['spoADAUSDTl'] = {
         'alive': True, 'position': 910.57, 'loss': {'limit': 50.0, 'result': -12.4},
         'margin': {'im': 300.0, 'mm': 15.0, 'leverage': 1.0, 'liq': None}}
-    page = render([('demo', c)])
+    page = _everything(c)
     assert '<span class="big neg">-1.86</span> USDT <span class="dim">after fees' in page
     assert 'worth 183.662 USDT' in page and 'cost 188.488 USDT' in page
     assert 'margin IM 300.00 USDT · MM 15.00 USDT' in page
@@ -726,11 +741,11 @@ def spec_U53_every_money_figure_names_its_coin():
     assert 'margin IM 0.013488 BTC · MM 0.001214 BTC' in render([('demo', inv)])
     assert venue_money({'terms': {'a': {'quote': 'USDT'}, 'b': {'quote': 'USDC'}}}) == 'USDC/USDT'
     assert venue_money({'bots': {'linBTCl': None}, 'terms': {'linBTCl': {'quote': 'USDC'}}}) == 'USDC'
-    assert 'size and committed in USDT' in render([('demo', dict(
+    assert 'size and committed in USDT' in _everything(dict(
         CONTRACT, terms={'spoADAUSDTl': {'strategy': 'martingale', 'quote': 'USDT',
                                          'ladder': [{'step': 0, 'fill_pct': 0.0, 'notional': 1.0,
                                                      'committed': 1.0, 'avg_pct': 0.0,
-                                                     'to_tp_pct': 0.01}]}}))])
+                                                     'to_tp_pct': 0.01}]}}))
 
 
 def spec_P1_the_entry_point_resolves_every_name_it_uses():
@@ -825,8 +840,8 @@ def spec_U10_a_refresh_does_not_shut_what_the_reader_opened():
     named so one script can reopen it; the script carries no number and
     the export carries no script."""
     from panel.server import KEEP_JS, render
-    live = render([('demo', CONTRACT)])
-    assert '<details data-k="0:spoADAUSDTl">' in live
+    live = _everything(CONTRACT)
+    assert '<details' not in live                      # U56: a card folds nothing
     assert 'http-equiv="refresh"' in live and KEEP_JS in live
     assert KEEP_JS in render([('demo', CONTRACT)], table=True)
     assert '<script' not in render([('demo', CONTRACT)], static='then')
@@ -1122,7 +1137,7 @@ def spec_R11_the_inverse_card_shows_dollars_and_the_coin():
         unreal_at_mark=-51.2,
         settle={'coin': 'BTC', 'realized': -0.00026, 'fees': 0.000111,
                 'unreal': -0.000605})
-    page = render([('demo', c)])
+    page = _everything(c)
     assert '-82.58</span>' in page                  # -21.98 - 9.4 - 51.2
     assert '-0.000976 BTC</span> <span class="dim">after fees' in page
     assert ('in the coin itself</td><td>realized -0.000260, fees 0.000111, '
@@ -1131,7 +1146,7 @@ def spec_R11_the_inverse_card_shows_dollars_and_the_coin():
     c['bots']['invETHUSDl'] = dict(c['bots']['invBTCUSDl'],
                                    settle=dict(c['bots']['invBTCUSDl']['settle'],
                                                coin='ETH'))
-    assert '-0.000976 ETH</span>' in render([('demo', c)])   # any coin
+    assert '-0.000976 ETH</span>' in _everything(c)   # any coin
 
 
 def spec_U16_a_card_states_its_investment_and_leverage():
@@ -1358,7 +1373,7 @@ def spec_U37_the_orders_sentence_spans_the_card():
                                 'entry_fills': 1, 'gap_trips': 0}},
          'watchdog': {'belief': {'age_s': 2, 'bots': {
              'linXUSDTl': {'alive': True, 'position': 1.0, 'orders': ov}}}}}
-    page = render([('demo', c)])
+    page = _everything(c)
     assert "<td colspan='2' class='wide'><b>orders</b> — resting: 1 buy" in page
     assert 'details td.wide{text-align:left;white-space:normal;width:auto' in CSS
 
@@ -1455,7 +1470,7 @@ def spec_D63_a_cards_total_carries_funding_and_names_it():
     c = json.loads(json.dumps(CONTRACT))
     b = c['bots']['spoADAUSDTl']
     b['funding'] = -3.10                            # paid
-    page = render([('demo', c)])
+    page = _everything(c)
     # 5.04 - 2.07 - 3.10 - 4.83 = -4.96, on the card and in the box
     assert page.count('-4.96</span>') >= 2, 'total left funding out'
     assert 'funding <b class="neg">-3.10</b>' in page
@@ -1600,3 +1615,27 @@ def spec_D65_the_trading_page_explains_and_does_not_arm():
         assert 'demo, testnet and mainnet' in r.read().decode()
     finally:
         srv.shutdown()
+
+
+def spec_U57_the_card_judges_the_price_against_the_slid_window_and_a_quiet_bot_shows_its_price():
+    """The owner's review (2026-10-08): 'a few bots appear to be out of
+    range'. Two of them had slid 27 rungs and were inside their window;
+    the card judged against the home range. Two quiet spot bots showed no
+    price at all: the readout carried a mark only on a book."""
+    import copy
+    from panel.server import render
+    c = copy.deepcopy(CONTRACT)
+    # the ADA grid: home 0.155-0.23 over 16 rungs (gap 0.005); slid -10 rungs the
+    # window is 0.105-0.18, and a mark of 0.17 is inside it, not below home
+    c['watchdog']['belief']['bots']['spoADAUSDTl'] = {'alive': True, 'position': 910.57, 'offset': -10}
+    c['bots']['spoADAUSDTl']['mark'] = 0.17
+    html = render([('demo', c)])
+    assert 'OUTSIDE' not in html and 'window slid -10 rungs from home' in html
+    assert 'above the bottom' in html and 'below the top' in html
+    # a quiet bot (no fills in the window) with a mark from the readout: placed, not blank
+    q = copy.deepcopy(CONTRACT)
+    q['bots']['spoADAUSDTl'] = None
+    q['watchdog']['belief']['bots']['spoADAUSDTl'] = {'alive': True, 'position': 910.57}
+    q['marks'] = {'spoADAUSDTl': 0.2017}
+    html = render([('demo', q)])
+    assert 'no fills' in html and 'price 0.2017 —' in html and 'above the bottom' in html

@@ -258,7 +258,7 @@ COLS = ('<colgroup><col style="width:10%"><col style="width:5%">'
         '<col style="width:6%"></colgroup>')
 
 
-def ladder_box(idx, botid, terms):
+def ladder_box(idx, botid, terms, open_=False):
     """U52 (the 3Commas summary box, owner: "what am I actually risking
     with this row"): a DCA card folds a table of its ladder — each step's
     fill, size, total committed, average entry and the bounce take-profit
@@ -277,7 +277,7 @@ def ladder_box(idx, botid, terms):
         f'<td>{pct(r["fill_pct"])}</td><td>{amount(r["notional"])}</td>'
         f'<td>{amount(r["committed"])}</td><td>{pct(r["avg_pct"])}</td>'
         f'<td>{pct(r["to_tp_pct"])}</td></tr>' for r in rows)
-    return (f'<details data-k="{idx}:{botid}:ladder"><summary>the ladder: '
+    return (f'<details{" open" if open_ else ""} data-k="{idx}:{botid}:ladder"><summary>the ladder: '
             f'covers a move of <b>{pct(last["fill_pct"])}</b>, then '
             f'{amount(last["committed"])} committed at an average of '
             f'{pct(last["avg_pct"])}</summary><table><tr><th>step</th>'
@@ -381,16 +381,18 @@ def _num_cls(v):
     return 'pos' if v > 0 else 'neg' if v < 0 else 'dim'
 
 
-def card(idx, botid, b, contract, belief):
+def card(idx, botid, b, contract, belief, full=False):
     """One bot, one card: its state in a word, what it made, where the
-    price sits in its range. Everything the table row said is still here —
-    the rest folds under 'the numbers'."""
+    price sits in its range. Everything the table row said is still here;
+    the numbers live on the position's own page (U56), where `full` lays
+    them open below the exchange's view of the position."""
     if ((contract.get('terms') or {}).get(botid) or {}).get('strategy') == 'portfolio':
-        return portfolio_card(idx, botid, contract, belief)                  # D78/H6
+        return portfolio_card(idx, botid, contract, belief, full=full)       # D78/H6
     rng = (contract.get('ranges') or {}).get(botid)
     ceil = ((contract.get('watchdog') or {}).get('ceilings') or {}).get(botid)
     money_coin, margin_coin = units_of(botid, (contract.get('terms') or {}).get(botid))   # U53
-    links = (f"<a href='/edit?fleet={idx}&bot={botid}'>edit</a> · "
+    links = (('' if full else f"<a href='/position?fleet={idx}&bot={botid}'>numbers</a> · ")
+             + f"<a href='/edit?fleet={idx}&bot={botid}'>edit</a> · "
              f"<a href='/setup?fleet={idx}&copy={botid}'>copy</a> · "
              f"<a href='/edit?fleet={idx}&bot={botid}&mode=remove'>remove"
              '</a>')
@@ -412,7 +414,8 @@ def card(idx, botid, b, contract, belief):
             head += f'<div class="pnl">{kept}</div>'
         held = (f'holding {pos:.10g} (belief)' if abs(pos) > 1e-12
                 else 'holding nothing')
-        mark, more, note = None, '', ''
+        mark = (contract.get('marks') or {}).get(botid)             # U57: a quiet bot has a price too
+        more, note = '', ''
         limit = (f'{abs(pos) / ceil * 100:.0f}% of {ceil:,.4g}' if ceil
                  else 'no limit')
     else:
@@ -461,8 +464,7 @@ def card(idx, botid, b, contract, belief):
         limit = (f'{abs(pos) / ceil * 100:.0f}% of {ceil:,.4g}' if ceil
                  else 'no limit')
         more = (
-            f'<details data-k="{idx}:{botid}"><summary>the numbers'
-            '</summary><table>'
+            '<div class="numbers"><h3>the numbers</h3><table>'
             f"<tr><td>fills</td><td>{b['fills']}</td></tr>"
             + (f"<tr><td>per trip after fees ({b['gap_trips'] or b['trips']}"
                f" trips; {b['per_trip']:+,.2f} before)</td>"
@@ -488,8 +490,10 @@ def card(idx, botid, b, contract, belief):
                + ('—' if b['settle']['unreal'] is None else
                   f"{b['settle']['unreal']:+.6f}") + '</td></tr>'
                if b.get('settle') else '')
-            + '</table></details>')
-    more += ladder_box(idx, botid, (contract.get('terms') or {}).get(botid))   # U52
+            + '</table></div>')
+    more += ladder_box(idx, botid, (contract.get('terms') or {}).get(botid), open_=True)   # U52
+    if not full:
+        more = ''                                 # U56: the numbers are the page's
     capped = (belief.get(botid) or {}).get('capped')
     if capped:
         # D56/D70: the account's cap holds this bot back — a flat one
@@ -559,6 +563,15 @@ def card(idx, botid, b, contract, belief):
         bad = rec.get('unexplained') is not None and abs(rec['unexplained']) > abs(rec['outside']) * 0.5 + 1e-9
         held += f'</div><div class="{"neg" if bad else "dim"}">{line}'
     where = ''
+    slid = ''
+    if rng and (belief.get(botid) or {}).get('offset') and rng.get('rungs', 0) > 1:
+        # U57: the window as it has slid (G17): the home lattice's gap times
+        # the offset, so the card judges the price against the window the
+        # bot trades, not the home it started from
+        gap = (rng['upper'] - rng['lower']) / (rng['rungs'] - 1)
+        off = belief[botid]['offset']
+        rng = dict(rng, lower=rng['lower'] + off * gap, upper=rng['upper'] + off * gap)
+        slid = f' · window slid {off:+d} rungs from home'
     if rng and mark:
         lo, hi = rng['lower'], rng['upper']
         if lo <= mark <= hi:
@@ -570,7 +583,7 @@ def card(idx, botid, b, contract, belief):
         where = (f'<div class="rng"><span class="dim">{lo:,.6g}</span>'
                  f'{strip(rng, mark, "100%")}'
                  f'<span class="dim">{hi:,.6g}</span></div>'
-                 f'<div class="dim">price {mark:,.6g} — {place}</div>')
+                 f'<div class="dim">price {mark:,.6g} — {place}{slid}</div>')
     elif rng:
         where = (f"<div class=\"dim\">range {rng['lower']:,.6g} to "
                  f"{rng['upper']:,.6g}</div>")
@@ -599,7 +612,7 @@ def card(idx, botid, b, contract, belief):
             f'{_plain_name(botid, contract, b)}</b>{note} '
             f'{state_tag(state, cls)}</div>'
             f'<div>{head}</div>{where}<div class="dim">{held}</div>{more}'
-            f'<div class="dim">{botid} · {links}</div></div>')
+            f'<div class="dim foot"><span>{botid}</span><span>{links}</span></div></div>')
 
 
 VIEWS = (('all', 'as listed'), ('side', 'longs / shorts'),
@@ -788,7 +801,7 @@ def portfolio_total(contract):
                for bl in belief.values() if bl.get('alive') is not False)
 
 
-def portfolio_card(idx, botid, contract, belief):
+def portfolio_card(idx, botid, contract, belief, full=False):
     """H6: the portfolio's card — the stack's value and coins, one line per
     asset (weight target → actual, hedge ratio target → actual, coins
     hedged, the regime word when the tilt is on), and three money lines
@@ -798,7 +811,8 @@ def portfolio_card(idx, botid, contract, belief):
     bl = belief.get(botid) or {}
     v = bl.get('portfolio') or {}
     q = terms.get('quote') or 'USDT'
-    links = (f"<a href='/edit?fleet={idx}&bot={botid}'>edit</a> "
+    links = (('' if full else f"<a href='/position?fleet={idx}&bot={botid}'>numbers</a> ")
+             + f"<a href='/edit?fleet={idx}&bot={botid}'>edit</a> "
              f"<a href='/edit?fleet={idx}&bot={botid}&mode=remove'>remove</a>")
     state = ('DEAD' if bl.get('alive') is False else 'NOT STARTED' if botid not in belief
              else 'HOLDING' if (v.get('stack_value') or 0) > 0 else 'RESTING')
@@ -807,6 +821,7 @@ def portfolio_card(idx, botid, contract, belief):
             + ', '.join(sorted({h['product'] for h in (terms.get('hedges') or {}).values()}) or ['nothing'])
             + f" · rebalanced every {(terms.get('rebalance') or {}).get('every_hours', 24):g} h"
             + (f" · tilt {terms['regime']['tilt']:.0%} with the regime" if terms.get('regime') else ' · neutral'))
+    facts = ''
     if not v:
         head = ('<span class="big dim">waits for the fleet\'s restart</span>' if botid not in belief
                 else '<span class="big dim">not yet valued</span>')
@@ -818,7 +833,9 @@ def portfolio_card(idx, botid, contract, belief):
                 f'<span class="dim">since its anchor, after fees</span><div class="parts">'
                 f'carry <b class="{_num_cls(carry)}">{carry:+,.2f}</b> · '
                 f'tilt <b class="{_num_cls(tilt)}">{tilt:+,.2f}</b> · '
-                f'basis &amp; shape <b class="{_num_cls(basis)}">{basis:+,.2f}</b></div></div>')
+                f'basis &amp; shape <b class="{_num_cls(basis)}">{basis:+,.2f}</b>'
+                + (f' · interest <b class="neg">−{v["interest"]:,.2f}</b>' if v.get('interest') else '')
+                + '</div></div>')
         rows = ''
         for a in v.get('assets') or []:
             w, act = a.get('weight') or 0.0, a.get('actual') or 0.0
@@ -836,16 +853,18 @@ def portfolio_card(idx, botid, contract, belief):
         if nxt:
             left = (nxt - contract['generated_ms']) / 3.6e6
             due = f"next tick in {left:.1f} h" if left > 0 else 'tick due'
-        body = (f"<div class=\"dim\">stack <b>{v.get('stack_value') or 0:,.2f}</b> {q}"
+        facts = (f"<div class=\"dim\">stack <b>{v.get('stack_value') or 0:,.2f}</b> {q}"
                 f" · cash {v.get('cash') or 0:,.2f}"
                 + (f" · parked {v['parked']:,.2f}" if v.get('parked') else '')
-                + (f" · borrowed <b>{v['borrowed']:,.2f}</b> ({v['leverage']:.2f}× the equity)"
+                + (f" · borrowed <b>{v['borrowed']:,.2f}</b> ({v['leverage']:.2f}× the equity"
+                   + (f", {v['borrow_apr']:.2%}/yr" if v.get('borrow_apr') is not None else '')
+                   + (f", interest paid {v['interest']:,.2f}" if v.get('interest') else '') + ')'
                    if v.get('borrowed') and v.get('leverage') else '')
                 + (f" · shorts cut {v['delevered']}×" if v.get('delevered') else '')
-                + (f" · {due}" if due else '') + '</div>'
-                f'<table><tr><th>asset</th><th>weight</th><th>hedge ratio</th>'
+                + (f" · {due}" if due else '') + '</div>')
+        body = (f'<table><tr><th>asset</th><th>weight</th><th>hedge ratio</th>'
                 f'<th>coins hedged</th><th>coins held</th><th></th></tr>{rows}</table>'
-                f'<details data-k="{idx}:{botid}"><summary>the numbers</summary><table>'
+                + (('<div class="numbers"><h3>the numbers</h3><table>'
                 f"<tr><td>value</td>{money(v.get('value'), cls=False)}</tr>"
                 f"<tr><td>anchor</td>{money(v.get('anchor'), cls=False)}</tr>"
                 f"<tr><td>shorts, open</td>{money(v.get('unreal'))}</tr>"
@@ -853,13 +872,65 @@ def portfolio_card(idx, botid, contract, belief):
                 f"<tr><td>funding, trailing window</td>{money((v.get('carry') or {}).get('trailing'))}</tr>"
                 + (f"<tr><td>loss limit</td><td>{bl['loss']['result']:,.2f} of {bl['loss']['limit']:,.2f}</td></tr>"
                    if bl.get('loss') else '')
-                + '</table></details>')
+                + '</table></div>') if full else ''))
     cls = 'neg' if state == 'DEAD' else 'dim'
     # H6: the portfolio's card spans the cards' row — six columns of assets
     # and three money lines ran past a 21em card's border (the owner, 2026-10-08)
+    # U55: three cards wide, not the page; the money and the facts side by
+    # side, the assets below, the footer aligned with every other card's
     return (f'<div class="card pfo"><div><span class="side pfo">PORTFOLIO</span> <b>{name}</b> '
             f'{state_tag(state, cls)}</div><div class="dim">{kind}</div>'
-            f'<div>{head}</div>{body}<div class="dim">{botid} · {links}</div></div>')
+            f'<div class="two"><div>{head}</div><div>{facts}</div></div>{body}'
+            f'<div class="dim foot"><span>{botid}</span><span>{links}</span></div></div>')
+
+
+def exchange_table(botid, b, belief, terms):
+    """U56 (the owner: "reads the data directly shown from the position
+    when viewed in the Bybit dashboard"): the position as the exchange's
+    own panel lays it out — symbol, side, size, value, entry, mark,
+    liquidation, margin, leverage, open and closed P&L — from the readout's
+    book and the engine's snapshot of the venue's margin (V14/V17)."""
+    bl = belief.get(botid) or {}
+    mv = bl.get('margin') or {}
+    money_coin, margin_coin = units_of(botid, terms)
+    pos = (b or {}).get('position') if b else bl.get('position')
+    mark = (b or {}).get('mark')
+    side = 'short' if botid.endswith('s') else 'long'
+    symbol = (terms or {}).get('symbol') or botid[3:-1]
+
+    def n(v, f=',.6g'):
+        return '—' if v is None else f'{v:{f}}'
+    inverse = bool((b or {}).get('inverse'))
+    qty = None if pos is None else abs(pos)
+    value = None if qty is None or not mark else (qty if inverse else qty * mark)
+    fmt = ',.2f' if margin_coin in ('USDT', 'USDC', 'USD') else ',.6g'
+    rows = [('symbol', symbol), ('side', side.upper()),
+            ('size', f"{n(qty)} {'USD' if inverse else coin_of(botid)}"),
+            ('value', f'{n(value, ",.2f")} {money_coin}'),
+            ('entry price', n((b or {}).get('avg_cost') or None)),
+            ('mark price', n(mark)),
+            ('liq. price', n(mv.get('liq'))),
+            ('initial margin', f"{n(mv.get('im'), fmt)} {margin_coin}" if mv.get('im') is not None else '—'),
+            ('maint. margin', f"{n(mv.get('mm'), fmt)} {margin_coin}" if mv.get('mm') is not None else '—'),
+            ('leverage', f"{mv['leverage']:g}×" if mv.get('leverage') else '—'),
+            ('unrealised P&amp;L', f"{n((b or {}).get('unreal_at_mark'), '+,.2f')} {money_coin}"),
+            ('realised, after fees', f"{n(((b or {}).get('realized') or 0) - ((b or {}).get('fees') or 0), '+,.2f')} {money_coin}"
+                                      if b else '—'),
+            ('funding', f"{n((b or {}).get('funding'), '+,.2f')} {money_coin}" if b else '—')]
+    return ('<table class="xch"><tr>' + ''.join(f'<th>{k}</th>' for k, _ in rows) + '</tr><tr>'
+            + ''.join(f'<td>{v}</td>' for _, v in rows) + '</tr></table>')
+
+
+def position_page(idx, label, botid, contract, belief):
+    """U56: one position, one page — the exchange's view first, then the
+    card with every number laid open."""
+    terms = (contract.get('terms') or {}).get(botid)
+    b = (contract.get('bots') or {}).get(botid)
+    xch = ('' if (terms or {}).get('strategy') == 'portfolio'
+           else f'<h3>as the exchange shows it</h3>{exchange_table(botid, b, belief, terms)}')
+    return (f'<h1>{label} · {_plain_name(botid, contract, b) if (terms or {}).get("strategy") != "portfolio" else botid[3:] + " portfolio"}</h1>'
+            f'{xch}<div class="cards one">{card(idx, botid, b, contract, belief, full=True)}</div>'
+            '<p><a href="/">&larr; fleet</a></p>')
 
 
 def hero_strip(labelled):
@@ -1118,10 +1189,9 @@ def nav_panel(table, view):
         f'<b class="on">{words}</b>' if key == view else
         f'<a href="{here}{"" if key == "all" else "?view=" + key}">{words}</a>'
         for key, words in VIEWS)
-    # U22 (owner: "show all … open/close all the numbers"): every card's
-    # numbers at once; each box still remembers itself
-    numbers = ('' if table else '<h3>numbers</h3><a href="javascript:ggAll(true)">'
-               'show all</a><a href="javascript:ggAll(false)">hide all</a>')
+    # U22's show-all switch is gone: the numbers live on each position's
+    # own page now (U56), and a card folds nothing
+    numbers = ''
     # U44: what a holding is said in, as Bybit's preference
     size = ''.join(f'<a href="javascript:ggSize(\'{k}\')" data-size="{k}">{w}</a>'
                    for k, w in SIZE_VIEWS)

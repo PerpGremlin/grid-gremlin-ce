@@ -938,3 +938,33 @@ def spec_F12_the_watch_waits_for_the_write_to_settle_and_polls_cheaply():
     assert watch.poll(now + 0.5) is None               # still settling
     assert watch.poll(now + 5) == {'linBTCUSDTl': 'applied'}
     assert watch.poll(now + 10) is None                # seen once
+
+
+def spec_F12_a_portfolio_row_is_known_to_the_watch_and_its_changes_wait_for_a_restart():
+    """The carry fleet's file changed under it (2026-10-08) and the watch
+    said the portfolio row was 'removed from the file': it walked market
+    rows only. Known by its own id now; a change is a restart's (H2)."""
+    import json
+    import tempfile
+    from pathlib import Path
+    from gridgremlin.config import validate_fleet
+    from gridgremlin.events import Notifier
+    from gridgremlin.reload import FleetWatch
+    pfo = {'strategy': 'portfolio', 'name': 'carry', 'capital': 1000,
+           'assets': [{'coin': 'BTC', 'weight': 0.5}, {'coin': 'ETH', 'weight': 0.5}]}
+    watch, bots, venue, lines, fleet = _watch_world([_GRID])
+    raw = json.loads(fleet.read_text())
+    raw['bots'].append(pfo)
+    fleet.write_text(json.dumps(raw))
+
+    class Row:                                     # the running portfolio bot, as the watch sees it
+        def __init__(self, cfg):
+            self.cfg, self.botid = cfg, cfg['botid']
+    bots.append(Row(validate_fleet(raw)['bots'][1]))
+    watch = FleetWatch(fleet, bots, {'bybit': venue, 'hyperliquid': venue.hl}, Notifier(sink=lines.append))
+    assert watch.apply() == {} and not any('removed from the file' in ln for ln in lines)
+    raw['bots'][1]['capital'] = 2000
+    fleet.write_text(json.dumps(raw))
+    assert watch.apply() == {'pfocarry': 'restart'}
+    assert any('learns new terms at the next restart' in ln for ln in lines)
+    assert bots[1].cfg['capital'] == 1000.0           # nothing applied live

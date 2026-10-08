@@ -204,10 +204,6 @@ def draft_guards(draft):
     if draft.get('strategy', 'grid') == 'martingale':
         from .replay import refuse_replay
         return refuse_replay(draft)
-    if draft.get('market_type') != 'linear':
-        return ("the backtester's fee/PnL maths are linear-only — '%s' "
-                'would return confident nonsense (A4)'
-                % draft.get('market_type'))
     return None
 
 
@@ -365,10 +361,6 @@ def main(argv):
             print(f'{botid}: {why}')
             return 2
         bar_minutes = MARTINGALE_BAR_MINUTES       # T7
-    if cfg['market_type'] != 'linear':
-        print(f"{botid}: the backtester's fee/PnL maths are linear-only — "
-              f"'{cfg['market_type']}' would return confident nonsense (A4)")
-        return 2
     try:
         bars, adapter = bars_and_adapter(cfg, bar_minutes, days)
     except (LookupError, ValueError) as e:

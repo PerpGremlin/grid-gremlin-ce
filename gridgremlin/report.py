@@ -1138,6 +1138,7 @@ def main(argv):
                         for b in botids},              # configured bot appears
                      **{b: None for b in pfo_ids}},    # D78: the row's book is its snapshot's
             'ranges': range_of,
+            'marks': {b: marks.get(key_of[b]) for b in botids},     # U57: the mark for a quiet bot too
             'terms': terms,
             'account': account,
             'watchdog': _watchdog_view(fleet),

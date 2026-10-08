@@ -873,3 +873,43 @@ def spec_H4_the_owners_flatten_takes_every_leg_together_and_a_reset_makes_the_ne
     fresh.cycle()                                                         # a first sight: the stack from capital
     assert fresh.row['anchor_value'] is not None and fresh.row['contributed'] == 0.0
     assert abs(venue.coins['BTC'] * 60000.0 - 50000.0) < 100.0
+
+
+def spec_H4_the_loans_cost_is_read_from_the_venues_ledger_and_a_rate_above_the_cap_stands_the_loan_down():
+    """Measured on the carry sub (2026-10-08): 0.000449%/hour, 3.93%/yr,
+    2.34 USDT for the first hour on 520k. The row reads the ledger, keeps
+    the cost as its own line, and stands the loan down above its cap."""
+    venue, lines, clock = _venue(), [], Clock()
+    venue.coins['USDT'] = 100000.0
+    venue.t_ms = int(clock.t * 1000)
+    venue.borrow = []
+    venue.borrow_history = lambda coin, since, now: [r for r in venue.borrow if since < r['time_ms'] <= now]
+    row = {'capital': 100000, 'spot_borrow': True, 'margin': {'spot_leverage': 2.0, 'borrow_apr_max': 0.06},
+           'assets': [{'coin': 'BTC', 'weight': 1.0}, {'coin': 'ETH', 'weight': 1.0}], 'risk': {'max_weight': 1.0}}
+    bot, _ = _bot(venue, lines, clock=clock, row=row)
+    bot.cycle()
+    clock.t += 3600; venue.t_ms = int(clock.t * 1000)
+    venue.borrow.append({'time_ms': venue.t_ms - 1000, 'cost': 0.45, 'hourly_rate': 0.00000449, 'size': 100000.0})
+    venue.coins['USDT'] -= 0.45                                            # the venue took its interest
+    bot.cycle()
+    v = bot.portfolio_view
+    assert abs(v['interest'] - 0.45) < 1e-9 and abs(v['borrow_apr'] - 0.00000449 * 8760) < 1e-9   # 3.93%/yr
+    assert abs(v['total'] + 0.45) < 1.0                                   # the cost is in the total…
+    assert abs(v['basis']) < 1.0                                          # …and out of basis & shape
+    assert bot.row.get('lever_cap') is None and not any('stands down' in ln for ln in lines)
+    clock.t += 3600; venue.t_ms = int(clock.t * 1000)
+    venue.borrow.append({'time_ms': venue.t_ms - 1000, 'cost': 1.0, 'hourly_rate': 0.00001, 'size': 100000.0})  # 8.76%/yr
+    bot.cycle()
+    assert abs(bot.row['interest_total'] - 1.45) < 1e-9                   # each hour counted once
+    assert bot.row['lever_cap'] == 1.0 and any("above the row's cap of 6.00%" in ln for ln in lines)
+    sells = [o for o in venue.orders if o[0] == 'spot' and o[2] == 'Sell']
+    assert sells and abs(sum(o[3] * venue.marks[o[1]] for o in sells) - 100000.0) < 200.0   # the loan repaid
+    clock.t += DAY; venue.t_ms = int(clock.t * 1000)
+    venue.available_pct = 0.9
+    venue.borrow.append({'time_ms': venue.t_ms - 1000, 'cost': 0.0, 'hourly_rate': 0.00001, 'size': 0.0})
+    bot.cycle()
+    assert bot.row['lever_cap'] == 1.0                                    # the rate still high: no easing
+    clock.t += DAY; venue.t_ms = int(clock.t * 1000)
+    venue.borrow.append({'time_ms': venue.t_ms - 1000, 'cost': 0.0, 'hourly_rate': 0.000004, 'size': 0.0})
+    bot.cycle()
+    assert abs(bot.row['lever_cap'] - 1.05) < 1e-9                        # under the cap again: eased a step

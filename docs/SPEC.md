@@ -829,7 +829,8 @@ eventually pin (T1).
   applied in place, the build's carried values kept and the loss ledger re-read;
   a change among the COLD keys (identity, strategy, venue, lattice, slide, seed,
   floor, a martingale's sizes and deviations) applies nothing of that row and
-  names what waits for a restart. A leverage change goes to the venue first, one
+  names what waits for a restart. A portfolio row is known to the watch by
+  its own id, and any change to it waits for a restart (H2), said so. A leverage change goes to the venue first, one
   leverage per market (the legs' highest, as at build) on Bybit, one per coin
   on Hyperliquid (its updateLeverage, as the build asserts it); the venue's
   refusal is said in its own words and nothing of that row is applied. *(live
@@ -1172,6 +1173,28 @@ eventually pin (T1).
   thin. A bot whose market was not read carries nothing; no readings yet is
   said as such. Display only, like the rest of K.
 
+- **U55** The dash reads as the owner reads it. A fleet file's `label` is
+  what the panel calls the fleet (forty characters at most); without one,
+  the venue and the file's environment word. Every card is a column with
+  its footer — the id and the buttons — aligned at the bottom, so the
+  buttons line up across cards. The portfolio card is three cards wide
+  and no wider, its money and its facts side by side, the assets below.
+
+- **U56** One position, one page. A card holds its state, its money and
+  its holding; its numbers live at `/position?fleet=&bot=` behind a
+  `numbers` button — the exchange's own view of the position first
+  (symbol, side, size, value, entry, mark, liquidation, margin, leverage,
+  open and closed P&L, funding), then the card with every number and the
+  ladder laid open. A card folds nothing, so U22's show-all switch is
+  retired (the owner, 2026-10-08: the opened tables collided and the cards
+  ran very long).
+
+- **U57** The card judges the price against the window the bot trades,
+  not the home it started from: a slid window (G17) is the home range
+  moved by the offset times the lattice's gap, and the card says how far
+  it slid. The readout carries every configured bot's mark, so a quiet
+  bot shows where the price sits in its range too.
+
 ## H — the hedged portfolio (D78)
 
 The design is `docs/PORTFOLIO.md`; an invariant appears here with the spec
@@ -1270,7 +1293,14 @@ that pins it (T1).
   after a trim it aims lower by the trimmed share, and eases back toward
   the file's leverage by 5% a tick only while free margin sits two
   buffers above the floor — so the daily tick does not lever back into
-  the floor it was just trimmed from. Past
+  the floor it was just trimmed from. The loan's cost is read from the
+  venue's own ledger (`borrow_history`: the hourly charges on the
+  interest-bearing size) and kept as the row's own figure; the latest
+  hourly rate, as a yearly one, is judged against `margin.borrow_apr_max`
+  — above it the loan stands down (the cap to 1×, planned at the next
+  read, said once an hour) and the ratchet does not ease back while the
+  rate stays above. *(measured 2026-10-08 on the carry sub: 0.000449%
+  an hour, 3.93% a year, 2.34 USDT for the first hour on 520k)* Past
   `basis_stop_pct` between an asset's perp and spot marks, that asset's
   pair alone is unwound — hedge bought back, coins sold, the quote parked
   — and the rest held; it re-enters from its parked cash when the basis is
@@ -1283,8 +1313,9 @@ that pins it (T1).
   mix: **carry** (funding received), **tilt** (the shorts' excess over
   neutral — the row's ratio × the coins held — marked each read against
   the price's move; no second model), **basis & shape** (what is left of
-  the total since the anchor after those two: the spot/perp gap and the
-  inverse contract's shape). The exchange box and the strip count the
+  the total since the anchor after those two and after the loan's
+  interest: the spot/perp gap and the inverse contract's shape); the
+  loan's interest and its yearly rate stand beside them, their own. The exchange box and the strip count the
   row's total like any card (D63); the *by strategy* view groups it under
   "portfolios", the *by coin* view too. A regime from D67's readings is
   believed only after it has held `hold_hours` ('trending up' → up,
@@ -1628,6 +1659,13 @@ that pins it (T1).
   A spec that passes with the behaviour sabotaged is a defect. *(audit 3.8)*
 - **T2** Every loop is driven at least two iterations by some spec. *(the fleet-loop
   NameError that no spec caught)*
+- **T3a** The backtester's money is the adapter's (A4): fees and funding on
+  the adapter's notional (qty × price for linear and spot, the contracts
+  for inverse), the basis by its average (arithmetic by quantity; harmonic
+  for inverse), P&L realised and marked in its settle coin and stated in
+  USD — so an inverse or spot row rehearses in its own maths; the
+  linear-only refusal is gone (the owner's rehearse of the inverse ETH
+  long, 2026-10-08).
 - **T3** The backtester drives the real `plan()`; fills require trade-through, not
   touch; funding is modelled; inventory is counted in integer qty-steps — float
   subtract-then-floor drops a whole step per iteration *(audit 2026-08-06)*. *(freqtrade + passivbot studies)*

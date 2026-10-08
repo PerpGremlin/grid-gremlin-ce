@@ -127,3 +127,26 @@ def spec_H5_the_fleet_lock_is_named_for_the_account_too():
     assert lock_tag_for(clients) == 'bybit.demo+hyperliquid.testnet'
     assert lock_tag_for(clients, 'default') == 'bybit.demo+hyperliquid.testnet'
     assert lock_tag_for(clients, 'carry') == 'bybit.demo+hyperliquid.testnet.carry'
+
+
+def spec_U55_a_fleet_names_itself_for_the_dash():
+    """The owner (2026-10-08): call the carry fleet 'bybit demo subaccount 1'
+    on the dash. A fleet file's `label` is what the panel calls it; without
+    one the venue and the file's environment word, as before."""
+    import tempfile
+    from pathlib import Path
+    from panel.server import fleet_label
+    assert validate_fleet({'bots': [ROW], 'label': 'Bybit demo subaccount 1'})['label'] == 'Bybit demo subaccount 1'
+    assert validate_fleet({'bots': [ROW]})['label'] is None
+    for bad in ('', '   ', 'x' * 41, 7):
+        try:
+            validate_fleet({'bots': [ROW], 'label': bad})
+        except ConfigError as e:
+            assert "'label'" in str(e)
+        else:
+            raise AssertionError(f'{bad!r} accepted')
+    d = Path(tempfile.mkdtemp())
+    (d / 'fleet.carry.json').write_text(json.dumps({'label': 'Bybit demo subaccount 1', 'bots': [ROW]}))
+    (d / 'fleet.hl.testnet.json').write_text(json.dumps({'bots': [dict(ROW, venue='hyperliquid')]}))
+    assert fleet_label(str(d / 'fleet.carry.json')) == 'Bybit demo subaccount 1'
+    assert fleet_label(str(d / 'fleet.hl.testnet.json')) == 'hyperliquid testnet'

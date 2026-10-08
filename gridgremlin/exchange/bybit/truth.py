@@ -250,6 +250,28 @@ def read_fills(client, category, symbol, start_ms, end_ms):
     return fills
 
 
+def read_borrow(client, coin, start_ms, end_ms):
+    """H4: the loan's cost as the venue charged it, hourly rows in the
+    window, oldest first — the cost in the coin, the hourly rate it was
+    charged at, the size it was charged on."""
+    out, cursor = [], None
+    for _ in range(MAX_ORDER_PAGES):
+        params = {'currency': coin, 'startTime': int(start_ms), 'endTime': int(end_ms), 'limit': 50}
+        if cursor:
+            params['cursor'] = cursor
+        page = client.get('/v5/account/borrow-history', params, signed=True)
+        for e in page.get('list', []):
+            out.append({'time_ms': int(e.get('createdTime') or 0),
+                        'cost': _f(e.get('borrowCost'), 0.0),
+                        'hourly_rate': _f(e.get('hourlyBorrowRate'), 0.0),
+                        'size': _f(e.get('InterestBearingBorrowSize'), 0.0)})
+        cursor = page.get('nextPageCursor')
+        if not cursor:
+            break
+    out.sort(key=lambda r: r['time_ms'])
+    return out
+
+
 def read_funding(client, category, symbol, start_ms, end_ms):
     """D63: funding paid or received, per position side. Bybit writes each
     settlement as an execution of type Funding on the leg it charged:
