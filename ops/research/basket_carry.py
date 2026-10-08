@@ -1,4 +1,4 @@
-"""Research (2026-10-10): the basket — several coins at target weights, each
+"""Research (2026-10-08): the basket — several coins at target weights, each
 with its own hedge, rebalanced on one clock. The owner: "a portfolio of
 assets … with the ability to run short hedges, which can also be
 rebalanced." Does a basket beat the best single-asset book on drawdown

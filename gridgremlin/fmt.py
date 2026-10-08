@@ -1,4 +1,4 @@
-"""One vocabulary for the primitives (C10, audit 2026-10-09): the float
+"""One vocabulary for the primitives (C10, audit 2026-10-08): the float
 parser, the UTC stamp, the number words. Each exists here once; a second
 definition anywhere fails the suite."""
 import time

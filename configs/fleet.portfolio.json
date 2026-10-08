@@ -32,7 +32,7 @@
       },
       "risk": {
         "max_loss": 60,
-        "max_loss_since": "2026-10-11T00:00:00Z",
+        "max_loss_since": "2026-10-08T00:00:00Z",
         "margin_floor_pct": 0.4,
         "basis_stop_pct": 0.01,
         "max_weight": 0.5

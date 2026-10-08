@@ -15,7 +15,7 @@ PORTFOLIO_KEYS = ('strategy', 'name', 'venue', 'account', 'capital', 'assets',
                   'margin', 'spot_borrow', 'spot_quote')
 PRODUCTS = ('usdt', 'usdc', 'inverse')
 H = 3_600_000
-CASH_RESERVE = 0.003         # of the cash a tick spends, kept for the buys' fees (three refusals by a hair, 2026-10-10)
+CASH_RESERVE = 0.003         # of the cash a tick spends, kept for the buys' fees (three refusals by a hair, 2026-10-08)
 
 
 def validate_portfolio(row, where='row'):

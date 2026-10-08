@@ -1,4 +1,4 @@
-"""Research (2026-10-09): the carry — what a delta-neutral pair of perps
+"""Research (2026-10-08): the carry — what a delta-neutral pair of perps
 would have earned from funding over the year, net of the fees to hold it.
 
   python3 ops/research/funding_carry.py [--days 365] [--coins BTC,ETH]

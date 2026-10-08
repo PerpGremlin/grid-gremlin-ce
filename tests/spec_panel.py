@@ -734,7 +734,7 @@ def spec_U53_every_money_figure_names_its_coin():
 
 
 def spec_P1_the_entry_point_resolves_every_name_it_uses():
-    """2026-10-09: the panel split left main() without Path, and the box's
+    """2026-10-08: the panel split left main() without Path, and the box's
     panel died at start — the one function no spec runs. Its free names
     are resolved against the module statically, so the façade can never
     lose an import again."""

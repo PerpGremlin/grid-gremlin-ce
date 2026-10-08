@@ -1,4 +1,4 @@
-"""Research (2026-10-09): the cross-venue carry — Bybit's USDT perp against
+"""Research (2026-10-08): the cross-venue carry — Bybit's USDT perp against
 Hyperliquid's perp on the same coin, both directions, a year of funding.
 
   python3 ops/research/funding_spread.py [--days 365] [--coins BTC,ETH]

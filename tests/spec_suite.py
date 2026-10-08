@@ -1,5 +1,5 @@
 """T1 and T5: the suite and the documents stay one vocabulary with the
-SPEC — held by the suite itself (audit 2026-10-09: 35 ids had no spec
+SPEC — held by the suite itself (audit 2026-10-08: 35 ids had no spec
 named for them; most were pinned under the decision that minted them)."""
 import ast
 import glob

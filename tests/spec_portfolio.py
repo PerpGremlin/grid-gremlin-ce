@@ -51,8 +51,8 @@ def spec_H1_the_row_is_its_assets_hedges_clock_and_risk_with_stated_defaults():
                                assets=[{'coin': 'BTC', 'weight': 0.5}, {'coin': 'ETH', 'weight': 0.5},
                                        {'coin': 'SOL', 'weight': 0.5}]))
     assert lev['margin'] == {'spot_leverage': 1.5, 'borrow_apr_max': 0.08}
-    loss = validate_config(_row(risk={'max_loss': 500, 'max_loss_since': '2026-10-10T00:00:00Z'}))
-    assert loss['risk']['max_loss'] == 500.0 and loss['risk']['max_loss_since_ms'] == 1791590400000
+    loss = validate_config(_row(risk={'max_loss': 500, 'max_loss_since': '2026-10-08T00:00:00Z'}))
+    assert loss['risk']['max_loss'] == 500.0 and loss['risk']['max_loss_since_ms'] == 1791417600000
     assert validate_portfolio(_row())['botid'] == 'pfocarry'                 # the module's own door
 
 
@@ -151,7 +151,7 @@ def spec_H3_an_outright_short_is_sized_from_the_stack_and_never_hedged():
 
 
 def spec_H3_the_cash_step_keeps_a_reserve_for_the_buys_own_fees():
-    """Three restarts on the carry fleet (2026-10-10): the cash split three
+    """Three restarts on the carry fleet (2026-10-08): the cash split three
     ways to the cent, the first two buys' fees left the third refused."""
     from gridgremlin.portfolio import CASH_RESERVE
     cfg = validate_config({k: v for k, v in _row().items() if k != 'rebalance'})     # the default reserve
