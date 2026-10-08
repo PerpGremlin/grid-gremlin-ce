@@ -20,7 +20,7 @@ import os
 from pathlib import Path
 
 from .apply import make_botid
-from .config import ConfigError, validate_fleet
+from .config import market_rows, ConfigError, validate_fleet
 from .exchange.errors import VenueError
 
 HOT_KEYS = frozenset((
@@ -78,7 +78,7 @@ class FleetWatch:
                                 '— running on with the terms it has (F12)', urgent=True)
             return {}
         rows = {make_botid(c['market_type'], c['symbol'], c['side']): c
-                for c in fleet['bots']}
+                for c in market_rows(fleet)}
         out = {}
         by_id = {b.botid: b for b in self.bots}
         for botid in rows:

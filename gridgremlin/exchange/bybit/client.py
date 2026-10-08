@@ -170,6 +170,10 @@ class Client:
         from . import truth as _t
         return _t.read_fills(self, market_type, symbol, since_ms, now_ms)
 
+    def funding_history(self, market_type, symbol, since_ms, now_ms):
+        from . import truth as _t
+        return _t.read_funding(self, market_type, symbol, since_ms, now_ms)
+
     def read_wallet(self):
         from . import truth as _t
         return _t.read_wallet(self.wallet_balance())
@@ -329,13 +333,20 @@ class WriteClient(Client):
                 raise
 
     def place_market(self, category, symbol, side, qty, position_idx=0,
-                     reduce_only=False, link_id=None, borrow=False):
+                     reduce_only=False, link_id=None, borrow=False, quote_qty=None):
         body = {'category': category, 'symbol': symbol, 'side': side,
                 'orderType': 'Market', 'qty': qty}
         if category == 'spot':
             # a spot market Buy is QUOTE-denominated by default — pin the unit
-            # so qty stays base on both sides (V6)
-            body['marketUnit'] = 'baseCoin'
+            # so qty stays base on both sides (V6). H2's cash buys say the
+            # quote on purpose (`quote_qty`): a buy sized in coins is checked
+            # against the balance at a buffered price and refused when it
+            # spends nearly all the cash (three restarts, 2026-10-10)
+            if quote_qty is not None:
+                body['marketUnit'] = 'quoteCoin'
+                body['qty'] = quote_qty
+            else:
+                body['marketUnit'] = 'baseCoin'
             body['isLeverage'] = 1 if borrow else 0     # D24: margin spot
         else:
             body['positionIdx'] = position_idx

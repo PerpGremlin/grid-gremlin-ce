@@ -738,6 +738,22 @@ stands unless the owner corrects it.
   lock; held, it refuses on Hyperliquid before any client is built (X15b).
   Bybit is unaffected (its nonce is per request). The owner's grant: the
   audit's "on you".
+- **D78 — The portfolio row (2026-10-10).** The owner, after two days of
+  measured research: *"lets do it all."* A row that holds several coins on
+  spot at target weights, hedges each with its own perpetual short at its
+  own ratio, collects the funding, and rebalances weights and hedges on one
+  clock, the risk judged on the whole and never on a leg. Pure carry (ratio
+  1, no tilt) is the default; the regime tilt, basket weights and margin on
+  the stack are opt-in layers. The pair is its one-coin form. The test runs
+  on a Bybit subaccount's own demo account and a Hyperliquid testnet
+  sub-account, which the engine learns to address (`vaultAddress`). The
+  design is `docs/PORTFOLIO.md`; its invariants enter SPEC.md (family H)
+  only with the specs that pin them (T1). Built after the owner has read it.
+  *Built 2026-10-10/11 (PRs #310–#321): H1–H7 end to end, margin on the
+  stack included; soaking on the Bybit subaccount's demo at the margin
+  floor by the owner's word ("as if a retail client uses it, teetering on
+  the edge of stress, constantly"). The Hyperliquid leg waits for a
+  sub-account the testnet will grant.*
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

@@ -385,6 +385,8 @@ def card(idx, botid, b, contract, belief):
     """One bot, one card: its state in a word, what it made, where the
     price sits in its range. Everything the table row said is still here —
     the rest folds under 'the numbers'."""
+    if ((contract.get('terms') or {}).get(botid) or {}).get('strategy') == 'portfolio':
+        return portfolio_card(idx, botid, contract, belief)                  # D78/H6
     rng = (contract.get('ranges') or {}).get(botid)
     ceil = ((contract.get('watchdog') or {}).get('ceilings') or {}).get(botid)
     money_coin, margin_coin = units_of(botid, (contract.get('terms') or {}).get(botid))   # U53
@@ -601,7 +603,10 @@ def card(idx, botid, b, contract, belief):
 
 
 VIEWS = (('all', 'as listed'), ('side', 'longs / shorts'),
-         ('pairs', 'pairs'))
+         ('pairs', 'pairs'), ('strategy', 'by strategy'), ('market', 'by coin'))
+STRATEGY_WORDS = {'grid': 'grids', 'martingale': 'DCA', 'pair': 'pairs — rebalancing',
+                  'portfolio': 'portfolios — hedged, rebalanced'}
+PRODUCT_WORDS = {'spo': 'spot', 'lin': 'perp', 'inv': 'inverse'}
 
 
 def grouped(contract, view='all'):
@@ -626,6 +631,34 @@ def grouped(contract, view='all'):
         groups = [('pairs — one market, long and short', paired),
                   ('on their own', [x for x in items
                                     if x[0][:-1] not in both])]
+    elif view == 'strategy':
+        # U54 (owner: "separate every strategy type on the dash"): one
+        # heading per kind, in the order the kinds first appear
+        terms = contract.get('terms') or {}
+        def kind(botid, b):
+            k = (b or {}).get('strategy') or (terms.get(botid) or {}).get('strategy')
+            return k or ('grid' if botid in (contract.get('ranges') or {}) else 'martingale')
+        order, by = [], {}
+        for botid, b in items:
+            k = kind(botid, b)
+            if k not in by:
+                order.append(k)
+            by.setdefault(k, []).append((botid, b))
+        groups = [(STRATEGY_WORDS.get(k, k), by[k]) for k in order]
+    elif view == 'market':
+        # U54: one coin across its products — spot, perp, inverse, each
+        # side — so what shares a wallet or an index sits together
+        order, by = [], {}
+        pterms = contract.get('terms') or {}
+        for botid, b in items:
+            c = ('portfolios' if (pterms.get(botid) or {}).get('strategy') == 'portfolio'
+                 else coin_of(botid))
+            if c not in order:
+                order.append(c)
+            by.setdefault(c, []).append((botid, b))
+        groups = [(c if c == 'portfolios' else
+                   f'{c} — ' + ', '.join(sorted({PRODUCT_WORDS.get(x[0][:3], x[0][:3]) for x in by[c]})), by[c])
+                  for c in order]
     else:
         return [('', items)]
     return [(title, rows) for title, rows in groups if rows]
@@ -746,6 +779,89 @@ def tier_badge(contract):
     return ' '.join(out)
 
 
+def portfolio_total(contract):
+    """H6: what the fleet's portfolio rows have made since their anchors,
+    from their own snapshots — counted into the exchange's total like any
+    card (D63). A row the engine has not valued counts nothing."""
+    belief = ((contract.get('watchdog') or {}).get('belief') or {}).get('bots', {})
+    return sum((bl.get('portfolio') or {}).get('total') or 0.0
+               for bl in belief.values() if bl.get('alive') is not False)
+
+
+def portfolio_card(idx, botid, contract, belief):
+    """H6: the portfolio's card — the stack's value and coins, one line per
+    asset (weight target → actual, hedge ratio target → actual, coins
+    hedged, the regime word when the tilt is on), and three money lines
+    that never mix: carry, tilt, basis & shape."""
+    import html as _h
+    terms = (contract.get('terms') or {}).get(botid) or {}
+    bl = belief.get(botid) or {}
+    v = bl.get('portfolio') or {}
+    q = terms.get('quote') or 'USDT'
+    links = (f"<a href='/edit?fleet={idx}&bot={botid}'>edit</a> "
+             f"<a href='/edit?fleet={idx}&bot={botid}&mode=remove'>remove</a>")
+    state = ('DEAD' if bl.get('alive') is False else 'NOT STARTED' if botid not in belief
+             else 'HOLDING' if (v.get('stack_value') or 0) > 0 else 'RESTING')
+    name = f"{botid[3:]} portfolio"
+    kind = (f"{len(terms.get('assets') or [])} assets · hedged on "
+            + ', '.join(sorted({h['product'] for h in (terms.get('hedges') or {}).values()}) or ['nothing'])
+            + f" · rebalanced every {(terms.get('rebalance') or {}).get('every_hours', 24):g} h"
+            + (f" · tilt {terms['regime']['tilt']:.0%} with the regime" if terms.get('regime') else ' · neutral'))
+    if not v:
+        head = ('<span class="big dim">waits for the fleet\'s restart</span>' if botid not in belief
+                else '<span class="big dim">not yet valued</span>')
+        body = ''
+    else:
+        total = v.get('total') or 0.0
+        carry, tilt, basis = v.get('carry', {}).get('total') or 0.0, v.get('tilt') or 0.0, v.get('basis') or 0.0
+        head = (f'<div class="pnl {_num_cls(total)}"><span class="big {_num_cls(total)}">{total:+,.2f}</span> {q} '
+                f'<span class="dim">since its anchor, after fees</span><div class="parts">'
+                f'carry <b class="{_num_cls(carry)}">{carry:+,.2f}</b> · '
+                f'tilt <b class="{_num_cls(tilt)}">{tilt:+,.2f}</b> · '
+                f'basis &amp; shape <b class="{_num_cls(basis)}">{basis:+,.2f}</b></div></div>')
+        rows = ''
+        for a in v.get('assets') or []:
+            w, act = a.get('weight') or 0.0, a.get('actual') or 0.0
+            hedged, coins = a.get('hedged') or 0.0, (v.get('stack') or {}).get(a['coin'], {}).get('coins') or 0.0
+            ratio_act = (hedged / coins) if coins else 0.0
+            note = ('unwound (basis)' if a.get('unwound') else
+                    f"regime {a['regime']}" if a.get('regime') else '')
+            rows += (f"<tr><td>{a['coin']}</td>"
+                     + (f"<td>{w:.0%} → {act:.0%}</td>" if w > 0 else f"<td>short {abs(w):.0%}</td>")
+                     + (f"<td>{a.get('ratio') or 0:g} → {ratio_act:.2f}</td><td>{hedged:,.6g}</td>"
+                        if w > 0 else f"<td>—</td><td>{a.get('short') or 0.0:,.6g}</td>")
+                     + f"<td>{coins:,.6g}</td><td class='dim'>{_h.escape(note)}</td></tr>")
+        nxt = v.get('next_tick_ms')
+        due = ''
+        if nxt:
+            left = (nxt - contract['generated_ms']) / 3.6e6
+            due = f"next tick in {left:.1f} h" if left > 0 else 'tick due'
+        body = (f"<div class=\"dim\">stack <b>{v.get('stack_value') or 0:,.2f}</b> {q}"
+                f" · cash {v.get('cash') or 0:,.2f}"
+                + (f" · parked {v['parked']:,.2f}" if v.get('parked') else '')
+                + (f" · borrowed <b>{v['borrowed']:,.2f}</b> ({v['leverage']:.2f}× the equity)"
+                   if v.get('borrowed') and v.get('leverage') else '')
+                + (f" · shorts cut {v['delevered']}×" if v.get('delevered') else '')
+                + (f" · {due}" if due else '') + '</div>'
+                f'<table><tr><th>asset</th><th>weight</th><th>hedge ratio</th>'
+                f'<th>coins hedged</th><th>coins held</th><th></th></tr>{rows}</table>'
+                f'<details data-k="{idx}:{botid}"><summary>the numbers</summary><table>'
+                f"<tr><td>value</td>{money(v.get('value'), cls=False)}</tr>"
+                f"<tr><td>anchor</td>{money(v.get('anchor'), cls=False)}</tr>"
+                f"<tr><td>shorts, open</td>{money(v.get('unreal'))}</tr>"
+                f"<tr><td>shorts, realised after fees</td>{money(v.get('realised'))}</tr>"
+                f"<tr><td>funding, trailing window</td>{money((v.get('carry') or {}).get('trailing'))}</tr>"
+                + (f"<tr><td>loss limit</td><td>{bl['loss']['result']:,.2f} of {bl['loss']['limit']:,.2f}</td></tr>"
+                   if bl.get('loss') else '')
+                + '</table></details>')
+    cls = 'neg' if state == 'DEAD' else 'dim'
+    # H6: the portfolio's card spans the cards' row — six columns of assets
+    # and three money lines ran past a 21em card's border (the owner, 2026-10-11)
+    return (f'<div class="card pfo"><div><span class="side pfo">PORTFOLIO</span> <b>{name}</b> '
+            f'{state_tag(state, cls)}</div><div class="dim">{kind}</div>'
+            f'<div>{head}</div>{body}<div class="dim">{botid} · {links}</div></div>')
+
+
 def hero_strip(labelled):
     """U50 (the owner: the exchange boxes "get lost while scrolling"): a
     strip pinned to the top of the page, one row per fleet — its name and
@@ -756,7 +872,7 @@ def hero_strip(labelled):
     lines = []
     for idx, (label, c) in enumerate(labelled):
         live = [b for b in c['bots'].values() if b is not None]
-        total = sum(card_total(b) for b in live)
+        total = sum(card_total(b) for b in live) + portfolio_total(c)       # H6
         belief = ((c.get('watchdog') or {}).get('belief') or {}).get('bots', {})
         dead = sum(1 for bl in belief.values() if bl.get('alive') is False)
         levs = [a['now'] for a in account_leverage(c).values()]
@@ -796,7 +912,7 @@ def cards_section(idx, label, contract, view='all'):
                else sum(funded))
     opened = [b['unreal_at_mark'] for b in live
               if b['unreal_at_mark'] is not None]
-    total = sum(card_total(b) for b in live)
+    total = sum(card_total(b) for b in live) + portfolio_total(contract)    # H6
     cards = '</div><div class="cards">'.join(
         (f'<div class="grp">{title}</div>' if title else '')
         + ''.join(card(idx, botid, b, contract, belief)

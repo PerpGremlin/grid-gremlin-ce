@@ -754,6 +754,34 @@ def spec_P1_the_entry_point_resolves_every_name_it_uses():
     assert not missing, f'panel.server.main uses names the module lacks: {missing}'
 
 
+def spec_U54_the_bots_can_be_arranged_by_strategy_or_by_coin():
+    """The owner: "separate every strategy type on the dash … more options
+    to organise". Two more arrangements: one heading per kind of bot, and
+    one per coin across its products. Every bot once in each."""
+    from panel.render import VIEWS, grouped, render
+    c = {'window_hours': 6.0, 'generated_ms': 0, 'unowned': {},
+         'bots': {'linBTCUSDTl': dict(CONTRACT['bots']['spoADAUSDTl'], strategy='grid'),
+                  'spoBTCUSDTl': dict(CONTRACT['bots']['spoADAUSDTl'], strategy='grid'),
+                  'invBTCUSDl': dict(CONTRACT['bots']['spoADAUSDTl'], strategy='grid', inverse=True),
+                  'lin1000PEPEUSDTl': dict(CONTRACT['bots']['spoADAUSDTl'], strategy='martingale'),
+                  'linETHUSDTs': None},
+         'terms': {'linETHUSDTs': {'strategy': 'martingale'}},
+         'watchdog': {'belief': {'age_s': 2, 'bots': {'linETHUSDTs': {'alive': True, 'position': 0.0}}}}}
+    assert [k for k, _ in VIEWS] == ['all', 'side', 'pairs', 'strategy', 'market']
+    strat = grouped(c, 'strategy')
+    assert [t for t, _ in strat] == ['grids', 'DCA']
+    assert [b for b, _ in strat[0][1]] == ['linBTCUSDTl', 'spoBTCUSDTl', 'invBTCUSDl']
+    assert [b for b, _ in strat[1][1]] == ['lin1000PEPEUSDTl', 'linETHUSDTs']      # a quiet bot by its terms
+    market = grouped(c, 'market')
+    assert [t for t, _ in market] == ['BTC — inverse, perp, spot', '1000PEPE — perp', 'ETH — perp']
+    assert [b for b, _ in market[0][1]] == ['linBTCUSDTl', 'spoBTCUSDTl', 'invBTCUSDl']
+    for view in ('strategy', 'market'):
+        assert sorted(b for _, rows in grouped(c, view) for b, _ in rows) == sorted(c['bots'])
+    page = render([('demo', c)], view='strategy')
+    assert '<div class="grp">grids</div>' in page and '<b class="on">by strategy</b>' in page
+    assert 'href="/?view=market"' in page and 'href="/table?view=strategy"' in page
+
+
 def spec_V10_a_card_says_when_the_price_has_left_the_range():
     from panel.server import render
     c = json.loads(json.dumps(CONTRACT))
@@ -919,7 +947,7 @@ def spec_U12_the_bots_can_be_arranged_by_side_or_by_pairs():
     pairs = grouped(c, 'pairs')
     assert [b for b, _ in pairs[0][1]] == ['linBTCUSDTl', 'linBTCUSDTs']
     assert 'invBTCUSDl' in [b for b, _ in pairs[1][1]]     # another market
-    for view in ('all', 'side', 'pairs'):
+    for view in ('all', 'side', 'pairs', 'strategy', 'market'):
         got = [b for _, rows in grouped(c, view) for b, _ in rows]
         assert sorted(got) == sorted(listed), view         # each bot once
     c2 = _many()

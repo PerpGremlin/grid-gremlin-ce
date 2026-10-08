@@ -1,0 +1,12 @@
+{
+  "tag": "🟠⚫ Bybit demo — portfolio",
+  "snapshot": "logs/snapshots-portfolio.jsonl",
+  "state": "logs/watchdog-portfolio.state.json",
+  "staleness_seconds": 1000,
+  "mm_rate_max": 0.5,
+  "equity_min": 1000,
+  "equity_drawdown_max": 0.25,
+  "re_alert_seconds": 86400,
+  "assumes_sole_actor": true,
+  "positions": {}
+}

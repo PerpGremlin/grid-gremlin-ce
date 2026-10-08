@@ -75,7 +75,11 @@ What runs, from the inside out:
 ## Install
 
 Fill the `{{PLACEHOLDERS}}` in each template you use and save it without the
-`.template` suffix under the names below. Per fleet: `fleet.service` →
+`.template` suffix under the names below. A fleet on a second account (H5:
+`"account": "<name>"` in its fleet file, `BYBIT_<NAME>_*` in `.env`) is a
+fleet like any other here — its own units, its own watchdog slot, listed in
+the once-per-box units beside the rest; each process selects the fleet's
+keys as it reads the file. Per fleet: `fleet.service` →
 `grid-gremlin3-<fleet>.service`, `fleet-failed.service` →
 `grid-gremlin3-<fleet>-failed.service`, and `watchdog.{service,timer}` /
 `watchdog-failed.service` → `grid-gremlin3-<fleet>-watchdog.*` /

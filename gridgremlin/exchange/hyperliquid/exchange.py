@@ -49,6 +49,9 @@ class ExchangeClient(InfoClient):
         self.wallet = priv_to_address(self.private_key)
         if not self.address:
             self.address = self.wallet       # no agent split: wallet IS the account
+        # H5: a sub-account is traded by the master's signer with the
+        # sub-account's address as the action's vault
+        self.vault = os.environ.get('HL_SUBACCOUNT') or None
         self._last_nonce = 0
 
     def _nonce(self):
@@ -62,7 +65,7 @@ class ExchangeClient(InfoClient):
         sig = sign_l1_action(self.private_key, action, None, nonce,
                              is_mainnet=(self.env == 'mainnet'))
         payload = {'action': action, 'nonce': nonce, 'signature': sig,
-                   'vaultAddress': None, 'expiresAfter': None}
+                   'vaultAddress': self.vault, 'expiresAfter': None}
         try:
             resp = self._post('/exchange', payload, retry_429=False)
         except HLError as e:

@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 from .apply import make_botid, rung_of
-from .config import validate_fleet
+from .config import market_rows, validate_fleet
 from .ladder import SEED_RUNG, fee_floor_for
 from .exchange.env import load_env
 from .exchange.errors import VenueError
@@ -301,7 +301,7 @@ def fleet_maps(fleet):
     """R18: what attribution needs from a fleet — each bot's market, its
     entry side, the exit side it closes by (I2), and each market's venue."""
     key_of, entry_sides, closers, venue_of = {}, {}, {}, {}
-    for cfg in fleet['bots']:
+    for cfg in market_rows(fleet):
         b = make_botid(cfg['market_type'], cfg['symbol'], cfg['side'])
         key_of[b] = (cfg['market_type'], cfg['symbol'])
         entry_sides[b] = 'buy' if cfg['side'] == 'long' else 'sell'
@@ -319,7 +319,7 @@ def kept_held(fleet, held):
     out = dict(held)
     view = _watchdog_view(fleet) or {}
     belief = (view.get('belief') or {}).get('bots') or {}
-    for cfg in fleet['bots']:
+    for cfg in market_rows(fleet):
         if cfg['market_type'] != 'spot':
             continue
         b = make_botid(cfg['market_type'], cfg['symbol'], cfg['side'])
@@ -928,12 +928,14 @@ def main(argv):
         return 2
     load_env()
     fleet = validate_fleet(json.loads(Path(argv[0]).read_text()))
+    from .exchange.env import select_account
+    select_account(fleet['account'])                  # H5
     now_ms = int(time.time() * 1000)
     since_ms = now_ms - int(hours * 3600 * 1000)
     by_venue, key_of, inverse_ids = {}, {}, set()
     strat_of, entry_sides, closers, side_of = {}, {}, {}, {}
     range_of, grids, terms = {}, {}, {}
-    for cfg in fleet['bots']:
+    for cfg in market_rows(fleet):
         by_venue.setdefault(cfg['venue'], []).append(cfg)
         botid = make_botid(cfg['market_type'], cfg['symbol'], cfg['side'])
         key_of[botid] = (cfg['market_type'], cfg['symbol'])
@@ -975,6 +977,20 @@ def main(argv):
         if cfg['market_type'] == 'inverse':
             inverse_ids.add(botid)
             inverse_ids.add(('unowned', cfg['symbol']))
+    pfo_ids = []
+    for cfg in fleet['bots']:                                # D78/H6: the row's terms
+        if cfg.get('strategy') != 'portfolio':
+            continue
+        pfo_ids.append(cfg['botid'])
+        terms[cfg['botid']] = {'strategy': 'portfolio', 'venue': cfg['venue'],
+                               'capital': cfg['capital'], 'quote': cfg['spot_quote'],
+                               'margin_coin': cfg['spot_quote'],
+                               'leverage': 1.0, 'market_type': None,
+                               'assets': cfg['assets'], 'hedges': cfg['hedges'],
+                               'short_products': cfg['short_products'],
+                               'rebalance': cfg['rebalance'], 'regime': cfg.get('regime'),
+                               'funding_rule': cfg['funding_rule'], 'risk': cfg['risk'],
+                               'account': cfg.get('account', 'default')}
     botids = list(key_of)
     fills, marks = [], {}
     for venue, rows in sorted(by_venue.items()):
@@ -1008,7 +1024,7 @@ def main(argv):
             account[venue] = None
     # D76: a spot bot with a stated holding — the wallet against its book,
     # the inverse books' coin P&L since the statement explaining the rest
-    anchored = [c for c in fleet['bots']
+    anchored = [c for c in market_rows(fleet)
                 if c['market_type'] == 'spot' and c.get('holding_since_ms')]
     if anchored:
         belief = ((_watchdog_view(fleet) or {}).get('belief') or {}).get('bots') or {}
@@ -1041,7 +1057,7 @@ def main(argv):
     # last time it was flat (a month at most) — the card's headline for the
     # busiest grid read -14k on a day the exchange showed +9.6k for the round
     cfg_of = {make_botid(c['market_type'], c['symbol'], c['side']): c
-              for c in fleet['bots']}
+              for c in market_rows(fleet)}
     held = {}
     for venue, rows in by_venue.items():
         held.update(_venue_held_all(venue, rows))
@@ -1089,7 +1105,7 @@ def main(argv):
         wide['counted_since_ms'] = start
         books[botid] = wide
     venue_of = {(c['market_type'], c['symbol']): c['venue']
-                for c in fleet['bots']}
+                for c in market_rows(fleet)}
     fresh = fills + [f for got in pulled.values() for f in got]
     since_first = kept_books(argv[0], fresh, venue_of, key_of, since_ms,
                              inverse_ids, entry_sides, closers, grids,
@@ -1115,11 +1131,12 @@ def main(argv):
         contract = {
             'window_hours': hours,
             'generated_ms': now_ms,
-            'bots': {b: (public_book(books[b], marks.get(key_of[b]),
-                                     side_of.get(b), strat_of.get(b),
-                                     key_of[b][1])
-                         if b in books else None)   # quiet ≠ absent: every
-                     for b in botids},              # configured bot appears
+            'bots': {**{b: (public_book(books[b], marks.get(key_of[b]),
+                                        side_of.get(b), strat_of.get(b),
+                                        key_of[b][1])
+                            if b in books else None)   # quiet ≠ absent: every
+                        for b in botids},              # configured bot appears
+                     **{b: None for b in pfo_ids}},    # D78: the row's book is its snapshot's
             'ranges': range_of,
             'terms': terms,
             'account': account,

@@ -23,7 +23,7 @@ from pathlib import Path
 
 from .adapters import adapter_for
 from .apply import make_botid
-from .config import ConfigError, validate_fleet
+from .config import market_rows, ConfigError, validate_fleet
 from .exchange.env import load_env
 from .exchange.errors import VenueError
 
@@ -78,7 +78,9 @@ def main(argv):
     try:
         load_env()
         fleet = validate_fleet(json.loads(Path(fleet_path).read_text()))
-        cfg = next((b for b in fleet['bots'] if make_botid(
+        from .exchange.env import select_account
+        select_account(fleet['account'])              # H5
+        cfg = next((b for b in market_rows(fleet) if make_botid(
             b['market_type'], b['symbol'], b['side']) == botid), None)
         if cfg is None:
             raise ConfigError(f'{botid}: not in this fleet')

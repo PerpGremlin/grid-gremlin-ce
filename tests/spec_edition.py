@@ -63,13 +63,17 @@ def spec_F21_the_examples_build_and_show_every_mechanic_once():
     from gridgremlin.main import BYBIT_LINK_LIMIT
     from gridgremlin.watchdog import validate_watchdog
     files = sorted(glob.glob(str(EXAMPLES / 'fleet*.json')))
-    assert len(files) == 2
+    assert len(files) == 3                      # Bybit demo, Hyperliquid testnet, the portfolio (D78)
     seen = set()
     for f in files:
         v = validate_fleet(json.loads(Path(f).read_text()))
         assert not v['refused'], v['refused']
         validate_watchdog(json.loads((ROOT / v['watchdog']).read_text()))
         for cfg in v['bots']:
+            if cfg.get('strategy') == 'portfolio':
+                assert cfg['capital'] <= 300 and not cfg.get('margin') and not cfg.get('regime')
+                seen.add('portfolio')
+                continue
             hl = cfg['venue'] == 'hyperliquid'
             check_link_fits(make_botid(cfg['market_type'], cfg['symbol'], cfg['side']),
                             widest_rung(cfg), 16 if hl else BYBIT_LINK_LIMIT,
@@ -80,7 +84,7 @@ def spec_F21_the_examples_build_and_show_every_mechanic_once():
                 if cfg.get(k):
                     seen.add(k)
     assert seen >= {'slide', 'max_loss', 'take_profit_tranches', 'breakeven_ladder',
-                    'trailing_stop_pct', 'repeat', 'stop'}, seen
+                    'trailing_stop_pct', 'repeat', 'stop', 'portfolio'}, seen
 
 
 def spec_F22_the_doctor_says_what_is_missing_and_what_is_next():

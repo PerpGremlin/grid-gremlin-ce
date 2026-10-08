@@ -1161,6 +1161,137 @@ eventually pin (T1).
   thin. A bot whose market was not read carries nothing; no readings yet is
   said as such. Display only, like the rest of K.
 
+## H — the hedged portfolio (D78)
+
+The design is `docs/PORTFOLIO.md`; an invariant appears here with the spec
+that pins it (T1).
+
+- **H1** The row is its assets, hedges, clock and risk, with stated defaults.
+  `strategy: portfolio` carries `name` (its id, `pfo<name>`), `venue`,
+  `account` (the keys it trades with, H5), `capital`, `assets` — `{coin,
+  weight, holding}` (`holding`: coins on spot the row adopts as its own,
+  never on an outright short), each coin once, no zero weight, the weights' sizes summing to 1
+  (to `spot_leverage` with `margin`, which needs `spot_borrow`), none above
+  `risk.max_weight` (default 0.5; up to 10, since a levered weight may
+  exceed 1), a negative weight an outright short — and
+  `hedge`: one `{product, ratio}` for every long, or one per coin, product in
+  usdt / usdc / inverse (default inverse), ratio 0–3 (default 1); a hedge on a
+  coin not held is refused, a short's entry may name only its product.
+  `rebalance` {every_hours 24, drift_pct 0.05, min_notional 0, cash_reserve
+  0.003}; `regime`
+  opt-in {tilt ≤ 0.9, hold_hours required, source structure}; `funding_rule`
+  on by default {stand_down_below 0, trailing_days 7}; `risk` {max_loss with
+  max_loss_since, margin_floor_pct 0.4, basis_stop_pct 0.01, max_weight 0.5}.
+  Every refusal names the key and the rule.
+- **H2** The row runs in the fleet on legs that are identities. The build
+  resolves each leg from the venue's catalogue (A1): a spot market per
+  long asset, a short per hedged asset on its product (usdt → linear
+  `<COIN>USDT`, usdc → linear `<COIN>PERP`, inverse → `<COIN>USD`), the
+  outright shorts the same; each is an I2 identity the fleet holds unique,
+  so a grid on the row's hedge market is refused at build. The row's book
+  is its own: it starts at first sight from `capital` in cash (the row's
+  `spot_quote`, USDT or USDC — its spot legs are `<COIN><QUOTE>`) plus each
+  asset's stated `holding`, and moves only by the row's own fills (a buy's
+  fee shaved from the coins received), an inverse leg's funding — paid in
+  the coin, it joins the book as coins — and its cash, like its coins,
+  is bounded by what the wallet holds in its quote; at a tick spot sells
+  are placed before spot buys, the perps after, and a spot buy is placed
+  in quote ("spend this much"), since the venue checks a coin-sized market
+  buy at a buffered price and refuses one that spends nearly all the cash; (link-attributed, deduped
+  by execution id across a re-read overlap) and the funding its shorts
+  received; coins are bounded by the wallet (D76). The book, the clock's
+  last tick, the unspent cash and the value the row is judged against
+  live in `logs/portfolio_state.json` — the third durable local fact
+  beside X7 and G22, written atomically under its lock after every cycle,
+  missing meaning never seen, unreadable failing closed. The row reads
+  the venue at most once a minute; the plan runs on its clock and is
+  placed as market orders (a daily rebalance is a taker act by design;
+  G13's post-only law is the grid's). The row learns new terms at a
+  restart on an edited file: a raised `capital` is cash to spend, a raised
+  `holding` adopts the difference, a lowered one of either is said and
+  nothing is sold, a changed asset list is said — and the next read plans
+  at once, not at the next tick. A Hyperliquid portfolio row is refused
+  by name until its leg is built.
+- **H3** The plan at a tick is pure. Between ticks (`every_hours` since the
+  last) nothing is wanted. The stack is the row's equity: its coins at
+  mark plus its cash, which is negative when the venue has lent it quote;
+  each target is weight × equity, so with `margin` (weights summing to
+  `spot_leverage`) the coins held are `spot_leverage` × equity, the
+  excess bought on the venue's loan (the borrow flag on every spot buy)
+  and the loan's interest the row's own. At a tick, in order: cash (a
+  linear leg's funding, capital raised) buys spot toward the weights —
+  the longs' shortfalls from their targets, by shortfall, which at the
+  weights is pro rata; what the shortfalls do not need stays cash (an
+  outright short's share is its margin), `rebalance.cash_reserve` (0.3%)
+  of the cash kept for the buys' own fees; a long leg past `drift_pct` of the stack is
+  bought or sold to its weight; an outright short past the drift is resized
+  from the stack; a hedge past the drift of its holding is resized to its
+  ratio — the row's ratio leaned by the regime tilt (up × (1 − tilt), down ×
+  (1 + tilt)) and stood down to zero while the trailing funding to the short
+  is below the funding rule's floor. A want under `min_notional` is left.
+  Each want is one order, named for why it is wanted.
+- **H4** The risk is the portfolio's. The row is valued every read — the
+  stack at mark, the cash and parked cash, the shorts' open P&L, their
+  realised P&L and fees from the row's own books — against the value at
+  its anchor (its first sight, moved along by every contribution since —
+  a capital raise, an adopted holding at the day's price, a new cash pot
+  — so the total counts only what the book made; `max_loss_since` is
+  the stated moment the loss counts from). At `max_loss` every leg goes together in one cycle —
+  shorts bought back reduce-only, the stack sold, as market orders — then
+  the tombstone (X7) and the page; a leg that refuses is named and the
+  rest still go, since a hedged book cut on one side is a directional bet
+  taken at the worst moment. A parked asset's share is its parked cash;
+  the rest keep their relative shares of the stack. Under
+  `margin_floor_pct` of free margin the whole book shrinks each read by
+  the share that restores the floor plus a 5-point buffer (the shortfall
+  over the initial margin the account uses; 3% at least, a quarter at
+  most; a quarter when the venue states no margin) — each long's coins
+  sold and its hedge bought back together, an outright short bought back
+  by the same share — so the book stays neutral while the loan is
+  repaid; said once an hour. A levered row remembers the floor's verdict:
+  after a trim it aims lower by the trimmed share, and eases back toward
+  the file's leverage by 5% a tick only while free margin sits two
+  buffers above the floor — so the daily tick does not lever back into
+  the floor it was just trimmed from. Past
+  `basis_stop_pct` between an asset's perp and spot marks, that asset's
+  pair alone is unwound — hedge bought back, coins sold, the quote parked
+  — and the rest held; it re-enters from its parked cash when the basis is
+  back under half the stop. The funding rule's stand-down lifts a hedge
+  and keeps the stack (H3).
+- **H6** The card says the three truths. A portfolio's card shows the
+  stack's value and coins, one line per asset (weight target → actual,
+  hedge ratio target → actual, coins hedged, the regime word when the tilt
+  is on, "unwound" under the basis stop), and three money lines that never
+  mix: **carry** (funding received), **tilt** (the shorts' excess over
+  neutral — the row's ratio × the coins held — marked each read against
+  the price's move; no second model), **basis & shape** (what is left of
+  the total since the anchor after those two: the spot/perp gap and the
+  inverse contract's shape). The exchange box and the strip count the
+  row's total like any card (D63); the *by strategy* view groups it under
+  "portfolios", the *by coin* view too. A regime from D67's readings is
+  believed only after it has held `hold_hours` ('trending up' → up,
+  'trending down' → down, a lean or a range → range). The row is edited in
+  the fleet file, not the form.
+- **H7** The rehearsal is the engine's own planner over history —
+  `gridgremlin/portfolio_rehearse.py` runs `plan_portfolio` on hourly
+  closes and 8h funding per coin with the research's fees (spot 0.1%,
+  perp 0.02%, a 10% collateral haircut on the margin test) and answers
+  equity (× start), the worst drawdown, funding, fees and the ticks that
+  placed. It reproduces the research harness (`ops/research/
+  basket_carry.py`) within 1.5 points of equity over 120 synthetic days,
+  with the same drawdown and funding; the CLI fetches two years through
+  the research's own fetchers (Hyperliquid's funding for an HL row).
+- **H5** Two accounts on one box. A fleet file names its `account`
+  (default `default`, today's keys untouched); every row on it must name
+  the same, or none — one account per process (F3). At start the process
+  reads that account's keys under the standard names: `BYBIT_<NAME>_API_KEY`,
+  `_API_SECRET`, `_DEMO`, `_TESTNET` (an account that says neither is real
+  money, D25 decides) and `HL_<NAME>_SUBACCOUNT` — the sub-account's address,
+  read for truth and stamped on every signed action as its `vaultAddress`;
+  the signer stays `HL_PRIVATE_KEY`, the master's agent. An account with no
+  keys on either venue refuses by name. The fleet lock is named for the
+  account too, so two accounts on one box are two locks.
+
 ## U — the panel's setup form
 
 - **U1** The advanced form reaches every key the config accepts: its schema is
@@ -1440,6 +1571,12 @@ eventually pin (T1).
   the move the ladder covers. From the engine's own schedule, carried in the
   contract's terms as fractions of the base price, so it holds before a round
   and during one. A grid card has none.
+- **U54** The bots can be arranged by strategy and by coin, beside U12's
+  arrangements: *by strategy* puts one heading per kind of bot (grids, DCA,
+  pairs) in the order the kinds first appear; *by coin* puts one heading per
+  coin across its products (spot, perp, inverse, each side), so what shares a
+  wallet or an index sits together. Every bot appears exactly once in every
+  view; the choice rides the links and the table alike.
 - **U53** Every money figure names its coin. The contract's terms carry each
   bot's `quote` (the coin its capital, notional, loss and P&L are in) and
   `margin_coin` (the coin the venue's margin on its position is in): the

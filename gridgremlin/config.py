@@ -13,7 +13,7 @@ MARKET_TYPES = ('linear', 'inverse', 'spot')
 VENUE_ICONS = {'bybit': '🟠⚫ Bybit',
                'hyperliquid': '🟢🟢 Hyperliquid'}   # owner's final pick
 SIDES = ('long', 'short')
-STRATEGIES = ('grid', 'martingale')
+STRATEGIES = ('grid', 'martingale', 'portfolio')
 SPACING_TYPES = ('percent', 'fixed')
 EXIT_FLOORS = ('rung', 'basis')
 RUNG_SIZINGS = ('equal', 'weighted')
@@ -57,7 +57,7 @@ SLIDE_KEYS = ('trigger_rungs', 'max_rungs', 'ref_position', 'confirm_seconds',
 SLIDE_DIRECTIONS = ('favourable', 'both')   # D28 default; D34 opt-in
 START_ORDER_TYPES = ('market', 'maker')       # D37: the base order's entry
 FLEET_KEYS = ('bots', 'poll_seconds', 'allow_mainnet', 'preflight', 'account_caps',
-              'risk_profiles',
+              'risk_profiles', 'account',
               'tombstones', 'slide_state',
               'notify_orders', 'watchdog')
 
@@ -823,6 +823,9 @@ def validate_config(row, where='row'):
         _refuse(f"{where}: 'strategy' must be one of {STRATEGIES}")
     if strategy == 'martingale':
         return validate_martingale(row, where)
+    if strategy == 'portfolio':                      # D78, SPEC H1
+        from .portfolio import validate_portfolio
+        return validate_portfolio(row, where)
     return validate_grid(row, where)
 
 
@@ -966,6 +969,7 @@ def validate_fleet(data, where='fleet'):
         'risk_profiles': validate_profiles(data.get('risk_profiles'), where),
         'tombstones': data.get('tombstones'),            # X7 path (default logs/)
         'slide_state': data.get('slide_state'),          # G22 path (default logs/)
+        'account': _account_name(data.get('account'), where),   # H5: whose keys
     }
     rows, refused = [], []
     for i, row in enumerate(bots):
@@ -985,6 +989,30 @@ def validate_fleet(data, where='fleet'):
     if tol is not None and len(refused) > tol:
         _refuse(f'{where}: {len(refused)} bad row(s), tolerance {tol} — '
                 f'{listed}')
+    for cfg in rows:                                   # H5: one account per process
+        if cfg.get('account') not in (None, fleet['account']):
+            _refuse(f"{where}: row {cfg.get('botid') or cfg.get('symbol')} names account "
+                    f"'{cfg['account']}' but the fleet trades '{fleet['account']}' — one "
+                    'account per fleet process (F3); give that row a fleet file of its own')
+        if cfg.get('strategy') == 'portfolio':
+            cfg['account'] = fleet['account']          # a row that names none is the fleet's
     fleet['bots'] = rows
     fleet['refused'] = refused
     return fleet
+
+
+def market_rows(fleet):
+    """The rows that trade one market — a grid or a DCA with a symbol and
+    a side. A portfolio row (D78) is several legs and is read by its own
+    paths; every per-market walk of a fleet starts here."""
+    return [c for c in fleet['bots'] if c.get('strategy') != 'portfolio']
+
+
+def _account_name(v, where):
+    import re
+    if v is None:
+        return 'default'
+    if not isinstance(v, str) or not re.fullmatch(r'[a-z0-9]{1,12}', v):
+        _refuse(f"{where}: 'account' is a short lower-case name — 'default', or one "
+                'whose keys .env carries as BYBIT_<NAME>_API_KEY / HL_<NAME>_SUBACCOUNT (H5)')
+    return v

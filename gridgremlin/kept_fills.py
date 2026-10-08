@@ -13,7 +13,7 @@ import sys
 import time
 from pathlib import Path
 
-from .config import validate_fleet
+from .config import market_rows, validate_fleet
 from .durable import locked, write_json
 from .exchange.env import load_env
 
@@ -85,7 +85,7 @@ def collect(fleet, kept, now_ms, bybit=None, hl=None,
     kept = dict(kept, collected=dict(kept['collected']),
                 fills=list(kept['fills']))       # every other key rides on
     keys = {('hyperliquid' if c['venue'] == 'hyperliquid' else 'bybit',
-             c['market_type'], c['symbol']) for c in fleet['bots']}
+             c['market_type'], c['symbol']) for c in market_rows(fleet)}
     keys |= {(f['venue'], f['market_type'], f['symbol'])
              for f in kept['fills']}
     new, errors = [], []
@@ -137,7 +137,7 @@ def settle_anchors(fleet, kept, now_ms, held, mark_of):
     _, entry_sides, closers, _ = fleet_maps(fleet)
     anchors = dict(kept.get('anchors') or {})
     misses = dict(kept.get('misses') or {})
-    for cfg in fleet['bots']:
+    for cfg in market_rows(fleet):
         b = make_botid(cfg['market_type'], cfg['symbol'], cfg['side'])
         if b in anchors:
             continue                          # once: an anchor never moves
@@ -170,7 +170,7 @@ def _held_and_marks(fleet, clients):
     from .report import _venue_held_all, kept_held
     held = {}
     by_venue = {}
-    for cfg in fleet['bots']:
+    for cfg in market_rows(fleet):
         by_venue.setdefault(cfg['venue'], []).append(cfg)
     for venue, rows in by_venue.items():
         held.update(_venue_held_all(venue, rows))
@@ -193,7 +193,9 @@ def keep(fleet_path, root='logs/fills', now_ms=None, clients=None,
     """Read, collect, write — under the file's lock, re-read inside it."""
     now_ms = int(time.time() * 1000) if now_ms is None else now_ms
     fleet = validate_fleet(json.loads(Path(fleet_path).read_text()))
-    venues = {c['venue'] for c in fleet['bots']}
+    from .exchange.env import select_account
+    select_account(fleet['account'])                  # H5
+    venues = {c['venue'] for c in market_rows(fleet)}
     if clients is None:
         clients = {}
         if venues - {'hyperliquid'}:

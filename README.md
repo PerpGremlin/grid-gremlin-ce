@@ -57,6 +57,11 @@ take-profit tranches and the breakeven ladder. `fleet.hl.testnet.json`
 engine-watched trailing stop. The `watchdog.*.json` beside them are the
 account guards the fleet refuses to run without. Edit the rows, or make your
 own in the panel — the panel writes the same file.
+`examples/fleet.portfolio.json`: the hedged portfolio (README §4b) — two
+coins on spot at equal weights, each hedged one for one by its inverse
+perpetual, the funding collected and compounded, rebalanced daily; pure
+carry, no leverage. It is edited in the file, not the form, and it starts
+from its capital in cash on a demo account.
 
 ## What to try, and what to look at
 

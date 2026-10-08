@@ -9,7 +9,7 @@ from .apply import (bot_identity, check_fleet_unique, check_link_fits,
                     make_botid, widest_rung)
 from .adapters import adapter_for
 from .bot import Bot
-from .config import (ConfigError, VENUE_ICONS, check_placeable,
+from .config import (ConfigError, VENUE_ICONS, check_placeable, market_rows,
                      venue_leverage_problem,
                      slide_adverse_commitment, slide_adverse_warning,
                      slide_leverage_warning, validate_fleet)
@@ -94,6 +94,56 @@ def acquire_fleet_lock(path):
     return handle
 
 
+def portfolio_legs(cfg, client):
+    """H2: the row's legs from the venue's catalogue (A1) — a spot market
+    per asset, a short per hedged asset on its product (usdt → linear
+    <COIN>USDT, usdc → linear <COIN>PERP, inverse → <COIN>USD), and the
+    outright shorts the same way. Refuses by name what the venue lacks."""
+    from .portfolio import leg_markets
+    legs = {'spot': {}, 'hedge': {}, 'short': {}}
+    for kind, coin, market_type, symbol, _ in leg_markets(cfg):
+        spec = parse_instrument(market_type, client.instruments_info(market_type, symbol))
+        legs[kind][coin] = {'market_type': market_type, 'symbol': symbol,
+                            'adapter': adapter_for(market_type, spec), 'spec': spec}
+    return legs
+
+
+def build_portfolio(cfg, client, notifier, state, tombs):
+    """H2: the row, its legs resolved and each an I2 identity the fleet
+    holds unique — a portfolio's BTCUSD short against an inverse BTC short
+    grid is refused at build like any collision."""
+    from .portfolio_bot import PortfolioBot
+    legs = portfolio_legs(cfg, client)
+    idents = []
+    for coin, leg in legs['spot'].items():
+        idents.append((cfg['botid'], ('spot', leg['symbol'], 0)))
+    for kind in ('hedge', 'short'):
+        for coin, leg in legs[kind].items():
+            idx = leg['adapter'].position_idx('Sell', False)
+            idents.append((cfg['botid'], (leg['market_type'], leg['symbol'], 0 if idx is None else idx)))
+            if leg['market_type'] == 'linear':
+                client.ensure_hedge_mode('linear', leg['symbol'])
+            elif leg['market_type'] == 'inverse':
+                # an inverse short is margined in its coin: the unified account
+                # refuses the order (110101) until the coin is collateral
+                try:
+                    client.ensure_collateral(leg['spec']['settle_coin'] or coin)
+                except VenueError as e:
+                    _vn(notifier, cfg['venue']).event('warn', cfg['botid'],
+                                                      f'collateral switch for {coin} deferred: {e}')
+    from .portfolio_bot import RegimeReader
+    reader = RegimeReader() if cfg.get('regime') else None
+    return PortfolioBot(cfg, legs, client, notifier, state, tombstones=tombs,
+                        regime_reader=reader), idents
+
+
+def lock_tag_for(clients, account='default'):
+    """F3's lock, named for the venues, their networks and (H5) the
+    account — two accounts on one box are two locks."""
+    tag = '+'.join(f'{v}.{c.env}' for v, c in sorted(clients.items()))
+    return tag if account in (None, 'default') else f'{tag}.{account}'
+
+
 def fleet_running(fleet_path):
     """F3's lock, asked rather than taken: does a fleet process hold any
     lock beside this fleet file? The close command uses it on Hyperliquid,
@@ -113,6 +163,14 @@ def fleet_running(fleet_path):
     return False
 
 
+def loss_limit(cfg):
+    """X14: a row's loss limit — a grid's or DCA's `max_loss`, a portfolio's
+    `risk.max_loss` (D78)."""
+    if cfg.get('strategy') == 'portfolio':
+        return (cfg.get('risk') or {}).get('max_loss')
+    return cfg.get('max_loss')
+
+
 def snapshot_row(bots, wallet, now, tiers=None):
     """F4/E3: derived from venue truth only; the DEAD are visible. F9: a
     dead bot no longer reads the venue, so its position is NOTHING — not
@@ -127,7 +185,7 @@ def snapshot_row(bots, wallet, now, tiers=None):
                                **({'offset': b.offset} if getattr(b, 'offset', 0) else {}),
                                # X14: the loss limit and where the bot
                                # stands against it, for the panel's card
-                               **({'loss': {'limit': b.cfg['max_loss'],
+                               **({'loss': {'limit': loss_limit(b.cfg),
                                             'result': b._loss_now}}
                                   if b.alive and getattr(b, '_loss_now', None)
                                   is not None else {}),
@@ -142,6 +200,10 @@ def snapshot_row(bots, wallet, now, tiers=None):
                                # V15: what rests and what waits (W1)
                                **({'orders': b.orders_view}
                                   if b.alive and getattr(b, 'orders_view',
+                                                         None) else {}),
+                               # D78/H6: the portfolio row's three truths
+                               **({'portfolio': b.portfolio_view}
+                                  if b.alive and getattr(b, 'portfolio_view',
                                                          None) else {})}
                      for b in bots}}
 
@@ -308,6 +370,8 @@ def _logs_dir(fleet_path):
 def build_fleet(fleet_path, notifier, allow_mainnet=False):
     load_env()
     fleet = validate_fleet(json.loads(Path(fleet_path).read_text()))
+    from .exchange.env import select_account
+    select_account(fleet['account'])                  # H5: whose keys this process reads
     for where, label, reason in fleet.get('refused', ()):
         # D52: a bad row is named and set aside; the rest start
         notifier.event('warn', 'fleet',
@@ -325,6 +389,7 @@ def build_fleet(fleet_path, notifier, allow_mainnet=False):
     except SlideStateError as e:            # G22: fails CLOSED like X7
         raise ConfigError(str(e)) from e
     clients, bots, identities = {}, [], []
+    pstate = None
     for cfg in fleet['bots']:
         venue = cfg['venue']
         if venue not in clients:
@@ -337,6 +402,24 @@ def build_fleet(fleet_path, notifier, allow_mainnet=False):
             refuse_mainnet(clients[venue], fleet.get('allow_mainnet', False),
                            allow_mainnet)
         client = clients[venue]
+        if cfg.get('strategy') == 'portfolio':               # D78, H2
+            if pstate is None:
+                from .portfolio_state import PortfolioState, PortfolioStateError
+                try:
+                    pstate = PortfolioState(str(_logs_dir(fleet_path) / 'portfolio_state.json'))
+                except PortfolioStateError as e:            # fails CLOSED like X7
+                    raise ConfigError(str(e)) from e
+            bot, idents = build_portfolio(cfg, client, notifier, pstate, tombs)
+            identities.extend(idents)
+            if tombs.has(bot.botid):
+                bot.alive = False
+                _vn(notifier, venue).event('warn', bot.botid,
+                                           'tombstoned — a stop fired '
+                                           f'({tombs.reason(bot.botid)}); remove the entry '
+                                           f"from {fleet.get('tombstones') or 'logs/tombstones.json'} "
+                                           'to revive, deliberately')
+            bots.append(bot)
+            continue
         if venue == 'hyperliquid':
             # _entry refuses BY NAME — a coin the venue removed must say so
             # (the XRP testnet delisting crashed the build as StopIteration)
@@ -462,8 +545,8 @@ def build_fleet(fleet_path, notifier, allow_mainnet=False):
         if not b.alive:
             continue                       # tombstoned: already dead-visible
         reason = b.cfg.pop('_preflight_fail', None)
-        if reason is None and pf.get('probe'):
-            reason = probe_bot(b)
+        if reason is None and pf.get('probe') and b.cfg.get('strategy') != 'portfolio':
+            reason = probe_bot(b)              # H2: the row's legs have no entry rung to rehearse
         if reason is not None:
             failures.append((b.botid, reason))
             b.alive = False
@@ -487,7 +570,7 @@ def build_fleet(fleet_path, notifier, allow_mainnet=False):
     fleet_n.event('fleet', 'fleet',
                   f'{len(bots)} bot(s) on {envs}: '
                   + ', '.join(b.botid for b in bots))
-    _project_margin(clients, fleet['bots'], fleet_n)
+    _project_margin(clients, market_rows(fleet), fleet_n)
     return fleet, clients, bots
 
 
@@ -498,7 +581,7 @@ def _ensure_symbol_capacity(bots, base_notifier):
     notifier = _vn(base_notifier, 'bybit')       # this function IS bybit-only
     groups = {}
     for b in bots:
-        if b.cfg['venue'] == 'bybit' and b.cfg['market_type'] == 'linear':
+        if b.cfg['venue'] == 'bybit' and b.cfg.get('market_type') == 'linear':
             groups.setdefault(b.cfg['symbol'], []).append(b)
     for symbol, legs in groups.items():
         client = legs[0].client
@@ -606,7 +689,7 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
                                        allow_mainnet=allow_mainnet)
     notifier.startup = False         # D60: the start is said; now only what
                                      # needs the owner reaches the phone
-    lock_tag = '+'.join(f'{v}.{c.env}' for v, c in sorted(clients.items()))
+    lock_tag = lock_tag_for(clients, fleet.get('account', 'default'))
     lock = acquire_fleet_lock(lock_path
                               or str(lockdir / f'{lock_tag}.lock'))
     try:
