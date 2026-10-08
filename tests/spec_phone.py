@@ -110,8 +110,8 @@ def spec_F16_the_fault_that_can_cost_money_is_marked_where_it_is_raised():
     """A call site is the one place that knows what its warning means.
     These are the ones that need the owner now or can cost money; a
     refactor that drops the mark silences them, so the source is read."""
-    from gridgremlin import bot, reload
-    src = inspect.getsource(bot) + inspect.getsource(reload)
+    from gridgremlin import bot, bot_basis, bot_round, bot_stops, reload
+    src = ''.join(inspect.getsource(m) for m in (bot, bot_stops, bot_basis, bot_round, reload))
     calls = re.findall(r"\.event\((.*?)\)\s*\n", src, re.S)
     def marked(needle):
         hit = [c for c in calls if needle in c]

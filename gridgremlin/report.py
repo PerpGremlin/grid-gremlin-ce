@@ -474,11 +474,7 @@ def _hl_pull(rows, since_ms):
     return fills, marks
 
 
-def _f_or_none(v):
-    try:
-        return None if v is None else float(v)
-    except (TypeError, ValueError):
-        return None
+from .fmt import float_or as _f_or_none  # noqa: E402  (C10: the one parser)
 
 
 # --- R14: money is counted from the last flat -------------------------------
@@ -604,8 +600,7 @@ def _side_size(positions, side):
 
 # --- the table ---------------------------------------------------------------
 
-def _n(v, nd=2):
-    return '—' if v is None else f'{v:,.{nd}f}'
+from .fmt import num as _n  # noqa: E402  (C10: one vocabulary)
 
 
 def window_truncated(book, side):
@@ -721,9 +716,7 @@ def account_leverage(contract):
     return out
 
 
-def _big(v):
-    return '—' if v is None else (f'{v / 1000:,.0f}k' if v >= 10_000
-                                  else f'{v:,.0f}')
+from .fmt import big as _big  # noqa: E402  (C10)
 
 
 def leverage_lines(contract):

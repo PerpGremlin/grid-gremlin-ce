@@ -80,8 +80,13 @@ def _row_dict():
 # --- M8: no range bounds -----------------------------------------------------
 
 def spec_M8_range_bounds_are_not_martingale_keys():
+    # pins: M7 M9 (no floor/cap/damping keys; no signal keys — absence is derived)
     _refused({**_row_dict(), 'lower': 50000.0}, 'unknown key')
     _refused({**_row_dict(), 'upper': 70000.0}, 'unknown key')
+    for key in ('min_position_base', 'max_position_base', 'damping', 'signal',
+                'start_signal'):
+        _refused({**_row_dict(), key: 1}, 'unknown key')
+    _refused({**_row_dict(), 'no_trade_pct': 1}, 'retired')      # B9, by name
 
 
 def spec_M8_depth_derives_from_the_schedule():

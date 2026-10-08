@@ -145,6 +145,7 @@ def _trend(start=60000.0, per_bar=600.0, bars=60):
 
 
 def spec_G18_sabotage_no_slide_idles_through_a_trend():
+    # pins: G11 (out of range the grid idles)
     bars = _trend()
     frozen = backtest(_cfg(slide=None), ADAPTER, bars, fee_rate=0.0002)
     sliding = backtest(_cfg(), ADAPTER, bars, fee_rate=0.0002)

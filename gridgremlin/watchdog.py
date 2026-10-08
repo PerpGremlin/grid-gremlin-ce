@@ -152,11 +152,15 @@ def send_telegram(text):
         print('WATCHDOG HAS NO TELEGRAM CREDENTIALS — this page reached '
               'NOBODY (journal only)', flush=True)
         return
-    from .tg import payload                           # F20: heading in bold
+    from .tg import payload, redact                   # F20: heading in bold
     data = urllib.parse.urlencode(payload(chat, text)).encode()
-    urllib.request.urlopen(
-        f'https://api.telegram.org/bot{token}/sendMessage', data,
-        timeout=20).read()
+    try:
+        urllib.request.urlopen(
+            f'https://api.telegram.org/bot{token}/sendMessage', data,
+            timeout=20).read()
+    except OSError as e:                              # P3: never the token
+        raise OSError(redact(f'telegram: {e} {getattr(e, "url", "") or ""}',
+                             token)) from None
 
 
 def disk_used(path):

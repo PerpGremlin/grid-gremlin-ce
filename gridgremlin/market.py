@@ -365,19 +365,10 @@ def latest(path=None):
 
 # --- words -------------------------------------------------------------------
 
-def _pct(v, nd=2, sign=True):
-    if v is None:
-        return '—'
-    return f'{v:+.{nd}f}%' if sign else f'{v:.{nd}f}%'
+from .fmt import pct as _pct  # noqa: E402  (C10)
 
 
-def _big(v):
-    if v is None:
-        return '—'
-    for unit, div in (('B', 1e9), ('M', 1e6), ('k', 1e3)):
-        if abs(v) >= div:
-            return f'{v / div:,.1f}{unit}'
-    return f'{v:,.0f}'
+from .fmt import big_si as _big  # noqa: E402  (C10)
 
 
 def _px(v):

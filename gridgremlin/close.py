@@ -87,6 +87,15 @@ def main(argv):
         tombs = Tombstones(fleet.get('tombstones')
                            or str(_logs_dir(fleet_path) / 'tombstones.json'))
         if cfg['venue'] == 'hyperliquid':
+            from .main import fleet_running
+            if fleet_running(fleet_path):
+                # X15b (D77): HL nonces are per wallet — a second signer
+                # beside the running fleet collides with it; the fleet is
+                # the one signer, so this command waits for it to stop
+                raise ConfigError('the fleet is running on this file — on '
+                                  'Hyperliquid one process signs for the '
+                                  'wallet at a time; stop the fleet first, '
+                                  'or close by hand on the venue (X15b)')
             from .exchange.hyperliquid.adapters import HLPerpAdapter
             from .exchange.hyperliquid.truth import parse_instrument as hl_pi
             from .exchange.hyperliquid.venue import HLVenueClient

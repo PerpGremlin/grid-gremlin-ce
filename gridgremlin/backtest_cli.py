@@ -11,9 +11,10 @@ from .adapters import adapter_for
 from .apply import make_botid
 from .backtest import backtest
 from .config import validate_fleet
+from .fees import BYBIT_MAKER
 
 
-def rehearse(draft, bars, adapter, fee=0.0002, bar_minutes=60):
+def rehearse(draft, bars, adapter, fee=BYBIT_MAKER, bar_minutes=60):
     """§9: a draft config replayed over real bars, returning the same
     vocabulary as the readout plus the hold benchmark — what the same
     capital did just sitting there. Pure: candles in, verdict out."""
@@ -39,7 +40,7 @@ SWEEP_STEP = 8          # T8: the coarse pass (5, 13, 21 … 77); the best is
 PLATEAU = 0.95          # within 5% of the best net is "as good"
 
 
-def sweep_rungs(raw, bars, adapter, fee=0.0002, bar_minutes=5,
+def sweep_rungs(raw, bars, adapter, fee=BYBIT_MAKER, bar_minutes=5,
                 candidates=None, progress=None):
     """T8 (D50): the step optimiser is the rehearsal, swept. The range is
     the owner's; only `rungs` moves. Each candidate is the real planner
@@ -139,7 +140,7 @@ def visited_pct(bars, lower, upper):
     return inside / len(bars) * 100.0
 
 
-def score_rungs(raw, n, bars, adapter, fee=0.0002, bar_minutes=5):
+def score_rungs(raw, n, bars, adapter, fee=BYBIT_MAKER, bar_minutes=5):
     """One replay of one rung count over one window: its net."""
     from .config import validate_config
     base = {k: v for k, v in raw.items()
@@ -150,7 +151,7 @@ def score_rungs(raw, n, bars, adapter, fee=0.0002, bar_minutes=5):
                     bar_hours=bar_minutes / 60.0)['net']
 
 
-def sweep_windows(raw, bars, adapter, fee=0.0002, bar_minutes=5,
+def sweep_windows(raw, bars, adapter, fee=BYBIT_MAKER, bar_minutes=5,
                   progress=None):
     """T9: the sweep read on two windows and tested out of sample. `bars`
     is the whole window (14 days); the newer half is the last 7. Three
@@ -317,7 +318,7 @@ def main(argv):
         optimize = True
     days = float(opt('--days', '7'))
     bar_minutes = int(opt('--bar-minutes', '60'))
-    fee = float(opt('--fee', '0.0002'))
+    fee = float(opt('--fee', str(BYBIT_MAKER)))
     funding = float(opt('--funding', '0'))
     if as_draft:
         # the options were parsed (and removed) above — asking opt() again
@@ -332,7 +333,7 @@ def main(argv):
         return 0 if 'refused' not in out else 1
     if len(argv) != 1 or not botid:
         print('usage: python3 -m gridgremlin.backtest_cli <fleet.json> '
-              '--bot <botid> [--days 7] [--bar-minutes 60] [--fee 0.0002] '
+              f'--bot <botid> [--days 7] [--bar-minutes 60] [--fee {BYBIT_MAKER}] '
               '[--funding 0] [--optimize] [--windows]   (or --draft, the row '
               'on stdin)')
         return 2

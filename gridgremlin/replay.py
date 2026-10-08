@@ -18,6 +18,7 @@ from .bot import Bot
 from .events import Notifier
 from .exchange.errors import VenueError
 from .report import apply_fill, new_book
+from .fees import BYBIT_MAKER, BYBIT_TAKER
 
 CYCLES_PER_STEP = 4      # the bot needs a few cycles to finish a sequence
                          # (close -> account -> cleanup -> re-enter)
@@ -277,8 +278,8 @@ class BarVenue:
             self.sl = float(stop_loss)
 
 
-def backtest_martingale(cfg, adapter, bars, fee_maker=0.0002,
-                        fee_taker=0.00055, bar_minutes=5, spread_bps=1.0):
+def backtest_martingale(cfg, adapter, bars, fee_maker=BYBIT_MAKER,
+                        fee_taker=BYBIT_TAKER, bar_minutes=5, spread_bps=1.0):
     """T7: the real Bot over real bars. Returns the grid rehearsal's
     vocabulary plus the round's own: rounds, deepest safety order, how each
     kind of ending was reached, and why the bot stopped if it did."""

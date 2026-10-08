@@ -415,15 +415,21 @@ def answer(box, text):
 
 class Telegram:
     def __init__(self, token):
+        self.token = token
         self.base = f'https://api.telegram.org/bot{token}'
 
     def _call(self, method, body, timeout):
         import urllib.request
+        from .tg import redact                        # P3: never the token
         req = urllib.request.Request(
             f'{self.base}/{method}', data=json.dumps(body).encode(),
             headers={'Content-Type': 'application/json'})
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            return json.loads(r.read().decode())
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return json.loads(r.read().decode())
+        except OSError as e:
+            raise OSError(redact(f'telegram: {e} {getattr(e, "url", "") or ""}',
+                                 self.token)) from None
 
     def updates(self, offset, wait=50):
         return self._call('getUpdates', {'offset': offset, 'timeout': wait,

@@ -164,6 +164,7 @@ class BrokeVenue(FakeVenue):
 
 
 def spec_B7_margin_halts_growth_with_doubling_backoff():
+    # pins: B6 (cooldowns are per cause: B5 flapping, B7 margin, each its own event)
     venue, lines, clock = BrokeVenue(), [], Clock()
     bot = _bot(venue, lines, clock)
     bot.cycle()

@@ -127,6 +127,7 @@ def spec_F7_demo_and_testnet_never_consult_the_safeties():
 # --- F6 and the watchdog's own validator -------------------------------------
 
 def spec_F6_the_assumption_set_is_typed_not_prose():
+    # pins: M5a (assumes_sole_actor is the assumption that makes a hosted-TP repeat safe)
     bare = dict(WD)
     del bare['assumes_sole_actor']
     _refused(validate_watchdog, bare, frag='assumes_sole_actor')

@@ -1006,6 +1006,7 @@ def spec_D63_the_total_carries_funding_and_an_inverse_book_converts_it():
 
 
 def spec_D63_per_trip_after_fees_takes_both_legs_off_each_trip():
+    # pins: R21
     from gridgremlin.report import per_trip, per_trip_net, public_book
     b = new_book()
     b.update(gap_realized=30.0, gap_trips=3, fees=1.2, fills=6)   # 0.2/fill
