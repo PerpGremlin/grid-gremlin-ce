@@ -18,6 +18,7 @@ from .css import CSS
 from .reference import KEY, TRADING
 from .render import contract_tiers, named, refusal_box, render, tidy
 from .forms import BACK, FORM, next_step_html, other_half_html, other_side_html, rehearse_bot_form, unit_for_fleet, unit_refusal, verdict, waiting_for_restart
+from gridgremlin.apply import row_botid
 
 CACHE_TTL_S = 30.0       # the readout reads the venues; 10 s fed the rate limit
 
@@ -668,7 +669,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 continue
             u = unit_for_fleet(f, self.units)
             for b in bots:
-                out[make_botid(b['market_type'], b['symbol'], b['side'])] = u
+                out[row_botid(b)] = u
         return out
 
     def _symbols(self, fi):
@@ -897,10 +898,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if orig:
             # the form knows every key the engine reads (U1); a row's own
             # notes (keys starting '_') are the operator's and ride along
-            from gridgremlin.apply import make_botid as _mb
             old = next((b for b in json.loads(
                 Path(self.fleets[fi]).read_text()).get('bots', [])
-                if _mb(b['market_type'], b['symbol'], b['side']) == orig),
+                if row_botid(b) == orig),
                 {})
             bot.update({k: v for k, v in old.items() if k.startswith('_')})
         return self._create_flow({'fleet': str(fi),
@@ -923,12 +923,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
         fi = int(q.get('fleet') or 0)
         botid = q.get('bot', '')
         fleet_raw = json.loads(Path(self.fleets[fi]).read_text())
-        from gridgremlin.apply import make_botid as _mb
         bot = next((b for b in fleet_raw.get('bots', [])
-                    if _mb(b['market_type'], b['symbol'], b['side'])
-                    == botid), None)
+                    if row_botid(b) == botid), None)
         if bot is None:
             return self._deny(404, f'{botid}: not in this fleet')
+        if bot.get('strategy') == 'portfolio' and q.get('mode') != 'remove':
+            return self._page(
+                f'<h1>{botid}</h1><p class="dim">a portfolio row (D78) is edited in '
+                'the fleet file by hand — its assets, hedges, clock and risk are the '
+                'row\'s own terms; the setup form knows one market at a time. '
+                f'<a href="/edit?fleet={fi}&bot={botid}&mode=remove">remove</a> is '
+                'here.</p><p><a href="/">&larr; fleet</a></p>')
         if q.get('mode') == 'remove':
             return self._page(
                 f'<h1>remove {botid}</h1><p class="dim">the bot and its '

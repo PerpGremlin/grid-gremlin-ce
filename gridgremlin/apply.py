@@ -11,6 +11,14 @@ def make_botid(market_type, symbol, side):
     return f'{market_type[:3]}{symbol}{side[0]}'.replace('-', '')
 
 
+def row_botid(row):
+    """A fleet file row's id: a portfolio row (D78) is pfo<name>; every
+    other row is I1's make_botid."""
+    if row.get('strategy') == 'portfolio':
+        return f"pfo{row.get('name')}"
+    return make_botid(row['market_type'], row['symbol'], row['side'])
+
+
 def coin_in_botid(text):
     """U32: a bot's id pasted where a market was wanted — linFARTCOINUSDTl
     for FARTCOINUSDT. The coin inside it, or None when the text is not

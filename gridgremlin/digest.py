@@ -11,7 +11,7 @@ import sys
 import time
 from pathlib import Path
 
-from .config import VENUE_ICONS, validate_fleet
+from .config import market_rows, VENUE_ICONS, validate_fleet
 from .durable import write_json
 from .exchange.env import load_env
 from .report import card_total
@@ -38,9 +38,9 @@ def day_books(fleet, kept, day_start_ms, now_ms):
                          make_botid, new_book)
     key_of, entry_sides, closers, _ = fleet_maps(fleet)
     inverse = {make_botid(c['market_type'], c['symbol'], c['side'])
-               for c in fleet['bots'] if c['market_type'] == 'inverse'}
+               for c in market_rows(fleet) if c['market_type'] == 'inverse'}
     rounders = {make_botid(c['market_type'], c['symbol'], c['side'])
-                for c in fleet['bots'] if c.get('strategy') == 'martingale'}
+                for c in market_rows(fleet) if c.get('strategy') == 'martingale'}
     anchors = kept.get('anchors') or {}
     out = {}
     for b in key_of:
@@ -112,6 +112,8 @@ def section(fleet_path, now, day_start, archive_root='logs/daily',
     from .kept_fills import load, store_path
     from .report import make_botid
     fleet = validate_fleet(json.loads(Path(fleet_path).read_text()))
+    from .exchange.env import select_account
+    select_account(fleet['account'])                  # H5
     tag = fleet_tag(fleet_path)
     venue = fleet['bots'][0]['venue'] if fleet['bots'] else ''
     head = VENUE_ICONS.get(venue, venue) + f' · {tag}'
@@ -131,7 +133,7 @@ def section(fleet_path, now, day_start, archive_root='logs/daily',
         kept = {'fills': [], 'anchors': {}, 'collected': {}}
     books = day_books(fleet, kept, int(day_start * 1000), int(now * 1000))
     dca = {make_botid(c['market_type'], c['symbol'], c['side'])
-           for c in fleet['bots'] if c.get('strategy') == 'martingale'}
+           for c in market_rows(fleet) if c.get('strategy') == 'martingale'}
     day_net, fees, trips, rounds, per_bot, left = 0.0, 0.0, 0, 0, [], 0
     for b, (start, end) in books.items():
         mark = (bots.get(b) or {}).get('mark')

@@ -14,6 +14,7 @@ import time
 from panel.chart import _f
 
 from .render import money, named, refusal_box, setup_button, sweep_html, windows_html
+from gridgremlin.apply import row_botid
 
 def rehearse_form(values=None):
     """The rehearsal's form, holding what was typed (U13): a result or a
@@ -182,7 +183,7 @@ def waiting_for_restart(fleet_path):
         running = set(json.loads(last).get('bots') or {})
     except (OSError, ValueError, KeyError, IndexError):
         return [], []
-    in_file = [make_botid(b['market_type'], b['symbol'], b['side'])
+    in_file = [row_botid(b)
                for b in fleet.get('bots', [])]
     return ([b for b in in_file if b not in running],
             sorted(running - set(in_file)))

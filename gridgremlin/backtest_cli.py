@@ -10,7 +10,7 @@ from pathlib import Path
 from .adapters import adapter_for
 from .apply import make_botid
 from .backtest import backtest
-from .config import validate_fleet
+from .config import market_rows, validate_fleet
 from .fees import BYBIT_MAKER
 
 
@@ -339,12 +339,12 @@ def main(argv):
         return 2
     raw_fleet = json.loads(Path(argv[0]).read_text())
     fleet = validate_fleet(json.loads(Path(argv[0]).read_text()))
-    cfg = next((b for b in fleet['bots']
+    cfg = next((b for b in market_rows(fleet)
                 if make_botid(b['market_type'], b['symbol'], b['side'])
                 == botid), None)
     if cfg is None:
         known = [make_botid(b['market_type'], b['symbol'], b['side'])
-                 for b in fleet['bots']]
+                 for b in market_rows(fleet)]
         print(f'{botid}: not in this fleet — bots: {", ".join(known)}')
         return 2
     if cfg.get('venue') not in VENUES_WITH_CANDLES:

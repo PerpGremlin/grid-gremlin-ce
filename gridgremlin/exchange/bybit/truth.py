@@ -41,6 +41,7 @@ def read_wallet(result):
         'mm_rate': _f(acct.get('accountMMRate')),
         'im_rate': _f(acct.get('accountIMRate')),
         'maint_margin': _f(acct.get('totalMaintenanceMargin')),
+        'im': _f(acct.get('totalInitialMargin')),
         'coins': coins})
 
 

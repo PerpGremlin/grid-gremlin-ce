@@ -16,9 +16,12 @@ CONFIGS = os.path.join(os.path.dirname(__file__), '..', 'configs')
 
 
 def _shipped_rows():
+    """Every shipped row the form knows — one market at a time. A
+    portfolio row (D78) is edited in the fleet file and has no form."""
     for path in sorted(glob.glob(os.path.join(CONFIGS, 'fleet*.json'))):
         for row in json.load(open(path))['bots']:
-            yield row
+            if row.get('strategy') != 'portfolio':
+                yield row
 
 
 # --- the advanced form reaches every key the file accepts --------------------
@@ -1379,6 +1382,8 @@ def spec_U19_an_edit_that_changes_nothing_writes_the_file_it_read():
             wd = json.loads(wd_text)
         venue = fleet['bots'][0].get('venue', 'bybit')
         for old in fleet['bots']:
+            if old.get('strategy') == 'portfolio':
+                continue                                   # D78: no form
             botid = make_botid(old['market_type'], old['symbol'], old['side'])
             bot = bot_from_form(form_from_bot(old), venue)
             bot.update({k: v for k, v in old.items() if k.startswith('_')})

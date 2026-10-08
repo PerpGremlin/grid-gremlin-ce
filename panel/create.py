@@ -12,8 +12,8 @@ import tempfile
 from pathlib import Path
 
 from gridgremlin.adapters import adapter_for
-from gridgremlin.apply import check_link_fits, make_botid, widest_rung
-from gridgremlin.config import (ConfigError, check_placeable,
+from gridgremlin.apply import row_botid, check_link_fits, make_botid, widest_rung
+from gridgremlin.config import (market_rows, ConfigError, check_placeable,
                                 check_venue_leverage, validate_fleet)
 from gridgremlin.ladder import grid_rungs, plan_grid, position_cap
 from gridgremlin.main import BYBIT_LINK_LIMIT, check_watchdog_coverage
@@ -27,7 +27,7 @@ def merge_proposal(fleet_raw, wd_raw, proposal):
     botid = make_botid(bot['market_type'], bot['symbol'], bot['side'])
     fleet = json.loads(json.dumps(fleet_raw))
     wd = json.loads(json.dumps(wd_raw))
-    if any(make_botid(b['market_type'], b['symbol'], b['side']) == botid
+    if any(row_botid(b) == botid
            for b in fleet.get('bots', [])):
         raise ConfigError(f'{botid}: already in this fleet — edit or '
                           'remove it first; identities are not reused')
@@ -49,7 +49,7 @@ def edit_proposal(fleet_raw, wd_raw, botid, bot, wmax):
     fleet = json.loads(json.dumps(fleet_raw))
     wd = json.loads(json.dumps(wd_raw))
     for i, b in enumerate(fleet.get('bots', [])):
-        if make_botid(b['market_type'], b['symbol'], b['side']) == botid:
+        if row_botid(b) == botid:
             fleet['bots'][i] = _in_order_of(b, bot)
             if wmax is None:           # D32: blanked = the limit is lifted
                 (wd.get('positions') or {}).pop(botid, None)
@@ -82,8 +82,7 @@ def remove_proposal(fleet_raw, wd_raw, botid):
     wd = json.loads(json.dumps(wd_raw))
     before = len(fleet.get('bots', []))
     fleet['bots'] = [b for b in fleet.get('bots', [])
-                     if make_botid(b['market_type'], b['symbol'],
-                                   b['side']) != botid]
+                     if row_botid(b) != botid]
     if len(fleet['bots']) == before:
         raise ConfigError(f'{botid}: not in this fleet')
     (wd.get('positions') or {}).pop(botid, None)
@@ -144,7 +143,7 @@ def validate_whole(fleet, wd, adapter_of):
                              for w, lab, r in vfleet['refused'])
         vwd = validate_watchdog(wd)
         caps = []
-        for cfg in vfleet['bots']:
+        for cfg in market_rows(vfleet):
             botid = make_botid(cfg['market_type'], cfg['symbol'],
                                cfg['side'])
             cap = None

@@ -222,6 +222,8 @@ def spec_I3_every_shipped_fleet_row_fits_its_venues_link():
     assert files
     for path in files:
         for row in json.load(open(path))['bots']:
+            if row.get('strategy') == 'portfolio':
+                continue                               # D78: no rung, no link
             cfg = validate_config(row)
             hl = cfg['venue'] == 'hyperliquid'
             check_link_fits(

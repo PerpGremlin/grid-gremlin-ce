@@ -33,8 +33,14 @@ def fetch_hl(coin, start_ms, end_ms):
                            'endTime': end_ms}).encode()
         req = urllib.request.Request(HL, data=body, headers={'Content-Type': 'application/json',
                                                              'User-Agent': 'grid-gremlin research'})
-        with urllib.request.urlopen(req, timeout=30) as r:
-            page = json.load(r)
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                page = json.load(r)
+        except urllib.error.HTTPError as e:
+            if e.code != 429:
+                raise
+            time.sleep(10.0)                  # the public info endpoint meters by the minute
+            continue
         if not page:
             break
         rows.extend({'t': int(x['time']), 'rate': float(x['fundingRate'])} for x in page)
@@ -42,7 +48,7 @@ def fetch_hl(coin, start_ms, end_ms):
         if newest <= cursor:
             break
         cursor = newest + 1
-        time.sleep(0.2)
+        time.sleep(1.0)
     seen, out = set(), []
     for x in sorted(rows, key=lambda x: x['t']):
         if x['t'] not in seen:

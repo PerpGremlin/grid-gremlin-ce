@@ -4,6 +4,7 @@ per side; the floors are what an exit must clear (G6)."""
 
 BYBIT_MAKER = 0.0002         # per side, the base tier
 BYBIT_TAKER = 0.00055
+BYBIT_SPOT_TAKER = 0.001     # spot, per side — what a market rebalance pays (H7)
 
 FEE_FLOOR_PCT = 0.001        # perps: ~0.02-0.055%/side, round trip covered
 SPOT_FEE_FLOOR_PCT = 0.0025  # spot: ~0.1%/side — a 0.001 floor sold at a LOSS

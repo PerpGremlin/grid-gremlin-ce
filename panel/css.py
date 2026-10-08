@@ -49,7 +49,7 @@ button.danger{background:var(--neg)}
 .side{display:inline-block;font-size:.8em;font-weight:bold;
 padding:.05em .55em;border-radius:3px;color:var(--bg);margin-right:.5em;
 vertical-align:middle}.side.long{background:var(--pos)}
-.side.short{background:var(--neg)}
+.side.short{background:var(--neg)}.side.pfo{background:var(--accent)}
 .card.long{border-left:4px solid var(--pos)}
 .card.short{border-left:4px solid var(--neg)}
 .cards{display:grid;gap:var(--gap);
@@ -85,7 +85,7 @@ border-color:var(--neg);font-weight:700}
 h1+.pnl{max-width:40em;font-size:1.05em}
 .lev-filled{display:none}.lev-on .lev-filled{display:block}.lev-on .lev-now{display:none}
 .rng{display:flex;align-items:center;gap:.6em}.rng svg{flex:1}
-.card table{width:100%}.card td{padding:.1em .4em}
+.card table{width:100%}.card.pfo{grid-column:1/-1;overflow-wrap:anywhere}.card td{padding:.1em .4em}
 .say{max-width:62em;font-size:1.1em;border-left:3px solid var(--accent);
 padding:.2em 1em}details{margin:.6em 0}summary{cursor:pointer;
 color:var(--accent)}details td{text-align:left}details td:first-child

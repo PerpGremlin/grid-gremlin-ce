@@ -1,0 +1,42 @@
+{
+  "_note": "A hedged portfolio (D78, README §4b): two coins at equal weights on spot, each hedged one for one by its inverse perpetual, funding collected and spent on spot at the daily tick, weights and hedges rebalanced at 5% drift. No tilt, no margin: pure carry. Needs a Bybit DEMO account with the coins' collateral switches on (the build flips them).",
+  "preflight": {
+    "probe": true
+  },
+  "watchdog": "configs/watchdog.portfolio.json",
+  "poll_seconds": 5,
+  "bots": [
+    {
+      "strategy": "portfolio",
+      "name": "carry",
+      "venue": "bybit",
+      "capital": 300,
+      "assets": [
+        {
+          "coin": "BTC",
+          "weight": 0.5
+        },
+        {
+          "coin": "ETH",
+          "weight": 0.5
+        }
+      ],
+      "hedge": {
+        "product": "inverse",
+        "ratio": 1.0
+      },
+      "rebalance": {
+        "every_hours": 24,
+        "drift_pct": 0.05,
+        "min_notional": 20
+      },
+      "risk": {
+        "max_loss": 60,
+        "max_loss_since": "2026-10-11T00:00:00Z",
+        "margin_floor_pct": 0.4,
+        "basis_stop_pct": 0.01,
+        "max_weight": 0.5
+      }
+    }
+  ]
+}

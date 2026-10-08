@@ -15,7 +15,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from .config import validate_fleet
+from .config import market_rows, validate_fleet
 from .exchange.truth import _f
 
 ADX_PERIOD = 14
@@ -318,10 +318,17 @@ def markets_of(fleet_paths):
     out = {}
     for fp in fleet_paths:
         fleet = validate_fleet(json.loads(Path(fp).read_text()))
-        for cfg in fleet['bots']:
+        for cfg in market_rows(fleet):
             key = (cfg['venue'], cfg['market_type'], cfg['symbol'])
             put = cfg.get('ladder_total_notional') or cfg.get('ladder_notional') or 0.0
             out[key] = out.get(key, 0.0) + float(put)
+        for cfg in fleet['bots']:                        # D78: the row's legs
+            if cfg.get('strategy') != 'portfolio':
+                continue
+            from .portfolio import leg_markets
+            for _, _, mt, sym, put in leg_markets(cfg):
+                key = (cfg['venue'], mt, sym)
+                out[key] = out.get(key, 0.0) + float(put)
     return out
 
 
