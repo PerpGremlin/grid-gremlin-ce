@@ -138,6 +138,27 @@ completed rounds; safety orders filled this window; the deepest rung
 reached. Depth near max SOs = the schedule nearly exhausted.</td></tr>
 <tr><td>hold benchmark</td><td class="dim">what the same capital would
 have done just holding over the same window. Beat it or hold.</td></tr>
+<tr><td>numbers (button)</td><td class="dim">the position's own page (U56):
+the position as the exchange shows it, then every number laid open.</td></tr>
+<tr><td>window slid N rungs from home</td><td class="dim">a sliding grid's
+window has moved with the price; the card judges the price against the
+window it trades, not the range it started from (U57).</td></tr>
+<tr><td>PORTFOLIO · carry / tilt / basis &amp; shape</td><td class="dim">the
+hedged portfolio row (D78): several coins on spot at target weights, each
+hedged by its own perpetual short. <b>carry</b> is the funding its shorts
+received; <b>tilt</b> what leaning the hedges with the regime made or
+cost; <b>basis &amp; shape</b> what is left of the total since the anchor
+after those two and after the loan's interest — the spot/perp gap and the
+inverse contract's shape. <b>interest</b> is what the venue charged on the
+loan.</td></tr>
+<tr><td>stack · cash · borrowed (N× the equity)</td><td class="dim">the
+portfolio's coins at mark; its unspent quote; the venue's loan when it
+runs on margin, and the stack as a multiple of the row's equity. The
+margin floor trims every leg together when free margin dips under it, and
+the row then aims lower until free margin is comfortable.</td></tr>
+<tr><td>weight → actual · hedge ratio → actual</td><td class="dim">per
+asset: the target share of the stack and where it sits; the hedge the row
+wants and the hedge it holds, as coins.</td></tr>
 </table><p><a href="/">&larr; fleet</a></p>"""
 
 

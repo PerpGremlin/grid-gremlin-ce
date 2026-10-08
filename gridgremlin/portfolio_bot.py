@@ -113,7 +113,8 @@ class PortfolioBot:
                 'fills_to_ms': now_ms, 'seen': [], 'funding_to_ms': now_ms,
                 'funding': [], 'funding_total': 0.0, 'parked': {}, 'unwound': {},
                 'delevered': 0, 'spent': 0.0, 'tilt_pnl': 0.0, 'last_px': {},
-                'regime_seen': {}, 'terms_seen': self._terms()}
+                'regime_seen': {}, 'terms_seen': self._terms(),
+                'interest_total': 0.0, 'interest_to_ms': now_ms, 'borrow_apr': None}
 
     def _terms(self):
         return {'capital': float(self.cfg['capital']), 'spot_quote': self.cfg.get('spot_quote', 'USDT'),
@@ -320,6 +321,47 @@ class PortfolioBot:
         row['cash'] += got
         row['funding_to_ms'] = now_ms
 
+    def _settle_interest(self, now_ms):
+        """H4: what the loan cost since the watermark, from the venue's own
+        ledger — summed into the row's figure, the latest hourly rate kept
+        as a yearly one; a venue that keeps no such ledger (a fake, a
+        venue without margin) leaves both as they are."""
+        hist = getattr(self.client, 'borrow_history', None)
+        row = self.row
+        if hist is None or not self.cfg.get('margin'):
+            return
+        row.setdefault('interest_total', 0.0)
+        row.setdefault('interest_to_ms', now_ms - 3_600_000)
+        try:
+            rows = hist(self.cfg.get('spot_quote', 'USDT'), row['interest_to_ms'], now_ms)
+        except (VenueError, OSError):
+            return
+        for r in rows:
+            if r['time_ms'] > row['interest_to_ms']:
+                row['interest_total'] += r['cost']
+                row['borrow_apr'] = r['hourly_rate'] * 8760.0
+        if rows:
+            row['interest_to_ms'] = max(row['interest_to_ms'], max(r['time_ms'] for r in rows))
+
+    def _judge_borrow_rate(self):
+        """H4: the venue's rate above the row's `borrow_apr_max` stands the
+        loan down — the ratchet's cap goes to 1× and eases back only once
+        the rate is under the cap again (the relax rule); said once an hour."""
+        cfg, row = self.cfg, self.row
+        apr, cap = row.get('borrow_apr'), (cfg.get('margin') or {}).get('borrow_apr_max')
+        if apr is None or not cap:
+            return
+        L = cfg['margin']['spot_leverage']
+        if apr > cap:
+            if (row.get('lever_cap') or L) > 1.0:
+                row['lever_cap'] = 1.0
+                row['last_tick_ms'] = None           # planned at the next read
+            self._say_once('apr', 'warn', f'the loan costs {apr:.2%}/yr, above the row\'s cap of '
+                                          f'{cap:.2%} — the leverage stands down to 1× (H4)')
+            row['rate_blocks_relax'] = True
+        else:
+            row['rate_blocks_relax'] = False
+
     def _short_size(self, truth, leg):
         idx = leg['adapter'].position_idx('Sell', False) or 0
         pos = truth['positions'].get(idx) or {}
@@ -501,6 +543,8 @@ class PortfolioBot:
         self._learn_terms(prices, wallet)
         self._settle_fills(now_ms)
         self._settle_funding(now_ms, prices)
+        self._settle_interest(now_ms)
+        self._judge_borrow_rate()
         # the book, bounded by the wallet (D76): coins above the row's own are
         # not its; coins missing are gone whoever took them
         wcoins = {c: float((wallet.get('coins') or {}).get(c, {}).get('wallet_balance', 0.0))
@@ -619,6 +663,7 @@ class PortfolioBot:
                 due = (row['last_tick_ms'] is None
                        or now_ms - row['last_tick_ms'] >= cfg['rebalance']['every_hours'] * 3_600_000)
                 if (due and row['lever_cap'] < L and eq and avail is not None
+                        and not row.get('rate_blocks_relax')
                         and avail / eq > risk['margin_floor_pct'] + 2 * FLOOR_BUFFER):
                     # eased back toward the file's number, a step a tick, only
                     # while free margin sits well above the floor
@@ -682,10 +727,12 @@ class PortfolioBot:
                         'unwound': a['coin'] in row['unwound']} for a in cfg['assets']],
             'carry': {'total': row['funding_total'],
                       'trailing': sum(x[2] for x in row['funding'])},
-            # H6: the three money lines that never mix
+            # H6: the three money lines that never mix — and the loan's cost, its own
             'total': value - basis_value,
             'tilt': row['tilt_pnl'],
-            'basis': value - basis_value - row['funding_total'] - row['tilt_pnl'],
+            'interest': row.get('interest_total', 0.0),
+            'borrow_apr': row.get('borrow_apr'),
+            'basis': value - basis_value - row['funding_total'] - row['tilt_pnl'] + row.get('interest_total', 0.0),
             'unreal': unreal, 'realised': realised, 'value': value,
             'anchor': basis_value, 'contributed': row['contributed'], 'last_tick_ms': row['last_tick_ms'],
             'next_tick_ms': ((row['last_tick_ms'] or now_ms)

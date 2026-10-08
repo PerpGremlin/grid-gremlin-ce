@@ -1427,17 +1427,28 @@ def spec_D76_the_form_stamps_the_holdings_moment():
     assert 'holding_since' not in bot_from_form(form_from_bot(row), 'bybit')
 
 
-def spec_U22_every_cards_numbers_open_or_close_at_once():
-    """Owner 2026-10-03: "can we have a show all button … open/close all the
-    numbers". The cards page carries show all · hide all; the table and the
-    export do not (nothing folds there)."""
+def spec_U56_a_cards_numbers_live_on_the_positions_own_page_and_the_show_all_switch_is_gone():
+    """Owner 2026-10-08: with show all on, the tables collided and the cards
+    ran very long — "make each position have its own page … reads the data
+    directly shown from the position when viewed in bybit dashboard". U22's
+    switch (owner 2026-10-03) is retired with it: a card folds nothing."""
+    from panel.render import card, exchange_table, position_page
     from panel.server import render
     live = render([], table=False)
-    assert '<h3>numbers</h3><a href="javascript:ggAll(true)">show all</a>' in live
-    assert 'ggAll(false)">hide all</a>' in live
-    assert 'window.ggAll=function' in live            # the script defines it
-    assert 'ggAll(' not in render([], table=True)     # the table folds nothing
-    assert 'ggAll(' not in render([], static='2026-10-03T00:00Z')
+    assert 'show all</a>' not in live and 'ggAll(true)' not in live and '<h3>numbers</h3>' not in live
+    from spec_panel import CONTRACT as C
+    belief = ((C.get('watchdog') or {}).get('belief') or {}).get('bots', {})
+    c = card(0, 'spoADAUSDTl', C['bots']['spoADAUSDTl'], C, belief)
+    assert '<details' not in c and "href='/position?fleet=0&bot=spoADAUSDTl'>numbers</a>" in c
+    page = position_page(0, 'demo', 'spoADAUSDTl', C, belief)
+    assert page.startswith('<h1>demo · ADAUSDT long grid spot</h1><h3>as the exchange shows it</h3><table class="xch">')
+    assert '<th>entry price</th>' in page and '<td>0.207</td>' in page and '<th>unrealised P&amp;L</th>' in page
+    assert '<div class="numbers"><h3>the numbers</h3><table>' in page and '<tr><td>fills</td><td>3</td></tr>' in page
+    assert 'numbers</a>' not in page.split('class="cards one"')[1]      # the page does not link to itself
+    xch = exchange_table('linDOGEs', None, {'linDOGEs': {'alive': True, 'position': 730.0,
+                                                          'margin': {'im': 12.5, 'mm': 4.0, 'leverage': 5, 'liq': 0.31}}},
+                         {'quote': 'USDT', 'margin_coin': 'USDT'})
+    assert '<td>SHORT</td>' in xch and '<td>730 DOGE</td>' in xch and '<td>0.31</td>' in xch and '<td>5×</td>' in xch
 
 
 def spec_U23_the_sweep_fits_the_box_and_says_it_is_working():

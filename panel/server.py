@@ -26,6 +26,24 @@ from .render import (COLS, REFRESH_S, SIZE_VIEWS, TIER_NAMES, VIEWS, WATCHDOG_OF
 from .forms import (BACK, FORM, curve_svg, next_step_html, other_half_html, other_side_html, rehearse_bot_form, rehearse_form, unit_for_fleet, unit_refusal, verdict, waiting_for_restart)  # noqa: F401
 from .routes import (CACHE_TTL_S, Handler)  # noqa: F401
 
+def fleet_label(f):
+    """U55: the dash's name for a fleet — the file's own `label` when it
+    carries one (the owner: "bybit demo subaccount 1"), else the venue and
+    the file stem's environment word."""
+    stem = Path(f).stem.replace('fleet.', '')
+    try:
+        raw = json.loads(Path(f).read_text())
+        if raw.get('label'):
+            return str(raw['label']).strip()
+        bots = raw.get('bots') or []
+        venue = bots[0].get('venue', 'bybit') if bots else None
+    except (OSError, ValueError, AttributeError):
+        venue = None
+    if not venue:
+        return stem
+    return f"{venue} {stem.split('.')[-1]}"
+
+
 def main(argv):
     if '--hours' in argv:
         i = argv.index('--hours')
@@ -58,19 +76,7 @@ def main(argv):
     else:
         Handler.token = secrets.token_urlsafe(16)
     Handler.fleets = tuple(a for a in argv if a.endswith('.json'))
-    def _label(f):
-        stem = Path(f).stem.replace('fleet.', '')
-        try:
-            bots = json.loads(Path(f).read_text()).get('bots') or []
-            venue = bots[0].get('venue', 'bybit') if bots else None
-        except (OSError, ValueError):
-            venue = None
-        if not venue:
-            return stem
-        # venue first, plus the stem's final token — the environment word
-        # (demo, testnet, mine); abbreviations like 'hl' never survive
-        return f"{venue} {stem.split('.')[-1]}"
-    Handler.labels = tuple(_label(f) for f in Handler.fleets)
+    Handler.labels = tuple(fleet_label(f) for f in Handler.fleets)
     if not Handler.fleets:
         print('usage: python3 -m panel.server <fleet.json>... '
               '[--hours N] [--port P] [--token-file F] [--units a,b]')

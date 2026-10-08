@@ -145,3 +145,19 @@ def spec_C5_check_placeable_works_with_a_real_adapter():
         assert 'cannot place a single order' in str(e)
     else:
         raise AssertionError('dust config was accepted against the real adapter')
+
+
+def spec_A4_notional_and_average_entry_follow_the_contract():
+    """Two more pieces of A4's unit law, for the backtester: the quote a
+    fill moves (what a fee is taken on) and the basis after adding to a
+    holding — arithmetic by quantity for linear and spot, harmonic for
+    inverse, where $1 contracts buy more coin at a lower price."""
+    from gridgremlin.adapters import LinearAdapter, SpotAdapter
+    lin, inv = LinearAdapter(SPEC_BTC_LINEAR), InverseAdapter(SPEC_BTC_INVERSE)
+    assert lin.notional(0.5, 60000.0) == 30000.0 and inv.notional(30000.0, 60000.0) == 30000.0
+    assert SpotAdapter(SPEC_ETH_SPOT).notional(2.0, 3000.0) == 6000.0
+    assert lin.average_entry(None, 0.0, 60000.0, 1.0) == 60000.0
+    assert lin.average_entry(60000.0, 1.0, 50000.0, 1.0) == 55000.0           # arithmetic by coins
+    # inverse: 60,000 contracts at 60,000 (1 BTC) + 60,000 at 50,000 (1.2 BTC) = 120,000 over 2.2 BTC
+    assert abs(inv.average_entry(60000.0, 60000.0, 50000.0, 60000.0) - 120000.0 / 2.2) < 1e-9
+    assert inv.average_entry(None, 0.0, 50000.0, 10.0) == 50000.0

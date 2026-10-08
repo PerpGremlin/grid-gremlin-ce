@@ -93,6 +93,22 @@ class _Adapter:
 
     # --- money (A4) ----------------------------------------------------------
 
+    def notional(self, qty, price):
+        """The quote a fill moves — what a fee and a funding charge are taken
+        on: qty × price for linear and spot, the contracts themselves for
+        inverse ($1 each)."""
+        return qty if self.market_type == 'inverse' else qty * price
+
+    def average_entry(self, basis, held, price, qty):
+        """The basis after adding `qty` at `price` to `held` at `basis`:
+        the arithmetic mean by quantity for linear and spot; for inverse
+        the harmonic mean — $1 contracts buy more coin at a lower price."""
+        if not held or basis is None:
+            return price
+        if self.market_type == 'inverse':
+            return (held + qty) / (held / basis + qty / price)
+        return (basis * held + price * qty) / (held + qty)
+
     def qty_from_notional(self, notional, price):
         raise NotImplementedError
 

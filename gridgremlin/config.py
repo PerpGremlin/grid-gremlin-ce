@@ -57,7 +57,7 @@ SLIDE_KEYS = ('trigger_rungs', 'max_rungs', 'ref_position', 'confirm_seconds',
 SLIDE_DIRECTIONS = ('favourable', 'both')   # D28 default; D34 opt-in
 START_ORDER_TYPES = ('market', 'maker')       # D37: the base order's entry
 FLEET_KEYS = ('bots', 'poll_seconds', 'allow_mainnet', 'preflight', 'account_caps',
-              'risk_profiles', 'account',
+              'risk_profiles', 'account', 'label',
               'tombstones', 'slide_state',
               'notify_orders', 'watchdog')
 
@@ -970,6 +970,7 @@ def validate_fleet(data, where='fleet'):
         'tombstones': data.get('tombstones'),            # X7 path (default logs/)
         'slide_state': data.get('slide_state'),          # G22 path (default logs/)
         'account': _account_name(data.get('account'), where),   # H5: whose keys
+        'label': _fleet_label(data.get('label'), where),         # U55: the dash's name for it
     }
     rows, refused = [], []
     for i, row in enumerate(bots):
@@ -1006,6 +1007,15 @@ def market_rows(fleet):
     a side. A portfolio row (D78) is several legs and is read by its own
     paths; every per-market walk of a fleet starts here."""
     return [c for c in fleet['bots'] if c.get('strategy') != 'portfolio']
+
+
+def _fleet_label(v, where):
+    """U55: what the panel calls the fleet — the owner's words, short."""
+    if v is None:
+        return None
+    if not isinstance(v, str) or not v.strip() or len(v) > 40:
+        _refuse(f"{where}: 'label' is a short name for the dash, forty characters at most")
+    return v.strip()
 
 
 def _account_name(v, where):

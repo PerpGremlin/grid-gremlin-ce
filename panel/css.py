@@ -54,7 +54,10 @@ vertical-align:middle}.side.long{background:var(--pos)}
 .card.short{border-left:4px solid var(--neg)}
 .cards{display:grid;gap:var(--gap);
 grid-template-columns:repeat(auto-fill,minmax(21em,1fr))}
-.card{border:1px solid var(--line);border-radius:6px;padding:.8em 1em}
+.card{border:1px solid var(--line);border-radius:6px;padding:.8em 1em;display:flex;flex-direction:column}
+.cards.one{grid-template-columns:minmax(0,1fr);max-width:calc(63em + 2*var(--gap))}
+.numbers h3,.xch+h3{margin:.5em 0 .2em}table.xch{width:100%;max-width:calc(63em + 2*var(--gap));font-size:.95em}table.xch th{text-align:left;color:var(--dim);font-weight:normal;padding:.1em .5em}table.xch td{padding:.1em .5em;white-space:nowrap}
+.card .foot{margin-top:auto;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.3em var(--gap-s)}
 .card>div{margin:var(--gap-s) 0}.big{font-size:1.5em}
 .pnl{border:1px solid var(--line);border-radius:5px;padding:.45em .75em;
 background:color-mix(in srgb,var(--line) 40%,transparent);margin:var(--gap-s) 0}
@@ -85,7 +88,8 @@ border-color:var(--neg);font-weight:700}
 h1+.pnl{max-width:40em;font-size:1.05em}
 .lev-filled{display:none}.lev-on .lev-filled{display:block}.lev-on .lev-now{display:none}
 .rng{display:flex;align-items:center;gap:.6em}.rng svg{flex:1}
-.card table{width:100%}.card.pfo{grid-column:1/-1;overflow-wrap:anywhere}.card td{padding:.1em .4em}
+.card table{width:100%}.card.pfo{grid-column:1/-1;justify-self:start;width:100%;max-width:calc(63em + 2*var(--gap));overflow-wrap:anywhere}
+.card.pfo .two{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap-s) var(--gap);align-items:start}.card.pfo .two>div{min-width:0}.card.pfo .pnl{max-width:none}.card td{padding:.1em .4em}
 .say{max-width:62em;font-size:1.1em;border-left:3px solid var(--accent);
 padding:.2em 1em}details{margin:.6em 0}summary{cursor:pointer;
 color:var(--accent)}details td{text-align:left}details td:first-child

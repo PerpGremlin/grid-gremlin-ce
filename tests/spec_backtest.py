@@ -328,8 +328,7 @@ def spec_T3_the_draft_door_knows_both_venues_and_names_the_rest():
     assert draft_guards(dict(hl, venue='bybit')) is None
     why = draft_guards(dict(hl, venue='nowhere'))
     assert 'nowhere' in why and 'hyperliquid' in why and 'bybit' in why
-    assert 'inverse' in draft_guards(dict(hl, venue='bybit',
-                                          market_type='inverse'))
+    assert draft_guards(dict(hl, venue='bybit', market_type='inverse')) is None   # A4: its own maths now
 
 
 def spec_T8_a_level_under_the_venues_minimum_is_skipped_by_name():
@@ -369,3 +368,34 @@ def spec_T9_the_sweep_is_read_on_two_windows_and_tested_out_of_sample():
     outside = _saw(80000.0, 90000.0, 2, 10)
     assert visited_pct(outside, 50000.0, 70000.0) == 0.0
     assert visited_pct([], 1, 2) is None
+
+
+def spec_T3a_an_inverse_row_rehearses_in_the_adapters_own_maths_instead_of_being_refused():
+    """The owner pressed rehearse on the inverse ETH long (2026-10-08) and
+    the gate said 'linear-only … confident nonsense'. The backtester asks
+    the adapter now: fees on the contracts, the basis harmonic, the P&L in
+    the coin stated in USD."""
+    from gridgremlin.adapters import InverseAdapter
+    from gridgremlin.backtest_cli import draft_guards
+    inv = InverseAdapter({'symbol': 'BTCUSD', 'qty_step': 1, 'price_tick': 0.5, 'min_qty': 1,
+                          'min_notional': None, 'settle_coin': 'BTC'})
+    cfg = validate_config({'market_type': 'inverse', 'symbol': 'BTCUSD', 'side': 'long', 'capital': 10000,
+                           'leverage': 1, 'lower': 50000, 'upper': 60000, 'rungs': 2})
+    assert draft_guards(dict(cfg, venue='bybit')) is None
+    # the one rung at 50,000 buys 5,000 contracts (0.1 BTC); the exit at 60,000 sells them —
+    # each bar opens within the placement window of the rung it trades through (W1)
+    bars = [{'o': 52000.0, 'h': 52500.0, 'l': 49000.0, 'c': 50500.0},          # trades through the buy
+            {'o': 58000.0, 'h': 61000.0, 'l': 57500.0, 'c': 60500.0}]          # and through the sell
+    r = backtest(cfg, inv, bars, fee_rate=0.0002, funding_rate_hourly=0.0)
+    assert r['trips'] == 1 and r['entry_fills'] == 1 and r['held'] == 0.0
+    coin = 5000.0 * (1 / 50000.0 - 1 / 60000.0)                                # 0.01667 BTC made
+    assert abs(r['grid_profit'] - coin * 60000.0) < 1e-6                       # 1,000, stated in USD at the exit
+    assert abs(r['fees'] - 2 * 5000.0 * 0.0002) < 1e-9                         # on the contracts, not × price
+    lin = LinearAdapter({'symbol': 'BTCUSDT', 'qty_step': 0.001, 'price_tick': 0.1, 'min_qty': 0.001,
+                         'min_notional': 5.0, 'settle_coin': 'USDT'})
+    lcfg = validate_config({'market_type': 'linear', 'symbol': 'BTCUSDT', 'side': 'long', 'capital': 10000,
+                            'leverage': 1, 'lower': 50000, 'upper': 60000, 'rungs': 2})
+    l = backtest(lcfg, lin, bars, fee_rate=0.0002)
+    q = 5000.0 / 50000.0                                                       # the linear rung: 0.1 BTC
+    assert abs(l['grid_profit'] - q * 10000.0) < 1e-6                          # linear: the same trade, in quote (1,000 too)
+    assert abs(l['fees'] - (q * 50000.0 + q * 60000.0) * 0.0002) < 1e-6       # on qty × price, as before (2.2)

@@ -1,5 +1,8 @@
 # The backtester (SPEC T3). The REAL plan_grid replayed over bars — no second
-# engine to drift. Fills require trade-through, never touch; funding is
+# engine to drift. Its money is the adapter's (A4): fees and funding on the
+# adapter's notional, the basis by its average, P&L realised and marked in
+# its settle coin and stated in USD — so an inverse row rehearses in its
+# own maths rather than being refused (2026-10-08). Fills require trade-through, never touch; funding is
 # modelled; the plan is computed at each bar's open, so only pre-existing
 # inventory can exit within the bar (conservative by construction). Entries
 # are OPTIMISTIC on coarse bars: every rung the bar trades through fills,
@@ -56,11 +59,10 @@ def backtest(cfg, adapter, bars, fee_rate=BYBIT_MAKER, funding_rate_hourly=0.0,
             if o['side'] == ('Buy' if long else 'Sell'):        # entries
                 through = bar['l'] < o['price'] if long else bar['h'] > o['price']
                 if through:
-                    total = (basis or 0.0) * held + o['price'] * o['qty']
+                    basis = adapter.average_entry(basis, held, o['price'], o['qty'])
                     held_steps += int(round(o['qty'] / step))
                     held = held_steps * step
-                    basis = total / held if held else None
-                    fees += o['qty'] * o['price'] * fee_rate
+                    fees += adapter.notional(o['qty'], o['price']) * fee_rate
                     entry_fills += 1
                     lots.append(o['rung'])
             else:                                               # exits
@@ -68,11 +70,11 @@ def backtest(cfg, adapter, bars, fee_rate=BYBIT_MAKER, funding_rate_hourly=0.0,
                 if through and held > 0:
                     qty_steps = min(int(round(o['qty'] / step)), held_steps)
                     qty = qty_steps * step
-                    realized += adapter.realised_pnl(
-                        basis, o['price'], qty) * (1.0 if long else -1.0)
+                    realized += adapter.pnl_to_usd(
+                        adapter.realised_pnl(basis, o['price'], qty), o['price']) * sign
                     held_steps -= qty_steps
                     held = held_steps * step
-                    fees += qty * o['price'] * fee_rate
+                    fees += adapter.notional(qty, o['price']) * fee_rate
                     trips += 1
                     if lots:                       # G23: the lot this exit closed
                         want = o['rung'] + lot_step
@@ -82,8 +84,9 @@ def backtest(cfg, adapter, bars, fee_rate=BYBIT_MAKER, funding_rate_hourly=0.0,
             held, basis, lots = 0.0, None, []
         max_held = max(max_held, held)
         if held and funding_rate_hourly:
-            funding += sign * held * bar['c'] * funding_rate_hourly * bar_hours
-        unreal = sign * held * (bar['c'] - basis) if basis else 0.0
+            funding += sign * adapter.notional(held, bar['c']) * funding_rate_hourly * bar_hours
+        unreal = (sign * adapter.pnl_to_usd(adapter.realised_pnl(basis, bar['c'], held), bar['c'])
+                  if basis and held else 0.0)
         equity = realized - fees - funding + unreal
         equity_curve.append(equity)
         peak = max(peak, equity)

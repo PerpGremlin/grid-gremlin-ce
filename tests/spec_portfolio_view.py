@@ -35,9 +35,14 @@ CONTRACT = {'window_hours': 6.0, 'generated_ms': 0, 'unowned': {}, 'ranges': {},
 def spec_H6_the_card_says_the_three_truths_and_the_exchange_counts_the_row():
     html = cards_section(0, 'demo', CONTRACT)
     assert 'carry portfolio' in html and 'PORTFOLIO' in html
-    assert '<div class="card pfo">' in html                      # spans the cards' row; its lines wrap
+    assert '<div class="card pfo">' in html and '<div class="two"><div>' in html   # two columns inside
+    from panel.reference import KEY
+    assert 'carry / tilt / basis &amp; shape' in KEY and 'window slid N rungs' in KEY and 'numbers (button)' in KEY
+    assert '<div class="dim foot"><span>pfocarry</span>' in html             # the footer every card shares
     from panel.css import CSS
-    assert '.card.pfo{grid-column:1/-1' in CSS
+    assert '.card.pfo{grid-column:1/-1;justify-self:start;width:100%;max-width:calc(63em' in CSS   # three cards wide, not the page
+    assert '.card .foot{margin-top:auto' in CSS and '.card.pfo .two{display:grid;grid-template-columns:1fr 1fr' in CSS
+    assert 'class="dim foot"><span>linDOGEs</span>' in html                 # the grid card's footer, the same shape
     assert '2 assets · hedged on inverse, usdt · rebalanced every 24 h · tilt 30% with the regime' in html
     assert '+1,010.00</span> USDT' in html and 'since its anchor' in html
     assert 'carry <b class="pos">+812.40</b>' in html and 'tilt <b class="pos">+150.60</b>' in html

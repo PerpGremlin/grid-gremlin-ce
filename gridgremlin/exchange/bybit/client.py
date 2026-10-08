@@ -174,6 +174,13 @@ class Client:
         from . import truth as _t
         return _t.read_funding(self, market_type, symbol, since_ms, now_ms)
 
+    def borrow_history(self, coin, since_ms, now_ms):
+        """H4: the venue's own ledger of what a loan in `coin` cost — one row
+        per hour charged: {'time_ms', 'cost', 'hourly_rate', 'size'}, oldest
+        first. Measured 2026-10-08 on the carry sub: 0.000449%/hour, 3.93%/yr."""
+        from . import truth as _t
+        return _t.read_borrow(self, coin, since_ms, now_ms)
+
     def read_wallet(self):
         from . import truth as _t
         return _t.read_wallet(self.wallet_balance())
