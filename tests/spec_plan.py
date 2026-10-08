@@ -70,6 +70,7 @@ def spec_G7_adopted_lots_suppress_the_nearest_entries():
 
 
 def spec_G7_release_is_furthest_first_as_exits_fill():
+    # pins: B9 (the dissolving suppression — no no-trade band)
     # one exit fills -> the lot it closed re-arms its OWN rung (G23): the
     # 58k lot exited at 59k, so 58k returns while 59k and 60k stay held.
     # Under the count proxy the FURTHEST suppressed entry returned first

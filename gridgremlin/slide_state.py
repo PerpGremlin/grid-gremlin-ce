@@ -8,7 +8,7 @@
 import json
 from pathlib import Path
 
-from .durable import write_json
+from .durable import locked, write_json
 
 
 class SlideStateError(Exception):
@@ -37,4 +37,5 @@ class SlideState:
     def set(self, botid, offset):
         """Durable before returning — the caller moves orders only after this."""
         self._rows[botid] = int(offset)
-        write_json(self.path, self._rows)
+        with locked(self.path):                  # X7b: one writer at a time
+            write_json(self.path, self._rows)

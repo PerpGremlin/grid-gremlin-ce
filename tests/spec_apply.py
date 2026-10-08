@@ -163,6 +163,7 @@ def spec_E2_amend_never_crosses_sides_or_flags():
 # --- E6/E7: the reaction matrix ----------------------------------------------
 
 def spec_E7_every_kind_reacts_and_none_kills():
+    # pins: E6 (kinds, never codes; ambiguous defers)
     assert set(KIND_REACTIONS) == set(KINDS)
     assert all('kill' not in r for r in KIND_REACTIONS.values())
     assert KIND_REACTIONS['margin'] == 'backoff_growth_only'
@@ -171,6 +172,7 @@ def spec_E7_every_kind_reacts_and_none_kills():
 
 
 def spec_E7_zero_position_is_the_close_we_expected_not_a_warning():
+    # pins: E7b
     """Live 2026-10-05: every tranche round's end logged two warns — the
     stop and TP upkeep wrote for a position Bybit had just closed, and got
     retCode 10001 "can not set tp/sl/ts for zero position". That is the

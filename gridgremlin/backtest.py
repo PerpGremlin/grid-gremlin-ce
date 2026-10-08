@@ -9,9 +9,10 @@ import math
 
 from .ladder import plan_grid, slide_offset
 from .window import window
+from .fees import BYBIT_MAKER
 
 
-def backtest(cfg, adapter, bars, fee_rate=0.0002, funding_rate_hourly=0.0,
+def backtest(cfg, adapter, bars, fee_rate=BYBIT_MAKER, funding_rate_hourly=0.0,
              bar_hours=1.0, spread_bps=1.0):
     long = cfg['side'] == 'long'
     sign = 1.0 if long else -1.0

@@ -55,11 +55,16 @@ class TelegramNotifier(Notifier):
         import json
         import urllib.request
         from .tg import payload                       # F20: labels in bold
+        from .tg import redact                        # P3: never the token
         req = urllib.request.Request(
             f'https://api.telegram.org/bot{self.token}/sendMessage',
             data=json.dumps(payload(self.chat_id, text, every_line=True)).encode(),
             headers={'Content-Type': 'application/json'})
-        urllib.request.urlopen(req, timeout=10).read()
+        try:
+            urllib.request.urlopen(req, timeout=10).read()
+        except OSError as e:
+            raise OSError(redact(f'telegram: {e} {getattr(e, "url", "") or ""}',
+                                 self.token)) from None
 
     def event(self, kind, botid, text, icon='', urgent=False):
         super().event(kind, botid, text)

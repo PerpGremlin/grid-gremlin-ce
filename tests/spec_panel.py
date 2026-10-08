@@ -278,6 +278,7 @@ def spec_C1_control_is_opt_in_and_typed():
 
 
 def spec_X7_revive_removes_exactly_the_typed_entry_atomically():
+    # pins: X7b (two writers, one lock)
     """The revive path is the delete-the-entry-deliberately workflow: the
     typed botid goes, everything else stays."""
     import tempfile
@@ -732,6 +733,27 @@ def spec_U53_every_money_figure_names_its_coin():
                                                      'to_tp_pct': 0.01}]}}))])
 
 
+def spec_P1_the_entry_point_resolves_every_name_it_uses():
+    """2026-10-09: the panel split left main() without Path, and the box's
+    panel died at start — the one function no spec runs. Its free names
+    are resolved against the module statically, so the façade can never
+    lose an import again."""
+    import ast
+    import builtins
+    import inspect
+    import panel.server as srv
+    tree = ast.parse(inspect.getsource(srv))
+    main = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'main')
+    loads = {n.id for n in ast.walk(main) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)}
+    stores = {n.id for n in ast.walk(main) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)}
+    stores |= {a.arg for a in main.args.args}
+    stores |= {n.name for n in ast.walk(main) if isinstance(n, (ast.FunctionDef, ast.ClassDef))}
+    stores |= {(a.asname or a.name).split('.')[0] for n in ast.walk(main)
+               if isinstance(n, (ast.Import, ast.ImportFrom)) for a in n.names}
+    missing = sorted(n for n in loads - stores if not hasattr(srv, n) and not hasattr(builtins, n))
+    assert not missing, f'panel.server.main uses names the module lacks: {missing}'
+
+
 def spec_V10_a_card_says_when_the_price_has_left_the_range():
     from panel.server import render
     c = json.loads(json.dumps(CONTRACT))
@@ -1161,7 +1183,7 @@ def spec_U43_several_units_restart_together_or_none_does():
     """Owner 2026-10-05: "can i restart both fleets at the same time from
     the panel by typing both lines?" Several names, spaces or commas; every
     one must be a unit, or nothing is done; one systemctl call carries them."""
-    import panel.server as ps
+    import panel.routes as ps
     calls = []
 
     class R:
@@ -1346,7 +1368,7 @@ def spec_U47_one_readout_per_fleet_at_a_time():
     import threading
     import time as _time
     from pathlib import Path
-    import panel.server as srv
+    import panel.routes as srv
     running, peak, calls = [0], [0], [0]
     gate = threading.Event()
 
@@ -1427,7 +1449,7 @@ def spec_D63_every_renderer_sums_through_one_total():
     import inspect
     import gridgremlin.digest as dg
     import gridgremlin.phone as ph
-    import panel.server as sv
+    import panel.render as sv                    # the renderer, since the split
     for mod in (dg, ph, sv):
         src = inspect.getsource(mod)
         assert "['realized'] - v['fees'] +" not in src, mod.__name__
@@ -1435,6 +1457,7 @@ def spec_D63_every_renderer_sums_through_one_total():
 
 
 def spec_D63_a_capped_card_says_where_its_fills_start():
+    # pins: R22
     from panel.server import render
     c = json.loads(json.dumps(CONTRACT))
     c['generated_ms'] = 30 * 86400000

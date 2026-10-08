@@ -16,6 +16,8 @@ import math
 import html
 import time
 
+from gridgremlin.fmt import utc_stamp
+
 from gridgremlin.apply import check_link_fits, make_botid, widest_rung
 from gridgremlin.config import ConfigError
 from gridgremlin.main import BYBIT_LINK_LIMIT
@@ -494,16 +496,13 @@ def bot_from_form(form, venue):
         if form.get(f'{b}_on') == '1':     # engine says what it needs
             bot.setdefault(b, {})
     if bot.get('max_loss') and not bot.get('max_loss_since'):      # D47
-        bot['max_loss_since'] = time.strftime('%Y-%m-%dT%H:%M:%SZ',
-                                              time.gmtime())
+        bot['max_loss_since'] = utc_stamp()
     if bot.get('holding') is not None and not bot.get('holding_since'):   # D76
-        bot['holding_since'] = time.strftime('%Y-%m-%dT%H:%M:%SZ',
-                                             time.gmtime())
+        bot['holding_since'] = utc_stamp()
     if bot.get('max_rounds') and not bot.get('max_rounds_since'):
         # D41: the count starts when the limit is set, as 3Commas' does;
         # an edit carries the stamp, so only a cleared box restarts it
-        bot['max_rounds_since'] = time.strftime('%Y-%m-%dT%H:%M:%SZ',
-                                                time.gmtime())
+        bot['max_rounds_since'] = utc_stamp()
     return bot
 
 
@@ -547,8 +546,7 @@ def _quick_limits(bot, form):
         except (ValueError, TypeError):
             raise ValueError(f'"Most this bot may lose": could not read '
                              f'"{raw}"')
-        bot['max_loss_since'] = time.strftime('%Y-%m-%dT%H:%M:%SZ',
-                                              time.gmtime())
+        bot['max_loss_since'] = utc_stamp()
     return bot
 
 

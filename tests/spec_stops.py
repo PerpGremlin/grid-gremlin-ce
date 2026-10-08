@@ -663,6 +663,43 @@ def spec_X15_a_running_bot_and_a_spot_holding_are_refused():
     assert venue.orders == []
 
 
+def spec_X15b_on_hyperliquid_the_close_command_waits_for_the_fleet():
+    """HL nonces are per wallet: a second signer beside the running fleet
+    collides with it. The command asks F3's lock; held, it refuses before
+    any client is built (D77)."""
+    import io
+    import json
+    import sys
+    import tempfile
+    from pathlib import Path
+    import gridgremlin.close as cl
+    from gridgremlin.main import acquire_fleet_lock, fleet_running
+    d = Path(tempfile.mkdtemp()) / 'configs'
+    d.mkdir()
+    (d / 'wd.json').write_text(json.dumps({
+        'tag': 't', 'snapshot': 's', 'state': 'st', 'staleness_seconds': 9,
+        'mm_rate_max': 0.5, 'equity_min': 10, 're_alert_seconds': 9, 'assumes_sole_actor': True}))
+    (d / 'f.json').write_text(json.dumps({'watchdog': str(d / 'wd.json'), 'bots': [
+        {'venue': 'hyperliquid', 'market_type': 'linear', 'symbol': 'BTC', 'side': 'long',
+         'capital': 100, 'leverage': 2, 'lower': 50000, 'upper': 60000, 'rungs': 5}]}))
+    logs = d.parent / 'logs'
+    logs.mkdir()
+    assert not fleet_running(str(d / 'f.json'))
+    held = acquire_fleet_lock(str(logs / 'hyperliquid.testnet.lock'))
+    try:
+        assert fleet_running(str(d / 'f.json'))
+        out, saved = io.StringIO(), sys.stdout
+        sys.stdout = out
+        try:
+            code = cl.main([str(d / 'f.json'), 'linBTCl', '--dry'])
+        finally:
+            sys.stdout = saved
+        assert code == 1 and 'one process signs' in json.loads(out.getvalue())['refused']
+    finally:
+        held.close()
+    assert not fleet_running(str(d / 'f.json'))
+
+
 def spec_X15_the_close_command_has_no_way_to_mainnet():
     """The run half of D25's double gate is passed shut, and the command
     takes no flag that opens it."""

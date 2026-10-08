@@ -94,6 +94,25 @@ def acquire_fleet_lock(path):
     return handle
 
 
+def fleet_running(fleet_path):
+    """F3's lock, asked rather than taken: does a fleet process hold any
+    lock beside this fleet file? The close command uses it on Hyperliquid,
+    where one process signs for a wallet at a time (X15b)."""
+    import glob
+    lockdir = _logs_dir(fleet_path)
+    for p in glob.glob(str(lockdir / '*.lock')) + glob.glob(str(lockdir / '*.prelock')):
+        try:
+            with open(p, 'a') as h:
+                try:
+                    fcntl.flock(h, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except OSError:
+                    return True
+                fcntl.flock(h, fcntl.LOCK_UN)
+        except OSError:
+            continue
+    return False
+
+
 def snapshot_row(bots, wallet, now, tiers=None):
     """F4/E3: derived from venue truth only; the DEAD are visible. F9: a
     dead bot no longer reads the venue, so its position is NOTHING — not

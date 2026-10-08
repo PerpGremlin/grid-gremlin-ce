@@ -181,6 +181,7 @@ def spec_T7_the_draft_door_serves_both_kinds_and_honours_the_days():
 
 
 def spec_M3_a_remainder_close_is_placed_once_and_left_resting():
+    # pins: M20
     """Found by the first rehearsal, 2026-10-03, in the LIVE engine: a
     tranche fills, the price falls back and a safety order fills. Every
     re-anchored target is now behind the round's best mark, so the bot

@@ -19,11 +19,7 @@ LABEL_GAP = 12                     # px between stacked labels
 MAX_RUNG_LINES = 60
 
 
-def _f(v):                       # the panel's one float-or-None (server
-    try:                         # imports it from here)
-        return float(v)
-    except (TypeError, ValueError):
-        return None
+from gridgremlin.fmt import float_or as _f  # noqa: E402  (C10: the one parser)
 
 
 def levels(cfg, mark):

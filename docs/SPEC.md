@@ -547,6 +547,10 @@ eventually pin (T1).
   coin P&L less fees since the moment (from the kept ledger) and the
   unexplained rest; the card says it, red when more than half is
   unexplained. The form stamps the moment when the holding is set.
+- **V10** A card says the bot in a glance and keeps every number: the state
+  word, the money box, the range strip, the holding; a card says when the
+  price has left its range; the dense table is still served at `/table`.
+- **V11** A watchdog that is off says OFF, not a number.
 - **V14** The truth carries the venue's own margin on a position: `position_im`
   and `position_mm` (Bybit's positionIM / positionMM; Hyperliquid's marginUsed as
   the initial figure and no maintenance figure, which is said as None). The bot
@@ -605,6 +609,12 @@ eventually pin (T1).
   engine and at the panel's gates alike. Unknown names and non-limit keys
   are refused by name. At the panel's whole-fleet gate a row the engine
   would set aside (D52) is a refusal, never a skip.
+- **C10** One vocabulary for the primitives (audit 2026-10-09). The float
+  parser (`fmt.float_or`), the UTC stamp (`fmt.utc_stamp`), the number words
+  (`fmt.num`, `big`, `big_si`, `pct`) and the fee constants (`fees.py`: the
+  maker and taker rates, G6's floors) exist once; every other module imports
+  them. A second definition of the parser's shape, the stamp's format or a
+  fee rate anywhere in the engine or the panel fails the suite.
 - **C8** A number is finite or it is refused. NaN passes every comparison
   as False and Infinity every lower bound; JSON reads both from a file and a
   form's float() reads "nan". The validator refuses non-finite values by
@@ -634,7 +644,7 @@ eventually pin (T1).
   other (a revive undone by the next stop, or a stop's row lost to a revive's
   write). Engine, close command and panel find the file by one rule: the
   fleet's `tombstones` key, else logs/ beside its home. The slide state
-  writes the same durable way. *(audit 2026-10-05)*
+  writes the same durable way, under the lock. *(audit 2026-10-05, 2026-10-09)*
 - **X7** A fired stop survives the process: the tombstone is durable BEFORE the
   flatten (a crash mid-stop stays dead), a tombstoned botid builds dead-and-visible
   (F4), and revival is a deliberate operator act — delete the entry, never automatic.
@@ -723,6 +733,10 @@ eventually pin (T1).
 
 ## F — fleet and operations
 
+- **X15b** On Hyperliquid the close command waits for the fleet (D77): nonces
+  are per wallet, and a second signer beside the running fleet collides with
+  it. The command asks F3's lock beside the fleet file; held, it refuses
+  before any client is built — stop the fleet, or close by hand on the venue.
 - **F1** Every fleet names a watchdog config, and its account guards (staleness,
   mm_rate, equity floor, drawdown) cover every bot. A per-bot position bound is
   opt-in (D32): present, it is checked; absent, the bot has no limit of its own. A
@@ -1302,7 +1316,7 @@ eventually pin (T1).
   "lists no such market" refusal, on both venues and in the terminal, says
   "looks like a bot's name, not a market; the coin inside it is X, type that"
   when the text is shaped like an id (I1), and nothing else otherwise.
-  *(U40, 2026-10-05: a Bybit name ending in USDC says the USDC perpetual is
+  *(2026-10-05: a Bybit name ending in USDC says the USDC perpetual is
   named with PERP instead — BTCUSDC → "BTCPERP, type that".)*
 - **U33** Every blank says what it becomes. The advanced form's empty boxes
   carry the engine's own default as their placeholder ("default 1", "default
@@ -1449,6 +1463,9 @@ eventually pin (T1).
   on stdin (`-K -`) from the shell's own printf, never in an argv `ps` can
   read. *(audit 2026-10-05)*
 
+- **P3** A Telegram token never leaves a sender in an error. The token travels
+  in the request URL; every sender — the fleet's notifier, the watchdog, the
+  phone — raises a redacted error, so no journal or log line can carry it.
 ## T — testing meta-invariants
 
 - **T1** Every invariant in this file has a spec named after its ID — or after the

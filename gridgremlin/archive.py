@@ -10,6 +10,8 @@ import json
 import subprocess
 import sys
 import time
+
+from .fmt import utc_stamp
 from pathlib import Path
 
 from .durable import write_json
@@ -42,8 +44,7 @@ def archive(fleet_path, out_dir='logs/daily', now=None, readout=run_readout,
     now = time.time() if now is None else now
     day = time.strftime('%Y-%m-%d', time.gmtime(now))
     tag = Path(fleet_path).stem.replace('fleet.', '', 1)
-    record = {'date': day, 'written_utc': time.strftime(
-                  '%Y-%m-%dT%H:%M:%SZ', time.gmtime(now)),
+    record = {'date': day, 'written_utc': utc_stamp(now),
               'fleet': Path(fleet_path).name,
               'snapshot': snapshot(fleet_path),
               'readout': readout(fleet_path)}

@@ -17,11 +17,7 @@ class TruthError(ValueError):
     """V1: a shape the engine must not trade from."""
 
 
-def _f(x, default=None):
-    try:
-        return float(x)
-    except (TypeError, ValueError):
-        return default
+from ..fmt import float_or as _f  # noqa: E402  (C10: the one parser)
 
 
 def _require(d, keys, what):

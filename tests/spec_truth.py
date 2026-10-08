@@ -178,6 +178,27 @@ def spec_I4_executions_dedup_by_exec_id():
     assert [f['exec_id'] for f in got] == ['a', 'b', 'c']
 
 
+def spec_R8_a_forced_close_is_a_fill_and_a_settlement_is_not():
+    """Liquidation (BustTrade) and auto-deleveraging (AdlTrade) move the
+    position and realise the loss, so they enter the ledger as venue
+    closes; funding and settlement rows never do (audit 2026-08-06: the
+    execType filter hid liquidations from the P&L and reinvest sizing)."""
+    from gridgremlin.exchange.bybit.truth import read_fills
+
+    def row(eid, exec_type, qty='1'):
+        return {'execId': eid, 'execTime': '100', 'symbol': 'BTCUSDT', 'side': 'Sell',
+                'execPrice': '60000', 'execQty': qty, 'execFee': '0', 'execType': exec_type,
+                'orderLinkId': '', 'closedSize': qty, 'createType': '', 'stopOrderType': ''}
+
+    class C:
+        def executions_page(self, category, symbol, s, e, cursor=None):
+            return {'list': [row('t', 'Trade'), row('b', 'BustTrade'), row('a', 'AdlTrade'),
+                             row('f', 'Funding'), row('s', 'Settlement')], 'nextPageCursor': None}
+    got = {f['exec_id']: f for f in read_fills(C(), 'linear', 'BTCUSDT', 0, 1000)}
+    assert set(got) == {'t', 'b', 'a'}
+    assert got['b']['venue_closed'] and got['a']['venue_closed']
+
+
 # --- E8 / env resolution -----------------------------------------------------
 
 def spec_E8_transport_failure_raises_not_guesses():

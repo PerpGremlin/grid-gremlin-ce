@@ -731,6 +731,13 @@ stands unless the owner corrects it.
   the statement, what is left unexplained — display only, nothing acts on
   it; funding is not counted and the card says so. Without a statement,
   D58 stands.
+- **D77 — One signer per Hyperliquid wallet: the close command waits for the
+  fleet (2026-10-09).** From the fresh-eyes audit (docs/AUDIT-2026-10-09.md):
+  the panel's close button signs from a second process while the fleet is
+  signing, and HL nonces are per wallet. The close command now asks F3's
+  lock; held, it refuses on Hyperliquid before any client is built (X15b).
+  Bybit is unaffected (its nonce is per request). The owner's grant: the
+  audit's "on you".
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

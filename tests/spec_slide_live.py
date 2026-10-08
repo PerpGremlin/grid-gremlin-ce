@@ -228,6 +228,7 @@ def spec_G22_the_offset_is_durable_BEFORE_the_orders_move():
     bot.cycle()
     assert order[0] == 'state' and 'cancel' in order and 'place' in order
     assert SlideState(tmp).get(bot.botid) == 12      # a new process reads it
+    assert Path(f'{tmp}.lock').exists()               # X7b: written under the lock
     assert json.loads(tmp.read_text()) == {bot.botid: 12}
 
 

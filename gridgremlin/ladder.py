@@ -5,8 +5,7 @@
 import math
 from decimal import Decimal
 
-FEE_FLOOR_PCT = 0.001        # perps: ~0.02-0.055%/side, round trip covered
-SPOT_FEE_FLOOR_PCT = 0.0025  # spot: ~0.1%/side — a 0.001 floor sold at a LOSS    # G6: an exit must clear costs; a constant, not a knob
+from .fees import FEE_FLOOR_PCT, SPOT_FEE_FLOOR_PCT, fee_floor_for  # noqa: E402,F401  (C10: G6's floors live in the fee table)
 CROSS_GUARD_BPS = 5.0    # B3/B8: one definition; the placer imports THIS one
 SPACING_GUARD_MULTIPLE = 3.0   # B8: spacing must clear the guard with margin
 SEED_RUNG = -1_000_000   # S3/G23: the seed's link rung — no lattice has it, so a
@@ -122,12 +121,6 @@ def trip_economics(rungs, maker_fee):
         return None, None, None
     round_trip = 2.0 * (maker_fee or 0.0)
     return gap - round_trip, gap, round_trip
-
-
-def fee_floor_for(market_type):
-    """G6: the floor is the venue's ROUND TRIP plus margin — spot charges
-    about ten times a perp per side, so one constant cannot serve both."""
-    return SPOT_FEE_FLOOR_PCT if market_type == 'spot' else FEE_FLOOR_PCT
 
 
 def exit_floor(side, split_ref, basis, market_type=None):

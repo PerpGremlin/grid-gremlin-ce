@@ -27,6 +27,14 @@ def bold_headings(text, every_line=False):
     return '\n'.join(out)
 
 
+def redact(text, token):
+    """P3: a Telegram bot token travels in the request URL; an error that
+    quotes the URL would carry it into a log. Every sender passes what it
+    raises through here."""
+    text = str(text)
+    return text.replace(token, '<token>') if token else text
+
+
 def payload(chat_id, text, every_line=False):
     """The sendMessage body every sender uses."""
     return {'chat_id': chat_id, 'text': bold_headings(text, every_line),
