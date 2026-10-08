@@ -811,3 +811,65 @@ def spec_H4_after_a_trim_the_row_aims_lower_and_eases_back_only_while_free_margi
         clock.t += DAY; venue.t_ms = int(clock.t * 1000)
         bot.cycle()
     assert bot.row['lever_cap'] is None                         # back at the file's 2×
+
+
+def spec_H2_a_levered_rows_quote_change_under_a_loan_reads_the_new_quotes_balance_as_the_loan():
+    """The owner swapped the debt's coin on the venue (USDC → USDT, 2026-10-11):
+    the row's new quote balance is the loan, not a fresh pot of capital —
+    read as capital it would have levered a phantom 81k four times."""
+    venue, lines, clock = _venue(), [], Clock()
+    venue.coins['USDT'] = 100000.0
+    venue.t_ms = int(clock.t * 1000)
+    row = {'capital': 100000, 'spot_borrow': True, 'margin': {'spot_leverage': 2.0},
+           'assets': [{'coin': 'BTC', 'weight': 1.0}, {'coin': 'ETH', 'weight': 1.0}], 'risk': {'max_weight': 1.0}}
+    bot, tmp = _bot(venue, lines, clock=clock, row=row)
+    bot.cycle()                                                  # 200k of spot, the venue lent 100k USDT
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    bot.cycle()
+    assert abs(bot.row['cash'] + 100000.0) < 1.0
+    # the owner swaps the loan's coin on the venue: USDT back to zero, USDC owed; the file says USDC
+    venue.coins['USDC'] = venue.coins['USDT']
+    venue.coins['USDT'] = 0.0
+    venue.marks['BTCUSDC'], venue.marks['ETHUSDC'] = venue.marks['BTCUSDT'], venue.marks['ETHUSDT']
+    legs = _legs()
+    for c in legs['spot']:
+        legs['spot'][c] = dict(legs['spot'][c], symbol=f'{c}USDC')
+    clock.t += 120; venue.t_ms = int(clock.t * 1000)
+    again, _ = _bot(venue, lines, tmp=tmp, legs=legs, clock=clock, row=dict(row, spot_quote='USDC'))
+    n = len(venue.orders)
+    again.cycle()
+    assert abs(again.row['cash'] + 100000.0) < 1.0                        # the loan, in its new coin
+    assert any('the loan is 99,9' in ln and "USDC, the row's cash" in ln for ln in lines)
+    assert again.row['contributed'] == 0.0 and len(venue.orders) == n    # nothing contributed, nothing bought
+    assert abs(again.portfolio_view['value'] - 100000.0) < 1.0           # equity unchanged by the swap
+
+
+def spec_H4_the_owners_flatten_takes_every_leg_together_and_a_reset_makes_the_next_start_a_first_sight():
+    """The owner (2026-10-11): 'flatten the account and erase all debt first
+    … its just demo'. The loss limit's act, by hand; the sales repay the
+    loan; --reset forgets the book and the tombstone."""
+    venue, lines, clock = _venue(), [], Clock()
+    venue.coins['USDT'] = 100000.0
+    venue.t_ms = int(clock.t * 1000)
+    bot, tmp = _bot(venue, lines, clock=clock,
+                    row={'capital': 100000, 'spot_borrow': True, 'margin': {'spot_leverage': 2.0},
+                         'assets': [{'coin': 'BTC', 'weight': 1.0}, {'coin': 'ETH', 'weight': 1.0}],
+                         'risk': {'max_weight': 1.0}})
+    bot.cycle()
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    bot.cycle()
+    assert venue.coins['USDT'] < -99000.0                                 # the loan
+    after = bot.flatten_now('flattened by the owner', tombstone=False)
+    assert venue.coins['BTC'] < 1e-9 and venue.coins['ETH'] < 1e-9        # the stack sold
+    assert all(not venue.positions.get(s) for s in ('BTCUSD', 'ETHUSD'))   # the shorts bought back
+    assert abs(after['USDT'] - 100000.0) < 1.0                            # the sales repaid the loan
+    assert not bot.alive and not bot.tombs.has('pfocarry')                # no tombstone when told so
+    assert any('flattened by the owner — every leg flattened together' in ln for ln in lines)
+    bot.state.forget('pfocarry')
+    assert PortfolioState(tmp / 'portfolio_state.json').get('pfocarry') == {}
+    fresh, _ = _bot(venue, lines, tmp=tmp, clock=clock,
+                    row={'capital': 100000, 'assets': [{'coin': 'BTC', 'weight': 0.5}, {'coin': 'ETH', 'weight': 0.5}]})
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    fresh.cycle()                                                         # a first sight: the stack from capital
+    assert fresh.row['anchor_value'] is not None and fresh.row['contributed'] == 0.0
+    assert abs(venue.coins['BTC'] * 60000.0 - 50000.0) < 100.0

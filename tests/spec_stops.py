@@ -685,6 +685,13 @@ def spec_X15b_on_hyperliquid_the_close_command_waits_for_the_fleet():
     logs = d.parent / 'logs'
     logs.mkdir()
     assert not fleet_running(str(d / 'f.json'))
+    other = acquire_fleet_lock(str(logs / 'bybit.demo.lock'))          # another fleet on the box
+    carry = acquire_fleet_lock(str(logs / 'bybit.demo.carry.lock'))    # a fleet on another account
+    assert not fleet_running(str(d / 'f.json'))                         # neither is this fleet's
+    assert fleet_running(str(d / 'f.json'), {'bybit'}, 'carry')         # but the carry fleet's is
+    assert fleet_running(str(d / 'f.json'), {'bybit'}, 'default')       # and the demo's for a default Bybit fleet
+    other.close()
+    carry.close()
     held = acquire_fleet_lock(str(logs / 'hyperliquid.testnet.lock'))
     try:
         assert fleet_running(str(d / 'f.json'))

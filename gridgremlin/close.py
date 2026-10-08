@@ -90,7 +90,7 @@ def main(argv):
                            or str(_logs_dir(fleet_path) / 'tombstones.json'))
         if cfg['venue'] == 'hyperliquid':
             from .main import fleet_running
-            if fleet_running(fleet_path):
+            if fleet_running(fleet_path, {c['venue'] for c in fleet['bots']}, fleet['account']):
                 # X15b (D77): HL nonces are per wallet — a second signer
                 # beside the running fleet collides with it; the fleet is
                 # the one signer, so this command waits for it to stop

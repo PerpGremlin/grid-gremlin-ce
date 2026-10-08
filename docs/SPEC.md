@@ -735,8 +735,11 @@ eventually pin (T1).
 
 - **X15b** On Hyperliquid the close command waits for the fleet (D77): nonces
   are per wallet, and a second signer beside the running fleet collides with
-  it. The command asks F3's lock beside the fleet file; held, it refuses
-  before any client is built — stop the fleet, or close by hand on the venue.
+  it. The command asks this fleet's own locks — its prelock, and the venue
+  locks of its venues on its account, never another fleet's beside them
+  (on a three-fleet box every fleet read as running, 2026-10-11); held, it
+  refuses before any client is built — stop the fleet, or close by hand on
+  the venue. The portfolio flatten (H4) asks the same way.
 - **F1** Every fleet names a watchdog config, and its account guards (staleness,
   mm_rate, equity floor, drawdown) cover every bot. A per-bot position bound is
   opt-in (D32): present, it is checked; absent, the bot has no limit of its own. A
@@ -1209,7 +1212,10 @@ that pins it (T1).
   G13's post-only law is the grid's). The row learns new terms at a
   restart on an edited file: a raised `capital` is cash to spend, a raised
   `holding` adopts the difference, a lowered one of either is said and
-  nothing is sold, a changed asset list is said — and the next read plans
+  nothing is sold, a changed asset list is said, a changed `spot_quote` is
+  a new cash pot of the capital — or, for a levered row whose loan the
+  owner swapped to the new coin on the venue, the new quote's negative
+  balance read as the loan, nothing contributed — and the next read plans
   at once, not at the next tick. A Hyperliquid portfolio row is refused
   by name until its leg is built.
 - **H3** The plan at a tick is pure. Between ticks (`every_hours` since the
@@ -1240,7 +1246,11 @@ that pins it (T1).
   shorts bought back reduce-only, the stack sold, as market orders — then
   the tombstone (X7) and the page; a leg that refuses is named and the
   rest still go, since a hedged book cut on one side is a directional bet
-  taken at the worst moment. A parked asset's share is its parked cash;
+  taken at the worst moment. The owner's flatten
+  (`gridgremlin.portfolio_flatten <fleet> <name> [--reset]`, the fleet
+  stopped) is the same act by hand — the cycle's reads, every leg
+  together, the venue read back; `--reset` forgets the row's book and its
+  tombstone so the next start is a first sight. A parked asset's share is its parked cash;
   the rest keep their relative shares of the stack. Under
   `margin_floor_pct` of free margin the whole book shrinks each read by
   the share that restores the floor plus a 5-point buffer (the shortfall

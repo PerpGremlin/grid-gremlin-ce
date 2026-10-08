@@ -145,7 +145,7 @@ class PortfolioBot:
                                   f'{coin}: the stated holding fell by {before - h:.10g} — the row '
                                   'does not sell what it was told it owns; sell by hand (H2)')
 
-    def _learn_terms(self, prices):
+    def _learn_terms(self, prices, wallet=None):
         """H2: the row's terms changed under it (a restart on an edited
         file): a raised capital is cash to spend, a lowered one is said and
         not sold down (the owner sells by hand), a changed asset list is
@@ -166,13 +166,23 @@ class PortfolioBot:
         if now.get('holdings') != seen.get('holdings'):
             self._adopt(seen.get('holdings'), prices)
         if now['spot_quote'] != seen['spot_quote']:
-            # a new quote is a new cash pot: the capital, in that quote; what
-            # was spent in the old quote is coins already
-            self._contribute(now['capital'] - max(row['cash'], 0.0))
-            row['cash'] = now['capital']
-            self.notify.event('info', self.botid,
-                              f"spot quote {seen['spot_quote']} → {now['spot_quote']}: cash is the capital, "
-                              f"{now['capital']:,.2f} {now['spot_quote']} (H2)")
+            bal = float(((wallet or {}).get('coins') or {}).get(now['spot_quote'], {}).get('wallet_balance', 0.0))
+            if self.cfg.get('margin') and bal < 0:
+                # a levered row's quote changed under a loan (the owner swapped
+                # the debt's coin on the venue): the new quote's balance IS the
+                # loan — the row's cash, nothing contributed
+                row['cash'] = bal
+                self.notify.event('info', self.botid,
+                                  f"spot quote {seen['spot_quote']} → {now['spot_quote']}: the loan is "
+                                  f"{-bal:,.2f} {now['spot_quote']}, the row's cash (H2)")
+            else:
+                # a new quote is a new cash pot: the capital, in that quote;
+                # what was spent in the old quote is coins already
+                self._contribute(now['capital'] - max(row['cash'], 0.0))
+                row['cash'] = now['capital']
+                self.notify.event('info', self.botid,
+                                  f"spot quote {seen['spot_quote']} → {now['spot_quote']}: cash is the capital, "
+                                  f"{now['capital']:,.2f} {now['spot_quote']} (H2)")
         elif now['capital'] > seen['capital']:
             row['cash'] += now['capital'] - seen['capital']
             self._contribute(now['capital'] - seen['capital'])
@@ -434,6 +444,35 @@ class PortfolioBot:
                           f"{self.cfg['risk']['basis_stop_pct']:.2%} — its pair unwound, "
                           'the rest held (H4)')
 
+    def flatten_now(self, reason, tombstone=True):
+        """The owner's flatten: the cycle's reads, then every leg together
+        (H4's act, by hand). Returns what the venue holds after."""
+        spot = {c: self.client.read_symbol_truth('spot', leg['symbol'])
+                for c, leg in self.legs['spot'].items()}
+        perps = {(k, c): self.client.read_symbol_truth(leg['market_type'], leg['symbol'])
+                 for k in ('hedge', 'short') for c, leg in self.legs[k].items()}
+        wallet = self.client.read_wallet()
+        prices = {c: float(t['mark'] or 0.0) for c, t in spot.items()}
+        for (k, c), t in perps.items():
+            prices.setdefault(c, float(t['mark'] or 0.0))
+        row = self.row or self._fresh_row(int(self._now() * 1000))
+        wcoins = {c: float((wallet.get('coins') or {}).get(c, {}).get('wallet_balance', 0.0))
+                  for c in self.legs['spot']}
+        coins = {c: min(row['coins'].get(c, 0.0), wcoins[c]) for c in self.legs['spot']}
+        held = {'hedge': {}, 'short': {}}
+        for (k, c), t in perps.items():
+            size, _ = self._short_size(t, self.legs[k][c])
+            px = prices[c]
+            held[k][c] = size / px if self.legs[k][c]['market_type'] == 'inverse' and px else size
+        tombs, self.tombs = self.tombs, (self.tombs if tombstone else None)
+        try:
+            self._flatten(reason, coins, held, prices)
+        finally:
+            self.tombs = tombs
+        after = self.client.read_wallet()
+        return {c: float((after.get('coins') or {}).get(c, {}).get('wallet_balance', 0.0))
+                for c in list(self.legs['spot']) + [self.cfg.get('spot_quote', 'USDT')]}
+
     # --- the cycle -------------------------------------------------------------------
 
     def cycle(self, equity=None):
@@ -459,7 +498,7 @@ class PortfolioBot:
         if fresh:
             self._adopt({}, prices)                  # a stated holding starts the book
             row['contributed'] = 0.0                 # the anchor is the first value: nothing contributed since
-        self._learn_terms(prices)
+        self._learn_terms(prices, wallet)
         self._settle_fills(now_ms)
         self._settle_funding(now_ms, prices)
         # the book, bounded by the wallet (D76): coins above the row's own are
@@ -623,7 +662,8 @@ class PortfolioBot:
                     placed += 1
                     if kind == 'spot' and side == 'Buy':
                         spent += done * prices[c]
-            row['cash'] = max(row['cash'] - spent, 0.0)
+            row['cash'] = (row['cash'] - spent if cfg.get('margin')      # a loan stays negative
+                           else max(row['cash'] - spent, 0.0))
             row['spent'] += spent
             if not refused:
                 row['last_tick_ms'] = now_ms         # a refused leg keeps the tick open
