@@ -144,6 +144,11 @@ the position as the exchange shows it, then every number laid open.</td></tr>
 holding, kind, margin, market, limits; a portfolio's assets — behind one
 word (U58). Click to fold or open; the card remembers. <b>cards: full /
 folded</b> in the side panel sets them all.</td></tr>
+<tr><td>… trade (card)</td><td class="dim">a single long or short with its
+own exit (D81): its take profit, its stop watched at the mark, who opened it
+when. <b>close trade</b> ends it early with one reduce-only market order;
+<b>clear</b>, once it has ended, frees its market and side. Opened from
+<b>new trade</b>.</td></tr>
 <tr><td>price, 24 h / 7 d</td><td class="dim">on a position's page: the
 price the engine read each minute, the window's rungs (edges dashed), the
 bot's own buys and sells as dots, liquidation in red (U65). Hover a dot or

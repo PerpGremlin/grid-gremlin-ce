@@ -191,6 +191,22 @@ class TradeWatch:
         return out
 
 
+def with_trades(fleet_path, fleet):
+    """L5: the validated fleet with its open trades among its rows, so every
+    reader — the readout and its cards, the kept ledger, the digest, the
+    market readings, the close command — sees a trade as the bot it is. A
+    trades file that cannot be read adds nothing and is said once by the
+    engine, which refuses to build beside it (L1)."""
+    try:
+        trades, _ = load_trades(state_path(fleet_path, fleet, 'trades'))
+    except TradeError:
+        return fleet
+    have = {make_botid(c['market_type'], c['symbol'], c['side'])
+            for c in fleet['bots'] if c.get('strategy') != 'portfolio'}
+    extra = [dict(t, account=fleet['account']) for t in trades if _botid(t) not in have]
+    return dict(fleet, bots=list(fleet['bots']) + extra) if extra else fleet
+
+
 def fleet_rows(fleet_path):
     """The fleet's own grid and DCA rows, validated, for the collision check."""
     fleet = validate_fleet(json.loads(Path(fleet_path).read_text()))

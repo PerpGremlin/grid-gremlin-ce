@@ -461,6 +461,15 @@ def kind_line(terms):
     lev = terms.get('leverage') or 1.0
     lev_s = (f'{lev:g}x leverage' if lev != 1 else
              ('no leverage' if mt == 'spot' else '1x, no leverage'))
+    if terms.get('trade'):                                          # L6 (D81)
+        parts = [f"take profit +{terms['tp_pct'] * 100:g}%" if terms.get('tp_pct') else 'take profit in tranches']
+        if terms.get('stop_pct'):
+            parts.append(f"stop −{terms['stop_pct'] * 100:g}% at the mark")
+        if terms.get('trail_pct'):
+            parts.append(f"trailing {terms['trail_pct'] * 100:g}%")
+        who = (f" · opened {terms['opened'][:16].replace('T', ' ')} by {terms.get('by', '?')}"
+               if terms.get('opened') else '')
+        return f'trade on {market} · {lev_s} · ' + ' · '.join(parts) + who
     if terms.get('strategy') == 'martingale':
         k, n = terms.get('multiplier') or 1.0, terms.get('add_ons')
         grows = (f'<span class="st" title="each add-on order is {k:g}× the '
@@ -482,6 +491,8 @@ def _plain_name(botid, contract, b):
     kind = (b or {}).get('strategy') or (
         'grid' if botid in (contract.get('ranges') or {}) else 'martingale')
     market = {'inv': ' inverse', 'spo': ' spot'}.get(botid[:3], '')
+    if ((contract.get('terms') or {}).get(botid) or {}).get('trade'):
+        return f"{botid[3:-1]} {side} trade{market}"                # L6
     return (f"{botid[3:-1]} {side} "
             f"{'grid' if kind == 'grid' else 'DCA'}{market}")
 
@@ -757,6 +768,13 @@ def card(idx, botid, b, contract, belief, full=False):
     side = 'short' if botid.endswith('s') else 'long'
     flat = (abs(pos) <= 1e-12 if b is not None else
             (belief.get(botid) or {}).get('position') == 0)   # unknown ≠ flat
+    is_trade = bool(((contract.get('terms') or {}).get(botid) or {}).get('trade'))
+    if is_trade and state != 'DEAD' and not flat and not botid.startswith('spo'):
+        # L6: a live trade can be ended early from its card — the close page
+        # asks for its name and sends one reduce-only market order
+        links += (f" · <a href='/close?fleet={idx}&bot={botid}'>close trade</a>")
+    elif is_trade and state == 'DEAD':
+        links += " · <a href='/trade'>clear</a>"
     if state == 'DEAD' and not botid.startswith('spo') and not flat:
         # X15: what a stopped bot left open can be closed from here — and
         # only then: a bot known to have stood down flat has nothing to
@@ -1368,7 +1386,7 @@ def page_links(table=False, view='all'):
     block on the fleet page, a bar across the top of every other page."""
     q = '' if view == 'all' else f'?view={view}'
     return ((f'<a href="/{q}">cards</a>' if table else f'<a href="/table{q}">table</a>')
-            + '<a href="/control">control</a><a href="/setup">set up a bot</a>'
+            + '<a href="/control">control</a><a href="/setup">set up a bot</a><a href="/trade">new trade</a>'
               '<a href="/rehearse">rehearse a grid</a><a href="/export">export '
               'snapshot</a><a href="/key">key</a>')
 
@@ -1379,7 +1397,7 @@ def side_nav():
     needs, the theme. Opens the page grid; PAGE_END closes it."""
     return ('<div class="page"><nav class="side"><h3>pages</h3>'
             '<a href="/">back to your bots</a><a href="/table">table</a>'
-            '<a href="/control">control</a><a href="/setup">new bot</a>'
+            '<a href="/control">control</a><a href="/setup">new bot</a><a href="/trade">new trade</a>'
             '<a href="/rehearse">rehearse a grid</a><a href="/export">export snapshot</a>'
             '<a href="/key">key</a><a href="javascript:history.back()">&larr; back</a>'
             '<span class="dim">leaving a form saves nothing</span>'

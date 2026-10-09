@@ -928,6 +928,8 @@ def main(argv):
         return 2
     load_env()
     fleet = validate_fleet(json.loads(Path(argv[0]).read_text()))
+    from .trades import with_trades
+    fleet = with_trades(argv[0], fleet)          # L5: a trade is a bot to every reader
     from .exchange.env import select_account
     select_account(fleet['account'])                  # H5
     now_ms = int(time.time() * 1000)
@@ -960,6 +962,12 @@ def main(argv):
                         'spot_borrow': bool(cfg.get('spot_borrow')),
                         'multiplier': cfg.get('order_size_multiplier'),
                         'add_ons': cfg.get('max_averaging_orders'),
+                        # L6 (D81): a trade's exit and its record, for its card
+                        **({'trade': True, 'tp_pct': cfg.get('take_profit_avg_pct'),
+                            'stop_pct': (cfg.get('stop') or {}).get('from_base_pct'),
+                            'trail_pct': cfg.get('trailing_stop_pct'),
+                            'opened': (cfg.get('_record') or {}).get('opened'),
+                            'by': (cfg.get('_record') or {}).get('by')} if cfg.get('trade') else {}),
                         # U53: what the money is counted in — an inverse
                         # row's capital and notional are dollars ($1
                         # contracts) and its margin is the coin itself

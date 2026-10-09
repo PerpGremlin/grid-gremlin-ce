@@ -156,3 +156,107 @@ def spec_L4_the_owners_command_builds_the_trade_from_plain_words():
     assert 'required' in _refused(build_row, 'long', 'BTCUSDT', {'capital': '1'})
     assert 'long or short' in _refused(build_row, 'up', 'BTCUSDT', {'capital': '1', 'tp': '1'})
     assert 'needs a value' in _refused(_opts, ['--tp'])
+
+
+def spec_L5_every_reader_sees_a_trade_as_the_bot_it_is():
+    """The readout, the kept ledger, the digest, the market readings and the
+    close command read the fleet with its open trades among its rows; a
+    trade a config row already covers is not added twice; an unreadable
+    trades file adds nothing (the engine refuses to build beside it)."""
+    import inspect
+    from gridgremlin import close, digest, kept_fills, market, report
+    from gridgremlin.trades import with_trades
+    d = Path(tempfile.mkdtemp())
+    (d / 'configs').mkdir()
+    f = d / 'configs' / 'fleet.x.json'
+    grid = {'market_type': 'linear', 'symbol': 'ETHUSDT', 'side': 'long', 'capital': 100.0, 'leverage': 5,
+            'upper': 3000.0, 'lower': 2000.0, 'rungs': 11}
+    fleet = {'bots': [validate_config(grid)], 'account': 'default'}
+    assert with_trades(f, fleet) is fleet                              # no file: the fleet as it was
+    (d / 'logs').mkdir()
+    (d / 'logs' / 'trades-x.json').write_text(json.dumps([dict(ROW), dict(ROW, symbol='ETHUSDT')]))
+    out = with_trades(f, fleet)
+    syms = [(c['symbol'], bool(c.get('trade'))) for c in out['bots']]
+    assert syms == [('ETHUSDT', False), ('BTCUSDT', True)]               # ETHUSDT long is the grid's
+    assert out['bots'][1]['account'] == 'default' and fleet['bots'] == [fleet['bots'][0]]
+    (d / 'logs' / 'trades-x.json').write_text('{bad')
+    assert with_trades(f, fleet) is fleet
+    for mod in (report, kept_fills, digest, market, close):
+        assert 'with_trades(' in inspect.getsource(mod), mod.__name__
+
+
+def spec_L6_a_trades_card_says_it_is_a_trade_with_its_exit_and_offers_its_close():
+    import copy
+    from panel.render import kind_line
+    from panel.server import render
+    sys.path.insert(0, str(Path(__file__).parent))
+    from spec_panel import CONTRACT
+    t = {'market_type': 'linear', 'strategy': 'martingale', 'leverage': 3, 'trade': True,
+         'tp_pct': 0.006, 'stop_pct': 0.006, 'trail_pct': None, 'opened': '2026-10-09T14:01:00Z', 'by': 'owner'}
+    line = kind_line(t)
+    assert line.startswith('trade on futures') and 'take profit +0.6%' in line and 'stop −0.6% at the mark' in line
+    assert 'opened 2026-10-09 14:01 by owner' in line
+    c = copy.deepcopy(CONTRACT)
+    bot = 'linBTCUSDTl'                                   # a linear trade: spot is never offered a close
+    c['bots'][bot] = dict(next(v for v in c['bots'].values() if v), side='long', strategy='martingale')
+    c.setdefault('terms', {})[bot] = t
+    c['watchdog']['belief']['bots'][bot] = {'alive': True, 'position': 1.0}
+    html = render([('demo', c)])
+    assert 'BTCUSDT long trade' in html
+    assert f"href='/close?fleet=0&bot={bot}'>close trade</a>" in html
+    c['watchdog']['belief']['bots'][bot] = {'alive': False, 'position': None}
+    assert "<a href='/trade'>clear</a>" in render([('demo', c)])
+
+
+def spec_L6_the_panels_trade_form_opens_refuses_with_the_typing_kept_and_clears():
+    """The owner's door on the panel: the form, a refusal that keeps what was
+    typed, a trade queued in the account's trades file through the bot
+    validator, and the clear of an ended one by its typed name."""
+    from spec_setup import _call, _served_fleet
+    base, d, close = _served_fleet()
+    try:
+        page = _call(base, '/trade')
+        assert '<h1>new trade' in page and 'name="tp"' in page and 'name="stop"' in page and 'no trades' in page
+        for field in ('symbol', 'capital', 'leverage', 'tp', 'stop', 'trail', 'trail_from', 'maker'):
+            assert f'name="{field}"' in page, field                    # the form reaches every trade term
+        refused = _call(base, '/trade', {'action': 'open', 'fleet': '0', 'side': 'long', 'symbol': 'BTCUSDT',
+                                         'capital': '200', 'leverage': '3'})
+        assert 'trade refused' in refused and 'required' in refused and 'value="200"' in refused
+        taken = _call(base, '/trade', {'action': 'open', 'fleet': '0', 'side': 'long', 'symbol': 'ETHUSDT',
+                                       'capital': '200', 'tp': '1'})
+        assert 'one position per side' in taken
+        ok = _call(base, '/trade', {'action': 'open', 'fleet': '0', 'side': 'long', 'symbol': 'btcusdt',
+                                    'capital': '200', 'leverage': '3', 'tp': '0.6', 'stop': '0.6', 'maker': '1'})
+        assert 'linBTCUSDTl: queued' in ok
+        rows = json.loads((d / 'logs' / 'trades-f.json').read_text())
+        assert rows[0]['symbol'] == 'BTCUSDT' and rows[0]['start_order_type'] == 'maker' and rows[0]['by'] == 'owner'
+        listed = _call(base, '/trade')
+        assert 'linBTCUSDTl' in listed and 'long BTCUSDT 200 at 3x' in listed
+        wrong = _call(base, '/trade', {'action': 'clear', 'fleet': '0', 'confirm': 'linXRPUSDTl'})
+        assert 'not a trade' in wrong
+        cleared = _call(base, '/trade', {'action': 'clear', 'fleet': '0', 'confirm': 'linBTCUSDTl'})
+        assert 'linBTCUSDTl: cleared' in cleared and json.loads((d / 'logs' / 'trades-f.json').read_text()) == []
+    finally:
+        close()
+
+
+def spec_L1_a_live_trade_sets_its_symbols_leverage_as_the_start_does():
+    """The first live trade margined at the venue's old 10x while it stated
+    3x: the live path skipped the start's per-symbol pass. It runs it now,
+    for the trade's symbol, with every leg already there."""
+    import gridgremlin.main as m
+    seen = []
+    saved = m.build_market_bot, m._ensure_symbol_capacity
+
+    class Bot:
+        def __init__(self, sym):
+            self.cfg, self.botid = {'symbol': sym, 'venue': 'bybit'}, 'x'
+    try:
+        m.build_market_bot = lambda cfg, client, notifier, tombs, slide: (Bot(cfg['symbol']), ('linear', cfg['symbol'], 1))
+        m._ensure_symbol_capacity = lambda bots, notifier: seen.append(sorted(b.cfg['symbol'] for b in bots))
+        fleet = {'account': 'default', '_tombs': None, '_slide': None}
+        others = [Bot('BTCUSDT'), Bot('ETHUSDT')]
+        bot, ident = m.build_live_trade({'symbol': 'BTCUSDT', 'venue': 'bybit'}, fleet, {'bybit': object()}, others, None)
+        assert ident == ('linear', 'BTCUSDT', 1) and seen == [['BTCUSDT', 'BTCUSDT']]   # the other BTC leg and the trade
+    finally:
+        m.build_market_bot, m._ensure_symbol_capacity = saved

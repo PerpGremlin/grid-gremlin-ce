@@ -1283,7 +1283,10 @@ eventually pin (T1).
   built by the fleet's own builder (`main.build_market_bot`, the one every
   bot meets at the start) and appended to the running bots. A trade on a
   venue the fleet has no client for, a builder's refusal, or a position
-  another bot already holds (I2) is said and refused; the rest stand. The
+  another bot already holds (I2) is said and refused; the rest stand. A
+  live trade then gets its symbol's risk tier and leverage set on the venue
+  with every leg already there, as the start does, so it margins at the
+  leverage it states. The
   fleet file watch (F12) leaves trades alone. At a start, the trades file's
   rows join the build like any row; a malformed file refuses the build.
 - **L2** A trade is a one-round DCA row with no safety orders: its base
@@ -1303,6 +1306,19 @@ eventually pin (T1).
   Percentages are of the entry; the stop is watched at the mark by the
   engine (a venue stop sits at one fixed level, X10). Every number meets the
   bot validator.
+- **L5** Every reader sees a trade as the bot it is: the readout and its
+  cards, the kept ledger, the digest, the market readings and the close
+  command read the fleet with its open trades among its rows
+  (`trades.with_trades`); a trade a config row already covers is not added
+  twice; an unreadable trades file adds nothing.
+- **L6** The owner's door on the panel: **new trade** in the navigation
+  opens one form — account, side, market, investment, leverage, take
+  profit, stop, trailing, maker or market — written through the same
+  validator; a refusal is said above the form with the typing kept. Below
+  it, every account's trades with a typed-name clear for one that has
+  ended. A trade's card names it a trade, states its exit and who opened it
+  when, offers **close trade** while it holds (the close page, one
+  reduce-only market order) and **clear** once it has ended.
 
 ## J — the agent (D80)
 
