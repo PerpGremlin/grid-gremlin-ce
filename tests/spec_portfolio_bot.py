@@ -959,3 +959,31 @@ def spec_H4_a_loan_that_costs_more_than_the_carry_it_buys_stands_down_to_1x():
     venue.borrow.append({'time_ms': venue.t_ms - 1000, 'cost': 0.0, 'hourly_rate': 0.00000449, 'size': 0.0})
     bot.cycle()
     assert not bot.row['yield_blocks_relax'] and abs(bot.row['lever_cap'] - 1.05) < 1e-9   # eased a step
+
+
+def spec_H2_two_writers_on_one_portfolio_state_cannot_undo_each_other_and_each_fleet_has_its_own():
+    """2026-10-09, the second subaccount's first hour: both portfolio fleets
+    shared logs/portfolio_state.json; the new one loaded the old one's
+    book at its start and wrote it back stale every cycle, and the old
+    one's writes dropped the new row. A restart would have read a stale
+    book or none (a first sight that buys the stack again). Every write
+    re-reads under the lock; the default path is the fleet's own; the
+    fleet file may name it."""
+    import json
+    from gridgremlin.config import validate_fleet
+    tmp = Path(tempfile.mkdtemp())
+    f = tmp / 'p.json'
+    a, b = PortfolioState(f), PortfolioState(f)            # two fleets, one file
+    a.set('pfocarry', {'cash': 1.0})
+    b.set('pfotilt', {'cash': 2.0})                         # b never knew pfocarry
+    assert json.loads(f.read_text()) == {'pfocarry': {'cash': 1.0}, 'pfotilt': {'cash': 2.0}}
+    a.set('pfocarry', {'cash': 3.0})                        # a never knew pfotilt
+    assert json.loads(f.read_text())['pfotilt'] == {'cash': 2.0}
+    b.forget('pfotilt')
+    assert json.loads(f.read_text()) == {'pfocarry': {'cash': 3.0}}
+    f.write_text('{broken')
+    a.set('pfocarry', {'cash': 4.0})                        # the book beats bookkeeping
+    assert json.loads(f.read_text())['pfocarry'] == {'cash': 4.0}
+    raw = {'bots': [dict(ROW)], 'portfolio_state': str(tmp / 'mine.json')}
+    assert validate_fleet(raw)['portfolio_state'] == str(tmp / 'mine.json')
+    assert validate_fleet({'bots': [dict(ROW)]})['portfolio_state'] is None

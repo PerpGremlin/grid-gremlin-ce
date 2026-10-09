@@ -841,15 +841,17 @@ def spec_U10_a_refresh_does_not_shut_what_the_reader_opened():
     the export carries no script."""
     from panel.server import KEEP_JS, render
     live = _everything(CONTRACT)
-    assert '<details' not in live                      # U56: a card folds nothing
+    assert '<details class="fold"' in live             # U58: a card folds its lower half…
+    assert '<details' not in live.split('<details class="fold"')[0].split('class="cards"')[-1]   # …and nothing above it
     assert 'http-equiv="refresh"' in live and KEEP_JS in live
     assert KEEP_JS in render([('demo', CONTRACT)], table=True)
     assert '<script' not in render([('demo', CONTRACT)], static='then')
     for word in ("details[data-k]", "'toggle'", 'scrollTo', 'gg-light'):
         assert word in KEEP_JS, word
-    for word in ('fetch(', 'http://', 'https://', 'eval(', 'Math.',
-                 'localStorage', 'cookie'):
+    for word in ('http://', 'https://', 'eval(', 'Math.', 'localStorage', 'cookie'):
         assert word not in KEEP_JS, word
+    # U61: the one fetch the script makes is of this same page, nothing else
+    assert KEEP_JS.count('fetch(') == 1 and 'fetch(location.href' in KEEP_JS
 
 
 def spec_D70_a_capped_bot_says_so_on_its_card():
@@ -1644,3 +1646,83 @@ def spec_U57_the_card_judges_the_price_against_the_slid_window_and_a_quiet_bot_s
     q['marks'] = {'spoADAUSDTl': 0.2017}
     html = render([('demo', q)])
     assert 'no fills' in html and 'price 0.2017 —' in html and 'above the bottom' in html
+
+
+def spec_U58_a_cards_lower_half_folds_and_the_side_panel_folds_every_card_at_once():
+    """The owner (2026-10-09), after U56 moved the numbers to their own
+    page: the cards are still long — fold what sits under the bar, keep
+    the numbers link, and give one switch that folds or opens every card
+    so the screen can be bigger and smaller. Open by default; a per-card
+    click is remembered either way; an export shows it open."""
+    import copy
+    from panel.server import render
+    from panel.reference import KEEP_JS
+    c = copy.deepcopy(CONTRACT)
+    html = render([('demo', c)])
+    # every card: the lines under the bar sit in one open fold with its own key
+    assert html.count('<details class="fold" data-k="0:') >= len(c['bots'])
+    bot = next(b for b, v in c['bots'].items() if v is not None and c['ranges'].get(b))
+    assert f'<details class="fold" data-k="0:{bot}:fold" open><summary>details</summary>' in html
+    i = html.index(f'data-k="0:{bot}:fold"')
+    start = html.rindex('<div class="card ', 0, i)
+    assert start < html.index('<div class="rng">', start) < i          # the bar stays above the fold
+    assert 'numbers</a>' in html                                                  # U56's link stays
+    # the side panel: one switch, both ways, cards only
+    assert 'javascript:ggFold(\'folded\',\'fold\')" data-fold="folded" data-cls="fold">folded</a>' in html
+    assert 'javascript:ggFold(\'open\',\'fold\')" data-fold="open" data-cls="fold">full</a>' in html
+    assert 'data-fold="folded">' not in render([('demo', c)], table=True)   # the table folds nothing
+    # the script remembers a closed fold as well as an open one, and the switch
+    assert "open[d.dataset.k]=d.open?1:0" in KEEP_JS and "window.ggFold=function(k,c)" in KEEP_JS
+    assert "S.setItem('gg-fold:'+c,k)" in KEEP_JS
+    # an export carries no script: the fold is open as written
+    out = render([('demo', c)], static='2026-10-09 12:00 UTC')
+    assert f'data-k="0:{bot}:fold" open>' in out and 'ggFold' not in out
+
+
+def spec_U59_an_account_folds_to_its_heading_and_box_and_the_side_panel_folds_every_account():
+    """The owner (2026-10-09): each account collapsible into a smaller
+    form, individually and all at once. The heading and the exchange's
+    box stay; the cards fold behind "N bots"; the side panel's accounts
+    switch sets them all, apart from the cards switch."""
+    import copy
+    from panel.server import render
+    c = copy.deepcopy(CONTRACT)
+    html = render([('demo', c), ('hl', c)])
+    for i in (0, 1):
+        assert f'<details class="acct" data-k="acct:{i}" open><summary>{len(c["bots"])} bots</summary><div class="cards">' in html
+        h1 = html.index(f'<h1 id="fleet{i}">')
+        box = html.index('<span class="dim">this exchange</span>', h1)
+        assert h1 < box < html.index(f'data-k="acct:{i}"', h1)      # heading, box, then the fold
+    assert 'javascript:ggFold(\'folded\',\'acct\')" data-fold="folded" data-cls="acct">folded</a>' in html
+    assert 'javascript:ggFold(\'open\',\'acct\')" data-fold="open" data-cls="acct">full</a>' in html
+    assert 'data-cls="fold">folded</a>' in html                       # the cards switch is its own
+    # one link beside each account's count folds or opens that account's cards alone
+    for i in (0, 1):
+        assert f'bots <a href="javascript:ggFoldIn({i})" data-foldin="{i}" class="tier">fold cards</a>' in html
+    from panel.server import KEEP_JS
+    assert 'details.acct[data-k="acct:\'+i+\'"] details.fold' in KEEP_JS and 'window.ggFoldIn=function(i)' in KEEP_JS
+    assert "a.textContent=all?'fold cards':'open cards'" in KEEP_JS
+    assert 'data-cls="acct"' not in render([('demo', c)], table=True)   # the table folds nothing
+    out = render([('demo', c)], static='then')
+    assert 'data-k="acct:0" open>' in out and 'ggFold' not in out
+
+
+def spec_U61_the_live_page_refreshes_in_place_and_never_reloads_whole():
+    """The owner (2026-10-09): the refresh flickers the whole screen every
+    few seconds. The live page carries no reload now; its script fetches
+    this same URL and swaps the strip and the cards in place, re-wiring
+    what folds; without script the old whole-page refresh stands; an
+    export refreshes nothing."""
+    from panel.render import REFRESH_S
+    from panel.server import KEEP_JS, render
+    live = render([('demo', CONTRACT)])
+    assert f'<meta name="gg-refresh" content="{REFRESH_S}">' in live
+    assert live.count('http-equiv="refresh"') == 1
+    assert f'<noscript><meta http-equiv="refresh" content="{REFRESH_S}"></noscript>' in live
+    assert "fetch(location.href,{credentials:'same-origin',cache:'no-store'})" in KEEP_JS
+    assert "['.hero','main']" in KEEP_JS and 'innerHTML=b.innerHTML' in KEEP_JS
+    assert "wire(document.querySelector('main')" in KEEP_JS          # the swapped cards fold as before
+    table = render([('demo', CONTRACT)], table=True)
+    assert 'name="gg-refresh"' in table and table.count('http-equiv="refresh"') == 1
+    out = render([('demo', CONTRACT)], static='then')
+    assert 'gg-refresh' not in out and 'http-equiv="refresh"' not in out and '<script' not in out

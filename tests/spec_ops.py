@@ -141,15 +141,21 @@ def spec_G22_the_split_gives_each_fleet_its_own_state_from_the_old_file_and_its_
     (d / 'logs' / 'tombstones.json').write_text(json.dumps(
         {'linBTCUSDTl': {'reason': 'stop'}, 'pfocarry': {'reason': 'loss'}, 'linOLDl': {'reason': 'gone'}}))
     (d / 'logs' / 'tombstones-carry.json').write_text(json.dumps({'linBTCUSDTs': {'reason': 'kept'}}))
+    (d / 'logs' / 'portfolio_state.json').write_text(json.dumps(
+        {'pfocarry': {'cash': 1.0}, 'pfogone': {'cash': 9.0}}))
+    (d / 'logs' / 'portfolio_state-carry.json').write_text(json.dumps({'pfocarry': {'cash': 2.0}}))
     p = split.plan([demo, carry])
+    assert p['fleets']['carry']['portfolio_state']['rows'] == {'pfocarry': {'cash': 2.0}}   # the per-fleet row wins
+    assert p['fleets']['demo']['portfolio_state']['rows'] == {}
+    assert p['orphans']['portfolio_state'] == {'pfogone': {'cash': 9.0}}
     assert p['fleets']['demo']['slide_state']['rows'] == {'linBTCUSDTl': -28, 'linSOLUSDTl': -14}
     assert p['fleets']['carry']['slide_state']['rows'] == {'linBTCUSDTl': -3}
     assert p['fleets']['demo']['tombstones']['rows'] == {'linBTCUSDTl': {'reason': 'stop'}}
     assert p['fleets']['carry']['tombstones']['rows'] == {
         'linBTCUSDTl': {'reason': 'stop'}, 'pfocarry': {'reason': 'loss'},
         'linBTCUSDTs': {'reason': 'kept'}}
-    assert p['orphans'] == {'tombstones': {'linOLDl': {'reason': 'gone'}},
-                            'slide_state': {'linETHs': -24}}
+    assert p['orphans']['tombstones'] == {'linOLDl': {'reason': 'gone'}}
+    assert p['orphans']['slide_state'] == {'linETHs': -24}
     try:
         split.commit([demo, carry], p, running=lambda f: f.endswith('fleet.carry.json'))
     except split.Refused as e:
@@ -163,7 +169,8 @@ def spec_G22_the_split_gives_each_fleet_its_own_state_from_the_old_file_and_its_
     assert json.loads((d / 'logs' / 'tombstones-carry.json').read_text())['linBTCUSDTs'] == {'reason': 'kept'}
     assert not (d / 'logs' / 'slide_state.json').exists()
     assert json.loads((d / 'logs' / 'archive' / 'slide_state.pre-split.json').read_text())['linETHs'] == -24
-    assert [str(m[1].name) for m in moved] == ['tombstones.pre-split.json', 'slide_state.pre-split.json']
+    assert [str(m[1].name) for m in moved] == ['tombstones.pre-split.json', 'slide_state.pre-split.json',
+                                               'portfolio_state.pre-split.json']
     try:
         split.plan([demo, d / 'elsewhere' / 'fleet.x.json'])
     except split.Refused as e:

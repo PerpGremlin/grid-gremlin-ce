@@ -65,11 +65,19 @@ What runs, from the inside out:
 
 13. **One state file per fleet** (`ops/split_local_state.py`, X7b/G22) —
     run once per box, with every fleet stopped, when a box still holds the
-    fleet-wide `logs/tombstones.json` or `logs/slide_state.json`: each fleet
+    fleet-wide `logs/tombstones.json`, `logs/slide_state.json` or
+    `logs/portfolio_state.json`: each fleet
     gets its own rows (a window offset from its latest snapshot when it has
     one), leftovers are named and kept only in the archive copy, the old
     files move to `logs/archive/`. The engine refuses to start beside the
     old files until it has run.
+
+14. **The expiry calendar** (`configs/expiry.json`, F29/D79) — what runs
+    out and when: keys, tokens, demo accounts, the box's billing. The demo
+    watchdog names it (`expiry`) and pages a week out (`expiry_warn_days`),
+    names what has run out, and reminds on its own interval;
+    `python3 -m gridgremlin.expiry configs/expiry.json` prints the list.
+    Dates are the owner's to fill; unknown is listed, never paged.
 
 > **Retired: the box-side Claude** — triage on failure, the Telegram relay
 > and the daily range review, now in `ops/retired/` (its README says why).
@@ -94,7 +102,9 @@ keys as it reads the file. Per fleet: `fleet.service` →
 `grid-gremlin3-<fleet>-watchdog-failed.service`. Once per box, listing every
 fleet file in `{{MORE_FLEET_CONFIGS}}`: `logrotate.*`, `fills.*`, `archive.*`,
 `digest.*`, `market.*`, `market-report.*` → `grid-gremlin3-<name>.*`; `phone.service` →
-`grid-gremlin3-phone.service`; `panel.service` → `gg-panel.service`.
+`grid-gremlin3-phone.service`; `panel.service` → `gg-panel.service`. The
+panel shows the fleets in the order its unit names them — the owner's: the
+Bybit accounts first, Hyperliquid after (U59).
 
 ```
 cp grid-gremlin3-*.service grid-gremlin3-*.timer gg-panel.service ~/.config/systemd/user/

@@ -18,9 +18,12 @@ from pathlib import Path
 # last writer won — the HL fleet's slide wrote back a copy taken before the
 # demo's BTC, SOL and XRP windows moved, and those offsets were gone. The
 # demo and carry fleets also share botids (both run a BTCUSDT pair), so a
-# shared file could never be right even with a re-read. The fleet's own key
+# shared file could never be right even with a re-read. The portfolio
+# state had the same flaw the same day: the second subaccount's fleet
+# loaded the first's book at its start and wrote it back stale every cycle,
+# and the first's writes dropped the second's row. The fleet's own key
 # still wins; the fleet-wide file refuses the build, naming the split.
-STATE_KINDS = ('tombstones', 'slide_state')
+STATE_KINDS = ('tombstones', 'slide_state', 'portfolio_state')
 
 
 class LegacyStateError(Exception):
@@ -49,7 +52,7 @@ def fleet_tag(fleet_path):
 
 def state_path(fleet_path, fleet_raw, kind):
     """Where a fleet's local durable fact lives — its own key
-    (`tombstones`, `slide_state`), else logs/<kind>-<fleet>.json beside its
+    (`tombstones`, `slide_state`, `portfolio_state`), else logs/<kind>-<fleet>.json beside its
     home — the one answer for the engine, close, flatten and the panel."""
     if kind not in STATE_KINDS:
         raise ValueError(kind)
@@ -59,8 +62,9 @@ def state_path(fleet_path, fleet_raw, kind):
 
 
 def refuse_legacy_state(fleet_path, fleet_raw):
-    """At build: a fleet-wide logs/tombstones.json or logs/slide_state.json
-    beside a fleet that does not name it is the old shared file — refuse,
+    """At build: a fleet-wide logs/tombstones.json, logs/slide_state.json or
+    logs/portfolio_state.json beside a fleet that does not name it is the
+    old shared file — refuse,
     naming the split, rather than start every window at home and every
     stopped bot alive."""
     for kind in STATE_KINDS:

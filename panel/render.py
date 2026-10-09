@@ -607,12 +607,24 @@ def card(idx, botid, b, contract, belief, full=False):
         # the close page asks the exchange itself
         links += (f" · <a href='/close?fleet={idx}&bot={botid}'>close "
                   'position</a>')
+    # U58: the lines under the bar fold behind one word, so a card can be
+    # small; the click is remembered per card, and the side panel folds or
+    # opens every card at once (the owner, 2026-10-09: "toggle all so it
+    # can be bigger and smaller"). The numbers stay the page's (U56).
     return (f'<div class="card {side}"><div>'
             f'<span class="side {side}">{side.upper()}</span> <b>'
             f'{_plain_name(botid, contract, b)}</b>{note} '
             f'{state_tag(state, cls)}</div>'
-            f'<div>{head}</div>{where}<div class="dim">{held}</div>{more}'
+            f'<div>{head}</div>{where}{fold(idx, botid, f'<div class="dim">{held}</div>')}{more}'
             f'<div class="dim foot"><span>{botid}</span><span>{links}</span></div></div>')
+
+
+def fold(idx, botid, inner, word='details'):
+    """U58: a card's lower half behind a summary word — open by default,
+    remembered per card by the page's script, folded or opened for every
+    card by the side panel's switch. An export (no script) shows it open."""
+    return (f'<details class="fold" data-k="{idx}:{botid}:fold" open>'
+            f'<summary>{word}</summary>{inner}</details>')
 
 
 VIEWS = (('all', 'as listed'), ('side', 'longs / shorts'),
@@ -880,8 +892,9 @@ def portfolio_card(idx, botid, contract, belief, full=False):
     # side, the assets below, the footer aligned with every other card's
     return (f'<div class="card pfo"><div><span class="side pfo">PORTFOLIO</span> <b>{name}</b> '
             f'{state_tag(state, cls)}</div><div class="dim">{kind}</div>'
-            f'<div class="two"><div>{head}</div><div>{facts}</div></div>{body}'
-            f'<div class="dim foot"><span>{botid}</span><span>{links}</span></div></div>')
+            f'<div class="two"><div>{head}</div><div>{facts}</div></div>'
+            + (fold(idx, botid, body, word='assets') if body else '')          # U58
+            + f'<div class="dim foot"><span>{botid}</span><span>{links}</span></div></div>')
 
 
 def exchange_table(botid, b, belief, terms):
@@ -972,7 +985,7 @@ def venue_money(contract):
     return '/'.join(coins) if coins else 'quote'
 
 
-def cards_section(idx, label, contract, view='all'):
+def cards_section(idx, label, contract, view='all', scripted=True):
     age = max(0, int(time.time() - contract['generated_ms'] / 1000))
     belief = ((contract.get('watchdog') or {}).get('belief')
               or {}).get('bots', {})
@@ -990,8 +1003,12 @@ def cards_section(idx, label, contract, view='all'):
                   for botid, b in rows)
         for title, rows in grouped(contract, view))
     # U45: the exchange's money in a box of its own, under its name
+    # U59: one link beside the count folds or opens this account's cards
+    # alone; its word says which it will do next
     return (f"<h1 id=\"fleet{idx}\">{label} {tier_badge(contract)} — {len(contract['bots'])} bots "
-            f'{sweep_note(contract)} <span class="dim">(read {age}s ago; '
+            + (f'<a href="javascript:ggFoldIn({idx})" data-foldin="{idx}" class="tier">fold cards</a> '
+               if scripted else '')               # an export has no script to run it
+            +             f'{sweep_note(contract)} <span class="dim">(read {age}s ago; '
             f'refreshes every {REFRESH_S}s)</span></h1>'
             f'<div class="pnl {_num_cls(total)}"><span class="dim">this '
             'exchange</span> <span class="big '
@@ -1000,7 +1017,11 @@ def cards_section(idx, label, contract, view='all'):
             f'<div class="parts">'
             f'{pnl_parts(net, sum(opened) if opened else None, funding)}'
             f'</div>{exchange_since_first(contract)}{exchange_leverage(contract)}</div>'
-            f'<div class="cards">{cards}</div>')
+            # U59: the account folds to its heading and its box; the side
+            # panel folds or opens every account at once
+            f'<details class="acct" data-k="acct:{idx}" open><summary>'
+            f"{len(contract['bots'])} bots</summary>"
+            f'<div class="cards">{cards}</div></details>')
 
 
 def section(idx, label, contract, view='all'):
@@ -1171,6 +1192,33 @@ SIZE_VIEWS = (('all', 'all'), ('coin', 'coins'), ('value', 'value'),
               ('cost', 'cost'))
 
 
+def page_links(table=False, view='all'):
+    """U60: every page of the panel, as links — the side panel's first
+    block on the fleet page, a bar across the top of every other page."""
+    q = '' if view == 'all' else f'?view={view}'
+    return ((f'<a href="/{q}">cards</a>' if table else f'<a href="/table{q}">table</a>')
+            + '<a href="/control">control</a><a href="/setup">set up a bot</a>'
+              '<a href="/rehearse">rehearse a grid</a><a href="/export">export '
+              'snapshot</a><a href="/key">key</a>')
+
+
+def side_nav():
+    """U60: the column every page outside the fleet page wears, the fleet
+    page's own shape — the pages, a way back, the one warning a form
+    needs, the theme. Opens the page grid; PAGE_END closes it."""
+    return ('<div class="page"><nav class="side"><h3>pages</h3>'
+            '<a href="/">back to your bots</a><a href="/table">table</a>'
+            '<a href="/control">control</a><a href="/setup">new bot</a>'
+            '<a href="/rehearse">rehearse a grid</a><a href="/export">export snapshot</a>'
+            '<a href="/key">key</a><a href="javascript:history.back()">&larr; back</a>'
+            '<span class="dim">leaving a form saves nothing</span>'
+            '<button class="quiet theme" onclick="document.documentElement.'
+            'classList.toggle(\'light\')">theme</button></nav><main>')
+
+
+PAGE_END = '</main></div>'
+
+
 def nav_panel(table, view):
     """U51 (the owner: the links at the bottom and the switches at the top
     "may be better as a side panel"): every page link and every view
@@ -1179,19 +1227,20 @@ def nav_panel(table, view):
     size in, leverage, theme. The live page only; the export has no
     actions to offer."""
     here = '/table' if table else '/'
-    q = '' if view == 'all' else f'?view={view}'
-    pages = ((f'<a href="/{q}">cards</a>' if table else
-              f'<a href="/table{q}">table</a>')
-             + '<a href="/control">control</a><a href="/setup">set up a bot</a>'
-               '<a href="/rehearse">rehearse a grid</a><a href="/export">export '
-               'snapshot</a><a href="/key">key</a>')
+    pages = page_links(table, view)
     arrange = ''.join(
         f'<b class="on">{words}</b>' if key == view else
         f'<a href="{here}{"" if key == "all" else "?view=" + key}">{words}</a>'
         for key, words in VIEWS)
-    # U22's show-all switch is gone: the numbers live on each position's
-    # own page now (U56), and a card folds nothing
-    numbers = ''
+    # U58: every card's lower half, folded or open at once — where U22's
+    # show-all switch was; the numbers themselves live on the position's
+    # page (U56)
+    numbers = ('' if table else
+               '<h3>cards</h3><a href="javascript:ggFold(\'open\',\'fold\')" data-fold="open" data-cls="fold">full</a>'
+               '<a href="javascript:ggFold(\'folded\',\'fold\')" data-fold="folded" data-cls="fold">folded</a>'
+               # U59: every account's cards behind its heading and its box
+               '<h3>accounts</h3><a href="javascript:ggFold(\'open\',\'acct\')" data-fold="open" data-cls="acct">full</a>'
+               '<a href="javascript:ggFold(\'folded\',\'acct\')" data-fold="folded" data-cls="acct">folded</a>')
     # U44: what a holding is said in, as Bybit's preference
     size = ''.join(f'<a href="javascript:ggSize(\'{k}\')" data-size="{k}">{w}</a>'
                    for k, w in SIZE_VIEWS)
@@ -1213,13 +1262,19 @@ def render(labelled, static=None, table=False, view='all'):
     face = section if table else cards_section
     if view not in dict(VIEWS):
         view = 'all'
-    body = ''.join(face(i, lb, c, view) for i, (lb, c) in enumerate(labelled))
+    body = ''.join(face(i, lb, c, view, scripted=not static) if not table else face(i, lb, c, view)
+                   for i, (lb, c) in enumerate(labelled))
     if static:
         head = ''
         chrome = (f'<p class="dim">exported {static} — a snapshot, '
                   'not a live view; the fleet has moved since.</p>')
     else:                                        # U51: the side panel
-        head = f'<meta http-equiv="refresh" content="{REFRESH_S}">'
+        # U61: the page refreshes in place — the script fetches this same
+        # URL and swaps the strip and the cards, so nothing flickers and
+        # nothing the reader opened or scrolled to moves; without script,
+        # the old whole-page refresh
+        head = (f'<meta name="gg-refresh" content="{REFRESH_S}">'
+                f'<noscript><meta http-equiv="refresh" content="{REFRESH_S}"></noscript>')
         body = f'<div class="page">{nav_panel(table, view)}<main>{body}</main></div>'
         chrome = KEEP_JS
     return f"""<!doctype html><meta charset="utf-8">

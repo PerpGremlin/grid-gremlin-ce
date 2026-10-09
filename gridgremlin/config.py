@@ -58,7 +58,7 @@ SLIDE_DIRECTIONS = ('favourable', 'both')   # D28 default; D34 opt-in
 START_ORDER_TYPES = ('market', 'maker')       # D37: the base order's entry
 FLEET_KEYS = ('bots', 'poll_seconds', 'allow_mainnet', 'preflight', 'account_caps',
               'risk_profiles', 'account', 'label',
-              'tombstones', 'slide_state',
+              'tombstones', 'slide_state', 'portfolio_state',
               'notify_orders', 'watchdog')
 
 # C2 — renames. old key -> (new key, message).
@@ -969,6 +969,7 @@ def validate_fleet(data, where='fleet'):
         'risk_profiles': validate_profiles(data.get('risk_profiles'), where),
         'tombstones': data.get('tombstones'),            # X7 path (default logs/)
         'slide_state': data.get('slide_state'),          # G22 path (default logs/)
+        'portfolio_state': data.get('portfolio_state'),  # H2 path (default logs/)
         'account': _account_name(data.get('account'), where),   # H5: whose keys
         'label': _fleet_label(data.get('label'), where),         # U55: the dash's name for it
     }
