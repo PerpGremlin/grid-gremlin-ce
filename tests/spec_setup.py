@@ -36,7 +36,9 @@ def spec_U1_the_advanced_form_reaches_every_config_key():
             | {f'slide.{k}' for k in SLIDE_KEYS})
     assert grid - config_paths('grid') == set()
     # rungs_beyond follows a sliding window; a martingale has none (X8)
-    mart = (set(MARTINGALE_KEYS)
+    # 'trade' marks a one-round row in the trades file, never a bot row the
+    # form writes: the trade form (D81, stage 2) is where it is reached
+    mart = (set(MARTINGALE_KEYS) - {'trade'}
             | {f'stop.{k}' for k in STOP_KEYS if k != 'rungs_beyond'})
     assert mart - config_paths('martingale') == set()
 
