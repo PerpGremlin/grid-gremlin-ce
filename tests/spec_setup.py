@@ -407,8 +407,11 @@ def spec_P1_the_panel_holds_its_boundary_behind_the_token():
         tp.write_text(json.dumps({'<b>x</b>': {'reason': '<script>1</script>'}}))
 
         class Me:
-            def _tombs_path(self):
+            labels = ('f',)
+
+            def _tombs_path(self, fi=0):
                 return tp
+            _tombs_all = Handler._tombs_all
         page = Handler._tombs_html(Me())
         assert '<script>1</script>' not in page and '&lt;script&gt;' in page
         assert '<b>x</b>' not in page

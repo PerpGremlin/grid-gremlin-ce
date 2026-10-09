@@ -109,3 +109,64 @@ def spec_F28_the_runbook_names_every_unit_timer_and_command_that_exists():
                  'systemctl --user stop grid-gremlin3-demo grid-gremlin3-hl', '/remote-control'):
         assert tool in page, tool
     assert len(page.splitlines()) < 140                       # one page, not a manual
+
+
+def spec_G22_the_split_gives_each_fleet_its_own_state_from_the_old_file_and_its_snapshot():
+    """ops/split_local_state.py, once per box (2026-10-08): the old shared
+    files are dealt out by botid, a window offset comes from the fleet's
+    latest snapshot when it has one (the clobbered file lost it; the
+    running fleet's belief did not), the same botid in two fleets lands in
+    both, rows already in a per-fleet file stay, leftovers are named and
+    kept only in the archive copy, a running fleet refuses the commit."""
+    import importlib.util
+    import json
+    spec = importlib.util.spec_from_file_location(
+        'split_local_state', ROOT / 'ops' / 'split_local_state.py')
+    split = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(split)
+    d = Path(tempfile.mkdtemp())
+    (d / 'configs').mkdir()
+    (d / 'logs').mkdir()
+    btc = {'market_type': 'linear', 'symbol': 'BTCUSDT', 'side': 'long'}
+    demo = d / 'configs' / 'fleet.demo.json'
+    carry = d / 'configs' / 'fleet.carry.json'
+    demo.write_text(json.dumps({'watchdog': 'configs/watchdog.demo.json',
+                                'bots': [btc, dict(btc, symbol='SOLUSDT')]}))
+    carry.write_text(json.dumps({'bots': [btc, {'strategy': 'portfolio', 'name': 'carry'}]}))
+    (d / 'configs' / 'watchdog.demo.json').write_text(json.dumps({'snapshot': 'logs/snapshots-demo.jsonl'}))
+    (d / 'logs' / 'snapshots-demo.jsonl').write_text(
+        json.dumps({'bots': {'linBTCUSDTl': {'offset': -28}, 'linSOLUSDTl': {'offset': -14}}}) + '\n'
+        + '{broken\n')
+    (d / 'logs' / 'slide_state.json').write_text(json.dumps({'linBTCUSDTl': -3, 'linETHs': -24}))
+    (d / 'logs' / 'tombstones.json').write_text(json.dumps(
+        {'linBTCUSDTl': {'reason': 'stop'}, 'pfocarry': {'reason': 'loss'}, 'linOLDl': {'reason': 'gone'}}))
+    (d / 'logs' / 'tombstones-carry.json').write_text(json.dumps({'linBTCUSDTs': {'reason': 'kept'}}))
+    p = split.plan([demo, carry])
+    assert p['fleets']['demo']['slide_state']['rows'] == {'linBTCUSDTl': -28, 'linSOLUSDTl': -14}
+    assert p['fleets']['carry']['slide_state']['rows'] == {'linBTCUSDTl': -3}
+    assert p['fleets']['demo']['tombstones']['rows'] == {'linBTCUSDTl': {'reason': 'stop'}}
+    assert p['fleets']['carry']['tombstones']['rows'] == {
+        'linBTCUSDTl': {'reason': 'stop'}, 'pfocarry': {'reason': 'loss'},
+        'linBTCUSDTs': {'reason': 'kept'}}
+    assert p['orphans'] == {'tombstones': {'linOLDl': {'reason': 'gone'}},
+                            'slide_state': {'linETHs': -24}}
+    try:
+        split.commit([demo, carry], p, running=lambda f: f.endswith('fleet.carry.json'))
+    except split.Refused as e:
+        assert 'running' in str(e)
+    else:
+        raise AssertionError('committed under a running fleet')
+    assert (d / 'logs' / 'slide_state.json').exists()           # nothing moved
+    moved = split.commit([demo, carry], p, running=lambda f: False)
+    assert json.loads((d / 'logs' / 'slide_state-demo.json').read_text()) == {
+        'linBTCUSDTl': -28, 'linSOLUSDTl': -14}
+    assert json.loads((d / 'logs' / 'tombstones-carry.json').read_text())['linBTCUSDTs'] == {'reason': 'kept'}
+    assert not (d / 'logs' / 'slide_state.json').exists()
+    assert json.loads((d / 'logs' / 'archive' / 'slide_state.pre-split.json').read_text())['linETHs'] == -24
+    assert [str(m[1].name) for m in moved] == ['tombstones.pre-split.json', 'slide_state.pre-split.json']
+    try:
+        split.plan([demo, d / 'elsewhere' / 'fleet.x.json'])
+    except split.Refused as e:
+        assert 'logs/' in str(e)
+    else:
+        raise AssertionError('two logs directories were split as one')

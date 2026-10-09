@@ -63,6 +63,14 @@ What runs, from the inside out:
     ssh alias already in use, dated and hard-linked, thirty days kept. Its
     README has the install, and the rebuild recipe.
 
+13. **One state file per fleet** (`ops/split_local_state.py`, X7b/G22) —
+    run once per box, with every fleet stopped, when a box still holds the
+    fleet-wide `logs/tombstones.json` or `logs/slide_state.json`: each fleet
+    gets its own rows (a window offset from its latest snapshot when it has
+    one), leftovers are named and kept only in the archive copy, the old
+    files move to `logs/archive/`. The engine refuses to start beside the
+    old files until it has run.
+
 > **Retired: the box-side Claude** — triage on failure, the Telegram relay
 > and the daily range review, now in `ops/retired/` (its README says why).
 > Retired by the owner 2026-09-28, switched off for good 2026-10-06: the

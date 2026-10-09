@@ -204,7 +204,12 @@ class Client:
 NOT_MODIFIED_CODES = {110025, 110043, 34040, 110075}
 CANNOT_MODIFY_CODES = {110024, 110028}
 RO_CAPACITY_CODES = {110017}
-MARGIN_CODES = {110004, 110006, 110007, 110012, 110044, 110045, 110052, 170131}
+# 110090: "the combined value of positions and orders has reached the limit
+# of the current risk tier" — the tier's cap, not a rung's fault. Classed
+# 'other' it flapped every buy rung of a 28-rung adverse slide for 13 hours,
+# a page a minute (2026-10-08); as 'margin' B7 halts growth and backs off.
+MARGIN_CODES = {110004, 110006, 110007, 110012, 110044, 110045, 110052, 110090,
+                170131}
 
 
 def _post_kind(ret_code, ret_msg=''):

@@ -22,6 +22,8 @@ from .exchange.errors import VenueError
 from .exchange.env import load_env
 from .ladder import grid_rungs, position_cap
 from .slide_state import SlideState, SlideStateError
+from .durable import (LegacyStateError, logs_dir, refuse_legacy_state,
+                      state_path)
 from .tombstones import Tombstones, TombstoneError
 from .watchdog import validate_watchdog
 
@@ -381,12 +383,8 @@ def placeable_or_dead(cfg, adapter):
 
 
 def _logs_dir(fleet_path):
-    """logs/ beside the fleet's home: configs/x.json -> configs/../logs;
-    a fleet file anywhere else keeps logs as its sibling. Anchored to the
-    file so every launcher agrees, whatever directory it ran from."""
-    parent = Path(fleet_path).resolve().parent
-    root = parent.parent if parent.name == 'configs' else parent
-    return root / 'logs'
+    """logs/ beside the fleet's home (durable.logs_dir)."""
+    return logs_dir(fleet_path)
 
 
 def build_fleet(fleet_path, notifier, allow_mainnet=False):
@@ -400,16 +398,11 @@ def build_fleet(fleet_path, notifier, allow_mainnet=False):
                        f'{where} ({label}) is skipped — {reason} — the '
                        'rest start (D52)')
     try:
-        tombs = Tombstones(fleet.get('tombstones')
-                           or str(_logs_dir(fleet_path)
-                                  / 'tombstones.json'))
-    except TombstoneError as e:
-        raise ConfigError(str(e)) from e
-    try:
-        slide = SlideState(fleet.get('slide_state')
-                           or str(_logs_dir(fleet_path) / 'slide_state.json'))
-    except SlideStateError as e:            # G22: fails CLOSED like X7
-        raise ConfigError(str(e)) from e
+        refuse_legacy_state(fleet_path, fleet)       # one file per fleet
+        tombs = Tombstones(str(state_path(fleet_path, fleet, 'tombstones')))
+        slide = SlideState(str(state_path(fleet_path, fleet, 'slide_state')))
+    except (LegacyStateError, TombstoneError, SlideStateError) as e:
+        raise ConfigError(str(e)) from e            # G22/X7: fail CLOSED
     clients, bots, identities = {}, [], []
     pstate = None
     for cfg in fleet['bots']:
@@ -438,7 +431,7 @@ def build_fleet(fleet_path, notifier, allow_mainnet=False):
                 _vn(notifier, venue).event('warn', bot.botid,
                                            'tombstoned — a stop fired '
                                            f'({tombs.reason(bot.botid)}); remove the entry '
-                                           f"from {fleet.get('tombstones') or 'logs/tombstones.json'} "
+                                           f'from {tombs.path} '
                                            'to revive, deliberately')
             bots.append(bot)
             continue
@@ -531,7 +524,7 @@ def build_fleet(fleet_path, notifier, allow_mainnet=False):
             _vn(notifier, venue).event('warn', bot.botid,
                            'tombstoned — a stop fired '
                            f'({tombs.reason(bot.botid)}); remove the entry '
-                           f"from {fleet.get('tombstones') or 'logs/tombstones.json'} "
+                           f'from {tombs.path} '
                            'to revive, deliberately')
         limit = 16 if venue == 'hyperliquid' else BYBIT_LINK_LIMIT
         chars = 4 if venue == 'hyperliquid' else 10

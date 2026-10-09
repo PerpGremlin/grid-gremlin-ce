@@ -171,6 +171,21 @@ def spec_E7_every_kind_reacts_and_none_kills():
     assert KIND_REACTIONS['flat'] == 'treat_done'
 
 
+def spec_B7_bybits_tier_cap_is_a_margin_refusal_not_a_rung_flap():
+    """2026-10-08: a 28-rung adverse slide at 75x met Bybit's risk-tier cap
+    (110090, "the combined value of positions and orders has reached the
+    limit of the current risk tier"). Classed 'other', every buy rung was
+    placed, refused, struck out and cooled, and each cooling paged — a
+    page a minute for 13 hours. The cap is the account's standing, not a
+    rung's: 'margin', so B7 halts growth and backs off."""
+    from gridgremlin.exchange.bybit.client import _post_kind
+    from gridgremlin.exchange.errors import KIND_REACTIONS
+    assert _post_kind(110090, 'The combined value of positions and orders has '
+                      'reached the limit of the current risk tier.') == 'margin'
+    assert _post_kind(110007, 'ab not enough for new order') == 'margin'
+    assert KIND_REACTIONS[_post_kind(110090)] == 'backoff_growth_only'
+
+
 def spec_E7_zero_position_is_the_close_we_expected_not_a_warning():
     # pins: E7b
     """Live 2026-10-05: every tranche round's end logged two warns — the

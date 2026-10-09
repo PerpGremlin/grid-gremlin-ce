@@ -190,8 +190,12 @@ eventually pin (T1).
   and the row's side (both sides under G24); missing means home — safe, because every link carries its
   absolute index (G17), so a resting order outside home is cancelled or re-adopted
   by the same diff as always (a lost ratchet, never lost money). The file fails
-  CLOSED like the tombstone; a failed WRITE never blocks the slide itself. *(D28;
-  BACKLOG §6 PR B)*
+  CLOSED like the tombstone; a failed WRITE never blocks the slide itself. One
+  file per fleet (`logs/slide_state-<fleet>.json`, X7b's rule), each write
+  re-read under the lock: on 2026-10-08 two fleets shared one file and the HL
+  fleet's slide wrote back a copy taken before the demo's BTC, SOL and XRP
+  windows moved — 28 rungs of a held position, gone from the file. *(D28;
+  BACKLOG §6 PR B; the clobber 2026-10-08)*
 - **G24** The adverse slide is opt-in (`slide.direction: both`, default `favourable`):
   the window also moves when the ref sits `trigger_rungs` beyond the ADVERSE edge (a
   long's bottom, a short's top), by G18's landing, G19's clamp (±`max_rungs`) and
@@ -262,7 +266,11 @@ eventually pin (T1).
 - **B6** Every cooldown is per-cause: distinguishable in state, in logs, and in events.
   *(CONCEPTS §12·N9)*
 - **B7** Margin backoff halts growth only — cancels still run — doubling to a ceiling,
-  retrying forever.
+  retrying forever. The venue's cap on a position's value is a margin refusal
+  too: Bybit's 110090 (the risk tier's limit on positions plus orders) classed
+  as a rung's fault flapped every buy rung of a 28-rung adverse slide for 13
+  hours, a page a minute *(2026-10-08)*; as `margin` the growth halts and the
+  phone hears the backoff.
 - **B8** Spacing must clear the guard band with stated margin, against the true
   minimum gap, not the mean — checked at BUILD against live quotes (the guard
   depends on the live spread), stated loudly rather than refused on a transient
@@ -651,8 +659,16 @@ eventually pin (T1).
   inside the lock, and write it atomically with fsync; neither can undo the
   other (a revive undone by the next stop, or a stop's row lost to a revive's
   write). Engine, close command and panel find the file by one rule: the
-  fleet's `tombstones` key, else logs/ beside its home. The slide state
-  writes the same durable way, under the lock. *(audit 2026-10-05, 2026-10-08)*
+  fleet's `tombstones` key, else `logs/tombstones-<fleet>.json` beside its
+  home, the fleet named by its file (`fleet.demo.json` → `demo`). ONE FILE
+  PER FLEET: two fleets sharing one file each held their own copy since
+  their build and the last writer won; and the demo and carry fleets share
+  botids (both run a BTCUSDT pair), so a shared file could never be right.
+  The old fleet-wide `logs/tombstones.json` or `logs/slide_state.json`
+  beside a fleet that does not name it REFUSES the build, naming the split
+  (`ops/split_local_state.py`, once, with every fleet stopped). The slide
+  state writes the same durable way, under the lock, re-read inside it.
+  *(audit 2026-10-05, 2026-10-08; the clobbered slide file 2026-10-08)*
 - **X7** A fired stop survives the process: the tombstone is durable BEFORE the
   flatten (a crash mid-stop stays dead), a tombstoned botid builds dead-and-visible
   (F4), and revival is a deliberate operator act — delete the entry, never automatic.
@@ -1300,7 +1316,13 @@ that pins it (T1).
   — above it the loan stands down (the cap to 1×, planned at the next
   read, said once an hour) and the ratchet does not ease back while the
   rate stays above. *(measured 2026-10-08 on the carry sub: 0.000449%
-  an hour, 3.93% a year, 2.34 USDT for the first hour on 520k)* Past
+  an hour, 3.93% a year, 2.34 USDT for the first hour on 520k)* The loan
+  stands down the same way when the shorts' trailing funding, as a yearly
+  yield on what they cover at mark, is under the venue's rate (H1: a loan
+  that costs more than the carry it buys is a levered long with a bill) —
+  judged once the row has a day of history, over the funding rule's
+  window, and the ratchet does not ease back while it holds *(designed in
+  H1, found unbuilt 2026-10-09)*. Past
   `basis_stop_pct` between an asset's perp and spot marks, that asset's
   pair alone is unwound — hedge bought back, coins sold, the quote parked
   — and the rest held; it re-enters from its parked cash when the basis is

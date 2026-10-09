@@ -343,24 +343,51 @@ class PortfolioBot:
         if rows:
             row['interest_to_ms'] = max(row['interest_to_ms'], max(r['time_ms'] for r in rows))
 
-    def _judge_borrow_rate(self):
-        """H4: the venue's rate above the row's `borrow_apr_max` stands the
-        loan down — the ratchet's cap goes to 1× and eases back only once
-        the rate is under the cap again (the relax rule); said once an hour."""
+    def _funding_yield(self, held, prices, now_ms):
+        """H4: the trailing funding to the shorts as a yearly yield on what
+        they cover at mark — None until the row has a day of history, or
+        while it holds no short."""
+        row, cfg = self.row, self.cfg
+        days = min(cfg['funding_rule']['trailing_days'],
+                   (now_ms - row['since_ms']) / 86_400_000)
+        notional = sum(held[k].get(c, 0.0) * prices.get(c, 0.0)
+                       for k in ('hedge', 'short') for c in held[k])
+        if days < 1.0 or notional <= 0:
+            return None
+        return sum(x[2] for x in row['funding']) / notional * (365.0 / days)
+
+    def _judge_borrow_rate(self, held, prices, now_ms):
+        """H4: the loan is stood down — the ratchet's cap to 1×, planned at
+        the next read, said once an hour — when the venue's rate is above
+        the row's `borrow_apr_max`, and when the shorts' trailing funding
+        yield is under that rate (H1: a loan that costs more than the carry
+        it buys is a levered long with a bill); the ratchet eases back only
+        once neither holds."""
         cfg, row = self.cfg, self.row
         apr, cap = row.get('borrow_apr'), (cfg.get('margin') or {}).get('borrow_apr_max')
         if apr is None or not cap:
             return
         L = cfg['margin']['spot_leverage']
-        if apr > cap:
+
+        def stand_down(key, kind, text):
             if (row.get('lever_cap') or L) > 1.0:
                 row['lever_cap'] = 1.0
                 row['last_tick_ms'] = None           # planned at the next read
-            self._say_once('apr', 'warn', f'the loan costs {apr:.2%}/yr, above the row\'s cap of '
-                                          f'{cap:.2%} — the leverage stands down to 1× (H4)')
+            self._say_once(key, kind, text)
+
+        if apr > cap:
+            stand_down('apr', 'warn', f'the loan costs {apr:.2%}/yr, above the row\'s cap of '
+                                      f'{cap:.2%} — the leverage stands down to 1× (H4)')
             row['rate_blocks_relax'] = True
         else:
             row['rate_blocks_relax'] = False
+        y = self._funding_yield(held, prices, now_ms)
+        if y is not None and y < apr:
+            stand_down('yield', 'margin', f'the shorts earn {y:.2%}/yr trailing, under the loan\'s '
+                                          f'{apr:.2%} — the leverage stands down to 1× (H4)')
+            row['yield_blocks_relax'] = True
+        else:
+            row['yield_blocks_relax'] = False
 
     def _short_size(self, truth, leg):
         idx = leg['adapter'].position_idx('Sell', False) or 0
@@ -544,7 +571,6 @@ class PortfolioBot:
         self._settle_fills(now_ms)
         self._settle_funding(now_ms, prices)
         self._settle_interest(now_ms)
-        self._judge_borrow_rate()
         # the book, bounded by the wallet (D76): coins above the row's own are
         # not its; coins missing are gone whoever took them
         wcoins = {c: float((wallet.get('coins') or {}).get(c, {}).get('wallet_balance', 0.0))
@@ -569,6 +595,7 @@ class PortfolioBot:
             px = prices[c]
             held[k][c] = (size / px if leg['market_type'] == 'inverse' and px else size)
             unreal += _unreal(leg['market_type'], size, avg, px)
+        self._judge_borrow_rate(held, prices, now_ms)
         realised = 0.0
         for key, book in row['books'].items():
             kind, c = key.split(':')
@@ -664,6 +691,7 @@ class PortfolioBot:
                        or now_ms - row['last_tick_ms'] >= cfg['rebalance']['every_hours'] * 3_600_000)
                 if (due and row['lever_cap'] < L and eq and avail is not None
                         and not row.get('rate_blocks_relax')
+                        and not row.get('yield_blocks_relax')
                         and avail / eq > risk['margin_floor_pct'] + 2 * FLOOR_BUFFER):
                     # eased back toward the file's number, a step a tick, only
                     # while free margin sits well above the floor

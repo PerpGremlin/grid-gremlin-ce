@@ -393,6 +393,81 @@ def spec_range_review_reports_the_slid_window():
                             {'slide_state': str(d / 'nope.json')}) == {}
 
 
+def spec_G22_two_writers_on_one_slide_file_cannot_undo_each_other():
+    """2026-10-08: two fleets on one box shared the file, each with its
+    copy since its build; the HL fleet's slide wrote back a copy taken
+    before the demo's windows moved, and 28 rungs of BTC were gone. Each
+    write re-reads under the lock, as the tombstones do (X7b)."""
+    tmp = _tmp()
+    a, b = SlideState(tmp), SlideState(tmp)          # two processes, one file
+    a.set('linBTCUSDTl', -28)
+    b.set('linETHs', -24)                             # held no BTC row at build
+    assert json.loads(tmp.read_text()) == {'linBTCUSDTl': -28, 'linETHs': -24}
+    assert SlideState(tmp).get('linBTCUSDTl') == -28
+    tmp.write_text('{broken')                         # corrupt under a writer
+    a.set('linBTCUSDTl', -30)                         # sliding beats bookkeeping
+    assert json.loads(tmp.read_text())['linBTCUSDTl'] == -30
+
+
+def spec_G22_every_fleet_keeps_its_own_state_file_by_default():
+    """The demo and carry fleets both run a BTCUSDT pair — the same botids —
+    so one shared file could never be right: the default is one file per
+    fleet, named by the fleet file, for tombstones and slide state alike;
+    a fleet's own key still wins."""
+    from gridgremlin.durable import fleet_tag, state_path
+    from gridgremlin.tombstones import path_for
+    d = Path(tempfile.mkdtemp())
+    assert fleet_tag('configs/fleet.demo.json') == 'demo'
+    assert fleet_tag('configs/fleet.hl.testnet.json') == 'hl.testnet'
+    assert fleet_tag('/x/other.json') == 'other'
+    assert fleet_tag('fleet.json') == 'fleet'
+    demo, carry = d / 'configs' / 'fleet.demo.json', d / 'configs' / 'fleet.carry.json'
+    assert state_path(demo, {}, 'slide_state') == d / 'logs' / 'slide_state-demo.json'
+    assert state_path(carry, {}, 'slide_state') == d / 'logs' / 'slide_state-carry.json'
+    assert state_path(demo, {}, 'tombstones') == d / 'logs' / 'tombstones-demo.json'
+    assert path_for(carry, {}) == d / 'logs' / 'tombstones-carry.json'
+    assert state_path(demo, {'slide_state': '/t/s.json'}, 'slide_state') == Path('/t/s.json')
+    try:
+        state_path(demo, {}, 'wallet')
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('an unknown kind got a path')
+
+
+def spec_G22_sabotage_the_old_shared_file_refuses_the_build_naming_the_split():
+    """A box upgraded with the shared file still beside the new names would
+    start every window at home and every stopped bot alive. The build
+    refuses, in words that say what to run; a fleet that names the shared
+    file as its own is not refused (it chose it)."""
+    from gridgremlin.durable import LegacyStateError, refuse_legacy_state
+    d = Path(tempfile.mkdtemp())
+    (d / 'configs').mkdir()
+    (d / 'logs').mkdir()
+    f = d / 'configs' / 'fleet.demo.json'
+    refuse_legacy_state(f, {})                               # nothing old: fine
+    (d / 'logs' / 'slide_state.json').write_text('{"linBTCUSDTl": -28}')
+    try:
+        refuse_legacy_state(f, {})
+    except LegacyStateError as e:
+        assert 'split_local_state' in str(e) and 'slide_state-demo.json' in str(e)
+    else:
+        raise AssertionError('the shared slide file was built beside')
+    refuse_legacy_state(f, {'slide_state': str(d / 'logs' / 'slide_state.json')})
+    (d / 'logs' / 'slide_state.json').unlink()
+    (d / 'logs' / 'tombstones.json').write_text('{}')
+    try:
+        refuse_legacy_state(f, {})
+    except LegacyStateError as e:
+        assert 'tombstones' in str(e)
+    else:
+        raise AssertionError('the shared tombstone file was built beside')
+    # the build itself is where it bites (main.build_fleet wraps it as a refusal)
+    import inspect
+    from gridgremlin import main as _m
+    assert 'refuse_legacy_state(fleet_path, fleet)' in inspect.getsource(_m.build_fleet)
+
+
 # --- D34: the adverse slide, live --------------------------------------------
 
 BOTH = dict(SLIDE, direction='both')
