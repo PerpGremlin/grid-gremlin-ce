@@ -372,27 +372,6 @@ def spec_F4_the_snapshot_carries_a_slid_window():
     assert 'offset' not in row['bots']['y']
 
 
-def spec_range_review_reports_the_slid_window():
-    path = Path(__file__).resolve().parent.parent / 'ops' / 'retired' / 'range_review.py'
-    spec = importlib.util.spec_from_file_location('range_review', path)
-    rr = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(rr)
-    raw = {'market_type': 'linear', 'symbol': 'BTCUSDT', 'side': 'long',
-           'lower': 50000, 'upper': 70000, 'rungs': 21, 'spacing_type': 'fixed'}
-    assert 'IDLE ABOVE' in rr.review_row(raw, 72000.0)
-    slid = rr.review_row(raw, 72000.0, offset=12)
-    assert '62000..82000' in slid and 'slid +12 rungs' in slid and 'IDLE' not in slid
-    assert 'slid +12' in rr.review_row(dict(raw, spacing_type='percent'),
-                                        72000.0, offset=12)
-    d = Path(tempfile.mkdtemp())
-    (d / 'configs').mkdir()
-    (d / 'logs').mkdir()
-    (d / 'logs' / 'slide_state.json').write_text('{"linBTCUSDTl": 12}')
-    assert rr.slide_offsets(d / 'configs' / 'fleet.json', {}) == {'linBTCUSDTl': 12}
-    assert rr.slide_offsets(d / 'configs' / 'fleet.json',
-                            {'slide_state': str(d / 'nope.json')}) == {}
-
-
 def spec_G22_two_writers_on_one_slide_file_cannot_undo_each_other():
     """2026-10-08: two fleets on one box shared the file, each with its
     copy since its build; the HL fleet's slide wrote back a copy taken

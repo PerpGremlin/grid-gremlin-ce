@@ -210,12 +210,7 @@ def main(argv):
         print('no portfolio row' + (f" named {name}" if name else '') + ' in that fleet')
         return 2
     cfg = rows[0]
-    root = Path(__file__).resolve().parents[1]
-    sys.path.insert(0, str(root))
-    from ops.research.fib_backtest import fetch                      # the research's fetchers
-    from ops.research.funding_carry import fetch as fetch_funding
-    from ops.research.funding_spread import fetch_hl
-    from ops.research.basket_carry import hl_8h
+    from .history import fetch_klines as fetch, fetch_funding, fetch_hl_funding as fetch_hl, hl_8h
     end = int(time.time() * 1000) // 86_400_000 * 86_400_000
     start = end - (365 * years + 40) * 86_400_000
     coins = [a['coin'] for a in cfg['assets']]
