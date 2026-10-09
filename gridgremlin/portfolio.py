@@ -230,6 +230,17 @@ def regime_word(reading):
     return 'range'
 
 
+def trailing_yield(received, notional, days):
+    """H3: the funding rule's figure — what a short received over its
+    trailing window as a YEARLY rate on what it covers at mark, so
+    `stand_down_below` means the same thing live and rehearsed (a raw
+    window sum had no defined units; the review, 2026-10-09). None short of
+    a day of history or without a notional: not judged."""
+    if not notional or days is None or days < 1.0:
+        return None
+    return received / notional * (365.0 / days)
+
+
 def hedge_ratio(cfg, coin, regime=None, funding_trailing=None):
     """H3: the ratio a hedge is held at now — the row's ratio, leaned by the
     regime tilt when the row carries one (up: × (1 − tilt); down: × (1 +

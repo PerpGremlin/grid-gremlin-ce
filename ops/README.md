@@ -79,6 +79,21 @@ What runs, from the inside out:
     `python3 -m gridgremlin.expiry configs/expiry.json` prints the list.
     Dates are the owner's to fill; unknown is listed, never paged.
 
+15. **The agent's door** (`gridgremlin.agent_door`, J1/J3, D80) — not a
+    unit: a forced command behind its own ssh key. On the box, one line in
+    the trading user's `~/.ssh/authorized_keys`, the fleet named here and
+    nowhere else:
+
+    ```
+    command="cd <repo> && python3 -m gridgremlin.agent_door configs/fleet.agent.json",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding ssh-ed25519 <the agent's public key> agent
+    ```
+
+    On the workstation, a host alias using that key; the supervised session
+    then runs `ssh <alias> read` and `ssh <alias> 'intent {...}'`. The fleet
+    file's `agent` block holds the limits (`paper: true` until the owner
+    says otherwise); its trades land in the trades file like any other, and
+    every intent in `logs/agent-intents-<fleet>.jsonl`.
+
 > **Retired: the box-side Claude** — triage on failure, the Telegram relay
 > and the daily range review, now in `ops/retired/` (its README says why).
 > Retired by the owner 2026-09-28, switched off for good 2026-10-06: the

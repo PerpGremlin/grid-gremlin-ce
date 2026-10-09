@@ -365,6 +365,30 @@ class PortfolioBot:
             return None
         return sum(x[2] for x in row['funding']) / notional * (365.0 / days)
 
+    def _trailing_funding(self, now_ms):
+        """H3: each hedge's market funding over the rule's window, as a yearly
+        rate (trailing_yield over the sum of the market's rates) — judged on
+        the market, never on the row's own payments, which stop while the
+        hedge stands down. Unreadable rates judge nothing: the hedge stays."""
+        from .portfolio import trailing_yield
+        win = self.cfg['funding_rule']['trailing_days']
+        read = getattr(self.client, 'market_funding_rates', None)
+        out = {}
+        if read is None:
+            return out
+        for c, leg in self.legs['hedge'].items():
+            try:
+                rates = read(leg['market_type'], leg['symbol'], now_ms - int(win * 86_400_000), now_ms)
+            except (VenueError, OSError, KeyError, ValueError):
+                continue
+            if not rates:
+                continue
+            days = min(win, (now_ms - rates[0][0]) / 86_400_000 + 1.0 / 3)
+            y = trailing_yield(sum(r for _, r in rates), 1.0, days)
+            if y is not None:
+                out[c] = y
+        return out
+
     def _judge_borrow_rate(self, held, prices, now_ms):
         """H4: the loan is stood down — the ratchet's cap to 1×, planned at
         the next read, said once an hour — when the venue's rate is above
@@ -742,12 +766,7 @@ class PortfolioBot:
                     f = row['lever_cap'] / L
                     active = [dict(a, weight=a['weight'] * f) if a['weight'] > 0 else a for a in active]
             eff = dict(cfg, assets=active)
-            trailing = {}
-            for c in self.legs['hedge']:
-                hq = held['hedge'].get(c, 0.0)
-                got = sum(x[2] for x in row['funding'] if x[1] == c)
-                trailing[c] = (got / (hq * prices[c])) if hq > 0 and prices[c] else None
-            trailing = {c: v for c, v in trailing.items() if v is not None}
+            trailing = self._trailing_funding(now_ms)
             regimes = {c: self._regime_now(c, now_ms) for c in self.legs['hedge']}
             # H8: the planner's equity is the row's: every coin with its hedge's
             # coin P&L, and the cash with the linear legs' P&L and realised

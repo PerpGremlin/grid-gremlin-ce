@@ -182,7 +182,7 @@ def equity_boxes(contract):
             + '</div>')
 
 
-def run_rate(b, contract, capital=None):
+def run_rate(b, contract, capital=None, trade=False):
     """U64: what every grid product states — how long the bot has run in
     the figure's own span, its grid profit (realised after fees) per day,
     and that as a yearly rate on its investment. Bybit's way: grid profit /
@@ -200,10 +200,11 @@ def run_rate(b, contract, capital=None):
     net = b['realized'] - b['fees']
     per_day = net / days
     run = f'{shown:.1f} d' if shown >= 1 else f'{shown * 24:.0f} h'
-    line = (f'running {run} · grid profit <b class="{_num_cls(per_day)}">{per_day:+,.2f}</b>/day')
+    word = '' if trade else 'grid '          # a trade (D81) has no grid
+    line = (f'running {run} · {word}profit <b class="{_num_cls(per_day)}">{per_day:+,.2f}</b>/day')
     if capital:
         apr = net / capital / days * 365 * 100
-        line += f' · grid APR <b class="{_num_cls(apr)}">{apr:+,.1f}%</b>'
+        line += f' · {word}APR <b class="{_num_cls(apr)}">{apr:+,.1f}%</b>'
     return f'<div class="rate">{line}</div>'
 
 
@@ -624,7 +625,7 @@ def card(idx, botid, b, contract, belief, full=False):
                 f'{money_coin}{coin} <span class="dim">after fees, {span}</span>'
                 f'<div class="parts">'
                 f'{pnl_parts(net, b["unreal_at_mark"], b.get("funding"))}'
-                f'</div>{run_rate(b, contract, ((contract.get("terms") or {}).get(botid) or {}).get("capital"))}'
+                f'</div>{run_rate(b, contract, ((contract.get("terms") or {}).get(botid) or {}).get("capital"), bool(((contract.get("terms") or {}).get(botid) or {}).get("trade")))}'
                 f'{since_first_line(contract, botid)}</div>')
         held = holding_html(pos, b['avg_cost'], mark, botid,
                             bool(b.get('inverse')), quote=money_coin)   # U44/U53

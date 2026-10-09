@@ -58,7 +58,7 @@ SLIDE_DIRECTIONS = ('favourable', 'both')   # D28 default; D34 opt-in
 START_ORDER_TYPES = ('market', 'maker')       # D37: the base order's entry
 FLEET_KEYS = ('bots', 'poll_seconds', 'allow_mainnet', 'preflight', 'account_caps',
               'risk_profiles', 'account', 'label',
-              'tombstones', 'slide_state', 'portfolio_state', 'trades',
+              'tombstones', 'slide_state', 'portfolio_state', 'trades', 'agent',
               'notify_orders', 'watchdog')
 
 # C2 — renames. old key -> (new key, message).
@@ -979,7 +979,12 @@ def validate_fleet(data, where='fleet'):
         _refuse(f'{where}: a fleet file is an object or a list of rows')
     _reject_unknown(data, FLEET_KEYS, where)
     bots = data.get('bots')
-    if not isinstance(bots, list) or not bots:
+    # J3 (D80): an agent's fleet may start with no bot of its own — its trades
+    # arrive through the door; every other fleet needs at least one row
+    agent_fleet = data.get('agent') is not None
+    if agent_fleet and bots is None:
+        bots = []
+    if not isinstance(bots, list) or (not bots and not agent_fleet):
         _refuse(f"{where}: 'bots' must be a non-empty list")
     fleet = {
         'watchdog': data.get('watchdog'),
@@ -996,6 +1001,9 @@ def validate_fleet(data, where='fleet'):
         'trades': data.get('trades'),                    # D81 path (default logs/)
         'account': _account_name(data.get('account'), where),   # H5: whose keys
         'label': _fleet_label(data.get('label'), where),         # U55: the dash's name for it
+        # J3 (D80): the agent's limits — only the owner's merged main changes them
+        'agent': (__import__('gridgremlin.agent', fromlist=['validate_agent']).validate_agent(
+            data['agent'], f'{where}.agent') if data.get('agent') is not None else None),
     }
     rows, refused = [], []
     for i, row in enumerate(bots):
@@ -1009,7 +1017,7 @@ def validate_fleet(data, where='fleet'):
                      if isinstance(row, dict) else 'not an object')
             refused.append((f'{where}.bots[{i}]', label, str(e)))
     listed = '; '.join(f'{w} ({lab}): {r}' for w, lab, r in refused)
-    if not rows:
+    if not rows and (refused or not agent_fleet):
         _refuse(f'{where}: every row refused — nothing would run: {listed}')
     tol = fleet['preflight']['max_failed_bots']
     if tol is not None and len(refused) > tol:

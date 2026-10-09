@@ -1322,6 +1322,26 @@ eventually pin (T1).
 
 ## J — the agent (D80)
 
+- **J1** The agent's one door is a forced command behind a restricted ssh
+  key (`gridgremlin.agent_door`): the key runs it and nothing else, and the
+  fleet file is named by the owner in the key's own line, never by the
+  agent. Two verbs, held by a spec so a third cannot creep in: **read** (its
+  limits, its open trades, its intents left this hour, today's loss, as
+  JSON) and **intent** (one JSON trade request). Anything else is refused by
+  name. The model holds no key, shell, file, config or unit.
+- **J3** The agent's limits are the fleet file's `agent` block, which only
+  the owner's merged main changes: the markets it may trade, the most
+  notional a trade and across its open trades, its most leverage, its loss
+  for the UTC day (its own subaccount's equity at the first snapshot after
+  midnight less its equity now), its intents per hour, a stop it must always
+  set between a least and a most distance, its session hours, and `paper`
+  (on unless the owner turns it off). Every limit refuses by name. A passing
+  intent becomes a trade row through D81's validator, marked `by: agent`
+  with its reason and confidence — or, in paper, is only checked. Every
+  intent is logged with its verdict (`logs/agent-intents-<fleet>.jsonl`),
+  the experiment's record. An agent fleet may start with no bot of its own
+  and opens its venue's client at the build, behind the mainnet gate.
+
 - **J2** The agent's working program does the arithmetic of technical
   analysis in code, so a model — or the owner by hand — only judges
   (`python3 -m gridgremlin.agent_tools <SYMBOL> … [--tf 5m,15m,1h,4h]`).
@@ -1492,6 +1512,21 @@ that pins it (T1).
   basket_carry.py`) within 1.5 points of equity over 120 synthetic days,
   with the same drawdown and funding; the CLI fetches two years through
   the research's own fetchers (Hyperliquid's funding for an HL row).
+- **H3b** The funding rule judges the MARKET's funding, never the row's own
+  payments: the sum of the hedge contract's funding rates over
+  `trailing_days`, as a yearly rate (`trailing_yield`), judged only after a
+  day; under `stand_down_below` (a yearly fraction, default 0) the hedge
+  stands down and stays down until the market's rate recovers. Unreadable
+  rates judge nothing and the hedge stays. The rehearsal applies the same
+  figure. *(the review: a raw window sum had no units; then found: judged on
+  the row's payments, which stop once the hedge is lifted, the rule saw
+  nothing and re-hedged the next day — a daily flip-flop, 2026-10-10)*
+- **H7b** The tilt is rehearsed with the regime the live bot would have
+  read: Wilder's ADX on the last 60 CLOSED 4h candles, built from the hourly
+  ones, turned into the planner's word (`regime_word`) and believed only
+  after it has held `hold_hours` — no candle from after the moment judged.
+  *(before, the rehearsal passed no regimes and a tilt rehearsed as neutral;
+  first scored 2026-10-10)*
 - **H5** Two accounts on one box. A fleet file names its `account`
   (default `default`, today's keys untouched); every row on it must name
   the same, or none — one account per process (F3). At start the process

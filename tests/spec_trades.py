@@ -260,3 +260,12 @@ def spec_L1_a_live_trade_sets_its_symbols_leverage_as_the_start_does():
         assert ident == ('linear', 'BTCUSDT', 1) and seen == [['BTCUSDT', 'BTCUSDT']]   # the other BTC leg and the trade
     finally:
         m.build_market_bot, m._ensure_symbol_capacity = saved
+
+
+def spec_L6_a_trades_rate_line_says_profit_not_grid_profit():
+    from panel.render import run_rate
+    gen = 10 * 86_400_000
+    b = {'fills': 2, 'realized': 3.0, 'fees': 0.14, 'counted_from': 'flat', 'counted_since_ms': gen - 86_400_000}
+    t = run_rate(b, {'generated_ms': gen, 'window_hours': 24}, 200.0, trade=True)
+    assert 'grid' not in t and ' profit <b' in t and ' APR <b' in t
+    assert 'grid profit' in run_rate(b, {'generated_ms': gen, 'window_hours': 24}, 200.0)
