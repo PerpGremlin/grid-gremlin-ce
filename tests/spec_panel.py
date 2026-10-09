@@ -98,7 +98,7 @@ def spec_P2_the_token_becomes_a_cookie_and_the_page_renders_the_contract():
         req = urllib.request.Request(f'{base}/data',
                                      headers={'Cookie': 'gg=tok123'})
         data = json.loads(op.open(req).read())
-        assert data == {'demo': CONTRACT}    # labelled by fleet, unmangled
+        assert data == {'demo': dict(CONTRACT, equity=None)}    # labelled by fleet, unmangled; U63 adds the line
     finally:
         srv.shutdown()
 
@@ -634,7 +634,7 @@ def spec_U50_the_exchange_boxes_ride_in_a_strip_pinned_to_the_top():
     assert '>1 bots</span><span></span><span class="dim">leverage —</span>' in demo
     assert 'href="#fleet1"' in hl and '<span class="big num pos">+13.10 <span class="dim">USDT</span></span>' in hl
     assert '<b class="neg num">1 dead</b><span class="dim">leverage 2.78x</span>' in hl
-    assert '.hero{display:grid;grid-template-columns:repeat(6,max-content)' in CSS   # squared
+    assert '.hero{display:grid;grid-template-columns:repeat(7,max-content)' in CSS   # squared; the 7th is U63's line
     assert '.hero .fleet{display:contents}' in CSS
     assert 'this exchange</span> <span class="big pos">+13.10</span>' in rest   # the box agrees
     assert '<h1 id="fleet0">' in rest and '<h1 id="fleet1">' in rest
@@ -1726,3 +1726,80 @@ def spec_U61_the_live_page_refreshes_in_place_and_never_reloads_whole():
     assert 'name="gg-refresh"' in table and table.count('http-equiv="refresh"') == 1
     out = render([('demo', CONTRACT)], static='then')
     assert 'gg-refresh' not in out and 'http-equiv="refresh"' not in out and '<script' not in out
+
+
+def spec_U62_the_table_and_the_exchange_view_scroll_sideways_and_the_strip_stacks_on_a_phone():
+    """Seen in screenshots (2026-10-09): the table's fixed layout cut every
+    number to "6…" at desktop width; the exchange's view of a position
+    ran off the page; the strip clipped its totals on a phone. The table
+    and the exchange view sit in a sideways-scrolling box with nothing
+    truncated; on a narrow screen the strip stacks one account per row."""
+    from panel.css import CSS
+    from panel.render import exchange_table
+    from panel.server import render
+    t = render([('demo', CONTRACT)], table=True)
+    assert '<div class="scroll"><table class="fleet">' in t and '</table></div>' in t
+    assert 'table-layout:fixed' not in CSS and 'text-overflow:ellipsis' not in CSS
+    assert '.scroll{overflow-x:auto' in CSS and 'table.fleet td,table.fleet th{white-space:nowrap}' in CSS
+    x = exchange_table('linDOGEs', None, {'linDOGEs': {'alive': True, 'position': 730.0, 'margin': {}}},
+                       {'quote': 'USDT', 'margin_coin': 'USDT'})
+    assert x.startswith('<div class="scroll"><table class="xch">') and x.endswith('</table></div>')
+    narrow = CSS[CSS.index('@media(max-width:40em)'):]
+    assert '.hero{' in narrow and 'display:block' in narrow and '.hero .fleet{display:block' in narrow
+
+
+def spec_U63_the_strip_carries_a_sparkline_and_the_box_the_days_and_the_weeks_line():
+    """The owner (2026-10-09), after the comparison: every other dashboard
+    leads with a line over time. From the fleet's own snapshots: a
+    sparkline in the strip, a 24 h and a 7 d chart under the account's
+    box with the low, the high and the change; nothing drawn without
+    two points; an export carries the same lines; one series, no legend."""
+    import copy
+    import time
+    from panel.render import equity_svg
+    from panel.server import render
+    now = time.time()
+    c = copy.deepcopy(CONTRACT)
+    c['equity'] = {'24h': [[now - 3600 + i * 300, 1000.0 + i] for i in range(12)],
+                   '7d': [[now - 6 * 86400 + i * 1800, 900.0 + i] for i in range(200)]}
+    html = render([('demo', c)])
+    assert '<span class="spark" title="equity, 24 h"><svg class="eq"' in html
+    assert 'equity, 24 h</div><div class="eqbox">' in html and 'equity, 7 d</div><div class="eqbox">' in html
+    assert '<span>low 1,000</span><span>high 1,011</span><b class="pos">+11 (+1.1%)</b>' in html
+    assert html.count('<polyline') == 3 and '<legend' not in html and 'stroke-width="2"' in html
+    assert '<title>' in html                                        # the box's native tooltip
+    out = render([('demo', c)], static='then')
+    assert out.count('<polyline') == 3 and '<script' not in out
+    assert equity_svg([[1, 2]]) == '' and equity_svg(None) == ''
+    assert 'equity line: no history yet' in render([('demo', CONTRACT)])
+    assert 'class="spark"' not in render([('demo', CONTRACT)])
+    down = equity_svg([[0, 10.0], [60, 5.0]], 400, 60, labels=True)
+    assert '<b class="neg">-5 (-50.0%)</b>' in down and 'fill="var(--neg)"' in down
+
+
+def spec_U64_a_card_says_how_long_it_has_run_and_its_grid_profit_per_day_and_a_year():
+    """The comparison (2026-10-09): every grid product states run time and
+    an APR. Bybit's way: grid profit (realised after fees) / investment /
+    days x 365, under a day counted as one. In the figure's own span —
+    since last flat, since the first fill in the cap, or the window."""
+    import copy
+    from panel.render import run_rate
+    gen = 10 * 86_400_000
+    b = {'fills': 10, 'realized': 120.0, 'fees': 20.0, 'counted_from': 'flat',
+         'counted_since_ms': gen - 4 * 86_400_000}
+    c = {'generated_ms': gen, 'window_hours': 24}
+    line = run_rate(b, c, capital=1000.0)
+    assert 'running 4.0 d' in line and '+25.00</b>/day' in line and '+912.5%' in line   # 100/1000/4*365
+    short = dict(b, counted_since_ms=gen - 6 * 3_600_000)
+    assert 'running 6 h' in run_rate(short, c, 1000.0) and '+100.00</b>/day' in run_rate(short, c, 1000.0)   # a day at least
+    cap = dict(b, counted_from='cap', first_ms=gen - 2 * 86_400_000)
+    assert 'running 2.0 d' in run_rate(cap, c)  and 'APR' not in run_rate(cap, c)          # no investment, no rate
+    win = dict(b, counted_from=None)
+    assert 'running 1.0 d' in run_rate(win, c, 1000.0)
+    assert run_rate(dict(b, fills=0), c, 1000.0) == '' and run_rate(b, {}, 1000.0) == ''
+    assert 'class="neg">-' in run_rate(dict(b, realized=-500.0), c, 1000.0)
+    from panel.server import render
+    live = copy.deepcopy(CONTRACT)
+    live['generated_ms'] = gen                       # the fixture's clock reads zero: no span, no line
+    assert '<div class="rate">running 6 h · grid profit' in render([('demo', live)])   # the fixture's 6 h window
+    assert '<div class="rate">' not in render([('demo', copy.deepcopy(CONTRACT))])

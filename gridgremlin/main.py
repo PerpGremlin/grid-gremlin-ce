@@ -207,6 +207,9 @@ def snapshot_row(bots, wallet, now, tiers=None):
                                'position': (b._last_pos or 0.0) if b.alive
                                else None,
                                **({'offset': b.offset} if getattr(b, 'offset', 0) else {}),
+                               # U65: the price the bot last read — the per-minute
+                               # history the position page's chart draws
+                               **({'mark': b._last_mark} if b.alive and getattr(b, '_last_mark', None) else {}),
                                # X14: the loss limit and where the bot
                                # stands against it, for the panel's card
                                **({'loss': {'limit': loss_limit(b.cfg),

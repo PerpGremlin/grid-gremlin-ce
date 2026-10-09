@@ -50,6 +50,163 @@ def strip(rng, mark, width='120'):
             f'<circle cx="{x:.1f}" cy="6" r="3" fill="var(--accent)"/></svg>')
 
 
+def equity_svg(points, width=120, height=18, labels=False):
+    """U63: the account's equity as a line — one series, two pixels, the
+    page's own ink: the accent for the line, the sign's colour only on the
+    change it says. A sparkline for the strip (no labels), the box's chart
+    with its low, its high and the change over the window, and a native
+    tooltip per point (no script). Fewer than two points draw nothing."""
+    pts = [(float(t), float(e)) for t, e in (points or [])]
+    if len(pts) < 2:
+        return ''
+    lo, hi = min(e for _, e in pts), max(e for _, e in pts)
+    t0, t1 = pts[0][0], pts[-1][0]
+    span_e, span_t = (hi - lo) or 1.0, (t1 - t0) or 1.0
+    W, H, pad = float(width), float(height), (3.0 if labels else 1.5)
+    def xy(t, e):
+        return (pad + (t - t0) / span_t * (W - 2 * pad),
+                H - pad - (e - lo) / span_e * (H - 2 * pad))
+    path = ' '.join(f'{x:.1f},{y:.1f}' for x, y in (xy(t, e) for t, e in pts))
+    change = pts[-1][1] - pts[0][1]
+    cls = 'pos' if change >= 0 else 'neg'
+    body = (f'<polyline points="{path}" fill="none" stroke="var(--accent)" '
+            'stroke-width="2" stroke-linejoin="round" stroke-linecap="round" '
+            'vector-effect="non-scaling-stroke"/>')
+    if labels:
+        import time as _t
+        step = max(1, len(pts) // 48)                   # a tooltip every few points, not every one
+        hover = ''.join(
+            f'<rect x="{xy(t, e)[0] - (W / len(pts)) / 2 * step:.1f}" y="0" '
+            f'width="{(W / len(pts)) * step:.1f}" height="{H:.0f}" fill="transparent">'
+            f'<title>{_t.strftime("%d %b %H:%M", _t.gmtime(t))} UTC · {e:,.2f}</title></rect>'
+            for t, e in pts[::step])
+        x1, y1 = xy(*pts[-1])
+        body += (f'<line x1="{pad}" y1="{H - pad:.1f}" x2="{W - pad:.1f}" y2="{H - pad:.1f}" '
+                 'stroke="var(--line)" stroke-width="1"/>'
+                 f'<circle cx="{x1:.1f}" cy="{y1:.1f}" r="3" fill="var(--{cls})"/>' + hover)
+    svg = (f'<svg class="eq" viewBox="0 0 {W:.0f} {H:.0f}" width="{"100%" if labels else width}" '
+           f'height="{height}" preserveAspectRatio="none" role="img">{body}</svg>')
+    if not labels:
+        return svg
+    pct = change / pts[0][1] * 100 if pts[0][1] else 0.0
+    return (f'<div class="eqbox"><div class="dim eqlab"><span>low {lo:,.0f}</span><span>high {hi:,.0f}</span>'
+            f'<b class="{cls}">{change:+,.0f} ({pct:+.1f}%)</b></div>{svg}</div>')
+
+
+def price_svg(series, window=None, liq=None, fills=(), height=180):
+    """U65: one position's price over the window, with the bot's own
+    levels and fills — the price line in the accent, the window's rungs as
+    faint lines and its edges dashed, buys and sells as ringed dots (a
+    native tooltip each), liquidation in red when it is on the chart and
+    named beneath when it is not. No script; nothing without two points."""
+    import time as _t
+    pts = [(float(t), float(p)) for t, p in (series or [])]
+    if len(pts) < 2:
+        return ''
+    t0, t1 = pts[0][0], pts[-1][0]
+    fs = [(t, p, s) for t, p, s in fills if t0 <= t <= t1]
+    ys = [p for _, p in pts] + [p for _, p, _ in fs]
+    lo, hi = min(ys), max(ys)
+    pad_y = (hi - lo) * 0.08 or hi * 0.002 or 1.0
+    lo, hi = lo - pad_y, hi + pad_y
+    W, H, L, R, T, B = 800.0, float(height), 4.0, 64.0, 6.0, 18.0
+    def x(t):
+        return L + (t - t0) / ((t1 - t0) or 1.0) * (W - L - R)
+    def y(p):
+        return T + (hi - p) / ((hi - lo) or 1.0) * (H - T - B)
+    parts = []
+    if window:
+        lw, uw, n = window['lower'], window['upper'], int(window.get('rungs') or 0)
+        gap = (uw - lw) / (n - 1) if n > 1 else 0.0
+        dash = ' stroke-dasharray="4 3"'
+        for i in range(n):
+            lv = lw + i * gap
+            if lo <= lv <= hi:
+                edge = i in (0, n - 1)
+                parts.append(f'<line x1="{L}" x2="{W - R}" y1="{y(lv):.1f}" y2="{y(lv):.1f}" stroke="var(--line)" '
+                             f'stroke-width="1"{dash if edge else ""}/>')
+        for lv, word in ((lw, 'bottom'), (uw, 'top')):
+            if lo <= lv <= hi:
+                parts.append(f'<text x="{W - R + 4}" y="{y(lv) + 4:.1f}" class="ax">{word} {lv:,.6g}</text>')
+    off = ''
+    if liq:
+        if lo <= liq <= hi:
+            parts.append(f'<line x1="{L}" x2="{W - R}" y1="{y(liq):.1f}" y2="{y(liq):.1f}" stroke="var(--neg)" '
+                         'stroke-width="1.5" stroke-dasharray="6 3"/>'
+                         f'<text x="{W - R + 4}" y="{y(liq) + 4:.1f}" class="ax neg">liq {liq:,.6g}</text>')
+        else:
+            off = f' · liquidation at {liq:,.6g}, {"below" if liq < lo else "above"} the chart'
+    path = ' '.join(f'{x(t):.1f},{y(p):.1f}' for t, p in pts)
+    parts.append(f'<polyline points="{path}" fill="none" stroke="var(--accent)" stroke-width="2" '
+                 'stroke-linejoin="round" stroke-linecap="round"/>')
+    for t, p, s in fs:
+        col = 'var(--pos)' if s == 'buy' else 'var(--neg)'
+        parts.append(f'<circle cx="{x(t):.1f}" cy="{y(p):.1f}" r="4" fill="{col}" stroke="var(--bg)" stroke-width="2">'
+                     f'<title>{s} {p:,.6g} · {_t.strftime("%d %b %H:%M", _t.gmtime(t))} UTC</title></circle>')
+    step = max(1, len(pts) // 60)
+    for t, p in pts[::step]:
+        parts.append(f'<rect x="{x(t) - 6:.1f}" y="{T}" width="12" height="{H - T - B:.0f}" fill="transparent">'
+                     f'<title>{_t.strftime("%d %b %H:%M", _t.gmtime(t))} UTC · {p:,.6g}</title></rect>')
+    parts.append(f'<text x="{L}" y="{H - 4}" class="ax">{_t.strftime("%d %b %H:%M", _t.gmtime(t0))}</text>'
+                 f'<text x="{W - R}" y="{H - 4}" class="ax" text-anchor="end">{_t.strftime("%d %b %H:%M", _t.gmtime(t1))} UTC</text>'
+                 f'<text x="{W - R + 4}" y="{y(pts[-1][1]) + 4:.1f}" class="ax">{pts[-1][1]:,.6g}</text>')
+    buys = sum(1 for f in fs if f[2] == 'buy')
+    key = (f'<div class="dim pkey"><span class="k-line"></span>price · <span class="k-buy"></span>{buys} buys · '
+           f'<span class="k-sell"></span>{len(fs) - buys} sells · rungs of the window{off}</div>')
+    return (f'<svg class="px" viewBox="0 0 {W:.0f} {H:.0f}" width="100%" role="img" '
+            f'aria-label="price with the bot\'s levels and fills">{"".join(parts)}</svg>{key}')
+
+
+def price_boxes(prices, window, liq, fills):
+    """U65: the day and the week of one position's price, or one quiet
+    line until the snapshots carry it."""
+    prices = prices or {}
+    day = price_svg(prices.get('24h'), window, liq, fills)
+    week = price_svg(prices.get('7d'), window, liq, fills)
+    if not day and not week:
+        return ('<p class="dim">price line: the engine has not recorded this bot\'s price yet '
+                '(it starts with the fleet\'s next restart)</p>')
+    return ((f'<h3>price, 24 h</h3>{day}' if day else '') + (f'<h3>price, 7 d</h3>{week}' if week else ''))
+
+
+def equity_boxes(contract):
+    """U63: the two windows under the exchange's box — a day and a week —
+    or one quiet line while the snapshot file has nothing yet."""
+    eq = contract.get('equity') or {}
+    day, week = equity_svg(eq.get('24h'), 400, 60, labels=True), equity_svg(eq.get('7d'), 400, 60, labels=True)
+    if not day and not week:
+        return '<div class="dim">equity line: no history yet</div>'
+    return ('<div class="eqrow">'
+            + (f'<div><div class="dim">equity, 24 h</div>{day}</div>' if day else '')
+            + (f'<div><div class="dim">equity, 7 d</div>{week}</div>' if week else '')
+            + '</div>')
+
+
+def run_rate(b, contract, capital=None):
+    """U64: what every grid product states — how long the bot has run in
+    the figure's own span, its grid profit (realised after fees) per day,
+    and that as a yearly rate on its investment. Bybit's way: grid profit /
+    investment / days x 365, a run under a day counted as one day. Returns
+    the line, or '' without fills or a span."""
+    gen = contract.get('generated_ms')
+    how = b.get('counted_from')
+    start = (b.get('counted_since_ms') if how == 'flat' else
+             b.get('first_ms') if how == 'cap' else
+             gen - contract.get('window_hours', 24) * 3.6e6 if gen else None)
+    if not gen or not start or not b.get('fills'):
+        return ''
+    days = max(1.0, (gen - start) / 8.64e7)
+    shown = (gen - start) / 8.64e7
+    net = b['realized'] - b['fees']
+    per_day = net / days
+    run = f'{shown:.1f} d' if shown >= 1 else f'{shown * 24:.0f} h'
+    line = (f'running {run} · grid profit <b class="{_num_cls(per_day)}">{per_day:+,.2f}</b>/day')
+    if capital:
+        apr = net / capital / days * 365 * 100
+        line += f' · grid APR <b class="{_num_cls(apr)}">{apr:+,.1f}%</b>'
+    return f'<div class="rate">{line}</div>'
+
+
 def settle(b, floor):
     """Stop now and you receive: the number every user reaches for and
     nobody ships. Position sold at mark, less the venue-shaped fee —
@@ -456,7 +613,8 @@ def card(idx, botid, b, contract, belief, full=False):
                 f'{money_coin}{coin} <span class="dim">after fees, {span}</span>'
                 f'<div class="parts">'
                 f'{pnl_parts(net, b["unreal_at_mark"], b.get("funding"))}'
-                f'</div>{since_first_line(contract, botid)}</div>')
+                f'</div>{run_rate(b, contract, ((contract.get("terms") or {}).get(botid) or {}).get("capital"))}'
+                f'{since_first_line(contract, botid)}</div>')
         held = holding_html(pos, b['avg_cost'], mark, botid,
                             bool(b.get('inverse')), quote=money_coin)   # U44/U53
         floor = (contract.get('fee_floors') or {}).get(botid)
@@ -930,17 +1088,26 @@ def exchange_table(botid, b, belief, terms):
             ('realised, after fees', f"{n(((b or {}).get('realized') or 0) - ((b or {}).get('fees') or 0), '+,.2f')} {money_coin}"
                                       if b else '—'),
             ('funding', f"{n((b or {}).get('funding'), '+,.2f')} {money_coin}" if b else '—')]
-    return ('<table class="xch"><tr>' + ''.join(f'<th>{k}</th>' for k, _ in rows) + '</tr><tr>'
-            + ''.join(f'<td>{v}</td>' for _, v in rows) + '</tr></table>')
+    return ('<div class="scroll"><table class="xch"><tr>' + ''.join(f'<th>{k}</th>' for k, _ in rows) + '</tr><tr>'
+            + ''.join(f'<td>{v}</td>' for _, v in rows) + '</tr></table></div>')
 
 
-def position_page(idx, label, botid, contract, belief):
+def position_page(idx, label, botid, contract, belief, prices=None, fills=()):
     """U56: one position, one page — the exchange's view first, then the
-    card with every number laid open."""
+    price with its levels and fills (U65), then the card with every number
+    laid open."""
     terms = (contract.get('terms') or {}).get(botid)
     b = (contract.get('bots') or {}).get(botid)
     xch = ('' if (terms or {}).get('strategy') == 'portfolio'
            else f'<h3>as the exchange shows it</h3>{exchange_table(botid, b, belief, terms)}')
+    if (terms or {}).get('strategy') != 'portfolio':
+        rng = (contract.get('ranges') or {}).get(botid)
+        off = (belief.get(botid) or {}).get('offset')
+        if rng and off and rng.get('rungs', 0) > 1:
+            gap = (rng['upper'] - rng['lower']) / (rng['rungs'] - 1)
+            rng = dict(rng, lower=rng['lower'] + off * gap, upper=rng['upper'] + off * gap)
+        liq = ((belief.get(botid) or {}).get('margin') or {}).get('liq')
+        xch += price_boxes(prices, rng, liq, fills)
     return (f'<h1>{label} · {_plain_name(botid, contract, b) if (terms or {}).get("strategy") != "portfolio" else botid[3:] + " portfolio"}</h1>'
             f'{xch}<div class="cards one">{card(idx, botid, b, contract, belief, full=True)}</div>'
             '<p><a href="/">&larr; fleet</a></p>')
@@ -964,13 +1131,16 @@ def hero_strip(labelled):
                'leverage ' + ' · '.join(f'{v:.2f}x' for v in levs))
         # six cells per fleet in one grid, so every column lines up whatever
         # the words' lengths (the owner: "so it looks squared")
+        spark = equity_svg(((c.get('equity') or {}).get('24h')), 120, 18)       # U63
         lines.append(
             f'<div class="fleet"><a href="#fleet{idx}">{label}</a>{tier_badge(c)}'
             f'<span class="big num {_num_cls(total)}">{total:+,.2f} '
             f'<span class="dim">{venue_money(c)}</span></span>'
             f'<span class="dim num">{len(c["bots"])} bots</span>'
             + (f'<b class="neg num">{dead} dead</b>' if dead else '<span></span>')
-            + f'<span class="dim">{lev}</span></div>')
+            + f'<span class="dim">{lev}</span>'
+            + (f'<span class="spark" title="equity, 24 h">{spark}</span>' if spark else '<span></span>')
+            + '</div>')
     return '<div class="hero">' + ''.join(lines) + '</div>'
 
 
@@ -1017,6 +1187,7 @@ def cards_section(idx, label, contract, view='all', scripted=True):
             f'<div class="parts">'
             f'{pnl_parts(net, sum(opened) if opened else None, funding)}'
             f'</div>{exchange_since_first(contract)}{exchange_leverage(contract)}</div>'
+            f'{equity_boxes(contract)}'                                          # U63
             # U59: the account folds to its heading and its box; the side
             # panel folds or opens every account at once
             f'<details class="acct" data-k="acct:{idx}" open><summary>'
@@ -1108,12 +1279,12 @@ def section(idx, label, contract, view='all'):
     return f"""
 <h1 id="fleet{idx}">{label} {tier_badge(contract)} — last {contract['window_hours']:g}h {sweep_note(contract)}
 <span class="dim">(read {age}s ago; refreshes every {REFRESH_S}s)</span></h1>
-<table class="fleet">{COLS}
+<div class="scroll"><table class="fleet">{COLS}
 <tr><th>bot</th><th>state</th><th>fills</th><th>realized</th>
 <th>fees</th><th>funding</th><th>open@avg</th><th>unreal</th><th>total</th>
 <th>bought</th><th>sold</th><th>range</th><th>edge lo/hi</th>
 <th>stop-now est.</th><th>watcher</th><th></th></tr>
-{''.join(rows)}</table>
+{''.join(rows)}</table></div>
 """
 
 
