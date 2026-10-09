@@ -66,6 +66,44 @@ class _Leg:
         return self.qty * (1 / p - 1 / self.entry) if self.inverse and self.qty and self.entry else 0.0
 
 
+def regime_from_bars(bars1h, hold_hours, bars4h=60):
+    """H7b: the live regime, rebuilt from history without lookahead — the
+    D67 reading (Wilder's ADX on the last `bars4h` CLOSED 4h candles, made
+    from the hourly ones) turned into the planner's word (regime_word) and
+    believed only after it has held `hold_hours`, as the live bot does.
+    Returns f(t_ms) -> 'up'|'down'|'range', to be called with t rising."""
+    from .market import adx, regime
+    from .portfolio import regime_word
+    four = []                                    # (close time, candle) of each 4h bar
+    cur = None
+    for b in bars1h:
+        start = b['t'] - b['t'] % (4 * H)
+        hi, lo = float(b.get('h', b['c'])), float(b.get('l', b['c']))
+        if cur is None or cur['t'] != start:
+            if cur is not None:
+                four.append((cur['t'] + 4 * H, cur))
+            cur = {'t': start, 'h': hi, 'l': lo, 'c': float(b['c'])}
+        else:
+            cur['h'], cur['l'], cur['c'] = max(cur['h'], hi), min(cur['l'], lo), float(b['c'])
+    words, closed = [], []
+    for close, c in four:
+        closed.append(c)
+        a, p, m = adx(closed[-bars4h:])
+        words.append((close, regime_word(regime(a, p, m))))
+    state = {'i': 0, 'word': 'range', 'cand': 'range', 'since': None, 'believed': 'range'}
+
+    def at(t):
+        while state['i'] < len(words) and words[state['i']][0] <= t:
+            close, w = words[state['i']]
+            if w != state['cand']:
+                state['cand'], state['since'] = w, close
+            state['i'] += 1
+        if state['since'] is not None and t - state['since'] >= hold_hours * H:
+            state['believed'] = state['cand']
+        return state['believed']
+    return at
+
+
 def rehearse(cfg, bars1h, funding, regimes=None, start_cash=None):
     """`bars1h`: {coin: [{'t', 'c'}]} on one grid; `funding`: {coin: rows
     {'t', 'rate'}} per 8h for the coin's short; `regimes`: {coin: f(t_ms)
@@ -83,6 +121,7 @@ def rehearse(cfg, bars1h, funding, regimes=None, start_cash=None):
     start = float(start_cash or cfg['capital'])
     held = {c: 0.0 for c in coins}
     cash, fees, paid, rebalances, seen = start, 0.0, 0.0, 0, set()
+    t_first = None
     apr = (cfg.get('margin') or {}).get('borrow_apr_max', 0.0)      # the row borrows at its cap
     last_tick, path = None, []
     for i in range(n):
@@ -103,7 +142,20 @@ def rehearse(cfg, bars1h, funding, regimes=None, start_cash=None):
                 'hedged': {c: legs[c].coins(px[c]) for c in coins if (cfg['hedges'].get(c) or {}).get('ratio', 0) > 0},
                 'shorts': {c: legs[c].coins(px[c]) for c in coins if c in cfg['short_products']}}
         reg = {c: regimes[c](t) for c in coins} if regimes else None
-        plan = plan_portfolio(cfg, book, px, t, last_tick, regimes=reg)
+        # H3: the funding rule, rehearsed with the live bot's own figure
+        from .portfolio import trailing_yield
+        t_first = t if t_first is None else t_first
+        win = cfg['funding_rule']['trailing_days']
+        days = min(win, (t - t_first) / 86_400_000)
+        trail = {}
+        lo = (t - win * 86_400_000) // (8 * H)
+        for c in coins:
+            # the market's rates over the window, as the live bot reads them
+            rates = [r for b, r in fund[c].items() if lo < b <= bucket]
+            y = trailing_yield(sum(rates), 1.0, days) if rates else None
+            if y is not None:
+                trail[c] = y
+        plan = plan_portfolio(cfg, book, px, t, last_tick, regimes=reg, funding_trailing=trail)
         if plan['tick']:
             last_tick = t
             moved = False
@@ -179,7 +231,11 @@ def main(argv):
             funding[c] = fetch_funding('inverse', f'{c}USD', start, end)
         else:
             funding[c] = fetch_funding('linear', f'{c}USDT', start, end)
-    r = rehearse(cfg, bars, funding)
+    regimes = None
+    if cfg.get('regime'):
+        # H7b: the tilt rehearsed with the regime the live bot would have read
+        regimes = {c: regime_from_bars(bars[c], cfg['regime']['hold_hours']) for c in coins}
+    r = rehearse(cfg, bars, funding, regimes=regimes)
     if r is None:
         print('could not be held (margin)')
         return 1

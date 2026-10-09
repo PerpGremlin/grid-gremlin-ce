@@ -147,3 +147,69 @@ def spec_H8_the_rehearsal_holds_a_ratio_one_book_dollar_neutral_and_averages_inv
             assert abs(r['equity'] - 1.0) < 0.005, (name, r['equity'])
     finally:
         pr.SPOT_FEE, pr.PERP_FEE = saved
+
+
+def spec_H7b_the_tilt_is_rehearsed_with_the_regime_the_live_bot_would_have_read():
+    """The rehearsal passed the planner no regimes, so a tilt rehearsed as
+    neutral. Now the live reading is rebuilt from history: Wilder's ADX on
+    closed 4h candles made from the hourly ones, turned into the planner's
+    word and believed only after it has held — never a candle from after t."""
+    import inspect
+    import gridgremlin.portfolio_rehearse as pr
+    H = 3_600_000
+    # a long steady rise then a long steady fall, hourly
+    ps = [100.0 + 0.5 * i for i in range(400)] + [300.0 - 0.5 * i for i in range(400)]
+    bars = [{'t': i * H, 'c': p, 'h': p + 0.2, 'l': p - 0.2} for i, p in enumerate(ps)]
+    f = pr.regime_from_bars(bars, hold_hours=24)
+    seen = [(b['t'], f(b['t'] + H)) for b in bars]
+    words = [w for _, w in seen]
+    assert words[0] == 'range' and 'up' in words[:400] and words[-1] == 'down'
+    first_up = next(t for t, w in seen if w == 'up')
+    assert first_up >= 60 * 4 * H // 2                   # ADX needs its closed history before any word
+    # no lookahead: the same function on the bars cut at any point agrees up to that point
+    cut = 520
+    g = pr.regime_from_bars(bars[:cut], hold_hours=24)
+    assert [g(b['t'] + H) for b in bars[:cut]] == words[:cut]
+    # the hold: the first 'down' comes at least 24 h after the fall's first down reading
+    h0 = pr.regime_from_bars(bars, hold_hours=0)
+    zero = [h0(b['t'] + H) for b in bars]
+    d0 = next(i for i, w in enumerate(zero) if w == 'down')
+    d24 = next(i for i, w in enumerate(words) if w == 'down')
+    assert d24 - d0 >= 24
+    src = inspect.getsource(pr.main)
+    assert "regimes = {c: regime_from_bars(bars[c], cfg['regime']['hold_hours'])" in src
+
+
+def spec_H3b_the_funding_rule_judges_the_markets_rate_as_a_yearly_figure_live_and_rehearsed():
+    """The review (2026-10-09): the live rule compared a raw window sum over
+    notional with `stand_down_below`, and the rehearsal never applied it.
+    One figure now — received over the window as a yearly rate on what the
+    short covers, judged only after a day — and the rehearsal uses it."""
+    import inspect
+    import gridgremlin.portfolio_bot as pb
+    import gridgremlin.portfolio_rehearse as pr
+    from gridgremlin.config import validate_config
+    from gridgremlin.portfolio import trailing_yield
+    assert abs(trailing_yield(10.0, 10_000.0, 7.0) - 10 / 10_000 * 365 / 7) < 1e-12
+    assert trailing_yield(10.0, 10_000.0, 0.5) is None and trailing_yield(10.0, 0.0, 7.0) is None
+    src = inspect.getsource(pb.PortfolioBot._trailing_funding)
+    assert 'trailing_yield(' in src and 'market_funding_rates' in src   # the market, not the row's payments
+    assert 'self._trailing_funding(now_ms)' in inspect.getsource(pb.PortfolioBot.cycle)
+    H = 3_600_000
+    row = validate_config({'strategy': 'portfolio', 'name': 't', 'venue': 'bybit', 'capital': 10000,
+                           'assets': [{'coin': 'BTC', 'weight': 1.0}], 'risk': {'max_weight': 1.0},
+                           'hedge': {'product': 'inverse', 'ratio': 1.0},
+                           'rebalance': {'every_hours': 24, 'drift_pct': 0.05}})
+    bars = {'BTC': [{'t': i * H, 'c': 100.0} for i in range(24 * 12)]}
+    neg = {'BTC': [{'t': i * 8 * H, 'rate': -0.001} for i in range(36)]}
+    pos = {'BTC': [{'t': i * 8 * H, 'rate': 0.001} for i in range(36)]}
+    saved = pr.SPOT_FEE, pr.PERP_FEE
+    pr.SPOT_FEE = pr.PERP_FEE = 0.0
+    try:
+        r_neg = pr.rehearse(row, bars, neg)
+        r_pos = pr.rehearse(row, bars, pos)
+    finally:
+        pr.SPOT_FEE, pr.PERP_FEE = saved
+    # paying funding, the hedge stands down after a day and STAYS down (judged on the market's
+    # rates, not on payments that stop): about a day of it paid, not the 3.6% of twelve days
+    assert -0.005 < r_neg['funding'] < 0 and r_pos['funding'] > 0.03

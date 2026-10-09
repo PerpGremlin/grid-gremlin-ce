@@ -174,6 +174,25 @@ class Client:
         from . import truth as _t
         return _t.read_funding(self, market_type, symbol, since_ms, now_ms)
 
+    def market_funding_rates(self, market_type, symbol, since_ms, now_ms):
+        """H3: the market's own funding rates (public), [(time_ms, rate)] oldest
+        first — what the funding rule judges, hedged or not: a row's own
+        payments stop when its hedge stands down, and the rule then judged
+        nothing and re-hedged at the next tick (2026-10-10)."""
+        out, end = [], now_ms
+        while end > since_ms:
+            d = self.get('/v5/market/funding/history', {'category': market_type, 'symbol': symbol,
+                                                         'startTime': since_ms, 'endTime': end, 'limit': 200})
+            rows = d.get('list') or []
+            for r in rows:
+                t = int(r['fundingRateTimestamp'])
+                if since_ms <= t <= now_ms:
+                    out.append((t, float(r['fundingRate'])))
+            if len(rows) < 200:
+                break
+            end = min(int(r['fundingRateTimestamp']) for r in rows) - 1
+        return sorted(set(out))
+
     def borrow_history(self, coin, since_ms, now_ms):
         """H4: the venue's own ledger of what a loan in `coin` cost — one row
         per hour charged: {'time_ms', 'cost', 'hourly_rate', 'size'}, oldest

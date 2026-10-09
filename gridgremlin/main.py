@@ -589,6 +589,12 @@ def build_fleet(fleet_path, notifier, allow_mainnet=False):
         bot, identity = build_market_bot(cfg, client, notifier, tombs, slide)
         identities.append((bot.botid, identity))
         bots.append(bot)
+    if fleet.get('agent') and 'bybit' not in clients:
+        # J3 (D80): an agent's fleet may hold no bot of its own yet, but its
+        # trades arrive through the door and need the venue's client — opened
+        # here with the same mainnet gate as every client (D25)
+        clients['bybit'] = WriteClient()
+        refuse_mainnet(clients['bybit'], fleet.get('allow_mainnet', False), allow_mainnet)
     _ensure_symbol_capacity(bots, notifier)
     check_fleet_unique(identities)
     pf = fleet['preflight']
