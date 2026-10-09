@@ -679,74 +679,9 @@ def spec_F9_a_dead_bot_is_visible_but_never_bounded():
     assert 'pos:botA' in evaluate(cfg, _row(bots=alive), 1000.0, 5000.0)
 
 
-def _range_review():
-    import importlib.util
-    from pathlib import Path
-    path = Path(__file__).resolve().parent.parent / 'ops' / 'retired' / 'range_review.py'
-    spec = importlib.util.spec_from_file_location('range_review', path)
-    rr = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(rr)
-    return rr
-
-
-def spec_F9_the_range_review_lists_the_dead_and_reviews_nobody_dead():
-    import json
-    from pathlib import Path
-    rr = _range_review()
-    d = Path(tempfile.mkdtemp())
-    (d / 'configs').mkdir()
-    (d / 'logs').mkdir()
-    fleet = d / 'configs' / 'fleet.hl.testnet.json'
-    grid = {'strategy': 'grid', 'venue': 'hyperliquid', 'market_type': 'linear',
-            'symbol': 'AVAX', 'side': 'long', 'lower': 10.0, 'upper': 20.0,
-            'rungs': 11}
-    fleet.write_text(json.dumps({'bots': [grid, dict(grid, symbol='SOL')]}))
-    snap = d / 'logs' / 'snapshots-hl-testnet.jsonl'      # the tag mapping
-    older = json.dumps({'t': 1, 'bots': {'linAVAXl': {'alive': True,
-                                                        'position': 25.0}}})
-    newest = json.dumps({'t': 2, 'bots': {'linAVAXl': {'alive': False,
-                                                         'position': None},
-                                           'linSOLl': {'alive': True,
-                                                       'position': 0.6}}})
-    snap.write_text(older + '\n' + newest + '\n')
-    assert rr.dead_bots(fleet) == {'linAVAXl'}           # the NEWEST row
-    rr.hl_marks = lambda: {'AVAX': 25.0, 'SOL': 15.0}     # no network
-    facts = rr.collect([str(fleet)])
-    avax = next(l for l in facts.splitlines() if l.startswith('linAVAXl'))
-    assert 'DEAD' in avax and 'IDLE' not in avax        # sabotage: was IDLE ABOVE
-    assert 'up-range' in next(l for l in facts.splitlines()
-                              if l.startswith('linSOLl'))
-    snap.unlink()
-    assert rr.dead_bots(fleet) == set()                   # unreadable = nobody
-    snap.write_text('not json\n')
-    assert rr.dead_bots(fleet) == set()
-
-
 # --- F10: the review pages the facts ALWAYS; a missing judgement says why --
 # 30 of the 48 days paged one line — the CLI's auth failure, exit 0, on
 # stdout — as the review, and the fact sheet was dropped.
-
-def spec_F10_facts_are_always_paged_and_a_failed_judgement_is_named():
-    rr = _range_review()
-    facts = 'linSOLl  10..20  mark 15  50% up-range'
-    auth = 'Failed to authenticate: OAuth session expired and could not be refreshed'
-    v, why = rr.verdict_or_reason(0, auth, '')
-    assert v is None and 'authenticated' in why and 'token' in why  # sabotage
-    v, why = rr.verdict_or_reason(1, '', 'boom')
-    assert v is None and why.startswith('claude exit 1: boom')
-    v, why = rr.verdict_or_reason(0, '', '')
-    assert v is None and why
-    v, why = rr.verdict_or_reason(0, 'linSOLl KEEP\n\nAll fine.', '')
-    assert v == 'linSOLl KEEP\n\nAll fine.' and why == ''
-    page = rr.compose(facts, None, 'claude not authenticated')
-    assert facts in page and 'no judgement: claude not authenticated' in page
-    page = rr.compose(facts, 'linSOLl KEEP', '')
-    assert page.startswith('linSOLl KEEP') and facts in page
-    v, why = rr.judge({'CLAUDE_BIN': '/nonexistent/claude'}, facts)
-    assert v is None and 'TOKEN' in why
-    v, why = rr.judge({'CLAUDE_BIN': '/nonexistent/claude',
-                       'CLAUDE_CODE_OAUTH_TOKEN': 'x'}, facts)
-    assert v is None and 'could not start' in why
 
 
 # --- F11: the fleet logs are rotated, and the rotation matches the writer --

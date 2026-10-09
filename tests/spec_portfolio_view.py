@@ -80,35 +80,6 @@ def _bars(n_hours, p0, drift, wobble, seed):
     return out
 
 
-def spec_H7_the_rehearsal_reproduces_the_research_harness_with_the_engines_planner():
-    import sys
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from ops.research.basket_carry import run_basket
-    n = 24 * 120
-    bars = {'BTC': _bars(n, 60000.0, 0.30, 0.08, 1.0), 'ETH': _bars(n, 3000.0, -0.20, 0.12, 2.0)}
-    funding = {c: [{'t': b['t'], 'rate': 0.0001} for i, b in enumerate(bars[c])
-                   if i == 0 or b['t'] // 28_800_000 != bars[c][i - 1]['t'] // 28_800_000]
-               for c in bars}
-    cfg = validate_config({'strategy': 'portfolio', 'name': 'r', 'capital': 10000,
-                           'assets': [{'coin': 'BTC', 'weight': 0.5}, {'coin': 'ETH', 'weight': 0.5}],
-                           'hedge': {'product': 'inverse', 'ratio': 1.0}})
-    mine = rehearse(cfg, bars, funding)
-    theirs = run_basket(['BTC', 'ETH'], bars, funding, None, {'BTC': 0.5, 'ETH': 0.5}, 0, 0.05, 24)
-    assert mine is not None and theirs is not None
-    # within 1.5 points over 120 days: the harness measures a leg's drift
-    # against the basket net of the shorts' P&L, the planner against the
-    # stack — a rebalance an hour apart now and then, the same book
-    assert abs(mine['equity'] - theirs['equity']) < 0.015, (mine['equity'], theirs['equity'])
-    assert abs(mine['funding'] - theirs['funding']) < 0.002 and abs(mine['maxDD'] - theirs['maxDD']) < 0.005
-    assert mine['rebalances'] >= 1 and mine['funding'] > 0.03                 # 120 days at 0.01%/8h ≈ 3.6%
-    # unhedged, the rehearsal is the stack's own path: the basket's price move, less fees
-    plain = validate_config({'strategy': 'portfolio', 'name': 'p', 'capital': 10000,
-                             'assets': [{'coin': 'BTC', 'weight': 0.5}, {'coin': 'ETH', 'weight': 0.5}],
-                             'hedge': {'ratio': 0}})
-    hodl = rehearse(plain, bars, funding)
-    assert hodl['funding'] == 0.0 and 0.9 < hodl['equity'] < 0.97             # BTC ends +25%, ETH −33%: the stack's own path
-
-
 def spec_H2_the_market_readings_cover_the_rows_legs():
     from gridgremlin.market import markets_of
     tmp = Path(tempfile.mkdtemp())

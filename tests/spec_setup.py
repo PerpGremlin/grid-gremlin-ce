@@ -475,8 +475,6 @@ def spec_P2_the_keys_stay_the_owners():
         text = (ops / 'systemd' / name).read_text()
         assert '${TELEGRAM_BOT_TOKEN}' not in text.replace('$${', '')
         assert '-K -' in text
-    tri = (ops / 'retired' / 'triage.sh').read_text()
-    assert 'bot${TELEGRAM_BOT_TOKEN}' not in tri and '-K -' in tri
 
 
 def spec_U6_quick_setup_to_a_written_bot_through_the_four_gates():
@@ -1965,9 +1963,8 @@ def spec_ops_no_live_unit_runs_the_retired_agent():
     """2026-10-06: the box-side Claude, retired 2026-09-28, still ran on every
     fleet failure because the fleet-down template called it and a token sat
     in .env. Retired is a property of the templates now: none may call it,
-    the alert no longer promises it, and each retired entry point refuses."""
-    import subprocess
-    import sys
+    and the alert no longer promises it (each retired entry point refusing
+    is pinned in spec_private.py, where ops/retired/ is)."""
     from pathlib import Path
     ops = Path(__file__).resolve().parents[1] / 'ops'
     for t in sorted((ops / 'systemd').glob('*.template')):
@@ -1977,13 +1974,6 @@ def spec_ops_no_live_unit_runs_the_retired_agent():
     for name in ('triage.sh', 'triage-settings.json', 'relay.py',
                  'range_review.py'):
         assert not (ops / name).exists(), f'ops/{name} is live again'
-    for script in ('relay.py', 'range_review.py'):
-        r = subprocess.run([sys.executable, '-I', str(ops / 'retired' / script),
-                            'x'], capture_output=True, text=True)
-        assert r.returncode != 0 and 'retired' in r.stderr, script
-    r = subprocess.run(['sh', str(ops / 'retired' / 'triage.sh'), 'demo'],
-                       capture_output=True, text=True)
-    assert r.returncode != 0 and 'retired' in r.stderr
 
 
 def spec_the_runner_leaves_no_temp_files_however_a_run_ends():

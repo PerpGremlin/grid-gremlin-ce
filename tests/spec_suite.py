@@ -29,6 +29,9 @@ def _mentions(seg, ident):
     return re.search(r'(?<![A-Za-z0-9])' + re.escape(ident) + r'(?![A-Za-z0-9])', seg) is not None
 
 
+PRIVATE_PINNED = ('F23', 'F10')     # the export, and the retired range review
+
+
 def spec_T1_every_invariant_has_a_spec_named_for_it_or_for_its_decision():
     """A spec names the id it pins — in its name, its docstring or a
     `# pins:` line — or is named for the D-number the SPEC entry cites
@@ -45,9 +48,10 @@ def spec_T1_every_invariant_has_a_spec_named_for_it_or_for_its_decision():
             continue
         unpinned.append(ident)
     if not (ROOT / 'ops' / 'public_export.py').exists():
-        # the public tree (D68) carries neither the exporter nor its spec —
-        # F23 is pinned in the private tree, where the export is run
-        unpinned = [i for i in unpinned if i != 'F23']
+        # the public tree (D68) carries neither the exporter nor its spec
+        # (F23) nor spec_private.py — what those pin is pinned in the
+        # private tree, where the export is run and the retired code lives
+        unpinned = [i for i in unpinned if i not in PRIVATE_PINNED]
     assert not unpinned, f'SPEC ids no spec names and no minting decision pins: {unpinned}'
 
 

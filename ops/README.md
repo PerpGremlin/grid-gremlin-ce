@@ -95,7 +95,8 @@ What runs, from the inside out:
     every intent in `logs/agent-intents-<fleet>.jsonl`.
 
 > **Retired: the box-side Claude** — triage on failure, the Telegram relay
-> and the daily range review, now in `ops/retired/` (its README says why).
+> and the daily range review, kept in the private tree's `ops/retired/`
+> (never exported, like `ops/research/`; its README says why).
 > Retired by the owner 2026-09-28, switched off for good 2026-10-06: the
 > audit of 2026-10-05 found their settings cage is not read-only, and triage
 > was still running on fleet failures while a token sat in `.env`. Each
