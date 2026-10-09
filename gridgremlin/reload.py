@@ -92,6 +92,8 @@ class FleetWatch:
                                     f'{botid}: new in the file — it starts at '
                                     'the next restart (F12)', urgent=True)
         for bot in self.bots:
+            if bot.cfg.get('trade'):
+                continue                   # D81: a trade lives in the trades file, not here
             new = rows.get(bot.botid)
             if new is None:
                 self.notifier.event('warn', bot.botid,

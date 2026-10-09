@@ -23,7 +23,7 @@ from pathlib import Path
 # loaded the first's book at its start and wrote it back stale every cycle,
 # and the first's writes dropped the second's row. The fleet's own key
 # still wins; the fleet-wide file refuses the build, naming the split.
-STATE_KINDS = ('tombstones', 'slide_state', 'portfolio_state')
+STATE_KINDS = ('tombstones', 'slide_state', 'portfolio_state', 'trades')
 
 
 class LegacyStateError(Exception):

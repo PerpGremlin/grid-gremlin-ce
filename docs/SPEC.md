@@ -1276,6 +1276,34 @@ eventually pin (T1).
   tooltip; no script; nothing without two points, and a quiet line until
   the snapshots carry the price (the fleet's next restart).
 
+## L — trades (D81)
+
+- **L1** A new trade joins a running fleet within a cycle. The trade watch
+  stats the trades file once a cycle; a changed file's new rows are each
+  built by the fleet's own builder (`main.build_market_bot`, the one every
+  bot meets at the start) and appended to the running bots. A trade on a
+  venue the fleet has no client for, a builder's refusal, or a position
+  another bot already holds (I2) is said and refused; the rest stand. The
+  fleet file watch (F12) leaves trades alone. At a start, the trades file's
+  rows join the build like any row; a malformed file refuses the build.
+- **L2** A trade is a one-round DCA row with no safety orders: its base
+  order is the whole trade (capital x leverage unless stated), repeat is
+  off, a DCA bot's ladder keys are refused by name, and its exit is still
+  required (M3). The real bot then enters, sets its take profit, rests no
+  safety order, and stands down when the round ends (M5).
+- **L3** The trades file is per fleet (`logs/trades-<fleet>.json`, X7b's
+  rule), changed only under its lock and re-read inside it. A market and
+  side another row of the fleet holds, or a trade already open there, is
+  refused. A trade's record (opened, by, reason, confidence) rides beside
+  its terms. Clearing a finished trade removes its row and its tombstone,
+  which only kept the finished trade from starting again.
+- **L4** The owner's door: `python3 -m gridgremlin.trade <fleet.json> open
+  long|short SYMBOL --capital Q --tp PCT [--leverage X] [--stop PCT]
+  [--trail PCT --trail-from PCT] [--maker]`, `list`, `clear <botid>`.
+  Percentages are of the entry; the stop is watched at the mark by the
+  engine (a venue stop sits at one fixed level, X10). Every number meets the
+  bot validator.
+
 ## J — the agent (D80)
 
 - **J2** The agent's working program does the arithmetic of technical

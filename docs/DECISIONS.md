@@ -773,6 +773,20 @@ stands unless the owner corrects it.
   `docs/AGENT.md`; its invariants enter SPEC.md as family J with their
   specs. *J2, the working program, built first (2026-10-09).*
 
+- **D81 — Trades: one primitive, two doors (2026-10-09).** The owner, on
+  D80: the box should open longs and shorts with stops and take-profits on
+  demand — *"one for the user, one for ai … by all means, build away."* A
+  trade is a one-round DCA row with no safety orders (`trade: true`): an
+  entry at market or maker, a take profit or tranches, an optional stop and
+  trailing, and the stand-down when its round ends. Trades live in the
+  fleet's trades file (`logs/trades-<fleet>.json`), never the tracked
+  config, and a running fleet builds a new one within a cycle with the same
+  builder every bot meets. One validator for every door: the owner's
+  (`gridgremlin.trade`, then the panel's form) and the agent's (D80). A
+  market and side another row holds is refused — the venue keeps one
+  position per side of a market per account. Built in stages: the engine
+  and the owner's command first; the form and the agent's door next.
+
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
 inline above.*

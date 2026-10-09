@@ -44,7 +44,7 @@ MARTINGALE_KEYS = COMMON_KEYS + (
     'take_profit_avg_pct', 'repeat', 'place_within_pct',
     'stop_cooldown_seconds', 'max_rounds', 'max_rounds_since',
     'max_hold_seconds', 'trailing_activation_pct', 'spot_borrow',
-    'spot_leverage')
+    'spot_leverage', 'trade')
 STOP_KEYS = ('watch', 'level', 'rungs_beyond', 'server_side',
              'from_base_pct', 'confirm_seconds', 'action',
              'confirm_candle', 'emergency_pct')
@@ -58,7 +58,7 @@ SLIDE_DIRECTIONS = ('favourable', 'both')   # D28 default; D34 opt-in
 START_ORDER_TYPES = ('market', 'maker')       # D37: the base order's entry
 FLEET_KEYS = ('bots', 'poll_seconds', 'allow_mainnet', 'preflight', 'account_caps',
               'risk_profiles', 'account', 'label',
-              'tombstones', 'slide_state', 'portfolio_state',
+              'tombstones', 'slide_state', 'portfolio_state', 'trades',
               'notify_orders', 'watchdog')
 
 # C2 — renames. old key -> (new key, message).
@@ -623,20 +623,43 @@ def validate_martingale(row, where='row'):
     cfg['capital'], cfg['leverage'] = capital, leverage
     cfg['ladder_notional'] = capital * leverage
 
-    cfg['base_order_size'] = _num(cfg, 'base_order_size', where, least=0.0,
-                                  least_open=True, required=True)
-    cfg['safety_order_size'] = _num(cfg, 'safety_order_size', where, least=0.0,
-                                    least_open=True, required=True)
-    cfg['order_size_multiplier'] = _num(cfg, 'order_size_multiplier', where,
-                                        least=1.0, most=10.0) or 1.0
-    cfg['deviation_pct'] = _fraction(cfg, 'deviation_pct', where)
-    if cfg['deviation_pct'] is None:
-        _refuse(f"{where}: 'deviation_pct' is required")
-    cfg['deviation_step_multiplier'] = _num(cfg, 'deviation_step_multiplier',
-                                            where, least=1.0, most=10.0) or 1.0
-    cfg['max_averaging_orders'] = _num(cfg, 'max_averaging_orders', where,
-                                       least=1, most=50, required=True,
-                                       integer=True)
+    # D81: a trade is a one-round DCA row with no safety orders — an entry,
+    # its exit (take profit, tranches, trailing), an optional stop, and the
+    # stand-down when the round ends (repeat off). It lives in the fleet's
+    # trades file, not the config, and joins a running fleet live (L1).
+    cfg['trade'] = _flag(cfg, 'trade')
+    if cfg['trade']:
+        if cfg.get('repeat'):
+            _refuse(f"{where}: a trade runs one round — 'repeat' is a DCA bot's (D81)")
+        for k in ('safety_order_size', 'deviation_pct', 'deviation_step_multiplier',
+                  'order_size_multiplier'):
+            if cfg.get(k) not in (None, 0, 0.0):
+                _refuse(f"{where}: a trade has no safety orders — '{k}' is a DCA bot's (D81)")
+        if cfg.get('max_averaging_orders') not in (None, 0):
+            _refuse(f"{where}: a trade has no safety orders — 'max_averaging_orders' "
+                    'is a DCA bot\'s (D81)')
+        cfg['base_order_size'] = (_num(cfg, 'base_order_size', where, least=0.0,
+                                       least_open=True) or capital * leverage)
+        cfg['safety_order_size'] = 0.0
+        cfg['order_size_multiplier'] = 1.0
+        cfg['deviation_pct'] = 0.0
+        cfg['deviation_step_multiplier'] = 1.0
+        cfg['max_averaging_orders'] = 0
+    else:
+        cfg['base_order_size'] = _num(cfg, 'base_order_size', where, least=0.0,
+                                      least_open=True, required=True)
+        cfg['safety_order_size'] = _num(cfg, 'safety_order_size', where, least=0.0,
+                                        least_open=True, required=True)
+        cfg['order_size_multiplier'] = _num(cfg, 'order_size_multiplier', where,
+                                            least=1.0, most=10.0) or 1.0
+        cfg['deviation_pct'] = _fraction(cfg, 'deviation_pct', where)
+        if cfg['deviation_pct'] is None:
+            _refuse(f"{where}: 'deviation_pct' is required")
+        cfg['deviation_step_multiplier'] = _num(cfg, 'deviation_step_multiplier',
+                                                where, least=1.0, most=10.0) or 1.0
+        cfg['max_averaging_orders'] = _num(cfg, 'max_averaging_orders', where,
+                                           least=1, most=50, required=True,
+                                           integer=True)
     _sched_d = cfg['deviation_pct']
     _sched_s = cfg['deviation_step_multiplier']
     _cum = sum(_sched_d * _sched_s ** i
@@ -970,6 +993,7 @@ def validate_fleet(data, where='fleet'):
         'tombstones': data.get('tombstones'),            # X7 path (default logs/)
         'slide_state': data.get('slide_state'),          # G22 path (default logs/)
         'portfolio_state': data.get('portfolio_state'),  # H2 path (default logs/)
+        'trades': data.get('trades'),                    # D81 path (default logs/)
         'account': _account_name(data.get('account'), where),   # H5: whose keys
         'label': _fleet_label(data.get('label'), where),         # U55: the dash's name for it
     }

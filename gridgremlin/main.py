@@ -390,6 +390,132 @@ def _logs_dir(fleet_path):
     return logs_dir(fleet_path)
 
 
+def build_market_bot(cfg, client, notifier, tombs, slide):
+    """One grid or DCA row (a trade included, D81) built on a connected
+    client: its adapter from the venue's catalogue, the build's warnings,
+    the bot, its tombstone, its link fit, the venue's modes and leverage.
+    The fleet build and the live trade watch (L1) share it, so a trade
+    joining a running fleet is built exactly as every bot at the start.
+    Returns (bot, identity)."""
+    venue = cfg['venue']
+    if venue == 'hyperliquid':
+        # _entry refuses BY NAME — a coin the venue removed must say so
+        # (the XRP testnet delisting crashed the build as StopIteration)
+        _, entry = client._entry(cfg['symbol'])
+        from .exchange.hyperliquid.truth import parse_instrument as hl_pi
+        spec = hl_pi(entry)
+        from .exchange.hyperliquid.adapters import HLPerpAdapter
+        adapter = HLPerpAdapter(spec)
+    else:
+        spec = parse_instrument(cfg['market_type'],
+                                client.instruments_info(cfg['market_type'],
+                                                        cfg['symbol']))
+        adapter = adapter_for(cfg['market_type'], spec)
+    cfg['funding_interval_minutes'] = spec['funding_interval_minutes']
+    if cfg.get('strategy') != 'martingale':
+        # G16: the venue's own fee schedule vs this grid's own spacing —
+        # a grid that cannot clear its round trip loses on every trip,
+        # and nothing else in the build would ever say so.
+        rates = getattr(client, 'fee_rates', None)
+        if rates is not None:
+            try:
+                from .ladder import grid_rungs as _g16, trip_economics
+                maker = rates(cfg['market_type'], cfg['symbol'])['maker']
+                net, gap, trip = trip_economics(_g16(cfg, adapter), maker)
+                if net is not None and net <= 0:
+                    _vn(notifier, venue).event(
+                        'warn', cfg['symbol'],
+                        f'EVERY ROUND TRIP LOSES: rung gap {gap:.4%} vs '
+                        f'round-trip fee {trip:.4%} — widen the range or '
+                        f'cut rungs (G16)')
+                elif net is not None and net < trip:
+                    _vn(notifier, venue).event(
+                        'warn', cfg['symbol'],
+                        f'thin margin: rung gap {gap:.4%} barely clears '
+                        f'the {trip:.4%} round trip (net {net:.4%}/trip)')
+            except (VenueError, OSError, KeyError, TypeError):
+                pass
+        # B8 was pinned as a pure function and never wired to a call site
+        # (audit 2026-08-06): a grid whose gap sits inside the guard band
+        # churns forever, silently. It needs LIVE quotes, so it lands
+        # here — stated loudly, not refused on a transient spread.
+        try:
+            from .ladder import (SPACING_GUARD_MULTIPLE,
+                                 grid_rungs as _gr,
+                                 spacing_clears_guard)
+            t = client.read_symbol_truth(
+                cfg['market_type'], cfg['symbol'],
+                spec['funding_interval_minutes'])
+            ok, gap, guard = spacing_clears_guard(
+                _gr(cfg, adapter), t['bid'], t['ask'])
+            # the guard scales with the LIVE spread, so a grid sitting
+            # within a few percent of the threshold flips either way
+            # between restarts — warn on a real shortfall, not on noise
+            if not ok and gap < 0.95 * SPACING_GUARD_MULTIPLE * guard:
+                _vn(notifier, venue).event(
+                    'warn', cfg['symbol'],
+                    f'rung gap {gap:.10g} sits inside the cross guard '
+                    f'({guard:.10g}, needs '
+                    f'{SPACING_GUARD_MULTIPLE * guard:.10g}) — nearest '
+                    'rungs will be dropped; widen the range or cut '
+                    'rungs (B8)')
+        except (VenueError, OSError, KeyError, TypeError):
+            pass                    # a quote we cannot read is not a verdict
+    if (cfg.get('spot_borrow')
+            and spec.get('margin_trading') not in (None, 'both',
+                                                   'utaOnly')):
+        # F8's metadata half: the venue's own catalogue says this coin
+        # cannot margin-trade — ask what CAN be asked (D27)
+        cfg['_preflight_fail'] = (f"venue catalogue: marginTrading="
+                                  f"'{spec.get('margin_trading')}' — "
+                                  'this coin cannot borrow')
+    placeable_or_dead(cfg, adapter)
+    bot = Bot(cfg, adapter, client, notifier, gen_seed=int(time.time()),
+              tombstones=tombs, slide_state=slide)
+    if bot.offset:
+        # G22: the window survived the process — say so at the start
+        _vn(notifier, venue).event(
+            'slide', bot.botid,
+            f'resuming {bot.offset:+d} rungs from home (G22)')
+    for warn in (slide_leverage_warning(cfg), slide_adverse_warning(cfg)):
+        if warn:
+            _vn(notifier, venue).event('warn', bot.botid, warn)
+    if tombs.has(bot.botid):
+        # X7: a fired stop survives the process. Dead AND visible (F4);
+        # revival = the operator deletes the tombstone entry, on purpose.
+        bot.alive = False
+        _vn(notifier, venue).event('warn', bot.botid,
+                       'tombstoned — a stop fired '
+                       f'({tombs.reason(bot.botid)}); remove the entry '
+                       f'from {tombs.path} '
+                       'to revive, deliberately')
+    limit = 16 if venue == 'hyperliquid' else BYBIT_LINK_LIMIT
+    chars = 4 if venue == 'hyperliquid' else 10
+    check_link_fits(bot.botid, widest_rung(cfg), limit, gen_chars=chars)
+    identity = bot_identity(cfg, adapter)
+    if venue == 'bybit' and cfg['market_type'] == 'linear':
+        client.ensure_hedge_mode(cfg['market_type'], cfg['symbol'])
+    elif (venue == 'bybit' and cfg['market_type'] == 'spot'
+            and cfg.get('spot_borrow')):
+        try:
+            client.ensure_collateral(spec['base_coin'])
+        except VenueError as e:
+            _vn(notifier, venue).event('warn', cfg['symbol'],
+                                       f'collateral switch deferred: {e}')
+    elif venue == 'hyperliquid':
+        lev, cross, note = hl_leverage_plan(cfg, adapter)
+        if note:
+            _vn(notifier, venue).event('warn', cfg['symbol'], note)
+        try:
+            if lev is not None:
+                client.update_leverage(client._entry(cfg['symbol'])[0],
+                                       lev, is_cross=cross)
+        except VenueError as e:
+            _vn(notifier, venue).event('warn', cfg['symbol'],
+                                       leverage_refusal_note(e))
+    return bot, identity
+
+
 def build_fleet(fleet_path, notifier, allow_mainnet=False):
     load_env()
     fleet = validate_fleet(json.loads(Path(fleet_path).read_text()))
@@ -408,7 +534,16 @@ def build_fleet(fleet_path, notifier, allow_mainnet=False):
         raise ConfigError(str(e)) from e            # G22/X7: fail CLOSED
     clients, bots, identities = {}, [], []
     pstate = None
-    for cfg in fleet['bots']:
+    # D81: the trades file's rows join the build as their own one-round rows;
+    # a row that does not validate is named and set aside (D52's shape)
+    from .trades import TradeError, load_trades
+    try:
+        trade_rows, trade_refused = load_trades(state_path(fleet_path, fleet, 'trades'))
+    except TradeError as e:
+        raise ConfigError(str(e)) from e
+    for i, why in trade_refused:
+        notifier.event('warn', 'fleet', f'trade {i} is skipped — {why} (L1)')
+    for cfg in fleet['bots'] + [dict(t, account=fleet['account']) for t in trade_rows]:
         venue = cfg['venue']
         if venue not in clients:
             armed = fleet.get('allow_mainnet', False) and allow_mainnet
@@ -438,121 +573,8 @@ def build_fleet(fleet_path, notifier, allow_mainnet=False):
                                            'to revive, deliberately')
             bots.append(bot)
             continue
-        if venue == 'hyperliquid':
-            # _entry refuses BY NAME — a coin the venue removed must say so
-            # (the XRP testnet delisting crashed the build as StopIteration)
-            _, entry = client._entry(cfg['symbol'])
-            from .exchange.hyperliquid.truth import parse_instrument as hl_pi
-            spec = hl_pi(entry)
-            from .exchange.hyperliquid.adapters import HLPerpAdapter
-            adapter = HLPerpAdapter(spec)
-        else:
-            spec = parse_instrument(cfg['market_type'],
-                                    client.instruments_info(cfg['market_type'],
-                                                            cfg['symbol']))
-            adapter = adapter_for(cfg['market_type'], spec)
-        cfg['funding_interval_minutes'] = spec['funding_interval_minutes']
-        if cfg.get('strategy') != 'martingale':
-            # G16: the venue's own fee schedule vs this grid's own spacing —
-            # a grid that cannot clear its round trip loses on every trip,
-            # and nothing else in the build would ever say so.
-            rates = getattr(client, 'fee_rates', None)
-            if rates is not None:
-                try:
-                    from .ladder import grid_rungs as _g16, trip_economics
-                    maker = rates(cfg['market_type'], cfg['symbol'])['maker']
-                    net, gap, trip = trip_economics(_g16(cfg, adapter), maker)
-                    if net is not None and net <= 0:
-                        _vn(notifier, venue).event(
-                            'warn', cfg['symbol'],
-                            f'EVERY ROUND TRIP LOSES: rung gap {gap:.4%} vs '
-                            f'round-trip fee {trip:.4%} — widen the range or '
-                            f'cut rungs (G16)')
-                    elif net is not None and net < trip:
-                        _vn(notifier, venue).event(
-                            'warn', cfg['symbol'],
-                            f'thin margin: rung gap {gap:.4%} barely clears '
-                            f'the {trip:.4%} round trip (net {net:.4%}/trip)')
-                except (VenueError, OSError, KeyError, TypeError):
-                    pass
-            # B8 was pinned as a pure function and never wired to a call site
-            # (audit 2026-08-06): a grid whose gap sits inside the guard band
-            # churns forever, silently. It needs LIVE quotes, so it lands
-            # here — stated loudly, not refused on a transient spread.
-            try:
-                from .ladder import (SPACING_GUARD_MULTIPLE,
-                                     grid_rungs as _gr,
-                                     spacing_clears_guard)
-                t = client.read_symbol_truth(
-                    cfg['market_type'], cfg['symbol'],
-                    spec['funding_interval_minutes'])
-                ok, gap, guard = spacing_clears_guard(
-                    _gr(cfg, adapter), t['bid'], t['ask'])
-                # the guard scales with the LIVE spread, so a grid sitting
-                # within a few percent of the threshold flips either way
-                # between restarts — warn on a real shortfall, not on noise
-                if not ok and gap < 0.95 * SPACING_GUARD_MULTIPLE * guard:
-                    _vn(notifier, venue).event(
-                        'warn', cfg['symbol'],
-                        f'rung gap {gap:.10g} sits inside the cross guard '
-                        f'({guard:.10g}, needs '
-                        f'{SPACING_GUARD_MULTIPLE * guard:.10g}) — nearest '
-                        'rungs will be dropped; widen the range or cut '
-                        'rungs (B8)')
-            except (VenueError, OSError, KeyError, TypeError):
-                pass                    # a quote we cannot read is not a verdict
-        if (cfg.get('spot_borrow')
-                and spec.get('margin_trading') not in (None, 'both',
-                                                       'utaOnly')):
-            # F8's metadata half: the venue's own catalogue says this coin
-            # cannot margin-trade — ask what CAN be asked (D27)
-            cfg['_preflight_fail'] = (f"venue catalogue: marginTrading="
-                                      f"'{spec.get('margin_trading')}' — "
-                                      'this coin cannot borrow')
-        placeable_or_dead(cfg, adapter)
-        bot = Bot(cfg, adapter, client, notifier, gen_seed=int(time.time()),
-                  tombstones=tombs, slide_state=slide)
-        if bot.offset:
-            # G22: the window survived the process — say so at the start
-            _vn(notifier, venue).event(
-                'slide', bot.botid,
-                f'resuming {bot.offset:+d} rungs from home (G22)')
-        for warn in (slide_leverage_warning(cfg), slide_adverse_warning(cfg)):
-            if warn:
-                _vn(notifier, venue).event('warn', bot.botid, warn)
-        if tombs.has(bot.botid):
-            # X7: a fired stop survives the process. Dead AND visible (F4);
-            # revival = the operator deletes the tombstone entry, on purpose.
-            bot.alive = False
-            _vn(notifier, venue).event('warn', bot.botid,
-                           'tombstoned — a stop fired '
-                           f'({tombs.reason(bot.botid)}); remove the entry '
-                           f'from {tombs.path} '
-                           'to revive, deliberately')
-        limit = 16 if venue == 'hyperliquid' else BYBIT_LINK_LIMIT
-        chars = 4 if venue == 'hyperliquid' else 10
-        check_link_fits(bot.botid, widest_rung(cfg), limit, gen_chars=chars)
-        identities.append((bot.botid, bot_identity(cfg, adapter)))
-        if venue == 'bybit' and cfg['market_type'] == 'linear':
-            client.ensure_hedge_mode(cfg['market_type'], cfg['symbol'])
-        elif (venue == 'bybit' and cfg['market_type'] == 'spot'
-                and cfg.get('spot_borrow')):
-            try:
-                client.ensure_collateral(spec['base_coin'])
-            except VenueError as e:
-                _vn(notifier, venue).event('warn', cfg['symbol'],
-                                           f'collateral switch deferred: {e}')
-        elif venue == 'hyperliquid':
-            lev, cross, note = hl_leverage_plan(cfg, adapter)
-            if note:
-                _vn(notifier, venue).event('warn', cfg['symbol'], note)
-            try:
-                if lev is not None:
-                    client.update_leverage(client._entry(cfg['symbol'])[0],
-                                           lev, is_cross=cross)
-            except VenueError as e:
-                _vn(notifier, venue).event('warn', cfg['symbol'],
-                                           leverage_refusal_note(e))
+        bot, identity = build_market_bot(cfg, client, notifier, tombs, slide)
+        identities.append((bot.botid, identity))
         bots.append(bot)
     _ensure_symbol_capacity(bots, notifier)
     check_fleet_unique(identities)
@@ -589,6 +611,8 @@ def build_fleet(fleet_path, notifier, allow_mainnet=False):
                   f'{len(bots)} bot(s) on {envs}: '
                   + ', '.join(b.botid for b in bots))
     _project_margin(clients, market_rows(fleet), fleet_n)
+    fleet['_identities'] = identities          # L1: the live trade watch's collision check
+    fleet['_tombs'], fleet['_slide'] = tombs, slide
     return fleet, clients, bots
 
 
@@ -721,6 +745,12 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
         lost_warn_t = 0.0
         from .reload import FleetWatch
         watch = FleetWatch(fleet_path, bots, clients, notifier)   # F12
+        from .trades import TradeWatch                            # L1 (D81)
+        trade_watch = TradeWatch(
+            state_path(fleet_path, fleet, 'trades'), bots, fleet.get('_identities', []),
+            lambda cfg: build_market_bot(dict(cfg, account=fleet['account']), clients[cfg['venue']],
+                                         notifier, fleet['_tombs'], fleet['_slide']),
+            notifier, clients)
         while cycles is None or n < cycles:
             try:
                 try:
@@ -729,6 +759,11 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
                     notifier.event('warn', 'fleet',
                                    f'fleet file watch: {type(e).__name__}: '
                                    f'{e} — running on (F12)')
+                try:
+                    trade_watch.poll()
+                except Exception as e:                       # noqa: BLE001
+                    notifier.event('warn', 'fleet',
+                                   f'trade watch: {type(e).__name__}: {e} — running on (L1)')
                 wallets = {}
                 for v, c in clients.items():                          # E8
                     try:
