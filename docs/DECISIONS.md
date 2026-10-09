@@ -762,6 +762,17 @@ stands unless the owner corrects it.
   (F29). Dates are the owner's to fill; an unknown date is listed and never
   paged. Nothing renews anything.
 
+- **D80 — The agent experiment (2026-10-09).** The owner, having read
+  `docs/AGENT.md`: *"grant D80, build the TA toolkit first."* A language
+  model trades one Bybit demo subaccount intraday with full discretion over
+  what and when, supervised, through one narrow door (a forced command with
+  two verbs) and limits it cannot change, scored against a rules-only twin
+  and flat. The model never runs on the box (the 2026-10-06 retirement
+  stands). Phases — paper, small demo, sized demo — each the owner's call;
+  anything beyond demo needs its own D-number. The design is
+  `docs/AGENT.md`; its invariants enter SPEC.md as family J with their
+  specs. *J2, the working program, built first (2026-10-09).*
+
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
 inline above.*

@@ -1276,6 +1276,21 @@ eventually pin (T1).
   tooltip; no script; nothing without two points, and a quiet line until
   the snapshots carry the price (the fleet's next restart).
 
+## J — the agent (D80)
+
+- **J2** The agent's working program does the arithmetic of technical
+  analysis in code, so a model — or the owner by hand — only judges
+  (`python3 -m gridgremlin.agent_tools <SYMBOL> … [--tf 5m,15m,1h,4h]`).
+  Read-only, Bybit's public endpoints, no key. Per market, one plain-text
+  block: the price, the day's change, funding per 8 h, open interest's
+  24 h change, the accounts' long share, depth within 1% (D67's reader);
+  per timeframe, EMA 9/21/50/200 and how many the price sits above, RSI 14
+  (Wilder), ATR 14 as a percent, Bollinger width, ADX with the D67 regime
+  word, and the last three pivot highs and lows (a flat top one level, a
+  dead-flat window none); the session's VWAP from its opening (Asia 00,
+  Europe 08, US 16 UTC) and the UTC day's high and low. A figure that
+  cannot be read is said in its place, never guessed.
+
 ## H — the hedged portfolio (D78)
 
 The design is `docs/PORTFOLIO.md`; an invariant appears here with the spec
