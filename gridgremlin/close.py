@@ -84,10 +84,9 @@ def main(argv):
             b['market_type'], b['symbol'], b['side']) == botid), None)
         if cfg is None:
             raise ConfigError(f'{botid}: not in this fleet')
-        from .main import _logs_dir, refuse_mainnet
-        from .tombstones import Tombstones
-        tombs = Tombstones(fleet.get('tombstones')
-                           or str(_logs_dir(fleet_path) / 'tombstones.json'))
+        from .main import refuse_mainnet
+        from .tombstones import Tombstones, path_for
+        tombs = Tombstones(str(path_for(fleet_path, fleet)))
         if cfg['venue'] == 'hyperliquid':
             from .main import fleet_running
             if fleet_running(fleet_path, {c['venue'] for c in fleet['bots']}, fleet['account']):

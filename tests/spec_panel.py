@@ -340,7 +340,7 @@ def spec_X7_two_writers_cannot_undo_each_other():
     t.join(2)
     assert order == ['first', 'second']
     # one answer for where a fleet's tombstones live
-    assert path_for(d / 'configs' / 'f.json', {}) == d / 'logs' / 'tombstones.json'
+    assert path_for(d / 'configs' / 'f.json', {}) == d / 'logs' / 'tombstones-f.json'
     assert path_for(d / 'x.json', {'tombstones': '/t/z.json'}) == _P('/t/z.json')
 
 
@@ -1239,9 +1239,14 @@ def spec_U43_several_units_restart_together_or_none_does():
         supervise = False
         pages = []
 
-        def _tombs_path(self):
+        labels = ('demo', 'hl')
+
+        def _tombs_path(self, fi=0):
             from pathlib import Path
             return Path('/nonexistent/tombstones.json')
+
+        def _tombs_all(self):
+            return [(0, 'demo', self._tombs_path(), {})]
 
         def _fleet_bots(self):
             return {}

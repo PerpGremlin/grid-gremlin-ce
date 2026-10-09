@@ -69,10 +69,8 @@ def remove(path, botid):
 
 
 def path_for(fleet_path, fleet_raw):
-    """Where a fleet's tombstones live — the fleet's own key, else logs/
-    beside its home — the one answer for engine, close and panel."""
-    if fleet_raw.get('tombstones'):
-        return Path(fleet_raw['tombstones'])
-    parent = Path(fleet_path).resolve().parent
-    root = parent.parent if parent.name == 'configs' else parent
-    return root / 'logs' / 'tombstones.json'
+    """Where a fleet's tombstones live — the fleet's own key, else
+    logs/tombstones-<fleet>.json beside its home — the one answer for
+    engine, close and panel (durable.state_path)."""
+    from .durable import state_path
+    return state_path(fleet_path, fleet_raw, 'tombstones')

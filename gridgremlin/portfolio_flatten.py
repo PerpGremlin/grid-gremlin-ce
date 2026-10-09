@@ -24,7 +24,7 @@ def main(argv):
     from .exchange.env import load_env, select_account
     from .main import _logs_dir, build_portfolio, fleet_running
     from .portfolio_state import PortfolioState
-    from .tombstones import Tombstones, remove
+    from .tombstones import Tombstones, path_for, remove
     load_env()
     fleet = validate_fleet(json.loads(Path(fleet_path).read_text()))
     select_account(fleet['account'])
@@ -38,7 +38,7 @@ def main(argv):
     cfg = rows[0]
     logs = _logs_dir(fleet_path)
     state = PortfolioState(str(logs / 'portfolio_state.json'))
-    tombs = Tombstones(str(fleet.get('tombstones') or logs / 'tombstones.json'))
+    tombs = Tombstones(str(path_for(fleet_path, fleet)))
     client = WriteClient()
     if client.env == 'mainnet':
         print('mainnet: not from here (D25)')

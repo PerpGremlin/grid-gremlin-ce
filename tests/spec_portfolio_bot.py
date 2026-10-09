@@ -907,9 +907,55 @@ def spec_H4_the_loans_cost_is_read_from_the_venues_ledger_and_a_rate_above_the_c
     clock.t += DAY; venue.t_ms = int(clock.t * 1000)
     venue.available_pct = 0.9
     venue.borrow.append({'time_ms': venue.t_ms - 1000, 'cost': 0.0, 'hourly_rate': 0.00001, 'size': 0.0})
+    venue.pay_funding('BTCUSD', 0.002)                                    # the carry pays well: 44%/yr
     bot.cycle()
     assert bot.row['lever_cap'] == 1.0                                    # the rate still high: no easing
     clock.t += DAY; venue.t_ms = int(clock.t * 1000)
     venue.borrow.append({'time_ms': venue.t_ms - 1000, 'cost': 0.0, 'hourly_rate': 0.000004, 'size': 0.0})
+    venue.pay_funding('BTCUSD', 0.002)
     bot.cycle()
     assert abs(bot.row['lever_cap'] - 1.05) < 1e-9                        # under the cap again: eased a step
+
+
+def spec_H4_a_loan_that_costs_more_than_the_carry_it_buys_stands_down_to_1x():
+    """H1's rule, found unbuilt 2026-10-09: the margin is lightened to 1×
+    whenever the trailing funding yield is below the borrow rate — a
+    levered stack whose shorts earn less than the loan costs is a levered
+    long with a bill. Judged only once the row has a day of history (a
+    fresh row has no funding yet), on the shorts' notional at mark, as a
+    yearly rate against the venue's; it blocks the ratchet's easing until
+    the carry pays again."""
+    venue, lines, clock = _venue(), [], Clock()
+    venue.coins['USDT'] = 100000.0
+    venue.t_ms = int(clock.t * 1000)
+    venue.borrow = []
+    venue.borrow_history = lambda coin, since, now: [r for r in venue.borrow if since < r['time_ms'] <= now]
+    row = {'capital': 100000, 'spot_borrow': True, 'margin': {'spot_leverage': 2.0, 'borrow_apr_max': 0.06},
+           'assets': [{'coin': 'BTC', 'weight': 1.0}, {'coin': 'ETH', 'weight': 1.0}], 'risk': {'max_weight': 1.0}}
+    bot, _ = _bot(venue, lines, clock=clock, row=row)
+    bot.cycle()                                                           # the stack at 2×, hedged
+    clock.t += 3600; venue.t_ms = int(clock.t * 1000)
+    venue.borrow.append({'time_ms': venue.t_ms - 1000, 'cost': 0.45, 'hourly_rate': 0.00000449, 'size': 100000.0})
+    bot.cycle()
+    assert bot._funding_yield({'hedge': {'BTC': 1.0}, 'short': {}}, {'BTC': 60000.0}, venue.t_ms) is None   # no day yet
+    assert bot.row.get('lever_cap') is None                              # an hour in: not judged
+    clock.t += DAY; venue.t_ms = int(clock.t * 1000)
+    venue.pay_funding('BTCUSD', 0.00001)                                  # 0.6 USDT on ~200k: nothing
+    venue.borrow.append({'time_ms': venue.t_ms - 1000, 'cost': 0.0, 'hourly_rate': 0.00000449, 'size': 100000.0})
+    bot.cycle()
+    assert bot.row['lever_cap'] == 1.0 and bot.row['yield_blocks_relax']
+    said = [ln for ln in lines if 'under the loan' in ln]
+    assert said and 'stands down to 1×' in said[0] and '3.93%' in said[0]
+    sells = [o for o in venue.orders if o[0] == 'spot' and o[2] == 'Sell']
+    assert sells and abs(sum(o[3] * venue.marks[o[1]] for o in sells) - 100000.0) < 300.0   # the loan repaid
+    assert not bot.row['rate_blocks_relax']                               # the rate itself is under the cap
+    clock.t += DAY; venue.t_ms = int(clock.t * 1000)
+    venue.available_pct = 0.9
+    venue.borrow.append({'time_ms': venue.t_ms - 1000, 'cost': 0.0, 'hourly_rate': 0.00000449, 'size': 0.0})
+    bot.cycle()
+    assert bot.row['lever_cap'] == 1.0                                    # the carry still thin: no easing
+    clock.t += DAY; venue.t_ms = int(clock.t * 1000)
+    venue.pay_funding('BTCUSD', 0.003)                                    # 180 USDT a day on ~100k: 65%/yr
+    venue.borrow.append({'time_ms': venue.t_ms - 1000, 'cost': 0.0, 'hourly_rate': 0.00000449, 'size': 0.0})
+    bot.cycle()
+    assert not bot.row['yield_blocks_relax'] and abs(bot.row['lever_cap'] - 1.05) < 1e-9   # eased a step

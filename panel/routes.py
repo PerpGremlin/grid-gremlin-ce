@@ -912,13 +912,27 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                   'ceiling': form.get('ceiling', ''),
                                   'pair': pair if how == 'quick' else ''})
 
-    def _tombs_path(self):
+    def _tombs_path(self, fi=0):
+        """One fleet's tombstone file (one per fleet since 2026-10-08)."""
         from gridgremlin.tombstones import path_for
+        f = self.fleets[min(fi, len(self.fleets) - 1)]
         try:
-            raw = json.loads(Path(self.fleets[0]).read_text())
+            raw = json.loads(Path(f).read_text())
         except (OSError, ValueError):
             raw = {}
-        return path_for(self.fleets[0], raw)
+        return path_for(f, raw)
+
+    def _tombs_all(self):
+        """Every fleet's tombstones: [(fleet index, label, path, rows)]."""
+        out = []
+        for fi, lb in enumerate(self.labels):
+            tp = self._tombs_path(fi)
+            try:
+                rows = json.loads(tp.read_text() or '{}') if tp.exists() else {}
+            except (OSError, ValueError):
+                rows = {}
+            out.append((fi, lb, tp, rows))
+        return out
 
     def _edit_page(self):
         q = dict(urllib.parse.parse_qsl(self.path.split('?', 1)[1]))
@@ -1108,25 +1122,23 @@ written config (§11).</p>
                     'side of this market.</p>'))
 
     def _tombs_html(self):
-        tombs = {}
-        tp = self._tombs_path()
-        if tp.exists():
-            tombs = json.loads(tp.read_text() or '{}')
         trows = ''.join(
-            f"<tr><td>{html.escape(b)}</td>"
+            f"<tr><td class='dim'>{html.escape(str(lb))}</td><td>{html.escape(b)}</td>"
             f"<td class='dim'>{html.escape(str(v.get('reason')))}</td>"
             f"<td><form method='post' action='/revive' style='margin:0'>"
             f"<input type='hidden' name='gg' value='1'>"
+            f"<input type='hidden' name='fleet' value='{fi}'>"
             f"<input name='confirm' size='14' placeholder='{html.escape(b, quote=True)}'>"
             f"<button>revive</button></form></td></tr>"
+            for fi, lb, _tp, tombs in self._tombs_all()
             for b, v in tombs.items()) or \
-            '<tr><td class="dim" colspan="3">no tombstones</td></tr>'
+            '<tr><td class="dim" colspan="4">no tombstones</td></tr>'
         return ('<h1>tombstones <span class="dim">— revival is deliberate, '
                 'with the evidence (X7)</span></h1>'
                 '<p class="dim">to revive a stopped bot, type its name in '
                 'the box on its own row and press revive (capitals do not '
-                'matter).</p>'
-                '<table><tr><th>bot</th><th>reason</th><th></th></tr>'
+                'matter). One file per fleet; the row says whose.</p>'
+                '<table><tr><th>fleet</th><th>bot</th><th>reason</th><th></th></tr>'
                 + trows + '</table>'
                 '<p class="dim">a revival takes effect at the next fleet '
                 'start — the file is the truth; the process reads it at '
@@ -1161,9 +1173,9 @@ written config (§11).</p>
             # each the decision; ALL must be units or nothing is done
             typed = [u for u in re.split(r'[\s,]+', form.get('confirm', ''))
                      if u]
-            tp = self._tombs_path()
-            tombs = (json.loads(tp.read_text() or '{}') if tp.exists()
-                     else {})
+            tombs = {}
+            for _fi, _lb, _tp, rows in self._tombs_all():
+                tombs.update(rows)
             for u in typed or ['']:
                 why = unit_refusal(u, self.units, tombs, self._fleet_bots())
                 if why:
@@ -1205,8 +1217,11 @@ written config (§11).</p>
                               '<a href="/">fleet</a></p>')
         # /revive — under the engine's own lock (X7, audit 2026-10-05)
         from gridgremlin.tombstones import remove as tomb_remove
-        tp = self._tombs_path()
-        tombs = json.loads(tp.read_text() or '{}') if tp.exists() else {}
+        tp = self._tombs_path(int(_f(form.get('fleet')) or 0))
+        try:
+            tombs = json.loads(tp.read_text() or '{}') if tp.exists() else {}
+        except (OSError, ValueError):
+            tombs = {}
         botid = next((t for t in tombs if named(form.get('confirm'), t)),
                      form.get('confirm', ''))
         gone = tomb_remove(tp, botid) if botid in tombs else None
