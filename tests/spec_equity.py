@@ -114,3 +114,36 @@ def spec_U65_the_snapshot_carries_each_bots_price_and_the_page_draws_it_with_lev
     assert '<h3>price, 24 h</h3><svg class="px"' in page and page.index('price, 24 h') < page.index('class="cards one"')
     quiet = position_page(0, 'demo', 'linBTCUSDTl', c, belief)
     assert 'it starts with the fleet' in quiet and '<svg class="px"' not in quiet
+
+
+def spec_H8_the_rehearsal_holds_a_ratio_one_book_dollar_neutral_and_averages_inverse_entries_harmonically():
+    """The return-split audit's controls: with fees and funding off, a
+    ratio-1 inverse-hedged book on a doubling, a halving, and a doubling
+    and back ends worth exactly what it started with. Before the fix the
+    rehearsal reported x0.832, x0.886 and x1.066 on these paths and the
+    true book drifted to a net short of nearly twice its equity."""
+    import gridgremlin.portfolio_rehearse as pr
+    from gridgremlin.config import validate_config
+    leg = pr._Leg(True)
+    leg.trade('sell', 1.0, 100.0)                     # 100 contracts at 100
+    leg.trade('sell', 0.5, 200.0)                     # 100 more at 200
+    assert abs(leg.entry - 400.0 / 3) < 1e-9 and abs(leg.open_coins(200.0) - (-0.5)) < 1e-9
+    row = validate_config({'strategy': 'portfolio', 'name': 't', 'venue': 'bybit', 'capital': 10000,
+                           'assets': [{'coin': 'BTC', 'weight': 1.0}], 'risk': {'max_weight': 1.0},
+                           'hedge': {'product': 'inverse', 'ratio': 1.0},
+                           'rebalance': {'every_hours': 24, 'drift_pct': 0.05}})
+    saved = pr.SPOT_FEE, pr.PERP_FEE
+    pr.SPOT_FEE = pr.PERP_FEE = 0.0
+    try:
+        hours = 30 * 24
+        paths = {'x2': [100.0 * (1 + i / hours) for i in range(hours + 1)],
+                 'x0.5': [100.0 * (1 - 0.5 * i / hours) for i in range(hours + 1)]}
+        paths['x2 and back'] = paths['x2'] + paths['x2'][::-1]
+        for name, ps in paths.items():
+            bars = {'BTC': [{'t': i * 3_600_000, 'c': p} for i, p in enumerate(ps)]}
+            r = pr.rehearse(row, bars, {'BTC': []})
+            # within half a percent: the 0.3% cash reserve, spent on spot at a later tick, is
+            # inside the 5% drift band and rides unhedged — the band's own slack, not a drift
+            assert abs(r['equity'] - 1.0) < 0.005, (name, r['equity'])
+    finally:
+        pr.SPOT_FEE, pr.PERP_FEE = saved

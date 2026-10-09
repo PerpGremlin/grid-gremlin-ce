@@ -48,11 +48,22 @@ class _Leg:
             self.qty -= closed
             if self.qty <= 1e-12:
                 self.qty, self.entry = 0.0, 0.0
+        elif self.inverse:
+            # H8: $1 contracts average HARMONICALLY — the arithmetic mean
+            # overstated every short added in a rally (the return-split audit)
+            self.entry = (p if not self.qty else
+                          (self.qty + delta) / (self.qty / self.entry + delta / p))
+            self.qty += delta
         else:
             self.entry = ((self.entry * self.qty + p * delta) / (self.qty + delta)
                           if self.qty + delta else 0.0)
             self.qty += delta
         return coins * p                           # quote notional traded
+
+    def open_coins(self, p):
+        """H8: an inverse leg's open P&L in its coin — part of the coins the
+        book owns, so a hedge of N contracts covers N / p of them exactly."""
+        return self.qty * (1 / p - 1 / self.entry) if self.inverse and self.qty and self.entry else 0.0
 
 
 def rehearse(cfg, bars1h, funding, regimes=None, start_cash=None):
@@ -84,7 +95,11 @@ def rehearse(cfg, bars1h, funding, regimes=None, start_cash=None):
                 got = legs[c].funding(fund[c].get(bucket, 0.0), px[c])
                 cash += got
                 paid += got
-        book = {'coins': dict(held), 'cash': cash,
+        # H8: the planner sees what the book owns — each coin with its inverse
+        # leg's open coin P&L, the cash with every realised P&L (in quote here)
+        # and the linear legs' open P&L — so a ratio-1 hedge stays static
+        book = {'coins': {c: held[c] + legs[c].open_coins(px[c]) for c in coins},
+                'cash': cash + sum(l.real + (0.0 if l.inverse else l.unreal(px[c])) for c, l in legs.items()),
                 'hedged': {c: legs[c].coins(px[c]) for c in coins if (cfg['hedges'].get(c) or {}).get('ratio', 0) > 0},
                 'shorts': {c: legs[c].coins(px[c]) for c in coins if c in cfg['short_products']}}
         reg = {c: regimes[c](t) for c in coins} if regimes else None
@@ -98,17 +113,21 @@ def rehearse(cfg, bars1h, funding, regimes=None, start_cash=None):
                 if kind == 'spot':
                     held[c] += q if o['side'] == 'buy' else -q
                     cash += (-q * p) if o['side'] == 'buy' else q * p
-                    fees += q * p * SPOT_FEE                   # the fee, counted once
+                    fee = q * p * SPOT_FEE                     # the fee, counted once
                 else:
                     traded = legs[c].trade('sell' if o['side'] == 'sell' else 'buy', q, p)
-                    fees += traded * PERP_FEE
+                    fee = traded * PERP_FEE
+                fees += fee
+                cash -= fee                                    # paid from the cash: a levered row borrows it
                 moved = True
             rebalances += moved
         if cash < 0:
-            fees += -cash * apr / 8760.0                 # the loan's hour of interest
+            interest = -cash * apr / 8760.0              # the loan's hour of interest
+            fees += interest
+            cash -= interest
         value = sum(held[c] * px[c] for c in coins)
         perp = sum(l.real + l.unreal(px[c]) for c, l in legs.items())
-        equity = value + cash + perp - fees
+        equity = value + cash + perp                    # fees and interest already left the cash
         notional = sum(l.coins(px[c]) * px[c] for c, l in legs.items())
         path.append(equity)
         if notional > (value * (1 - HAIRCUT) + cash + perp) * 10 or equity <= 0:

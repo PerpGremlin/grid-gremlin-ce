@@ -84,7 +84,8 @@ def run_basket(coins, bars1h, funding_inv, regimes, weights, tilt, threshold, ch
                 for c in coins:
                     reg = regimes[c].read(t) if regimes else 'range'
                     h = {'up': 1.0 - tilt, 'range': 1.0, 'down': 1.0 + tilt}[reg]
-                    want = h * coins_held[c]
+                    own = coins_held[c] + (legs[c].open_coins(px[c]) if hasattr(legs[c], 'open_coins') else 0.0)
+                    want = h * own                         # the coins incl. the inverse leg's coin P&L (the audit)
                     drift = abs(legs[c].coins_hedged(px[c]) - want) * px[c] / max(coins_held[c] * px[c], 1e-9)
                     if drift > threshold:
                         fees += legs[c].set_coins(want, px[c]) * PERP_FEE

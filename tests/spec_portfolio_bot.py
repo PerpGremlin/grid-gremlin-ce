@@ -375,9 +375,11 @@ def spec_H6_the_tilt_line_is_the_shorts_excess_over_neutral_marked_each_read():
     clock.t += 61; venue.t_ms = int(clock.t * 1000)
     bot.cycle()
     v = bot.portfolio_view
-    # neutral would hold 0.75 BTC short; it holds ~0.341 (inverse: 22,500 / 66,000) → the lean
-    # made (0.75 − 0.341) × 6,000 ≈ 2,455 on BTC and (15 − 6.82) × 300 ≈ 2,455 on ETH
-    assert 4800 < v['tilt'] < 5000, v['tilt']
+    # H8: half-hedged, the book is long 0.375 BTC and 7.5 ETH beyond neutral — an inverse
+    # short of 22,500 contracts opened at 60,000 covers 0.375 BTC whatever the price — so a
+    # 10% rise makes 0.375 × 6,000 = 2,250 on BTC and 7.5 × 300 = 2,250 on ETH (before the
+    # return-split audit it read ~4,910: the hedge counted as shrinking while the price rose)
+    assert abs(v['tilt'] - 4500.0) < 1.0, v['tilt']
     assert abs(v['total'] - (v['carry']['total'] + v['tilt'] + v['basis'])) < 1e-6   # the three sum to the total
     assert v['total'] > 4000                                     # half-hedged into a 10% rise
 
@@ -987,3 +989,45 @@ def spec_H2_two_writers_on_one_portfolio_state_cannot_undo_each_other_and_each_f
     raw = {'bots': [dict(ROW)], 'portfolio_state': str(tmp / 'mine.json')}
     assert validate_fleet(raw)['portfolio_state'] == str(tmp / 'mine.json')
     assert validate_fleet({'bots': [dict(ROW)]})['portfolio_state'] is None
+
+
+def spec_H8_a_ratio_one_inverse_hedge_stays_static_through_a_doubling_and_a_halving():
+    """The return-split audit (2026-10-09, confirmed by an independent
+    review): the planner compared the hedge, contracts / mark, with the
+    spot coins alone — the inverse leg's own coin P&L left out — so after a
+    rally the book read under-hedged and sold more shorts (net short), and
+    the reverse after a fall. With the leg's coin P&L in the coins the
+    planner weighs, a ratio-1 hedge of N contracts covers N / mark of them
+    exactly: no hedge order at the next tick, either way."""
+    for factor in (2.0, 0.5):
+        venue, lines, clock = _venue(), [], Clock()
+        venue.t_ms = int(clock.t * 1000)
+        bot, _ = _bot(venue, lines, clock=clock)
+        bot.cycle()                                                     # the stack and its hedges
+        before = {s: dict(p) for s, p in venue.positions.items()}
+        n = len(venue.orders)
+        for s in ('BTCUSDT', 'BTCUSD', 'ETHUSDT', 'ETHUSD'):
+            venue.marks[s] *= factor
+        clock.t += DAY + 60; venue.t_ms = int(clock.t * 1000)
+        bot.cycle()                                                     # the next tick
+        hedge_orders = [o for o in venue.orders[n:] if o[0] == 'inverse']
+        assert hedge_orders == [], (factor, hedge_orders)
+        assert {s: dict(p) for s, p in venue.positions.items()} == before
+
+
+def spec_H8_an_inverse_legs_average_entry_is_harmonic_and_its_fee_is_in_the_coin():
+    """$1 contracts: 100 opened at 100 and 100 at 200 average at 133.33, not
+    150 — the arithmetic mean hid a third of the loss closing at 200. The
+    venue charges an inverse fee in the coin; the row's value counts the
+    leg's realised net of it once, in the coins (H8), never again as quote."""
+    from gridgremlin.portfolio_bot import _apply
+    book = {'position': 0.0, 'avg': 0.0, 'realized': 0.0, 'fees': 0.0}
+    _apply(book, 'sell', 100.0, 100.0, 0.0, True)
+    _apply(book, 'sell', 200.0, 100.0, 0.0, True)
+    assert abs(book['avg'] - 400.0 / 3) < 1e-9
+    _apply(book, 'buy', 200.0, 200.0, 0.0001, True)
+    assert abs(book['realized'] - (-0.5)) < 1e-9 and book['fees'] == 0.0001     # −0.5 coin = −$100 at 200
+    lin = {'position': 0.0, 'avg': 0.0, 'realized': 0.0, 'fees': 0.0}
+    _apply(lin, 'sell', 100.0, 1.0, 0.0, False)
+    _apply(lin, 'sell', 200.0, 1.0, 0.0, False)
+    assert lin['avg'] == 150.0                                                    # a linear leg stays arithmetic
