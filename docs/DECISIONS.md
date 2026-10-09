@@ -755,6 +755,13 @@ stands unless the owner corrects it.
   the edge of stress, constantly"). The Hyperliquid leg waits for a
   sub-account the testnet will grant.*
 
+- **D79 — The expiry calendar (2026-10-09).** The last item of the owner's
+  ops list (2026-10-08): *"lets do the expiry calendar."* A dated list of
+  what runs out — keys, tokens, demo accounts, the box's billing — that the
+  demo watchdog reads, paging a week out and naming what has run out
+  (F29). Dates are the owner's to fill; an unknown date is listed and never
+  paged. Nothing renews anything.
+
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
 inline above.*

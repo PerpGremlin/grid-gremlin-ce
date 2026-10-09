@@ -1442,7 +1442,8 @@ def spec_U56_a_cards_numbers_live_on_the_positions_own_page_and_the_show_all_swi
     from spec_panel import CONTRACT as C
     belief = ((C.get('watchdog') or {}).get('belief') or {}).get('bots', {})
     c = card(0, 'spoADAUSDTl', C['bots']['spoADAUSDTl'], C, belief)
-    assert '<details' not in c and "href='/position?fleet=0&bot=spoADAUSDTl'>numbers</a>" in c
+    assert '<div class="numbers">' not in c and "href='/position?fleet=0&bot=spoADAUSDTl'>numbers</a>" in c
+    assert c.count('<details') == 1 and 'class="fold"' in c        # U58: only the lower half folds, never the numbers
     page = position_page(0, 'demo', 'spoADAUSDTl', C, belief)
     assert page.startswith('<h1>demo · ADAUSDT long grid spot</h1><h3>as the exchange shows it</h3><table class="xch">')
     assert '<th>entry price</th>' in page and '<td>0.207</td>' in page and '<th>unrealised P&amp;L</th>' in page
@@ -2073,4 +2074,29 @@ def spec_D64_the_served_panel_asks_twice_on_mainnet_only():
         assert 'retype_' not in page
     finally:
         Handler._cache.pop(fleet_p, None)
+        close()
+
+
+def spec_U60_every_page_wears_the_panels_navigation():
+    """The owner (2026-10-09): a navigation column or bar on all of the
+    pages, so a reader moves freely. The fleet page has its side panel;
+    every other page wears one bar with the same pages, a way back and
+    the forms' one warning."""
+    import urllib.request
+    from panel.forms import BACK
+    from panel.render import PAGE_END, page_links, side_nav
+    assert BACK == side_nav() and BACK.startswith('<div class="page"><nav class="side">')
+    for href in ('/', '/table', '/control', '/setup', '/rehearse', '/export', '/key'):
+        assert f'href="{href}"' in side_nav(), href
+    assert 'history.back()' in side_nav() and 'leaving a form saves nothing' in side_nav()
+    assert 'href="/table"' in page_links() and 'href="/"' in page_links(table=True)
+    assert 'class="bar"' not in side_nav()            # .bar is the progress bar's; the column is nav.side
+    base, d, close = _served_fleet()
+    try:
+        for path in ('/key', '/setup', '/rehearse'):          # control is unarmed on a test panel
+            req = urllib.request.Request(base + path, headers={'Cookie': 'gg=tok'})
+            page = urllib.request.urlopen(req, timeout=10).read().decode()
+            assert '<div class="page"><nav class="side">' in page and PAGE_END in page, path
+            assert page.index('<nav class="side">') < page.index('<main>'), path
+    finally:
         close()

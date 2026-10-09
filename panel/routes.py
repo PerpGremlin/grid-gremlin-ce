@@ -176,8 +176,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if self.path.startswith('/rehearse?job='):
             return self._rehearse_job_page(self.path.split('job=', 1)[1][:16])
         if self.path == '/rehearse':
+            from panel.render import PAGE_END
+            from panel.reference import KEEP_JS
             body = (f'<!doctype html><meta charset="utf-8">'
-                    f'<title>rehearse</title><style>{CSS}</style>{FORM}')
+                    f'<title>rehearse</title><style>{CSS}</style>{BACK}{FORM}{PAGE_END}{KEEP_JS}')
             self.send_response(200)
             self.send_header('Content-Type', 'text/html; charset=utf-8')
             self.end_headers()
@@ -451,9 +453,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-Type', 'text/html; charset=utf-8')
         self.end_headers()
+        from panel.render import PAGE_END
+        from panel.reference import KEEP_JS
         self.wfile.write(tidy(f'<!doctype html><meta charset="utf-8">'
-                              f'<title>create</title><style>{CSS}</style>'
-                              + BACK + body).encode())
+                              f'<title>grid-gremlin</title><style>{CSS}</style>'
+                              + BACK + body + PAGE_END + KEEP_JS).encode())
 
     def _create_flow(self, form, apply=False):
         from panel.create import (atomic_write, dry_ladder, dump_config,

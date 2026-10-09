@@ -280,9 +280,12 @@ def next_step_html(mode, unit, units):
 # U11: every page off the main one starts with the way back to it. U21
 # (owner 2026-10-03): and one step back — a result page's "back" should
 # return to the page it came from, not only to the start.
-BACK = ('<p><a href="javascript:history.back()">&larr; back</a> · '
-        '<a href="/">back to your bots</a> <span class="dim">'
-        '— leaving a form saves nothing</span></p>')
+def _side():
+    from .render import side_nav
+    return side_nav()
+
+
+BACK = _side()         # U60: every page wears the panel's navigation, as a column
 
 
 def unit_refusal(typed, units, tombs, fleet_bots=None):

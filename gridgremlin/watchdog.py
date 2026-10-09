@@ -13,7 +13,8 @@ from .exchange.env import load_env
 
 WATCHDOG_KEYS = ('tag', 'snapshot', 'state', 'staleness_seconds', 'mm_rate_max',
                  'equity_min', 'equity_drawdown_max', 're_alert_seconds',
-                 'positions', 'assumes_sole_actor', 'disk_used_max')
+                 'positions', 'assumes_sole_actor', 'disk_used_max',
+                 'expiry', 'expiry_warn_days')
 
 
 def validate_watchdog(cfg, where='watchdog'):
@@ -36,6 +37,12 @@ def validate_watchdog(cfg, where='watchdog'):
     # with it — the alarm is on by default, at 85% of the snapshot's volume
     out['disk_used_max'] = _num(out, 'disk_used_max', where, least=0.0,
                                 least_open=True, most=1.0) or 0.85
+    # F29: the expiry calendar is one watchdog's to read (one box, one
+    # list — name it on one fleet's watchdog, or every fleet pages it)
+    if out.get('expiry') is not None and (not isinstance(out['expiry'], str)
+                                          or not out['expiry']):
+        raise ConfigError(f"{where}: 'expiry' is the calendar's path (configs/expiry.json)")
+    out['expiry_warn_days'] = _num(out, 'expiry_warn_days', where, least=0.0) or 7.0
     if 'assumes_sole_actor' not in cfg:
         raise ConfigError(f"{where}: 'assumes_sole_actor' is required — every "
                           'threshold assumes something about who else trades '
@@ -225,6 +232,12 @@ def main(argv):
     peak = peak_equity(state.get('_peak'), row['equity'] if row else None)
     breaches = evaluate(cfg, row, now, peak, recent,
                         disk_used=disk_used(snap))
+    if cfg.get('expiry'):                            # F29: what runs out
+        import datetime as _dt
+        from .expiry import expiry_breaches
+        breaches.update(expiry_breaches(
+            cfg['expiry'], _dt.datetime.fromtimestamp(now, _dt.timezone.utc).date(),
+            int(cfg['expiry_warn_days'])))
     if healed:
         print(f"[{cfg['tag']}] {healed}", flush=True)
         send_telegram(f"[{cfg['tag']}] {healed}")

@@ -421,7 +421,7 @@ def build_fleet(fleet_path, notifier, allow_mainnet=False):
             if pstate is None:
                 from .portfolio_state import PortfolioState, PortfolioStateError
                 try:
-                    pstate = PortfolioState(str(_logs_dir(fleet_path) / 'portfolio_state.json'))
+                    pstate = PortfolioState(str(state_path(fleet_path, fleet, 'portfolio_state')))
                 except PortfolioStateError as e:            # fails CLOSED like X7
                     raise ConfigError(str(e)) from e
             bot, idents = build_portfolio(cfg, client, notifier, pstate, tombs)

@@ -425,6 +425,7 @@ def spec_G22_every_fleet_keeps_its_own_state_file_by_default():
     assert state_path(demo, {}, 'slide_state') == d / 'logs' / 'slide_state-demo.json'
     assert state_path(carry, {}, 'slide_state') == d / 'logs' / 'slide_state-carry.json'
     assert state_path(demo, {}, 'tombstones') == d / 'logs' / 'tombstones-demo.json'
+    assert state_path(carry, {}, 'portfolio_state') == d / 'logs' / 'portfolio_state-carry.json'
     assert path_for(carry, {}) == d / 'logs' / 'tombstones-carry.json'
     assert state_path(demo, {'slide_state': '/t/s.json'}, 'slide_state') == Path('/t/s.json')
     try:

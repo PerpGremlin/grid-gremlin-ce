@@ -667,8 +667,10 @@ eventually pin (T1).
   The old fleet-wide `logs/tombstones.json` or `logs/slide_state.json`
   beside a fleet that does not name it REFUSES the build, naming the split
   (`ops/split_local_state.py`, once, with every fleet stopped). The slide
-  state writes the same durable way, under the lock, re-read inside it.
-  *(audit 2026-10-05, 2026-10-08; the clobbered slide file 2026-10-08)*
+  state and the portfolio state (`portfolio_state-<fleet>.json`, H2) write
+  the same durable way, under the lock, re-read inside it. *(audit
+  2026-10-05, 2026-10-08; the clobbered slide file 2026-10-08; the second
+  subaccount's fleet writing the first's book back stale, 2026-10-09)*
 - **X7** A fired stop survives the process: the tombstone is durable BEFORE the
   flatten (a crash mid-stop stays dead), a tombstoned botid builds dead-and-visible
   (F4), and revival is a deliberate operator act — delete the entry, never automatic.
@@ -951,6 +953,15 @@ eventually pin (T1).
   costs nothing; `latest` moves; the newest `KEEP` days stay; the destination
   is the owner's alone (mode 700). Settings come from one file and never from
   the script, which refuses to run without them.
+- **F29** The expiry calendar (D79). `configs/expiry.json` lists what runs
+  out — keys, tokens, demo accounts, the box's billing — as `{name,
+  expires, note, where}`, `expires` an ISO date or null for unknown
+  (listed by `python3 -m gridgremlin.expiry`, never paged, never guessed).
+  One fleet's watchdog names it (`expiry`); every run adds to its breaches
+  what runs out within `expiry_warn_days` (7) and what has run out, so the
+  page comes once, the reminder on the watchdog's interval, and
+  "recovered" when the date is moved on. An unreadable calendar is one
+  breach, not a silent watch. Nothing renews anything.
 - **F28** The runbook (`docs/RUNBOOK.md`, D75) names what exists: every unit
   the templates in `ops/systemd/` render (by its `grid-gremlin3-` or `gg-`
   name), every timer, every phone command the phone answers, the close tool,
@@ -1210,6 +1221,31 @@ eventually pin (T1).
   moved by the offset times the lattice's gap, and the card says how far
   it slid. The readout carries every configured bot's mark, so a quiet
   bot shows where the price sits in its range too.
+- **U58** A card's lower half folds. What sits under the money box and the
+  range bar — holding, kind, liquidation, market, margin, investment, loss
+  limit; a portfolio's assets table — sits behind one summary word, open
+  by default; the page's script remembers each card's click either way,
+  and the side panel's **cards: full / folded** switch sets every card at
+  once (where U22's show-all switch was). The numbers stay the position
+  page's (U56); an export, which carries no script, shows every fold open.
+- **U59** An account folds to its heading and its box: each fleet's cards
+  sit behind "N bots", open by default, remembered like a card's fold; the
+  side panel's **accounts: full / folded** sets every account at once,
+  apart from the cards switch; one link beside each account's count
+  (**fold cards** / **open cards**) folds or opens that account's cards
+  alone. The fleets stand in the order the panel was
+  given them — the Bybit accounts first, by the owner's word.
+- **U60** Every page wears the panel's navigation as the fleet page does:
+  a column on the left with the pages, a way back, the forms' one warning
+  and the theme; the content beside it. One function names the pages.
+  *(first built as a bar across the top, whose class was the progress
+  bar's — the links spilled onto the heading; the column, 2026-10-09)*
+- **U61** The live page refreshes in place, never whole: the script
+  fetches this same URL — the one fetch it makes, same origin, nothing
+  else — and swaps the strip and the cards, re-wiring what folds, so
+  nothing flickers and nothing the reader opened or scrolled to moves.
+  Without script the whole-page refresh stands (`<noscript>`); an export
+  refreshes nothing and carries no script.
 
 ## H — the hedged portfolio (D78)
 

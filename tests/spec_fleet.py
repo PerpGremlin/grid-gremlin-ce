@@ -968,3 +968,76 @@ def spec_F12_a_portfolio_row_is_known_to_the_watch_and_its_changes_wait_for_a_re
     assert watch.apply() == {'pfocarry': 'restart'}
     assert any('learns new terms at the next restart' in ln for ln in lines)
     assert bots[1].cfg['capital'] == 1000.0           # nothing applied live
+
+
+def spec_F29_the_expiry_calendar_pages_a_week_out_and_names_what_ran_out():
+    """D79 (owner 2026-10-09): keys, tokens, demo accounts, the box's billing
+    — a dated list the watchdog reads, so "expires in 7 days" is a page.
+    Unknown dates are listed, never paged; an unreadable calendar is one
+    breach, not a silent watch; the shipped calendar and the shipped
+    watchdog configs validate; the CLI renders soonest first."""
+    import datetime as dt
+    import json
+    import tempfile
+    from pathlib import Path as _P
+    import gridgremlin.expiry as ex
+    import gridgremlin.watchdog as wd
+    from gridgremlin.config import ConfigError
+    today = dt.date(2026, 10, 9)
+    cal = ex.validate_calendar([
+        {'name': 'key A', 'expires': '2026-10-16', 'note': 'seven days'},
+        {'name': 'key B', 'expires': '2026-10-17'},
+        {'name': 'key C', 'expires': '2026-10-09'},
+        {'name': 'key D', 'expires': '2026-10-01', 'where': 'the console'},
+        {'name': 'key E', 'expires': None},
+    ])
+    b = ex.due(cal, today)
+    assert b == {
+        'expires:key A': 'expires in 7 day(s): key A (2026-10-16)',
+        'expires:key C': 'expires today: key C (2026-10-09)',
+        'expired:key D': 'EXPIRED 8 day(s) ago: key D (2026-10-01)',
+    }                                                            # B is 8 days out, E unknown
+    assert 'expires:key B' in ex.due(cal, today, warn_days=8)
+    for bad in ([{'name': 'x'}], [{'name': '', 'expires': None}], [{'name': 'x', 'expires': 'soon'}],
+                [{'name': 'x', 'expires': None}, {'name': 'x', 'expires': None}],
+                [{'name': 'x', 'expires': None, 'renew': 1}], {'name': 'x'}):
+        try:
+            ex.validate_calendar(bad)
+        except ConfigError:
+            continue
+        raise AssertionError(f'{bad} was accepted')
+    d = _P(tempfile.mkdtemp())
+    f = d / 'expiry.json'
+    f.write_text(json.dumps([{'name': 'key A', 'expires': '2026-10-16'}]))
+    assert ex.expiry_breaches(f, today) == {'expires:key A': 'expires in 7 day(s): key A (2026-10-16)'}
+    assert ex.expiry_breaches(d / 'none.json', today) == {
+        'expiry_unread': f'expiry calendar unread — {d / "none.json"}: unreadable '
+                         f"([Errno 2] No such file or directory: '{d / 'none.json'}')"}
+    f.write_text('{not json')
+    assert list(ex.expiry_breaches(f, today)) == ['expiry_unread']
+    # the watchdog's keys: the path, the horizon; a bad path refused
+    cfg = wd.validate_watchdog(dict(WD, expiry='configs/expiry.json'))
+    assert cfg['expiry'] == 'configs/expiry.json' and cfg['expiry_warn_days'] == 7.0
+    assert wd.validate_watchdog(dict(WD, expiry='x.json', expiry_warn_days=14))['expiry_warn_days'] == 14.0
+    assert wd.validate_watchdog(dict(WD)).get('expiry') is None
+    try:
+        wd.validate_watchdog(dict(WD, expiry=''))
+    except ConfigError:
+        pass
+    else:
+        raise AssertionError('an empty calendar path was accepted')
+    # the shipped calendar validates and the shipped demo watchdog names it
+    root = _P(__file__).resolve().parents[1]
+    shipped = ex.load_calendar(root / 'configs' / 'expiry.json')
+    assert shipped and all(e['expires'] is None for e in shipped)        # dates are the owner's to fill
+    demo = json.loads((root / 'configs' / 'watchdog.demo.json').read_text())
+    assert demo['expiry'] == 'configs/expiry.json'
+    example = root / 'configs' / 'examples' / 'watchdog.demo.json'   # the CE's configs ARE the examples (F21)
+    if example.exists():
+        assert json.loads(example.read_text())['expiry'] == 'configs/expiry.json'
+    # the page: soonest first, the unknown last
+    page = ex.render(cal, today).splitlines()
+    assert page[0].startswith('2026-10-01') and 'EXPIRED 8d ago' in page[0] and '[the console]' in page[0]
+    assert page[1].startswith('2026-10-09') and 'today' in page[1]
+    assert page[-1].endswith('key E') and 'confirm' in page[-1]
+    assert ex.render([], today) == '(an empty calendar)'

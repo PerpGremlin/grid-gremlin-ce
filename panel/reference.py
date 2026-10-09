@@ -140,6 +140,14 @@ reached. Depth near max SOs = the schedule nearly exhausted.</td></tr>
 have done just holding over the same window. Beat it or hold.</td></tr>
 <tr><td>numbers (button)</td><td class="dim">the position's own page (U56):
 the position as the exchange shows it, then every number laid open.</td></tr>
+<tr><td>details / assets (fold)</td><td class="dim">a card's lower half —
+holding, kind, margin, market, limits; a portfolio's assets — behind one
+word (U58). Click to fold or open; the card remembers. <b>cards: full /
+folded</b> in the side panel sets them all.</td></tr>
+<tr><td>N bots (fold)</td><td class="dim">an account's cards, behind its
+heading and its box (U59). <b>accounts: full / folded</b> sets them
+all; <b>fold cards / open cards</b> beside the count folds or opens
+this one account's cards.</td></tr>
 <tr><td>window slid N rungs from home</td><td class="dim">a sliding grid's
 window has moved with the price; the card judges the price against the
 window it trades, not the range it started from (U57).</td></tr>
@@ -167,14 +175,29 @@ wants and the hedge it holds, as coins.</td></tr>
 # browser tab: which boxes are open, how far down the page is, and the
 # theme. No number passes through it.
 KEEP_JS = """<script>(function(){
-var S=sessionStorage,open={};
+var S=sessionStorage,open={},root=document.documentElement,KINDS=['fold','acct'];
 try{open=JSON.parse(S.getItem('gg-open')||'{}');}catch(e){}
-document.querySelectorAll('details[data-k]').forEach(function(d){
- if(open[d.dataset.k])d.open=true;
- d.addEventListener('toggle',function(){
-  if(d.open)open[d.dataset.k]=1;else delete open[d.dataset.k];
-  S.setItem('gg-open',JSON.stringify(open));});});
-var root=document.documentElement;
+function wire(scope){
+ KINDS.forEach(function(c){var g=S.getItem('gg-fold:'+c);
+  if(g)scope.querySelectorAll('details.'+c).forEach(function(d){d.open=(g==='open');});});
+ scope.querySelectorAll('details[data-k]').forEach(function(d){
+  if(d.dataset.k in open)d.open=!!open[d.dataset.k];
+  d.addEventListener('toggle',function(){
+   open[d.dataset.k]=d.open?1:0;S.setItem('gg-open',JSON.stringify(open));});});}
+function inAcct(i){return document.querySelectorAll('details.acct[data-k="acct:'+i+'"] details.fold');}
+function picks(){document.querySelectorAll('[data-fold]').forEach(function(a){
+ a.classList.toggle('pick',a.dataset.fold===(S.getItem('gg-fold:'+a.dataset.cls)||'open'));});
+ document.querySelectorAll('[data-foldin]').forEach(function(a){var all=true;
+  inAcct(a.dataset.foldin).forEach(function(d){if(!d.open)all=false;});
+  a.textContent=all?'fold cards':'open cards';});}
+wire(document);picks();
+window.ggFold=function(k,c){document.querySelectorAll('details.'+c).forEach(function(d){
+ d.open=(k==='open');delete open[d.dataset.k];});
+ S.setItem('gg-open',JSON.stringify(open));S.setItem('gg-fold:'+c,k);picks();};
+window.ggFoldIn=function(i){var all=true,ds=inAcct(i);
+ ds.forEach(function(d){if(!d.open)all=false;});
+ ds.forEach(function(d){d.open=!all;open[d.dataset.k]=all?0:1;});
+ S.setItem('gg-open',JSON.stringify(open));picks();};
 if(S.getItem('gg-light'))root.classList.add('light');
 window.ggSize=function(k){['coin','value','cost'].forEach(function(u){
  root.classList.toggle('only-'+u,k===u);});S.setItem('gg-size',k);
@@ -188,8 +211,6 @@ ggLev(S.getItem('gg-lev')||'now');
 new MutationObserver(function(){
  if(root.classList.contains('light'))S.setItem('gg-light','1');
  else S.removeItem('gg-light');}).observe(root,{attributes:true});
-window.ggAll=function(on){document.querySelectorAll('details[data-k]')
- .forEach(function(d){d.open=on;});};
 var nav=document.querySelector('nav.side'),hero=document.querySelector('.hero');
 function top(){if(nav&&hero)nav.style.top=hero.offsetHeight+'px';}
 top();window.addEventListener('resize',top);
@@ -197,4 +218,12 @@ var y=S.getItem('gg-y:'+location.pathname);
 if(y)window.scrollTo(0,Number(y));
 window.addEventListener('pagehide',function(){
  S.setItem('gg-y:'+location.pathname,String(window.scrollY));});
+var m=document.querySelector('meta[name="gg-refresh"]'),every=m?Number(m.content):0;
+if(every>0)setInterval(function(){
+ fetch(location.href,{credentials:'same-origin',cache:'no-store'})
+ .then(function(r){return r.ok?r.text():'';}).then(function(t){if(!t)return;
+  var doc=new DOMParser().parseFromString(t,'text/html');
+  ['.hero','main'].forEach(function(q){var a=document.querySelector(q),b=doc.querySelector(q);
+   if(a&&b)a.innerHTML=b.innerHTML;});
+  wire(document.querySelector('main')||document);picks();top();}).catch(function(){});},every*1000);
 })();</script>"""

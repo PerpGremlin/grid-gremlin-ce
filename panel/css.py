@@ -90,6 +90,10 @@ h1+.pnl{max-width:40em;font-size:1.05em}
 .rng{display:flex;align-items:center;gap:.6em}.rng svg{flex:1}
 .card table{width:100%}.card.pfo{grid-column:1/-1;justify-self:start;width:100%;max-width:calc(63em + 2*var(--gap));overflow-wrap:anywhere}
 .card.pfo .two{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap-s) var(--gap);align-items:start}.card.pfo .two>div{min-width:0}.card.pfo .pnl{max-width:none}.card td{padding:.1em .4em}
+nav.side span.dim{display:block;margin:var(--gap-s) 0 0;font-size:.9em}
+details.acct{margin:0}details.acct>summary{color:var(--dim);margin:0 0 var(--gap-s)}
+.card details.fold{margin:.2em 0}.card details.fold>summary{color:var(--dim);font-size:.9em}
+.card details.fold>summary:hover{color:var(--accent)}
 .say{max-width:62em;font-size:1.1em;border-left:3px solid var(--accent);
 padding:.2em 1em}details{margin:.6em 0}summary{cursor:pointer;
 color:var(--accent)}details td{text-align:left}details td:first-child

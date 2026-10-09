@@ -36,8 +36,8 @@ def main(argv):
         print(f'no portfolio row named {name}')
         return 2
     cfg = rows[0]
-    logs = _logs_dir(fleet_path)
-    state = PortfolioState(str(logs / 'portfolio_state.json'))
+    from .durable import state_path
+    state = PortfolioState(str(state_path(fleet_path, fleet, 'portfolio_state')))
     tombs = Tombstones(str(path_for(fleet_path, fleet)))
     client = WriteClient()
     if client.env == 'mainnet':
