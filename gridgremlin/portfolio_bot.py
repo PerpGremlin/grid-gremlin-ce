@@ -33,12 +33,21 @@ def _unreal(mt, size, avg, mark):
 
 def _apply(book, side, price, qty, fee, inverse):
     """A short leg's own average-cost book: a sell opens or adds, a buy
-    reduces and realises. Realised in quote (inverse: in the coin, carried
-    as coin and stated at mark by the reader). Fees in quote."""
+    reduces and realises. Linear: realised and fees in quote. Inverse: $1
+    contracts, realised and fees in the coin (the venue charges an inverse
+    fee in the coin — H8), and the average entry is the contracts-weighted
+    HARMONIC mean: the arithmetic mean overstates the short's P&L whenever
+    contracts are added at a new price (the return-split audit, 2026-10-09)."""
     pos, avg = book['position'], book['avg']
     if side == 'sell':
         total = pos + qty
-        book['avg'] = (avg * pos + price * qty) / total if total else 0.0
+        if inverse:
+            if not pos or not avg:
+                book['avg'] = price
+            elif total and price:
+                book['avg'] = total / (pos / avg + qty / price)
+        else:
+            book['avg'] = (avg * pos + price * qty) / total if total else 0.0
         book['position'] = total
     else:
         closed = min(pos, qty)
@@ -589,20 +598,47 @@ class PortfolioBot:
         elif cfg.get('margin') and wq < 0:
             row['cash'] = wq                 # the venue's loan, with its interest, is the row's
         held, unreal = {'hedge': {}, 'short': {}}, 0.0
+        open_coin = {}                 # H8: an inverse hedge's open P&L, in its coin
+        lin_open = 0.0
         for (k, c), t in perps.items():
             leg = self.legs[k][c]
             size, avg = self._short_size(t, leg)
             px = prices[c]
-            held[k][c] = (size / px if leg['market_type'] == 'inverse' and px else size)
-            unreal += _unreal(leg['market_type'], size, avg, px)
-        self._judge_borrow_rate(held, prices, now_ms)
-        realised = 0.0
+            inv = leg['market_type'] == 'inverse'
+            held[k][c] = (size / px if inv and px else size)
+            u = _unreal(leg['market_type'], size, avg, px)
+            unreal += u
+            if inv and k == 'hedge' and px:
+                open_coin[c] = u / px
+            elif not inv:
+                lin_open += u
+        # H8: an inverse leg realises and pays its fees in the coin, and the
+        # venue settles them into the coin's wallet — so the coins the row
+        # holds are its spot book PLUS its hedge's realised coin, bounded by
+        # the wallet (D76); counted there once, never again as quote (the
+        # audit's double count). A linear leg's realised stays quote.
+        realised, inv_real = 0.0, {}
         for key, book in row['books'].items():
             kind, c = key.split(':')
-            inv = self.legs[kind][c]['market_type'] == 'inverse'
-            realised += (book['realized'] * prices[c] if inv else book['realized']) - book['fees']
+            if self.legs[kind][c]['market_type'] == 'inverse':
+                if kind == 'hedge':
+                    inv_real[c] = inv_real.get(c, 0.0) + book['realized'] - book['fees']
+                else:
+                    realised += (book['realized'] - book['fees']) * prices[c]
+            else:
+                realised += book['realized'] - book['fees']
+        coins = {c: max(min(row['coins'].get(c, 0.0) + inv_real.get(c, 0.0), wcoins[c]), 0.0)
+                 for c in self.legs['spot']}
+        # H8: what the planner weighs and hedges: every coin the row owns,
+        # its hedge's open coin P&L included. A ratio-1 hedge of N contracts
+        # covers N / mark coins exactly when the coins include that P&L —
+        # left out, the book reads under-hedged after a rally and adds shorts
+        # (net short), over-hedged after a fall (net long): the drift the
+        # return-split audit measured (2026-10-09)
+        plan_coins = {c: coins[c] + open_coin.get(c, 0.0) for c in coins}
+        self._judge_borrow_rate(held, prices, now_ms)
         stack = sum(coins[c] * prices[c] for c in coins)
-        self._mark_tilt(coins, held, prices)
+        self._mark_tilt(plan_coins, held, prices)
         value = stack + row['cash'] + sum(row['parked'].values()) + unreal + realised
         if row['anchor_value'] is None:
             row['anchor_value'] = value
@@ -648,6 +684,7 @@ class PortfolioBot:
             if basis > risk['basis_stop_pct'] and (coins.get(c, 0.0) > 0 or held['hedge'].get(c, 0.0) > 0):
                 self._unwind(c, coins, held, prices, basis)
                 coins[c] = 0.0
+                plan_coins[c] = 0.0
                 held['hedge'][c] = 0.0
                 placed += 1
         # --- H3 on the clock ----------------------------------------------------
@@ -671,6 +708,7 @@ class PortfolioBot:
                         self._say_once(f'reenter:{c}', 'warn', f'{c}: re-entry refused: {e}')
                         got = 0.0
                     coins[c] = coins.get(c, 0.0) + got
+                    plan_coins[c] = plan_coins.get(c, 0.0) + got
                     row['cash'] += parked - got * prices[c]
                     placed += 1
                 else:
@@ -711,8 +749,10 @@ class PortfolioBot:
                 trailing[c] = (got / (hq * prices[c])) if hq > 0 and prices[c] else None
             trailing = {c: v for c, v in trailing.items() if v is not None}
             regimes = {c: self._regime_now(c, now_ms) for c in self.legs['hedge']}
-            book = {'coins': coins, 'hedged': held['hedge'], 'shorts': held['short'],
-                    'cash': row['cash']}
+            # H8: the planner's equity is the row's: every coin with its hedge's
+            # coin P&L, and the cash with the linear legs' P&L and realised
+            book = {'coins': plan_coins, 'hedged': held['hedge'], 'shorts': held['short'],
+                    'cash': row['cash'] + lin_open + realised}
             plan = plan_portfolio(eff, book, prices, now_ms, row['last_tick_ms'],
                                   regimes=regimes, funding_trailing=trailing)
         if plan['tick']:

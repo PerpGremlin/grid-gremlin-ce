@@ -1393,6 +1393,22 @@ that pins it (T1).
   — and the rest held; it re-enters from its parked cash when the basis is
   back under half the stop. The funding rule's stand-down lifts a hedge
   and keeps the stack (H3).
+- **H8** An inverse hedge is counted in its own coin. A short of N $1
+  contracts opened at E has a constant coin exposure of N / E; its open P&L,
+  N (1/mark − 1/E), accrues in the coin. So the coins the planner weighs and
+  hedges are the row's spot coins, its hedge's realised coin net of the
+  coin-paid fees (settled into the coin's wallet, bounded by it — D76 —
+  and counted there once, never again as quote), and its hedge's open
+  coin P&L; the hedge is N / mark; and a ratio-1 book then needs no hedge
+  order through any price path. The planner's equity is the row's: those
+  coins at mark, the cash with every linear leg's P&L. An inverse leg's
+  average entry is the contracts-weighted harmonic mean. The rehearsal
+  holds the same rules and pays its fees and interest from the cash.
+  *(the return-split audit, 2026-10-09, confirmed by an independent review:
+  the hedge counted against the spot coins alone drifted a ratio-1 book net
+  short in a rally and long in a fall, and the arithmetic entry invented
+  ~40 points of the rehearsal's two-year return; the true neutral basket
+  earned its funding, x1.13, at a 1% drawdown)*
 - **H6** The card says the three truths. A portfolio's card shows the
   stack's value and coins, one line per asset (weight target → actual,
   hedge ratio target → actual, coins hedged, the regime word when the tilt

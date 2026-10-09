@@ -85,11 +85,21 @@ class Leg:
             self.real += (closed * (1 / p - 1 / self.entry) * p if self.inverse
                           else (self.entry - p) * closed)
             self.qty -= closed
+        elif self.inverse:
+            # $1 contracts average harmonically (the return-split audit, 2026-10-09)
+            self.entry = (p if self.qty <= 0 else
+                          (self.qty + delta) / (self.qty / self.entry + delta / p))
+            self.qty += delta
         else:
             self.entry = ((self.entry * self.qty + p * delta) / (self.qty + delta)
                           if self.qty + delta > 0 else p)
             self.qty += delta
         return abs(delta) if self.inverse else abs(delta) * p
+
+    def open_coins(self, p):
+        """An inverse leg's open P&L in its coin — part of what the book owns,
+        so the hedge of N contracts covers N / p of the coins (the audit)."""
+        return self.qty * (1 / p - 1 / self.entry) if self.inverse and self.qty > 0 and self.entry else 0.0
 
     def funding(self, rate, p):
         """What the short receives at a settlement, in quote."""
@@ -136,7 +146,9 @@ def run(bars1h, funding, regime, tilt, threshold, check_h, start_cash=10_000.0, 
                 spot_value = coins * p
             if hedge == 'rotate' and len(hist_lin) >= 21:
                 which = 'usdt' if sum(hist_lin[-21:]) >= sum(hist_inv[-21:]) else 'inverse'
-            want = target_h * coins
+            # the coins the hedge covers include the inverse leg's own coin P&L —
+            # left out, a ratio-1 book drifts net short in a rally (the audit)
+            want = target_h * (coins + legs['inverse'].open_coins(p))
             if hedge == 'split':
                 plan = {'usdt': want / 2, 'inverse': want / 2}
             elif hedge in ('usdt', 'inverse'):
