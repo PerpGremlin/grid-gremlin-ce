@@ -188,3 +188,17 @@ def spec_H3_with_margin_the_targets_are_weight_times_equity_and_the_cash_goes_ne
     plan = plan_portfolio(cfg, book, half, 3 * DAY, DAY)
     sells = {o['leg'][1]: round(o['coins'] * half[o['leg'][1]]) for o in plan['orders'] if o['leg'][0] == 'spot'}
     assert sells == {'BTC': 18750, 'ETH': 18750} and all(o['side'] == 'sell' for o in plan['orders'] if o['leg'][0] == 'spot')
+
+
+def spec_H1c_an_outright_short_is_usd_margined_never_inverse():
+    """An inverse contract is margined in its own coin: an outright inverse
+    short would make the row hold the coin — a long the planner never counts
+    (the 2026-10-09 review). It defaults to usdt; inverse is refused, named."""
+    two = [{'coin': 'BTC', 'weight': 0.5}, {'coin': 'ETH', 'weight': -0.5}]
+    assert validate_config(_row(assets=two))['short_products'] == {'ETH': 'usdt'}
+    assert validate_config(_row(assets=two, hedge={'ETH': {'product': 'usdc'}}))['short_products'] == {'ETH': 'usdc'}
+    _refused(_row(assets=two, hedge={'ETH': {'product': 'inverse'}}),
+             'outright short cannot be inverse', 'margined in ETH itself', 'H1c')
+    # a long's hedge may still be inverse: its coin is the spot leg it hedges
+    assert validate_config(_row(assets=two, hedge={'BTC': {'product': 'inverse'}}))['hedges']['BTC']['product'] == 'inverse'
+

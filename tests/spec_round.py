@@ -123,6 +123,34 @@ def spec_M5_repeat_reanchors_a_new_round_at_market():
     assert bot.alive
 
 
+
+def spec_M5_a_new_round_starts_with_every_round_scoped_field_reset():
+    """The 2026-10-08 audit: the round's latches were reset field by field
+    in two places. ROUND_SCOPED declares them once; a completed round
+    resets every one — here each is dirtied before the round ends."""
+    import inspect
+    from gridgremlin import bot_round
+    venue, lines = FakeVenue(), []
+    bot = _bot(venue, lines, repeat=True)
+    bot.cycle()
+    bot.cycle()
+    junk = object()
+    for name, _ in bot_round.ROUND_SCOPED:
+        setattr(bot, name, junk)
+    venue.position = None
+    venue.mark = 61000.0
+    assert bot.cycle() == {'round': 'cleanup'}
+    left = [n for n, _ in bot_round.ROUND_SCOPED if getattr(bot, n) is junk]
+    assert not left, left
+    for name, start in bot_round.ROUND_SCOPED:
+        assert getattr(bot, name) == (set(start) if isinstance(start, frozenset) else start), name
+    # one place: the round's end calls the reset, and resets nothing by hand beside it
+    src = inspect.getsource(bot_round.RoundMixin)
+    assert src.count('self._reset_round()') == 1
+    at = src.index('self._round += 1')
+    block = src[at:src.index('self.notify.event', at)]
+    assert block.split() == ['self._round', '+=', '1', 'self._reset_round()', '#', 'ROUND_SCOPED,', 'all', 'of', 'it'], block
+
 def spec_M5_repeat_off_round_complete_kills():
     venue, lines = FakeVenue(), []
     bot = _bot(venue, lines)

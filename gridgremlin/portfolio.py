@@ -139,8 +139,19 @@ def validate_portfolio(row, where='row'):
         hedges[coin] = {'product': product, 'ratio': 1.0 if ratio is None else float(ratio)}
     cfg['hedges'] = hedges
     cfg.pop('hedge', None)
-    shorts = {a['coin']: _enum(hedge.get(a['coin']) or {}, 'product', w, PRODUCTS, default='inverse')
-              for a in out if a['weight'] < 0}
+    # H1c: an outright short is a USD-margined perp. An inverse contract is
+    # margined in its own coin — the row would have to hold the coin, a long
+    # the short exists not to have, and nothing here counts it
+    shorts = {}
+    for a in out:
+        if a['weight'] < 0:
+            c = a['coin']
+            prod = _enum(hedge.get(c) or {}, 'product', f'{w}.{c}', PRODUCTS, default='usdt')
+            if prod == 'inverse':
+                _refuse(f"{w}.{c}: an outright short cannot be inverse — an inverse contract is "
+                        f"margined in {c} itself, so the row would hold {c}: a long the short "
+                        "exists not to have. Name 'usdt' or 'usdc' (H1c)")
+            shorts[c] = prod
     cfg['short_products'] = shorts
 
     # --- the clock -----------------------------------------------------------------

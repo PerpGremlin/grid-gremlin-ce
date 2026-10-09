@@ -299,3 +299,19 @@ def spec_the_phone_never_stutters_either():
     t.event('fleet', 'fleet', '12 bot(s) on demo', icon='I Venue')
     t.close()
     assert sent[-1] == 'I Venue fleet: 12 bot(s) on demo'
+
+
+def spec_E2_the_cycle_hands_every_order_write_to_the_reconcile_step():
+    """The 2026-10-08 audit: the cycle decides WHAT; bot_reconcile does it —
+    amends, then cancels, then creates. No order write lives in `cycle`."""
+    import inspect
+    from gridgremlin.bot import Bot
+    from gridgremlin.bot_reconcile import ReconcileMixin
+    cyc = inspect.getsource(Bot.cycle)
+    assert 'self._reconcile(' in cyc
+    for write in ('place_order(', 'amend_order(', 'cancel_order('):
+        assert write not in cyc, write
+    rec = inspect.getsource(ReconcileMixin._reconcile)
+    a, c, p = (rec.index(w) for w in ('amend_order(', 'cancel_order(', 'place_order('))
+    assert a < c < p                                   # amends, cancels, then creates
+
