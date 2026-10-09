@@ -1246,6 +1246,35 @@ eventually pin (T1).
   nothing flickers and nothing the reader opened or scrolled to moves.
   Without script the whole-page refresh stands (`<noscript>`); an export
   refreshes nothing and carries no script.
+- **U62** Nothing on the panel is truncated to fit: the table and the
+  exchange's view of a position sit in a box that scrolls sideways when
+  the screen is narrower than they are, every number whole; on a phone
+  the strip stacks one account per row instead of clipping its totals.
+  *(screenshots 2026-10-09: "6…", "-43,3…", a funding column off the page)*
+- **U63** The account's equity over time, from the fleet's own snapshot
+  file (F4, never rotated — F26): a sparkline of the last day in the strip,
+  and under each account's box a 24 h and a 7 d line with the low, the
+  high and the change over the window, a native tooltip per point, no
+  script. One series, two pixels, the page's own ink; the sign's colour
+  only on the change. The file is read from its tail, once cold and then
+  only what was appended (`gridgremlin.equity_series`), so a 40 MB history
+  costs a refresh a few kilobytes; an unpriced row (E9) and a torn line are
+  skipped; fewer than two points draw nothing and the box says so.
+- **U64** A card says how long it has run and its grid profit per day and
+  a year, as every grid product does: in the figure's own span (since last
+  flat, since the first fill in the cap, or the window), realised after
+  fees per day, and — where the bot states its investment — Bybit's grid
+  APR: grid profit / investment / days x 365, a run under a day counted as
+  one day.
+- **U65** A position's page draws its price over a day and a week with the
+  bot's own levels and fills: the engine's per-minute snapshot carries each
+  live bot's last mark (F4, amended — the only price history at grid
+  resolution, no new venue read); the fills come from the kept ledger
+  (R18) by the link's prefix (I1); the window's rungs (slid, U57), its
+  edges dashed, and liquidation in red when it is on the chart, named
+  beneath when it is not. Buys and sells are ringed dots with a native
+  tooltip; no script; nothing without two points, and a quiet line until
+  the snapshots carry the price (the fleet's next restart).
 
 ## H — the hedged portfolio (D78)
 

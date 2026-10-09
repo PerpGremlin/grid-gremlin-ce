@@ -98,9 +98,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
         Handler._cache[fleet] = (time.time(), data)
         return data
 
+    _series = {}                       # U63: per snapshot file, the tail already read
+
     def _labelled(self):
-        return [(lb, self._contract(f))
+        return [(lb, self._with_equity(f, self._contract(f)))
                 for lb, f in zip(self.labels, self.fleets)]
+
+    def _with_equity(self, fleet, contract):
+        """U63: the account's equity over the last day and week, from the
+        fleet's own snapshot file, beside the readout it was made for."""
+        from gridgremlin.equity_series import equity_windows, snapshot_path
+        snap = snapshot_path(fleet)
+        try:
+            eq = equity_windows(snap, time.time(), Handler._series.setdefault(snap, {})) if snap else None
+        except (OSError, ValueError):
+            eq = None
+        return dict(contract, equity=eq)
 
     def _authed(self):
         return f'gg={self.token}' in (self.headers.get('Cookie') or '')
@@ -1069,7 +1082,18 @@ written config (§11).</p>
         belief = ((contract.get('watchdog') or {}).get('belief') or {}).get('bots', {})
         if botid not in (contract.get('bots') or {}) and botid not in belief:
             return self._deny(404, f'{botid}: not in this fleet')
-        return self._page(position_page(fi, self.labels[fi], botid, contract, belief))
+        # U65: the price from the fleet's own snapshots, the fills from the kept ledger
+        from gridgremlin.durable import fleet_tag, logs_dir
+        from gridgremlin.equity_series import bot_fills, price_windows, snapshot_path
+        snap = snapshot_path(self.fleets[fi])
+        now = time.time()
+        try:
+            prices = price_windows(snap, botid, now, Handler._series.setdefault(snap, {})) if snap else None
+        except (OSError, ValueError):
+            prices = None
+        fills = bot_fills(logs_dir(self.fleets[fi]) / 'fills' / f'{fleet_tag(self.fleets[fi])}.json',
+                          botid, int((now - 7 * 86400) * 1000))
+        return self._page(position_page(fi, self.labels[fi], botid, contract, belief, prices, fills))
 
     def _close_page(self):
         import html as _html

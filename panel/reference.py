@@ -144,6 +144,20 @@ the position as the exchange shows it, then every number laid open.</td></tr>
 holding, kind, margin, market, limits; a portfolio's assets — behind one
 word (U58). Click to fold or open; the card remembers. <b>cards: full /
 folded</b> in the side panel sets them all.</td></tr>
+<tr><td>price, 24 h / 7 d</td><td class="dim">on a position's page: the
+price the engine read each minute, the window's rungs (edges dashed), the
+bot's own buys and sells as dots, liquidation in red (U65). Hover a dot or
+the line for its time.</td></tr>
+<tr><td>running · per day · grid APR</td><td class="dim">how long the
+bot has run in the figure's span, its realised profit after fees per day,
+and that as a yearly rate on its investment — Bybit's grid APR: profit /
+investment / days x 365, under a day counted as a day (U64). A big APR on
+a short run is arithmetic, not a promise.</td></tr>
+<tr><td>equity, 24 h / 7 d</td><td class="dim">the account's equity as
+the engine's own snapshot saw it, one point a minute or so, over the last
+day and week (U63): the low, the high and the change over the window;
+hover a point for its time. The small line in the strip is the same day.
+Not the venue's chart: the engine's reading of the venue's wallet.</td></tr>
 <tr><td>N bots (fold)</td><td class="dim">an account's cards, behind its
 heading and its box (U59). <b>accounts: full / folded</b> sets them
 all; <b>fold cards / open cards</b> beside the count folds or opens

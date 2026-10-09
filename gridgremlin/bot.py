@@ -52,6 +52,7 @@ class Bot(StopsMixin, BasisMixin, RoundMixin):
         self._gen = gen_seed
         self._now = clock or time.time
         self._last_pos = None
+        self._last_mark = None        # U65: the snapshot's price, one a minute, the chart's history
         self._placed_last = set()      # (rung, side) placed on the prior cycle
         self._flap = {}                # B5: (rung, side) -> strike count
         self._cooldown = {}            # B6: (rung, side) -> (until, cause)
@@ -280,6 +281,7 @@ class Bot(StopsMixin, BasisMixin, RoundMixin):
         truth = self.client.read_symbol_truth(
             cfg['market_type'], cfg['symbol'],
             cfg.get('funding_interval_minutes', 480.0))
+        self._last_mark = truth.get('mark')
         if cfg['market_type'] == 'spot' and cfg['strategy'] == 'martingale':
             # D59: spot has no reduce-only — our sells ARE the round's
             # exits; say so in the shape every exit path reads
