@@ -5,7 +5,7 @@
 # __init__ (S6); nothing is private to a file.
 import time
 
-from .apply import diff, make_botid, make_link, pair_amends, rung_of
+from .apply import diff, make_botid, make_link, rung_of
 from .config import CANDLE_SECONDS, hosts_position_stop
 from .exchange.errors import VenueError
 from .ladder import (SEED_RUNG, anchor_from_rung, fee_floor_for, grid_rungs,
@@ -15,11 +15,12 @@ from .ladder import (SEED_RUNG, anchor_from_rung, fee_floor_for, grid_rungs,
 from .window import window
 from .bot_constants import (FLAT_CONFIRMATIONS, RUNGS_LAG_CYCLES, DEFER_ESCALATE_CYCLES, FLAP_LIMIT, FLAP_COOLDOWN, BACKOFF_BASE, BACKOFF_CEILING, HISTORY_WINDOW_DAYS, VENUE_STOP, STOP_RUNG)  # noqa: F401  (re-exported: the specs read them here)
 from .bot_basis import BasisMixin
+from .bot_reconcile import ReconcileMixin
 from .bot_round import RoundMixin
 from .bot_stops import StopsMixin
 
 
-class Bot(StopsMixin, BasisMixin, RoundMixin):
+class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
     # E3/S6: the reset-on-restart list, complete and asserted by spec —
     # _last_pos (fill baseline, re-seeded first cycle), _gen (restart-unique),
     # _held_ref (re-anchors), _placed_last/_flap/_cooldown (churn guards),
@@ -34,7 +35,8 @@ class Bot(StopsMixin, BasisMixin, RoundMixin):
     # finds, so a restart can only loosen it by what the price gave back),
     # _round_hwm_basis (M22: the average the round's gauge belongs to),
     # _round_hwm_held (M25: the holding it last saw; a shrink asks the fills),
-    # _folded (D71: the slivers folded this round, said once).
+    # _folded (D71: the slivers folded this round, said once). The round's own
+    # fields are declared once in bot_round.ROUND_SCOPED and reset together.
     # Everything else the bot knows
     # comes from the venue each cycle — except the two stated durable local
     # facts: `tombs` (X7) and `offset`, the slide window (G22).
@@ -92,7 +94,6 @@ class Bot(StopsMixin, BasisMixin, RoundMixin):
         self._exit_links_last = set()  # S7: the ownership discriminator
         self._uncovered_warned = False
         self._anomaly_warned = False
-        self._anchor = None            # M: the round's base price
         self._borrow = bool(cfg.get('spot_borrow'))    # D24
         self.tombs = tombstones        # X7: the prevents-restart half of D1
         self._round = 0
@@ -101,11 +102,6 @@ class Bot(StopsMixin, BasisMixin, RoundMixin):
         self._unplaceable_warned = False
         self._history_capped_warned = False
         self._flat_streak = 0          # E9: confirmations of 'flat'
-        self._round_hwm = None         # M10: best mark seen this round
-        self._round_hwm_basis = None   # M22: ...for THIS average
-        self._round_hwm_held = None    # M25: ...and the holding it last saw
-        self._folded = ()              # D71: the slivers folded, said once
-        self._be_level = None          # D38: the breakeven stop, round-scoped
         self._basis_cache = None       # G15: (held, basis) from fills
         self._rungs_cache = None       # G23: (held, [rung per lot]) from fills
         self._rungs_seen = None        # G26: (|held|, fill ids, newest ms) of
@@ -115,18 +111,10 @@ class Bot(StopsMixin, BasisMixin, RoundMixin):
         self._defer_cycles = 0         # G15: cycles exits were withheld
         self._entry_since = None       # D37: when this round's maker base
         self._quoted_at = None         # first rested / was last quoted
-        self._stop_since = None        # X9: when the stop level was crossed
         self._candle_seen = None       # X12: the last candle boundary seen
         self._loss_cache = None        # X14: (when, held, realised net)
         self._loss_now = None          # X14: the result last judged
-        self._trail_said = None        # M21: the trail level last announced
-        self._trail_best = None        # M21: best mark since this average
-        self._trail_basis = None       # M21: the average the trail is for
-        self._round_t0 = None          # M19: the round's first fill, from
-                                       # the venue; round-scoped
-        self._round_rungs = set()      # M24: safety rungs filled this round
-        self._round_rungs_at = None    # ...read at this holding
-        self._stop_base = None         # X10: the round's base price, from
+        self._reset_round()            # ROUND_SCOPED (bot_round.py): set in one place
 
     def _maybe_seed(self, truth, held, ref):
         """D9/S2/S3: first cycle, flat, no owned orders resting — market-buy
@@ -570,76 +558,8 @@ class Bot(StopsMixin, BasisMixin, RoundMixin):
             # re-buys that rung). Nothing is placed, nothing cancelled,
             # until the fills account for the position: seconds, usually.
             to_cancel, to_create = [], []
-        amends, cancels, creates = pair_amends(to_cancel, to_create, self.botid)
-
-        for order, want in amends:
-            try:
-                self.client.amend_order(cfg['market_type'], cfg['symbol'],
-                                        order['order_id'],
-                                        adapter.fmt_qty(want['qty']))
-                self.notify.event('amend', self.botid,
-                                  f"{want['side']}@{want['price']:.10g} "
-                                  f"qty -> {want['qty']:.10g}")
-            except VenueError as e:
-                if e.kind not in ('gone', 'not_modified'):
-                    self.notify.event('warn', self.botid, f'amend: {e}')
-
-        uncancelled = set()
-        for order in cancels:                       # E2: cancels before creates
-            try:
-                self.client.cancel_order(cfg['market_type'], cfg['symbol'],
-                                         order['order_id'])
-                self.notify.event('cancel', self.botid,
-                                  f"{order['side']}@{order['price']:.10g}")
-            except VenueError as e:
-                if e.kind != 'gone':
-                    # E2 is a CONDITION, not a sequence: the old order still
-                    # rests, so its replacement must not join it — that is
-                    # how two full-size sells shared one wallet (audit
-                    # 2026-08-07 H3). The rung retries whole next cycle.
-                    uncancelled.add((rung_of(order['link_id'], self.botid),
-                                     order['side']))
-                    self.notify.event('warn', self.botid, f'cancel: {e}')
-
-        placed_now, placed_exit_links, skipped = set(), set(), 0
-        if now < self._backoff_until:               # B7: growth only is halted
-            creates, skipped = [], len(creates)
-        for want in creates:
-            key = (want['rung'], want['side'])
-            if key in uncancelled:
-                skipped += 1
-                continue
-            if self._cooling(key, now) or self._would_cross(want, bid, ask):
-                self.notify.event('skip', self.botid,
-                                  f"{want['side']}@{want['price']:.10g}")
-                skipped += 1
-                continue
-            self._gen += 1
-            link = self._make_link(want['rung'])
-            idx = adapter.position_idx(want['side'], want['reduce_only']) or 0
-            try:
-                self.client.place_order(
-                    cfg['market_type'], cfg['symbol'], want['side'],
-                    adapter.fmt_qty(want['qty']), adapter.fmt_price(want['price']),
-                    link, idx, want['reduce_only'], borrow=self._borrow)
-                placed_now.add(key)
-                if want['side'] == self._exit_side:
-                    placed_exit_links.add(link)
-                self.notify.event('placed', self.botid,
-                                  f"{want['side']}@{want['price']:.10g} "
-                                  f"x {want['qty']:.10g}")
-            except VenueError as e:
-                if e.kind == 'margin':   # account-level: B7's backoff, never
-                    self.notify.event('margin', self.botid, str(e))
-                    self._do_backoff(now)              # a rung-flap matter
-                    break
-                # rung-level failure: an ATTEMPT — placed-but-not-resting
-                # strikes the flap next cycle (B5), so a rung that fails
-                # repeatedly COOLS instead of warning once per cycle (the
-                # 170037 incident: ~1500 warns before the switch was found)
-                placed_now.add(key)
-                if e.kind not in ('ro_capacity', 'post_only_reject'):
-                    self.notify.event('warn', self.botid, f'place: {e}')
+        amends, cancels, placed_now, placed_exit_links, skipped = self._reconcile(
+            to_cancel, to_create, bid, ask, now)
 
         sellable = held and abs(held) > 0 and cfg['strategy'] == 'grid'
         has_exits = any(o['side'] == self._exit_side for o in desired)

@@ -573,6 +573,14 @@ eventually pin (T1).
   keeps the last read as `margin_view`, derived every cycle and never decided on;
   the snapshot carries it (F4) and the card says "margin IM … · MM … · at Nx on
   the exchange".
+- **V18** Hyperliquid's signing is pinned bit for bit to the official SDK's
+  production vectors on both nets (keccak, msgpack, the phantom agent,
+  EIP-712), and its writes go out in the SDK's envelope: a cloid carries the
+  link verbatim and is refused past 16 bytes, nonces strictly increase,
+  floats never reach the wire, a gone cancel is success, and a clean `err`
+  is a real rejection. One spec per layer, every vector named in its own
+  failure. *(vendored 2026-07-27; one module-body spec until the 2026-10-08
+  audit)*
 - **V17** The venue's own liquidation price rides the margin view (`liq`, from
   Bybit's `liqPrice` and Hyperliquid's `liquidationPx`) into the snapshot, and
   the card says "liquidates at X · N% away" from the mark — red inside 5%.
@@ -1367,7 +1375,7 @@ that pins it (T1).
   never on an outright short), each coin once, no zero weight, the weights' sizes summing to 1
   (to `spot_leverage` with `margin`, which needs `spot_borrow`), none above
   `risk.max_weight` (default 0.5; up to 10, since a levered weight may
-  exceed 1), a negative weight an outright short — and
+  exceed 1), a negative weight an outright short (H1c) — and
   `hedge`: one `{product, ratio}` for every long, or one per coin, product in
   usdt / usdc / inverse (default inverse), ratio 0–3 (default 1); a hedge on a
   coin not held is refused, a short's entry may name only its product.
@@ -1377,6 +1385,12 @@ that pins it (T1).
   on by default {stand_down_below 0, trailing_days 7}; `risk` {max_loss with
   max_loss_since, margin_floor_pct 0.4, basis_stop_pct 0.01, max_weight 0.5}.
   Every refusal names the key and the rule.
+- **H1c** An outright short is a USD-margined perp: its product defaults to
+  `usdt`, may be `usdc`, and is never `inverse` — an inverse contract is
+  margined in its own coin, so the row would hold the coin, a long the short
+  exists not to have and the planner never counts. Refused, naming why.
+  *(the 2026-10-09 review: the outright inverse short's coin collateral was
+  not modelled)*
 - **H2** The row runs in the fleet on legs that are identities. The build
   resolves each leg from the venue's catalogue (A1): a spot market per
   long asset, a short per hedged asset on its product (usdt → linear

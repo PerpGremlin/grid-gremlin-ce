@@ -14,7 +14,35 @@ from .window import window
 from .bot_constants import FLAT_CONFIRMATIONS, HISTORY_WINDOW_DAYS, STOP_RUNG, VENUE_STOP
 
 
+# The round's own state (the 2026-10-08 audit): every field that belongs
+# to one round, with its starting value, reset in one place — at the bot's
+# start and when a round completes — so a new latch is declared here or it
+# is not round-scoped. Each is also E3-reset (spec_S6): a restart re-reads it.
+ROUND_SCOPED = (
+    ('_anchor', None),           # M: the round's base price
+    ('_round_hwm', None),        # M10: best mark seen this round
+    ('_round_hwm_basis', None),  # M22: ...for THIS average
+    ('_round_hwm_held', None),   # M25: ...and the holding it last saw
+    ('_be_level', None),         # D38: the breakeven stop
+    ('_folded', ()),             # D71: the slivers folded, said once
+    ('_stop_since', None),       # X9: when the stop level was crossed
+    ('_stop_base', None),        # X10: the round's base price, from the fills
+    ('_round_t0', None),         # M19: the round's first fill, from the venue
+    ('_round_rungs', frozenset()),   # M24: safety rungs filled this round
+    ('_round_rungs_at', None),   # ...read at this holding
+    ('_trail_said', None),       # M21: the trail level last announced
+    ('_trail_best', None),       # M21: best mark since this average
+    ('_trail_basis', None),      # M21: the average the trail is for
+)
+
+
 class RoundMixin:
+
+    def _reset_round(self):
+        """Every ROUND_SCOPED field to its starting value."""
+        for name, start in ROUND_SCOPED:
+            setattr(self, name, set(start) if isinstance(start, frozenset) else start)
+
     def _close_round(self, truth, held, rung, result, what, said):
         """Close what the round holds at market under our own link, so M14
         reads it as our exit and M5 decides what follows. The round's
@@ -632,18 +660,7 @@ class RoundMixin:
                 if done:
                     return done
                 self._round += 1
-                self._anchor = None
-                self._round_hwm = None          # M10: round-scoped
-                self._round_hwm_basis = None    # M22: and its average
-                self._round_hwm_held = None     # M25: and its holding
-                self._be_level = None           # D38: so is the ladder
-                self._folded = ()               # D71: and the folds
-                self._stop_since = self._stop_base = None    # X9/X10 too
-                self._round_t0 = None                        # and M19
-                self._round_rungs = set()                    # and M24
-                self._round_rungs_at = None
-                self._trail_said = None                      # and M21:
-                self._trail_best = self._trail_basis = None  # round-scoped
+                self._reset_round()             # ROUND_SCOPED, all of it
                 self.notify.event('repeat', self.botid,
                                   f'round {self._round + 1} re-anchors at '
                                   'market (M5: from flat only)')
