@@ -516,6 +516,19 @@ def build_market_bot(cfg, client, notifier, tombs, slide):
     return bot, identity
 
 
+def build_live_trade(cfg, fleet, clients, bots, notifier):
+    """L1: a trade joining a running fleet gets everything a bot gets at the
+    start — the shared builder, then its symbol's risk tier and leverage set
+    on the venue with every leg already there (the start's one pass, run
+    for the new trade's symbol), so the trade margins at the leverage it
+    states. The first live trade margined at the venue's old 10x while its
+    card said 3x (2026-10-09)."""
+    bot, identity = build_market_bot(dict(cfg, account=fleet['account']), clients[cfg['venue']],
+                                     notifier, fleet['_tombs'], fleet['_slide'])
+    _ensure_symbol_capacity([b for b in bots if b.cfg.get('symbol') == cfg['symbol']] + [bot], notifier)
+    return bot, identity
+
+
 def build_fleet(fleet_path, notifier, allow_mainnet=False):
     load_env()
     fleet = validate_fleet(json.loads(Path(fleet_path).read_text()))
@@ -748,8 +761,7 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
         from .trades import TradeWatch                            # L1 (D81)
         trade_watch = TradeWatch(
             state_path(fleet_path, fleet, 'trades'), bots, fleet.get('_identities', []),
-            lambda cfg: build_market_bot(dict(cfg, account=fleet['account']), clients[cfg['venue']],
-                                         notifier, fleet['_tombs'], fleet['_slide']),
+            lambda cfg: build_live_trade(cfg, fleet, clients, bots, notifier),
             notifier, clients)
         while cycles is None or n < cycles:
             try:

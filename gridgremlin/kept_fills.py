@@ -193,6 +193,8 @@ def keep(fleet_path, root='logs/fills', now_ms=None, clients=None,
     """Read, collect, write — under the file's lock, re-read inside it."""
     now_ms = int(time.time() * 1000) if now_ms is None else now_ms
     fleet = validate_fleet(json.loads(Path(fleet_path).read_text()))
+    from .trades import with_trades
+    fleet = with_trades(fleet_path, fleet)          # L5: a trade is a bot to every reader
     from .exchange.env import select_account
     select_account(fleet['account'])                  # H5
     venues = {c['venue'] for c in market_rows(fleet)}

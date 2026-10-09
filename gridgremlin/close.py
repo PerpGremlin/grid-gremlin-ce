@@ -78,6 +78,8 @@ def main(argv):
     try:
         load_env()
         fleet = validate_fleet(json.loads(Path(fleet_path).read_text()))
+        from .trades import with_trades
+        fleet = with_trades(fleet_path, fleet)          # L5: a trade is a bot to every reader
         from .exchange.env import select_account
         select_account(fleet['account'])              # H5
         cfg = next((b for b in market_rows(fleet) if make_botid(

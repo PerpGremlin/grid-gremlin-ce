@@ -318,6 +318,8 @@ def markets_of(fleet_paths):
     out = {}
     for fp in fleet_paths:
         fleet = validate_fleet(json.loads(Path(fp).read_text()))
+        from .trades import with_trades
+        fleet = with_trades(fp, fleet)                # L5: a trade's market is read too
         for cfg in market_rows(fleet):
             key = (cfg['venue'], cfg['market_type'], cfg['symbol'])
             put = cfg.get('ladder_total_notional') or cfg.get('ladder_notional') or 0.0

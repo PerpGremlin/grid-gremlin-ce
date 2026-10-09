@@ -112,6 +112,8 @@ def section(fleet_path, now, day_start, archive_root='logs/daily',
     from .kept_fills import load, store_path
     from .report import make_botid
     fleet = validate_fleet(json.loads(Path(fleet_path).read_text()))
+    from .trades import with_trades
+    fleet = with_trades(fleet_path, fleet)          # L5: a trade is a bot to every reader
     from .exchange.env import select_account
     select_account(fleet['account'])                  # H5
     tag = fleet_tag(fleet_path)
