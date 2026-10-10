@@ -109,3 +109,33 @@ def spec_H7_the_rehearsal_borrows_at_the_rows_rate():
     # 60 days of interest on 10,000 borrowed at 10%: about 164, counted in the fees
     assert 0.014 < b['fees'] - a['fees'] - 0.001 < 0.020
     assert b['equity'] > a['equity']                                       # at these rates the lean pays
+
+
+def spec_U66_every_accounts_box_and_the_strip_say_its_mmr():
+    """The owner: "account MMR should be displayed for every account on the
+    fleet page" — the exchange's own gauge, from the fleet's snapshot."""
+    from panel.render import MMR_WARN, exchange_mmr, hero_strip
+    calm = {'watchdog': {'belief': {'mm_rate': 0.279, 'age_s': 60}}}
+    line = exchange_mmr(calm)
+    assert 'account MMR <b class="dim">27.9%</b>' in line and 'liquidates at 100%' in line
+    assert 'min ago' not in line
+    hot = exchange_mmr({'watchdog': {'belief': {'mm_rate': MMR_WARN + 0.01, 'age_s': 1800}}})
+    assert 'class="neg"' in hot and 'as of 30 min ago' in hot
+    assert exchange_mmr({}) == '' and exchange_mmr({'watchdog': {'belief': {}}}) == ''
+    c = {'bots': {}, 'watchdog': {'belief': {'mm_rate': 0.035, 'bots': {}}}, 'terms': {}}
+    strip = hero_strip([('Hyperliquid testnet', c)])
+    assert 'MMR <b class="">3.5%</b>' in strip
+
+
+def spec_U66_a_cards_fold_aligns_its_headings_with_their_numbers():
+    """The owner: in the numbers, with assets dropped down, "some headings
+    are misaligned" — the info pages' `details td{text-align:left}` and its
+    22em first column reached into a card's folds: numbers went left under
+    right-aligned headings. A card's fold aligns both right, the first
+    column left and as wide as it needs."""
+    from panel.css import CSS
+    assert ('.card details.fold td,.card details.fold th{text-align:right;white-space:nowrap;'
+            'padding:.1em .4em}') in CSS
+    assert '.card details.fold td:first-child,.card details.fold th:first-child{text-align:left;width:auto}' in CSS
+    # two classes outrank the info pages' bare `details td` wherever each sits (specificity, not order)
+    assert 'details td{text-align:left}' in CSS

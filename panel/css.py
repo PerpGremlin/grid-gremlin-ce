@@ -102,6 +102,8 @@ nav.side span.dim{display:block;margin:var(--gap-s) 0 0;font-size:.9em}
 details.acct{margin:0}details.acct>summary{color:var(--dim);margin:0 0 var(--gap-s)}
 .card details.fold{margin:.2em 0}.card details.fold>summary{color:var(--dim);font-size:.9em}
 .card details.fold>summary:hover{color:var(--accent)}
+.card details.fold td,.card details.fold th{text-align:right;white-space:nowrap;padding:.1em .4em}
+.card details.fold td:first-child,.card details.fold th:first-child{text-align:left;width:auto}
 .say{max-width:62em;font-size:1.1em;border-left:3px solid var(--accent);
 padding:.2em 1em}details{margin:.6em 0}summary{cursor:pointer;
 color:var(--accent)}details td{text-align:left}details td:first-child

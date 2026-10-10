@@ -931,6 +931,26 @@ def exchange_leverage(contract):
                    for now, filled in leverage_lines(contract).values())
 
 
+MMR_WARN = 0.5             # the account's MMR from which its line is red
+
+
+def exchange_mmr(contract):
+    """U66: the account's MMR as the exchange states it — maintenance margin
+    over equity, the gauge Bybit liquidates at 100% — from the fleet's
+    latest snapshot, in every account's box; red from MMR_WARN, its age said
+    when the snapshot is old, nothing claimed when there is none. (The
+    owner, 2026-10-11: "account MMR should be displayed for every account".)"""
+    belief = ((contract.get('watchdog') or {}).get('belief') or {})
+    rate = belief.get('mm_rate')
+    if rate is None:
+        return ''
+    age = belief.get('age_s') or 0
+    old = f' · as of {age // 60:.0f} min ago' if age > 600 else ''
+    cls = 'neg' if rate >= MMR_WARN else 'dim'
+    return (f'<div class="parts mmr">account MMR <b class="{cls}">{rate:.1%}</b>'
+            f' <span class="dim">· the exchange liquidates at 100%{old}</span></div>')
+
+
 def exchange_since_first(contract):
     """R18: the exchange box's kept line — every bot's whole result summed;
     a bot whose figure cannot be whole is named as left out, never
@@ -1148,6 +1168,9 @@ def hero_strip(labelled):
         levs = [a['now'] for a in account_leverage(c).values()]
         lev = ('leverage —' if not levs or any(v is None for v in levs) else
                'leverage ' + ' · '.join(f'{v:.2f}x' for v in levs))
+        rate = ((c.get('watchdog') or {}).get('belief') or {}).get('mm_rate')
+        if rate is not None:                                     # U66
+            lev += (f' · MMR <b class="{"neg" if rate >= MMR_WARN else ""}">{rate:.1%}</b>')
         # six cells per fleet in one grid, so every column lines up whatever
         # the words' lengths (the owner: "so it looks squared")
         spark = equity_svg(((c.get('equity') or {}).get('24h')), 120, 18)       # U63
@@ -1205,7 +1228,8 @@ def cards_section(idx, label, contract, view='all', scripted=True):
             '<span class="dim">after fees, each bot counted as its card says</span>'
             f'<div class="parts">'
             f'{pnl_parts(net, sum(opened) if opened else None, funding)}'
-            f'</div>{exchange_since_first(contract)}{exchange_leverage(contract)}</div>'
+            f'</div>{exchange_since_first(contract)}{exchange_leverage(contract)}'
+            f'{exchange_mmr(contract)}</div>'                                     # U66
             f'{equity_boxes(contract)}'                                          # U63
             f'{agent_box(contract)}'                                             # J5
             # U59: the account folds to its heading and its box; the side
