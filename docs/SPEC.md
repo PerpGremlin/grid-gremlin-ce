@@ -1256,6 +1256,14 @@ eventually pin (T1).
   model's figure; a reading without the model, or one regime, says so.
   Display only. *(the owner, 2026-10-11: "build the how it decided page …
   the type of stuff id be happy to build into the display")*
+- **K12** The carry, read. Each hourly reading carries both sides of a
+  carry trade from Bybit's public data: every coin's margin borrow rate a
+  year (one call), and what each coin's perpetuals paid a short — the last
+  settlement, 7, 30 and 90 days, linear and inverse (a coin with no
+  inverse has none) — as a yearly rate whatever the settlement interval;
+  a window the history does not cover is none. The history is kept in
+  `logs/market-carry.json` and refetched as funding settles (8 h).
+  Display only.
 - **U55** The dash reads as the owner reads it. A fleet file's `label` is
   what the panel calls the fleet (forty characters at most); without one,
   the venue and the file's environment word. Every card is a column with
@@ -1367,6 +1375,17 @@ eventually pin (T1).
   "far too much for a card … looks like pionex at first", the rest on the
   numbers page, live, for every position type; the split so "we dont
   have to scroll down a whole screen")*
+- **U69** The carry page (`/carry`): the year of a leveraged basis trade on
+  the newest reading — the funding the short is paid on the stack, the
+  interest on the loan, the fees (0.35% of the stack); the net, on the
+  owner's own money, the leverage on the spread, the funding that breaks
+  even; the year at funding from 0 to 15%; every coin read with its 90-day
+  net at the page's loan share. A loan past 70% of the stack is said, red;
+  a loan past the stack is capped at it; no reading is said. The owner's
+  example is the default (100,000 stack, 85,000 borrowed, BTC on the
+  inverse, 90 days). Display only. *(the owner, 2026-10-11: "say i held
+  100k of BTC with an 85K USDT debt … what would that look like over an
+  entire year?")*
 - **L1** A new trade joins a running fleet within a cycle. The trade watch
   stats the trades file once a cycle; a changed file's new rows are each
   built by the fleet's own builder (`main.build_market_bot`, the one every

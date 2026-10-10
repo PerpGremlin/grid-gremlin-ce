@@ -1695,6 +1695,35 @@ def spec_U68_a_card_is_slim_and_its_numbers_page_is_live():
     assert '@media (max-width:860px){.split{display:block}' in CSS and 'max-width:1100px){.split' not in CSS
 
 
+def spec_U69_the_carry_page_works_the_year_on_the_newest_reading():
+    """The owner (2026-10-11): "say i held 100k of BTC with an 85K USDT debt
+    … shorted 100k of BTCUSD (inverse) … what would that look like over an
+    entire year?" — live, as a page: the funding on the stack, the interest
+    on the loan, the fees; the net on the owner's own money; the funding
+    that breaks even; the year at other funding rates; every coin read. A
+    loan past 70% of the stack is said, red. No reading: said."""
+    from panel.carry import carry_page, year_of
+    y = year_of(100_000, 85_000, 0.057, 0.0393)
+    assert round(y['funding']) == 5700 and round(y['interest']) == 3340 and round(y['fees']) == 350
+    assert round(y['net']) == 2010 and abs(y['on_own'] - 2010.5 / 15_000) < 1e-3
+    assert abs(y['breakeven'] - (3340.5 + 350) / 100_000) < 1e-6 and abs(y['lever'] - 100 / 15) < 1e-9
+    row = {'t': 1000.0, 'carry': {'borrow_apr': {'USDT': 0.0393, 'BTC': 0.0042},
+           'funding': {'BTC': {'inverse': {'last': 0.02, 'every_h': 8, 'd7': 0.06, 'd30': 0.056, 'd90': 0.057},
+                               'linear': {'last': -0.005, 'every_h': 8, 'd7': 0.027, 'd30': 0.042, 'd90': 0.044}},
+                       'DOT': {'linear': {'unread': 'HTTPError'}}}}}
+    page = carry_page(row, {}, now=1060.0)
+    assert '<h1>carry</h1>' in page and 'value="100000"' in page and 'value="85000"' in page   # the owner's example
+    assert '+2,010' in page and '+13.4%' in page and '6.7× on the spread' in page
+    assert '3.69% a year' in page                                                             # breaks even
+    assert '85% of the stack is borrowed' in page and '<p class="neg">' in page
+    assert page.count('<tr><td>') >= 6 + 7 + 2 and 'unread' in page
+    calm = carry_page(row, {'loan': '50000', 'leg': 'linear', 'window': 'd30'}, now=1060.0)
+    assert 'of the stack is borrowed' not in calm and '+4.20% a year on 100,000' in calm
+    assert 'no carry reading yet' in carry_page(None) and 'no carry reading yet' in carry_page({'t': 1.0})
+    big = carry_page(row, {'loan': '999999999'}, now=1060.0)                                  # a loan past the stack: capped
+    assert 'value="100000" inputmode' in big and big.count('value="100000"') == 2
+
+
 def spec_U58_a_cards_lower_half_folds_and_the_side_panel_folds_every_card_at_once():
     """The owner (2026-10-09): fold what sits under the bar, with one switch
     for every card. U68 (2026-10-11) made the fleet page's cards slim, so
