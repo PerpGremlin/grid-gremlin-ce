@@ -424,6 +424,23 @@ def spec_G26_a_lagging_fill_list_never_re_places_the_exit_that_just_filled():
     assert bot._rungs_cache[1] == [10]
 
 
+def spec_G26_how_long_the_fill_list_lagged_is_logged_when_it_catches_up():
+    """The loose end, measured (2026-10-11: 42 escalations across three
+    fleets, each after one ordinary fill, once on both sides of one symbol
+    at once): when the list catches up, the log says after how many cycles
+    — log-only, never the phone. A prompt list says nothing."""
+    venue, bot, fills, late, lines = _two_lots_then_the_lower_exit_fills()
+    for _ in range(3):
+        bot.cycle()
+    fills.append(late)
+    bot.cycle()
+    said = [ln for ln in lines if 'fill list caught up' in ln]
+    assert said == ['[log] net linBTCUSDTl: fill list caught up after 3 cycle(s) (G26)'], said
+    venue, bot, _, _, lines = _two_lots_then_the_lower_exit_fills(lag=False)
+    bot.cycle()
+    assert not any('caught up' in ln for ln in lines)
+
+
 def spec_G26_a_prompt_fill_list_costs_nothing():
     venue, bot, _, _, _ = _two_lots_then_the_lower_exit_fills(lag=False)
     bot.cycle()
@@ -440,6 +457,7 @@ def spec_G26_a_change_the_fills_never_explain_stops_freezing_and_says_so():
         bot.cycle()
     assert sum('do not account for the change' in ln for ln in lines) == 1
     assert _sells(venue.orders)                    # exits are maintained again
+    assert not any('caught up' in ln for ln in lines)   # re-baselined, not caught up
 
 
 def spec_G26_through_flat_and_back_the_new_lot_gets_its_exit_at_once():
