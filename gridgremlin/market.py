@@ -24,6 +24,9 @@ THIN_DEPTH_X, THIN_VOLUME_X = 1.0, 10.0          # of what the fleet puts there
 THIN_DEPTH_FLOOR, THIN_VOLUME_FLOOR = 10_000.0, 100_000.0   # quote, however small the fleet
 CROWDED_PCT, CROWDED_FUNDING_8H = 60.0, 0.01     # % of accounts, %/8h
 STORE = 'logs/market.jsonl'
+HMM_STORE = 'logs/market-hmm.json'   # K10: each coin's daily fit, reused hourly
+HMM_FIT_DAYS, HMM_FILTER_HOURS, HMM_REFIT_S = 180, 500, 86_400
+HMM_MIN_BIC_GAIN = 10.0              # two states must beat one bell curve by this (strong evidence)
 TG_CAP = 3500
 FEAR_GREED_URL = 'https://api.alternative.me/fng/?limit=30'
 SESSIONS = ((0, 'Asia'), (8, 'Europe'), (16, 'US'))
@@ -312,6 +315,106 @@ def read_announcements(fetch, bases):
 
 # --- collect, keep, read back -----------------------------------------------
 
+# --- K10: calm or wild, the hidden model's reading -------------------------------
+
+def _hourly(fetch, symbol, hours, now_ms):
+    """Bybit's public hourly candles for the last `hours`, oldest first."""
+    base = 'https://api.bybit.com/v5/market/kline'
+    out, end = {}, int(now_ms)
+    while len(out) < hours:
+        need = min(1000, hours - len(out))
+        rows = fetch(f'{base}?category=linear&symbol={symbol}&interval=60&limit={need}&end={end}')['result']['list']
+        if not rows:
+            break
+        for c in _candles_bybit(rows):
+            out[c['t']] = c
+        end = min(int(r[0]) for r in rows) - 1
+        if len(rows) < need:
+            break
+    return [out[t] for t in sorted(out)]
+
+
+def _log_returns(candles):
+    import math
+    return [math.log(b['c'] / a['c']) for a, b in zip(candles, candles[1:]) if a['c'] > 0 and b['c'] > 0]
+
+
+def read_hmm(fetch, coin, cache, now):
+    """K10: a two-state hidden Markov model of `coin`'s hourly returns on
+    Bybit (the market-wide state, whichever venue a bot trades it on): fitted
+    on the last HMM_FIT_DAYS once a day (kept in `cache`), then filtered over
+    the last HMM_FILTER_HOURS — the probability the market is in its wild
+    state now, from the hours up to now only, and how long the current state
+    has held. Display only: no bot reads it."""
+    import math
+    from .hmm import _pdf, best_fit, bic, forward
+    sym = f'{coin}USDT'
+    now_ms = int(now * 1000)
+    try:
+        fit = cache.get(coin)
+        if not fit or now - fit.get('fit_t', 0) >= HMM_REFIT_S:
+            r = _log_returns(_hourly(fetch, sym, HMM_FIT_DAYS * 24, now_ms))
+            if len(r) < 24 * 30:
+                return {'unread': f'{len(r)} hours of {sym} — too few to fit'}
+            pi, A, mu, var, ll2 = best_fit(r, 2, restarts=2)
+            m1 = sum(r) / len(r)
+            v1 = max(sum((x - m1) ** 2 for x in r) / len(r), 1e-12)
+            ll1 = sum(math.log(_pdf(x, m1, v1)) for x in r)
+            # BIC: is a second state worth its parameters, or one bell curve enough?
+            fit = {'fit_t': now, 'A': A, 'mu': mu, 'var': var, 'n': len(r),
+                   'bic_gain': bic(ll1, 1, len(r)) - bic(ll2, 2, len(r))}
+            cache[coin] = fit
+        recent = _hourly(fetch, sym, HMM_FILTER_HOURS, now_ms)
+        r = _log_returns(recent)
+        if len(r) < 48:
+            return {'unread': f'{len(r)} recent hours of {sym}'}
+    except (OSError, ValueError, KeyError, IndexError, TypeError) as e:
+        return {'unread': f'{type(e).__name__}: {e}'}
+    A, mu, var = fit['A'], fit['mu'], fit['var']
+    a01, a10 = A[0][1], A[1][0]
+    pi = [a10 / (a01 + a10), a01 / (a01 + a10)] if a01 + a10 else [0.5, 0.5]   # the long-run shares
+    alphas, _ = forward(r, pi, A, mu, var)
+    p = alphas[-1][1]
+    wild = p > 0.5
+    spell = 0
+    for a in reversed(alphas):
+        if (a[1] > 0.5) != wild:
+            break
+        spell += 1
+    sd = [math.sqrt(v * 24) for v in var]
+    two = (fit.get('bic_gain') or 0.0) > HMM_MIN_BIC_GAIN
+    if not two:                     # one bell curve explains it: no wild state to name
+        return {'two_states': False, 'state': 'one regime', 'sd_day': [math.sqrt(sum(
+            (x - sum(r) / len(r)) ** 2 for x in r) / len(r) * 24)], 'bic_gain': fit.get('bic_gain'),
+                'fit_age_h': (now - fit['fit_t']) / 3600.0, 'fit_hours': fit['n']}
+    return {'two_states': True, 'bic_gain': fit['bic_gain'],
+            'p_wild': p, 'state': 'wild' if wild else 'calm', 'spell_h': spell,
+            'sd_day': sd,
+            # how far apart the states are: near 1, "wild" is only less calm
+            # (a market with no wild spells still fits two states)
+            'separation': sd[1] / sd[0] if sd[0] else None,
+            'stay': [A[0][0], A[1][1]],
+            'typical_spell_h': [1.0 / (1.0 - A[k][k]) if A[k][k] < 1 else None for k in (0, 1)],
+            'fit_age_h': (now - fit['fit_t']) / 3600.0, 'fit_hours': fit['n'],
+            # the last two days, for the panel's mini chart: closes and P(wild)
+            'closes_48h': [round(c['c'], 8) for c in recent[-48:]],
+            'p_wild_48h': [round(a[1], 3) for a in alphas[-48:]]}
+
+
+def load_hmm(path=None):
+    try:
+        return json.loads(Path(path or HMM_STORE).read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def save_hmm(cache, path=None):
+    from .durable import write_json
+    p = Path(path or HMM_STORE)
+    p.parent.mkdir(exist_ok=True)
+    write_json(p, cache)
+
+
 def markets_of(fleet_paths):
     """Every (venue, market_type, symbol) a fleet trades, once, with what
     the fleets put on it in quote: {key: committed}."""
@@ -334,7 +437,7 @@ def markets_of(fleet_paths):
     return out
 
 
-def collect(fleet_paths, fetch=fetch_json, now=None, hl_testnet=True):
+def collect(fleet_paths, fetch=fetch_json, now=None, hl_testnet=True, hmm_cache=None):
     now = time.time() if now is None else now
     row = {'t': now, 'markets': {}, 'cross': {}}
     bases = []
@@ -348,6 +451,8 @@ def collect(fleet_paths, fetch=fetch_json, now=None, hl_testnet=True):
             bases.append(b)
     for b in bases:
         row['cross'][b] = read_cross(fetch, b)
+    if hmm_cache is not None:                                   # K10
+        row['hmm'] = {b: read_hmm(fetch, b, hmm_cache, now) for b in bases}
     row['fear_greed'] = read_fear_greed(fetch)
     row['announcements'] = read_announcements(fetch, bases)
     return row
@@ -361,15 +466,22 @@ def append(row, path=None):
 
 
 def latest(path=None):
+    """The newest reading — read from the file's END (the panel asks every
+    refresh; the file grows a line an hour and is never read whole)."""
     p = Path(path or STORE)
     if not p.exists():
         return None
-    last = None
-    with open(p) as f:
-        for line in f:
-            if line.strip():
-                last = line
-    return json.loads(last) if last else None
+    with open(p, 'rb') as f:
+        f.seek(0, 2)
+        size = f.tell()
+        back = 65536
+        while True:
+            f.seek(max(0, size - back))
+            lines = [ln for ln in f.read().split(b'\n') if ln.strip()]
+            if size - back <= 0 or len(lines) >= 2:
+                break                        # the last line is whole once another precedes it
+            back *= 4
+    return json.loads(lines[-1]) if lines else None
 
 
 # --- words -------------------------------------------------------------------
@@ -541,7 +653,11 @@ def main(argv):
     from .exchange.env import load_env
     load_env()
     import os
-    row = collect(paths, hl_testnet=os.environ.get('HL_TESTNET', '').lower() == 'true')
+    hmm_cache = load_hmm()
+    row = collect(paths, hl_testnet=os.environ.get('HL_TESTNET', '').lower() == 'true',
+                  hmm_cache=hmm_cache)
+    if not dry:
+        save_hmm(hmm_cache)
     texts = report(row)
     if dry:
         print(json.dumps(row)[:400] + '…')

@@ -1547,7 +1547,7 @@ def agent_box(contract):
             f'<div class="parts">{words}</div>{table}</div>')
 
 
-def render(labelled, static=None, table=False, view='all'):
+def render(labelled, static=None, table=False, view='all', market=None):
     """One renderer, two artefacts (§4): the live page, or — with
     static=timestamp-text — a self-contained export: no refresh, no
     actions, provenance stamped. The numbers can never diverge because
@@ -1569,6 +1569,9 @@ def render(labelled, static=None, table=False, view='all'):
         # the old whole-page refresh
         head = (f'<meta name="gg-refresh" content="{REFRESH_S}">'
                 f'<noscript><meta http-equiv="refresh" content="{REFRESH_S}"></noscript>')
+        if not table:                            # U67: the bots, and the markets beside them
+            from .markets import market_column
+            body = f'<div class="split"><div class="bots">{body}</div>{market_column(market)}</div>'
         body = f'<div class="page">{nav_panel(table, view)}<main>{body}</main></div>'
         chrome = KEEP_JS
     return f"""<!doctype html><meta charset="utf-8">

@@ -213,9 +213,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         base, _, query = self.path.partition('?')
         view = dict(urllib.parse.parse_qsl(query)).get('view', 'all')
+        if self.path != '/data' and base != '/table':
+            from gridgremlin.market import latest
+            try:
+                market = latest()                  # U67: the markets half, from the readings file
+            except (OSError, ValueError):
+                market = None
+        else:
+            market = None
         body = (json.dumps({lb: c for lb, c in self._labelled()})
                 if self.path == '/data' else
-                render(self._labelled(), table=base == '/table', view=view))
+                render(self._labelled(), table=base == '/table', view=view, market=market))
         self.send_response(200)
         self.send_header('Content-Type',
                          'application/json' if self.path == '/data'
