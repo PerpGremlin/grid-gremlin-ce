@@ -315,3 +315,42 @@ def spec_E2_the_cycle_hands_every_order_write_to_the_reconcile_step():
     a, c, p = (rec.index(w) for w in ('amend_order(', 'cancel_order(', 'place_order('))
     assert a < c < p                                   # amends, cancels, then creates
 
+
+
+def spec_D82_a_recurring_margin_refusal_pages_once_then_hourly_with_its_count():
+    """The owner, 2026-10-11: a Bybit risk tier refused the stress test's
+    growth and paged about six times an hour. A margin refusal and its
+    backoff reach the phone the first time, then at most hourly with how
+    often they came; every one is still in the log; a kill is never held."""
+    from gridgremlin.events import REFUSAL_REPEAT, TelegramNotifier
+    sent, lines, t = [], [], [1000.0]
+
+    def pages():
+        return [ln for s in sent for ln in s.split('\n')]
+    n = TelegramNotifier('tok', 'chat', transport=sent.append, clock=lambda: t[0], sink=lines.append)
+    n.startup = False
+    refusal = 'bybit /v5/order/create: retCode 110090: the risk tier limit'
+    n.event('margin', 'linBTCUSDTl', refusal)
+    n.event('backoff', 'linBTCUSDTl', 'margin: growth halted 30s')
+    n.close()
+    assert pages() == [f'margin linBTCUSDTl: {refusal}', 'backoff linBTCUSDTl: margin: growth halted 30s']
+    for i in range(5):                                       # five more inside the hour: held
+        t[0] += 300.0
+        n.event('margin', 'linBTCUSDTl', refusal)
+        n.event('backoff', 'linBTCUSDTl', f'margin: growth halted {60 * (i + 1)}s')
+    n.close()
+    assert len(pages()) == 2
+    assert sum('[ship] margin linBTCUSDTl' in ln for ln in lines) == 6       # all in the log
+    t[0] += REFUSAL_REPEAT
+    n.event('margin', 'linBTCUSDTl', refusal)
+    n.close()
+    assert len(pages()) == 3 and pages()[2] == f'margin linBTCUSDTl: still (6x in 85 min): {refusal}'
+    n.event('kill', 'linBTCUSDTl', 'liquidated')               # never held
+    n.close()
+    assert pages()[-1] == 'kill linBTCUSDTl: liquidated'
+    before = len(pages())
+    m = TelegramNotifier('tok', 'chat', transport=sent.append, clock=lambda: t[0], sink=lines.append)
+    m.event('margin', 'linBTCUSDTl', refusal)                  # the fleet starting: said as it was
+    m.event('margin', 'linBTCUSDTl', refusal)
+    m.close()
+    assert len(pages()) - before == 2
