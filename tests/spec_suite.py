@@ -167,7 +167,7 @@ def spec_T13_no_tracked_file_carries_a_bot_token_in_its_name_or_its_text():
 
 
 def spec_T13_the_token_scan_catches_what_it_says():
-    secret = 'AA' + 'GcZ4UyzyxAbgYQDBknsu092hdwxSClJC8'      # built here, so this file carries none
+    secret = 'AA' + 'FAKEexampleNOTaToken' + '0' * 14       # fabricated, built here: this file carries none
     assert TOKEN.search(f'docs/1234567890 {secret}.txt')
     assert TOKEN.search(f'TELEGRAM_BOT_TOKEN=1234567890:{secret}')
-    assert not TOKEN.search('8986924277 is a number') and not TOKEN.search('AAGcZ4 short')
+    assert not TOKEN.search('1234567890 is a number') and not TOKEN.search('AAshort')
