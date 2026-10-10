@@ -1327,6 +1327,17 @@ eventually pin (T1).
   ended. A trade's card names it a trade, states its exit and who opened it
   when, offers **close trade** while it holds (the close page, one
   reduce-only market order) and **clear** once it has ended.
+- **L7** A running trade is closed by its own bot, never from outside: a
+  close request (`{t, by, reason}`) rides in the trade's record in the
+  trades file; the fleet hands it to the trade's bot — at once when the
+  file changes, and at the start for a request made before a restart —
+  which flattens with one reduce-only market order under its own link and
+  stands down, tombstoned with who asked and why. The first request
+  stands. The owner's **close trade** on the panel, the agent's live
+  `close` and the engine's day-loss flatten all write it; the close
+  command (X15) stays for what a stopped bot left open. *(2026-10-10: the
+  panel's close trade ran the close command, which refuses a bot that has
+  not stood down — the button could never close a live trade)*
 
 ## J — the agent (D80)
 
@@ -1348,7 +1359,36 @@ eventually pin (T1).
   with its reason and confidence — or, in paper, is only checked. Every
   intent is logged with its verdict (`logs/agent-intents-<fleet>.jsonl`),
   the experiment's record. An agent fleet may start with no bot of its own
-  and opens its venue's client at the build, behind the mainnet gate.
+  and opens its venue's client at the build, behind the mainnet gate. Live,
+  the engine enforces the day's loss too: at the limit every open trade of
+  the agent's gets a close request (L7) — and a live agent fleet must name
+  its watchdog, whose snapshots the day's loss is read from, or it is
+  refused.
+
+- **J6** Paper is a book judged by the market, not a log: a paper intent is
+  filled at the last 1-minute close and recorded with its stop, take profit
+  and trail; each time the door is used every open position is walked from
+  its entry over Bybit's public 1-minute candles after the entry's minute
+  — a candle opening beyond the stop fills at its open, one reaching both
+  stop and take profit takes the stop, the trail moves after the candle is
+  judged — and a position the candles closed is frozen. Fees on both sides
+  at the base tier (a take profit's exit at maker, every other exit at
+  taker; a maker entry assumed filled, stated as optimistic). In paper the
+  open trades, the gross and the day's loss are the book's (closed since
+  00:00 UTC plus open at the last price). `side: close` closes a market's
+  paper positions at the last price — never refused by the hour's count or
+  the session, since reducing is always allowed — unless the candles
+  closed them first; live, it writes a close request for each of the
+  agent's trades on that market (L7). A market that cannot be read closes
+  nothing.
+- **J5** The score is computed from the closed positions alone: P&L after
+  fees against flat, the worst drawdown of the closed P&L, the hit rate,
+  the average win and loss, fees as a share of gross, the count by how each
+  closed, and calibration — hit rate by confidence band (below 0.5, 0.5 to
+  0.7, 0.7 and above), and whether higher bands win at least as often. No
+  verdict before 200 closed trades: the score says how many remain. The
+  nightly digest carries it under the agent fleet's section (the paper
+  book; a live agent's trades are their own cards).
 
 - **J2** The agent's working program does the arithmetic of technical
   analysis in code, so a model — or the owner by hand — only judges

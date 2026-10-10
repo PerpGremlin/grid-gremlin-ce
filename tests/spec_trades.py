@@ -269,3 +269,90 @@ def spec_L6_a_trades_rate_line_says_profit_not_grid_profit():
     t = run_rate(b, {'generated_ms': gen, 'window_hours': 24}, 200.0, trade=True)
     assert 'grid' not in t and ' profit <b' in t and ' APR <b' in t
     assert 'grid profit' in run_rate(b, {'generated_ms': gen, 'window_hours': 24}, 200.0)
+
+
+# --- L7: the close request -------------------------------------------------------------
+
+def spec_L7_a_close_request_rides_in_the_trades_record_and_the_first_stands():
+    from gridgremlin.tombstones import Tombstones
+    from gridgremlin.trades import request_close, trade_status
+    d = Path(tempfile.mkdtemp())
+    path = d / 'trades-x.json'
+    add_trade(path, [], dict(ROW))
+    tombs = Tombstones(str(d / 'tombstones-x.json'))
+    assert trade_status(path, 'linBTCUSDTl', tombs) == 'live' and trade_status(path, 'linXRPUSDTl', tombs) is None
+    req = request_close(path, 'linBTCUSDTl', 'owner', 'done for the day')
+    assert req['by'] == 'owner' and req['t'].endswith('Z')
+    assert request_close(path, 'linBTCUSDTl', 'agent', 'later')['by'] == 'owner'   # the first stands
+    trades, refused = load_trades(path)
+    assert refused == [] and trades[0]['_record']['close']['reason'] == 'done for the day'
+    assert 'close' not in trades[0] and 'nothing to close' in _refused(request_close, path, 'linXRPUSDTl', 'x')
+    tombs.add('linBTCUSDTl', 'closed on request')
+    assert trade_status(path, 'linBTCUSDTl', tombs) == 'ended'
+
+
+def spec_L7_the_fleet_hands_a_close_request_to_the_running_trade_once_restart_included():
+    import os
+    from gridgremlin.trades import request_close
+    d = Path(tempfile.mkdtemp())
+    path = d / 'trades-x.json'
+    add_trade(path, [], dict(ROW))
+
+    class B:
+        botid, alive, close_request = 'linBTCUSDTl', True, None
+    bot, lines = B(), []
+    w = TradeWatch(path, [bot], [], None, Notifier(sink=lines.append), {'bybit': object()})
+    assert bot.close_request is None
+    request_close(path, 'linBTCUSDTl', 'owner', 'enough')
+    os.utime(path, (5, 6))
+    w.poll()
+    assert bot.close_request['by'] == 'owner' and sum('close requested by owner' in ln for ln in lines) == 1
+    os.utime(path, (7, 8))
+    w.poll()
+    assert sum('close requested' in ln for ln in lines) == 1                # once
+    fresh = B()                                                             # a restart: the request stands
+    TradeWatch(path, [fresh], [], None, Notifier(sink=lines.append), {'bybit': object()})
+    assert fresh.close_request['reason'] == 'enough'
+
+
+def spec_L7_a_trade_asked_to_close_flattens_under_its_own_link_and_stands_down():
+    """Sabotage: a bot that ignores close_request keeps its position and
+    lives — this spec then fails on the market order and the tombstone."""
+    from gridgremlin.bot import Bot
+    from gridgremlin.tombstones import Tombstones
+    from spec_round import ADAPTER, FakeVenue
+    venue, lines = FakeVenue(), []
+    tombs = Tombstones(str(Path(tempfile.mkdtemp()) / 't.json'))
+    bot = Bot(validate_trade(dict(ROW, take_profit_avg_pct=0.01)), ADAPTER, venue,
+              Notifier(sink=lines.append), gen_seed=1, tombstones=tombs)
+    bot.cycle()
+    bot.cycle()
+    assert venue.position and bot.alive
+    bot.close_request = {'t': 'now', 'by': 'owner', 'reason': 'enough'}
+    assert bot.cycle() is None
+    assert venue.position is None and bot.alive is False
+    assert tombs.has('linBTCUSDTl') and 'closed on request by owner: enough (L7)' in Path(tombs.path).read_text()
+    assert venue.orders == []
+
+
+def spec_L7_the_panels_close_trade_asks_the_fleet_for_a_running_trade():
+    from panel.server import Handler
+    from spec_setup import _call, _served_fleet
+    base, d, close = _served_fleet()
+    saved = Handler.units
+    try:
+        Handler.units = ('some.service',)
+        assert 'linBTCUSDTl: queued' in _call(base, '/trade', {
+            'action': 'open', 'fleet': '0', 'side': 'long', 'symbol': 'BTCUSDT',
+            'capital': '200', 'leverage': '3', 'tp': '0.6', 'stop': '0.6'})
+        page = _call(base, '/close?fleet=0&bot=linBTCUSDTl')
+        assert 'close trade linBTCUSDTl' in page and 'sent by the trade itself' in page
+        assert 'not closed' in _call(base, '/close', {'fleet': '0', 'bot': 'linBTCUSDTl', 'confirm': 'yes'})
+        done = _call(base, '/close', {'fleet': '0', 'bot': 'linBTCUSDTl', 'confirm': 'linBTCUSDTl'})
+        assert 'linBTCUSDTl: close requested' in done
+        row = json.loads((d / 'logs' / 'trades-f.json').read_text())[0]
+        assert row['close']['by'] == 'owner' and row['close']['reason'] == 'close trade on the panel'
+    finally:
+        Handler.units = saved
+        close()
+

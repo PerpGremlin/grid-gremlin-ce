@@ -220,7 +220,25 @@ def section(fleet_path, now, day_start, archive_root='logs/daily',
                       f"{(now * 1000 - max(kept['collected'].values())) / 6e4:.0f}"
                       ' min ago')
     lines.append('health: ' + ' · '.join(health))
+    if fleet.get('agent'):
+        lines.extend(agent_lines(fleet_path, fleet['agent']))
     return lines, tag, place
+
+
+def agent_lines(fleet_path, limits):
+    """J5 in the digest: the agent's score as the book stands (the door
+    settles it each call). Live trades are on their own cards above; their
+    score from the venue's fills is not built."""
+    if not limits['paper']:
+        return ['agent (live): its trades are the cards above; the J5 score '
+                'reads the paper book only, for now']
+    from .agent_paper import book_path, load_book
+    from .agent_score import render, score
+    try:
+        book = load_book(book_path(fleet_path))
+    except (OSError, ValueError) as e:
+        return [f'agent (paper): the book is unreadable — {e}']
+    return ['agent (paper): ' + render(score(book)).replace('\n', '\n  ')]
 
 
 def build(fleet_paths, now=None, **roots):
