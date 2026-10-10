@@ -1301,6 +1301,14 @@ eventually pin (T1).
 
 ## L — trades (D81)
 
+- **U66** Every account says its MMR — maintenance margin over equity, the
+  gauge the exchange liquidates at 100% — from the fleet's latest snapshot:
+  in its box ("account MMR 27.9% · the exchange liquidates at 100%") and
+  beside its leverage in the strip; red from 50%, its age said when the
+  snapshot is over ten minutes old, nothing claimed without one. A card's
+  folded tables align each heading with its numbers (right), the first
+  column left and as wide as it needs — the info pages' `details td` rule
+  had reached into them. *(the owner, 2026-10-11)*
 - **L1** A new trade joins a running fleet within a cycle. The trade watch
   stats the trades file once a cycle; a changed file's new rows are each
   built by the fleet's own builder (`main.build_market_bot`, the one every
