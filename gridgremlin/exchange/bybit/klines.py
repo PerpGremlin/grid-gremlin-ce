@@ -31,6 +31,25 @@ def fetch_bars(category, symbol, bar_minutes, start_ms, end_ms):
     return out
 
 
+def fetch_funding(category, symbol, start_ms, end_ms):
+    """T10: the market's funding settlements, [{'t', 'rate'}] oldest first
+    — public, no key, paged newest-first as the venue answers."""
+    rows, end = {}, int(end_ms)
+    while end > start_ms:
+        q = urllib.parse.urlencode({'category': category, 'symbol': symbol,
+                                    'startTime': int(start_ms), 'endTime': end,
+                                    'limit': 200})
+        with urllib.request.urlopen(
+                f'{PUBLIC_HOST}/v5/market/funding/history?{q}', timeout=20) as r:
+            page = json.load(r)['result'].get('list', [])
+        for x in page:
+            rows[int(x['fundingRateTimestamp'])] = float(x['fundingRate'])
+        if len(page) < 200:
+            break
+        end = min(int(x['fundingRateTimestamp']) for x in page) - 1
+    return [{'t': t, 'rate': rows[t]} for t in sorted(rows)]
+
+
 def fetch_instrument(category, symbol):
     q = urllib.parse.urlencode({'category': category, 'symbol': symbol})
     with urllib.request.urlopen(

@@ -104,7 +104,7 @@ def spec_C10_the_primitives_exist_once():
     assert not offenders, offenders
 
 
-def spec_T6_a_spec_never_reaches_the_network():
+def spec_T12_a_spec_never_reaches_the_network():
     """The runner refuses name resolution for anything but loopback, so a
     spec that fetches a live price fails here as it does on GitHub's
     runners (spec_J1, 2026-10-10) — never only after a CE push."""
@@ -113,13 +113,24 @@ def spec_T6_a_spec_never_reaches_the_network():
     try:
         socket.getaddrinfo('api.bybit.com', 443)
     except OSError as e:
-        assert 'never reach the network (T6)' in str(e)
+        assert 'never reach the network (T12)' in str(e)
     else:
         raise AssertionError('a spec resolved a public host')
     try:
         urllib.request.urlopen('https://api.bybit.com/v5/market/time', timeout=2)
     except OSError as e:
-        assert 'T6' in str(e) or 'T6' in str(getattr(e, 'reason', ''))
+        assert 'T12' in str(e) or 'T12' in str(getattr(e, 'reason', ''))
     else:
         raise AssertionError('a spec reached the network')
     assert socket.getaddrinfo('127.0.0.1', 80)                    # the panel's specs still serve
+
+
+def spec_T5_every_spec_id_is_defined_once():
+    """A second definition of an id read into a dict overwrites the first
+    without a word: T6 was given twice (the backtester's window, then the
+    network guard, 2026-10-11) and the suite stayed green."""
+    import collections
+    text = (ROOT / 'docs' / 'SPEC.md').read_text()
+    ids = re.findall(r'^- \*\*([A-Z][0-9]+[a-z]?)\*\*', text, re.M)
+    twice = [i for i, n in collections.Counter(ids).items() if n > 1]
+    assert ids and not twice, f'SPEC ids defined more than once: {twice}'

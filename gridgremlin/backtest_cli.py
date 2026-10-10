@@ -14,17 +14,20 @@ from .config import market_rows, validate_fleet
 from .fees import BYBIT_MAKER
 
 
-def rehearse(draft, bars, adapter, fee=BYBIT_MAKER, bar_minutes=60):
+def rehearse(draft, bars, adapter, fee=BYBIT_MAKER, bar_minutes=60, funding=None,
+             account=None):
     """§9: a draft config replayed over real bars, returning the same
     vocabulary as the readout plus the hold benchmark — what the same
-    capital did just sitting there. Pure: candles in, verdict out."""
+    capital did just sitting there. Pure: candles in, verdict out. T10:
+    `funding` is the market's settlements over the window, when read."""
     if draft['strategy'] == 'martingale':      # T7: the real Bot, replayed
         from .replay import backtest_martingale
         r = backtest_martingale(draft, adapter, bars, fee_maker=fee,
                                 bar_minutes=bar_minutes)
     else:
         r = backtest(draft, adapter, bars, fee_rate=fee,
-                     funding_rate_hourly=0.0, bar_hours=bar_minutes / 60.0)
+                     funding_rate_hourly=0.0, bar_hours=bar_minutes / 60.0,
+                     funding=funding, account=account)
     r['bar_minutes'] = bar_minutes
     first_o, last_c = bars[0]['o'], bars[-1]['c']
     sign = 1.0 if draft['side'] == 'long' else -1.0
@@ -236,7 +239,7 @@ def bars_and_adapter(cfg, bar_minutes, days):
 
 
 def run_draft(raw, days, bar_minutes, fee, optimize=False, progress=None,
-              windows=False):
+              windows=False, account=None):
     """--draft: validate a config that exists nowhere yet, fetch real
     bars, rehearse. Returns a dict; 'refused' carries the engine's own
     refusal text verbatim. With `optimize` (T8) the grid's rung count is
@@ -286,7 +289,24 @@ def run_draft(raw, days, bar_minutes, fee, optimize=False, progress=None,
         return out
     if progress:
         progress(f'replaying {len(bars)} candles', 0.5)
-    return rehearse(draft, bars, adapter, fee=fee, bar_minutes=bar_minutes)
+    return rehearse(draft, bars, adapter, fee=fee, bar_minutes=bar_minutes,
+                    funding=window_funding(draft, bars, bar_minutes), account=account)
+
+
+def window_funding(draft, bars, bar_minutes):
+    """T10: the market's funding settlements over the bars' window — a
+    Bybit futures grid only (spot pays none; Hyperliquid's hourly funding is
+    not read here). None when it cannot be read: the verdict then says
+    funding was not modelled, never that it was nothing."""
+    if (draft.get('strategy') == 'martingale' or draft.get('venue') == 'hyperliquid'
+            or draft['market_type'] == 'spot' or not bars):
+        return None
+    from .exchange.bybit.klines import fetch_funding
+    try:
+        return fetch_funding(draft['market_type'], draft['symbol'], bars[0]['t'],
+                             bars[-1]['t'] + bar_minutes * 60_000)
+    except (OSError, ValueError, KeyError):
+        return None
 
 
 MARTINGALE_BAR_MINUTES = 5     # T7: a round turns on moves an hour hides
@@ -316,6 +336,8 @@ def main(argv):
     bar_minutes = int(opt('--bar-minutes', '60'))
     fee = float(opt('--fee', str(BYBIT_MAKER)))
     funding = float(opt('--funding', '0'))
+    account = opt('--account', None)                # T11: {equity, mm, label}
+    account = json.loads(account) if account else None
     if as_draft:
         # the options were parsed (and removed) above — asking opt() again
         # returned the DEFAULTS, so every draft ran 7 days whatever was
@@ -324,7 +346,8 @@ def main(argv):
             print(json.dumps({'progress': p, 'frac': frac}), file=sys.stderr,
                   flush=True)
         out = run_draft(sys.stdin.read(), days, bar_minutes, fee,
-                        optimize=optimize, progress=say, windows=windows)
+                        optimize=optimize, progress=say, windows=windows,
+                        account=account)
         print(json.dumps(out))
         return 0 if 'refused' not in out else 1
     if len(argv) != 1 or not botid:

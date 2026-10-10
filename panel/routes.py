@@ -338,6 +338,38 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(tidy(body).encode())
 
+    def _account_for(self, draft):
+        """T11: the account a new bot of this venue would land on — the
+        first fleet on that venue trading the default account, else the
+        first on that venue — as its latest snapshot states it: {equity,
+        mm, label}. None when no snapshot says (the verdict then says so)."""
+        from gridgremlin.equity_series import snapshot_path
+        venue = (draft or {}).get('venue') or 'bybit'
+        picks = []
+        for f, lb in zip(self.fleets, self.labels):
+            try:
+                raw = json.loads(Path(f).read_text())
+            except (OSError, ValueError):
+                continue
+            venues = {r.get('venue') or 'bybit' for r in raw.get('bots') or []
+                      if r.get('strategy') != 'portfolio'}
+            if venue in venues:
+                picks.append((raw.get('account') not in (None, 'default'), f, lb))
+        for _, f, lb in sorted(picks, key=lambda p: p[0]):
+            snap = snapshot_path(f)
+            try:
+                with open(snap, 'rb') as fh:
+                    fh.seek(0, 2)
+                    fh.seek(max(0, fh.tell() - 65536))
+                    last = fh.read().decode(errors='replace').strip().splitlines()[-1]
+                row = json.loads(last)
+            except (OSError, ValueError, IndexError, TypeError):
+                continue
+            eq, rate = row.get('equity'), row.get('mm_rate')
+            if eq and rate is not None:
+                return {'equity': float(eq), 'mm': float(eq) * float(rate), 'label': lb}
+        return None
+
     def _start_rehearsal(self, form, draft, bot_json, days):
         import threading
         now = time.time()
@@ -349,6 +381,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return None                        # starves the fleets (U23)
         job = secrets.token_hex(4)
         self._jobs[job] = {'t0': now, 'form': dict(form), 'draft': draft,
+                           'account': self._account_for(draft),
                            'bot_json': bot_json, 'days': days,
                            'optimize': form.get('optimize') == '1',
                            'progress': 'starting', 'frac': 0.0,
@@ -368,7 +401,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         args = (['nice', '-n', '10', sys.executable, '-m',
                  'gridgremlin.backtest_cli', '--draft', '--days',
                  f"{job['days']:g}"]
-                + (['--windows'] if job['optimize'] else []))   # T9
+                + (['--windows'] if job['optimize'] else [])    # T9
+                + (['--account', json.dumps(job['account'])] if job.get('account') else []))   # T11
         try:
             proc = subprocess.Popen(args, stdin=subprocess.PIPE,
                                     stdout=subprocess.PIPE,

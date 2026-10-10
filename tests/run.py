@@ -26,7 +26,7 @@ LOOPBACK = ('localhost', '127.0.0.1', '::1', '')
 
 
 def _no_network():
-    """T6: a spec never reaches the network. Name resolution for anything but
+    """T12: a spec never reaches the network. Name resolution for anything but
     loopback is refused — the panel's specs serve on 127.0.0.1 — so the
     workstation runs the suite as GitHub's runners do (Bybit answers them
     403): a spec that fetched a live price passed here and failed there
@@ -37,7 +37,7 @@ def _no_network():
     def guarded(host, *a, **k):
         h = host.decode() if isinstance(host, bytes) else (host or '')
         if h not in LOOPBACK:
-            raise OSError(f'specs never reach the network (T6): {h}')
+            raise OSError(f'specs never reach the network (T12): {h}')
         return real(host, *a, **k)
     socket.getaddrinfo = guarded
 
