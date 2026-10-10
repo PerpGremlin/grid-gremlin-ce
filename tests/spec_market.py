@@ -406,3 +406,60 @@ def spec_K11_the_how_it_decided_page_redoes_each_hour_from_the_reading():
     assert 'one regime.' in decided_page(dict(row, hmm={'BTC': {'two_states': False, 'sd_day': [0.02],
                                                                'bic_gain': 3.0, 'fit_hours': 4320}}), 'BTC')
     assert 'href="/calm-wild?coin=BTC"' in tile('BTC', {'price': 1.0}, h)   # the tile leads to it
+
+
+def _funding_feed(t_end=1_800_000_000_000, days=100, rate=0.0001, every_h=8, no_inverse=('DOT',)):
+    """A fake Bybit: funding settlements every `every_h` hours at `rate`
+    (the last 10 days at twice it), newest first in pages of 200; margin
+    borrow rates; no inverse market for the coins in `no_inverse`."""
+    from urllib.parse import parse_qs, urlparse
+    calls = []
+    def fetch(url):
+        calls.append(url)
+        u = urlparse(url)
+        q = {k: v[0] for k, v in parse_qs(u.query).items()}
+        if 'spot-margin-trade' in u.path:
+            return {'result': {'vipCoinList': [{'list': [
+                {'currency': 'USDT', 'hourlyBorrowRate': '0.0000044425670000'},
+                {'currency': 'BTC', 'hourlyBorrowRate': '0.00000048'},
+                {'currency': 'PEPE', 'hourlyBorrowRate': '0.00001'}]}]}}
+        if q['category'] == 'inverse' and q['symbol'][:-3] in no_inverse:
+            return {'retCode': 10001, 'retMsg': 'symbol invalid', 'result': {}}
+        step = every_h * 3_600_000
+        ts = [t for t in range(t_end - days * 86_400_000, t_end + 1, step) if t <= int(q['endTime'])]
+        page = list(reversed(ts))[:int(q['limit'])]
+        return {'retCode': 0, 'result': {'list': [
+            {'symbol': q['symbol'], 'fundingRate': str(rate * (2 if t > t_end - 10 * 86_400_000 else 1)),
+             'fundingRateTimestamp': str(t)} for t in page]}}
+    return fetch, calls, t_end
+
+
+def spec_K12_the_reading_says_what_a_short_was_paid_and_what_a_loan_costs():
+    """The owner (2026-10-11), on the carry trade: the reading carries both
+    sides — each coin's margin borrow rate (one call, every coin, a year)
+    and what its perpetuals paid a short over the last settlement, 7, 30
+    and 90 days (linear and inverse; a coin with no inverse has none), as a
+    yearly rate whatever the settlement interval. The history is kept and
+    refetched only as it settles."""
+    from gridgremlin.market import CARRY_REFRESH_S, read_carry
+    fetch, calls, t_end = _funding_feed()
+    now = t_end / 1000 + 60
+    cache = {}
+    c = read_carry(fetch, ['BTC', 'DOT'], cache, now)
+    assert abs(c['borrow_apr']['USDT'] - 0.0389169) < 1e-6 and 'PEPE' not in c['borrow_apr']
+    btc = c['funding']['BTC']['linear']
+    assert abs(btc['d90'] - (80 * 3 * 0.0001 + 10 * 3 * 0.0002) / 90 * 365) < 1e-9          # 270 settlements, paged
+    assert abs(btc['d7'] - 0.0002 * 3 * 365) < 0.01 and abs(btc['last'] - 0.0002 * 3 * 365) < 1e-9
+    assert btc['every_h'] == 8 and set(c['funding']['DOT']) == {'linear'}               # no inverse: none
+    assert len(cache['linear:BTCUSDT']['h']) == 270 and cache['inverse:DOTUSD']['h'] == []
+    n = len(calls)
+    read_carry(fetch, ['BTC', 'DOT'], cache, now + 3600)                                # kept: one call
+    assert len(calls) == n + 1
+    read_carry(fetch, ['BTC', 'DOT'], cache, now + CARRY_REFRESH_S)                     # settled: refetched
+    assert len(calls) > n + 2
+    f4, _, _ = _funding_feed(every_h=4)                                                 # 4-hourly: the same year
+    c4 = read_carry(f4, ['BTC'], {}, now)['funding']['BTC']['linear']
+    assert c4['every_h'] == 4 and abs(c4['last'] - 0.0002 * 6 * 365) < 1e-9
+    assert abs(c4['d7'] - 2 * btc['d7']) < 0.02                                         # twice the settlements, twice the pay
+    short, _, _ = _funding_feed(days=20)                                                # too short for 90 days: none
+    assert read_carry(short, ['BTC'], {}, now)['funding']['BTC']['linear']['d90'] is None

@@ -201,6 +201,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(tidy(body).encode())
             return
+        if self.path.split('?')[0] == '/carry':                      # U69
+            from gridgremlin.market import latest
+            from panel.reference import KEEP_JS
+            from .carry import carry_page
+            from .render import PAGE_END, side_nav
+            q = dict(urllib.parse.parse_qsl(self.path.partition('?')[2]))
+            body = (f'<!doctype html><meta charset="utf-8"><title>carry</title><style>{CSS}</style>'
+                    f'{side_nav()}<main>{carry_page(latest(), q)}</main>{PAGE_END}{KEEP_JS}')
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(tidy(body).encode())
+            return
         if self.path.split('?')[0] == '/calm-wild':                  # K11
             from gridgremlin.market import latest
             from panel.reference import KEEP_JS

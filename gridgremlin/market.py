@@ -27,6 +27,9 @@ STORE = 'logs/market.jsonl'
 HMM_STORE = 'logs/market-hmm.json'   # K10: each coin's daily fit, reused hourly
 HMM_FIT_DAYS, HMM_FILTER_HOURS, HMM_REFIT_S = 180, 500, 86_400
 HMM_MIN_BIC_GAIN = 10.0              # two states must beat one bell curve by this (strong evidence)
+CARRY_STORE = 'logs/market-carry.json'   # K12: each perpetual's funding history, refreshed as it settles
+CARRY_DAYS, CARRY_REFRESH_S = 90, 8 * 3600
+CARRY_WINDOWS = (('d7', 7), ('d30', 30), ('d90', 90))
 TG_CAP = 3500
 FEAR_GREED_URL = 'https://api.alternative.me/fng/?limit=30'
 SESSIONS = ((0, 'Asia'), (8, 'Europe'), (16, 'US'))
@@ -404,6 +407,93 @@ def read_hmm(fetch, coin, cache, now):
             'p_wild_48h': [round(a[1], 3) for a in alphas[-48:]]}
 
 
+# --- K12: the carry — funding received against the loan's cost ----------------
+
+def _funding_history(fetch, category, symbol, days, now_ms):
+    """Bybit's public funding settlements for `symbol` over the last `days`,
+    oldest first, as (ms, rate). Paged back by end time; [] if the market
+    does not exist (a coin with no inverse perpetual)."""
+    base = 'https://api.bybit.com/v5/market/funding/history'
+    start, end, out = now_ms - days * 86_400_000, now_ms, {}
+    for _ in range(12):
+        d = fetch(f'{base}?category={category}&symbol={symbol}&limit=200&endTime={end}')
+        rows = (d.get('result') or {}).get('list') or [] if d.get('retCode', 0) == 0 else []
+        for r in rows:
+            t = int(r['fundingRateTimestamp'])
+            if t >= start:
+                out[t] = float(r['fundingRate'])
+        if len(rows) < 200 or not rows or min(int(r['fundingRateTimestamp']) for r in rows) < start:
+            break
+        end = min(int(r['fundingRateTimestamp']) for r in rows) - 1
+    return sorted(out.items())
+
+
+def funding_apr(history, days, now_ms):
+    """What a short was paid over the last `days`, as a yearly rate: the sum
+    of the settlements in the window over the window's length — whatever
+    the settlement interval (8 h, 4 h, 1 h). None when the history does not
+    cover nine-tenths of the window."""
+    start = now_ms - days * 86_400_000
+    inside = [r for t, r in history if t >= start]
+    if not history or history[0][0] > start + days * 8_640_000:
+        return None
+    return sum(inside) / days * 365
+
+
+def read_carry(fetch, bases, cache, now):
+    """K12: the two sides of a carry trade, from Bybit's public data — the
+    yearly cost of borrowing each coin on margin (one call, every coin), and
+    what each coin's perpetuals paid a short: the last settlement and the
+    last 7, 30 and 90 days, linear and inverse. The funding history is kept
+    in `cache` and refetched as it settles; display only."""
+    now_ms = int(now * 1000)
+    out = {'borrow_apr': {}, 'funding': {}}
+    try:
+        d = fetch('https://api.bybit.com/v5/spot-margin-trade/data?vipLevel=No%20VIP')
+        for c in d['result']['vipCoinList'][0]['list']:
+            if c.get('currency') in set(bases) | {'USDT', 'USDC'} and c.get('hourlyBorrowRate') not in (None, ''):
+                out['borrow_apr'][c['currency']] = float(c['hourlyBorrowRate']) * 24 * 365
+    except (OSError, ValueError, KeyError, IndexError, TypeError) as e:
+        out['borrow_unread'] = f'{type(e).__name__}: {e}'
+    for b in bases:
+        legs = {}
+        for cat, sym in (('linear', f'{b}USDT'), ('inverse', f'{b}USD')):
+            key = f'{cat}:{sym}'
+            try:
+                kept = cache.get(key)
+                if not kept or now - kept.get('t', 0) >= CARRY_REFRESH_S:
+                    kept = {'t': now, 'h': _funding_history(fetch, cat, sym, CARRY_DAYS, now_ms)}
+                    cache[key] = kept
+            except (OSError, ValueError, KeyError, IndexError, TypeError) as e:
+                legs[cat] = {'unread': f'{type(e).__name__}: {e}'}
+                continue
+            h = [tuple(x) for x in kept['h']]
+            if not h:
+                continue
+            step = (h[-1][0] - h[-2][0]) if len(h) > 1 else 28_800_000
+            leg = {'last': h[-1][1] * 86_400_000 / step * 365 if step > 0 else None,
+                   'every_h': step / 3_600_000}
+            for name, days in CARRY_WINDOWS:
+                leg[name] = funding_apr(h, days, now_ms)
+            legs[cat] = leg
+        out['funding'][b] = legs
+    return out
+
+
+def load_carry(path=None):
+    try:
+        return json.loads(Path(path or CARRY_STORE).read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def save_carry(cache, path=None):
+    from .durable import write_json
+    p = Path(path or CARRY_STORE)
+    p.parent.mkdir(exist_ok=True)
+    write_json(p, cache)
+
+
 def load_hmm(path=None):
     try:
         return json.loads(Path(path or HMM_STORE).read_text())
@@ -440,7 +530,7 @@ def markets_of(fleet_paths):
     return out
 
 
-def collect(fleet_paths, fetch=fetch_json, now=None, hl_testnet=True, hmm_cache=None):
+def collect(fleet_paths, fetch=fetch_json, now=None, hl_testnet=True, hmm_cache=None, carry_cache=None):
     now = time.time() if now is None else now
     row = {'t': now, 'markets': {}, 'cross': {}}
     bases = []
@@ -456,6 +546,8 @@ def collect(fleet_paths, fetch=fetch_json, now=None, hl_testnet=True, hmm_cache=
         row['cross'][b] = read_cross(fetch, b)
     if hmm_cache is not None:                                   # K10
         row['hmm'] = {b: read_hmm(fetch, b, hmm_cache, now) for b in bases}
+    if carry_cache is not None:                                 # K12
+        row['carry'] = read_carry(fetch, bases, carry_cache, now)
     row['fear_greed'] = read_fear_greed(fetch)
     row['announcements'] = read_announcements(fetch, bases)
     return row
@@ -656,11 +748,12 @@ def main(argv):
     from .exchange.env import load_env
     load_env()
     import os
-    hmm_cache = load_hmm()
+    hmm_cache, carry_cache = load_hmm(), load_carry()
     row = collect(paths, hl_testnet=os.environ.get('HL_TESTNET', '').lower() == 'true',
-                  hmm_cache=hmm_cache)
+                  hmm_cache=hmm_cache, carry_cache=carry_cache)
     if not dry:
         save_hmm(hmm_cache)
+        save_carry(carry_cache)
     texts = report(row)
     if dry:
         print(json.dumps(row)[:400] + '…')
