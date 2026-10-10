@@ -396,6 +396,9 @@ def read_hmm(fetch, coin, cache, now):
             'stay': [A[0][0], A[1][1]],
             'typical_spell_h': [1.0 / (1.0 - A[k][k]) if A[k][k] < 1 else None for k in (0, 1)],
             'fit_age_h': (now - fit['fit_t']) / 3600.0, 'fit_hours': fit['n'],
+            # K11: the fitted model itself, so the panel can redo each hour's
+            # step in the open (the "how it decided" page)
+            'A': A, 'mu': mu, 'var': var,
             # the last two days, for the panel's mini chart: closes and P(wild)
             'closes_48h': [round(c['c'], 8) for c in recent[-48:]],
             'p_wild_48h': [round(a[1], 3) for a in alphas[-48:]]}

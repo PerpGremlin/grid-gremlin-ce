@@ -360,3 +360,49 @@ def spec_K10_the_reading_keeps_two_days_for_the_mini_chart():
     r = read_hmm(fetch, 'BTC', {}, t_end / 1000 + 60)
     assert len(r['closes_48h']) == 48 and len(r['p_wild_48h']) == 48
     assert r['p_wild_48h'][-1] > 0.9 and r['p_wild_48h'][0] < 0.5          # the wild tail at the end
+
+
+def spec_K11_the_how_it_decided_page_redoes_each_hour_from_the_reading():
+    """The owner (2026-10-11): the calm-or-wild working, live, as a panel
+    page. The reading carries its model (the transition table, each state's
+    drift and spread); the page redoes every hour of the last two days in
+    the filter's three steps — carry the belief forward, read each state's
+    bell curve at the move, Bayes' rule — and lands on the model's own
+    figure. A reading with no model, or one regime, says so."""
+    from gridgremlin.market import read_hmm
+    from panel.markets import decide_steps, decided_page, tile
+    fetch, _, t_end = _hourly_feed(24 * 200, wild_tail=10)
+    h = read_hmm(fetch, 'BTC', {}, t_end / 1000 + 60)
+    assert {'A', 'mu', 'var'} <= set(h) and h['var'][0] < h['var'][1]        # state 1 is the wild one
+    # the steps, against the filter itself on a model that switches often
+    # (a feed that never switches hides a wrong row of the table)
+    import math
+    import random
+    from gridgremlin.hmm import forward, sample
+    A, mu, var = [[0.9, 0.1], [0.3, 0.7]], [0.0002, -0.0005], [0.003 ** 2, 0.012 ** 2]
+    obs, _ = sample([0.75, 0.25], A, mu, var, 300, random.Random(5))
+    alphas, _ = forward(obs, [0.75, 0.25], A, mu, var)
+    closes = [100.0]
+    for x in obs:
+        closes.append(closes[-1] * math.exp(x))
+    known = {'A': A, 'mu': mu, 'var': var, 'closes_48h': closes[-48:],
+             'p_wild_48h': [a[1] for a in alphas[-48:]]}
+    steps = decide_steps(known)
+    assert len(steps) == 47 and steps[-1]['ago_h'] == 0
+    for s in steps:                                                         # the page lands where the filter did
+        assert abs(s['after'] - s['model']) < 1e-6, s
+    assert any(s['after'] > 0.5 for s in steps) and any(s['after'] < 0.5 for s in steps)
+    assert decide_steps(h)[-1]['after'] > 0.9                               # the live reading's wild tail
+    row = {'t': t_end / 1000, 'markets': {'bybit:linear:BTCUSDT': {'symbol': 'BTCUSDT', 'committed': 1.0}},
+           'hmm': {'BTC': h}}
+    page = decided_page(row, 'BTC', now=t_end / 1000 + 120)
+    assert '<h1>how it decided — BTC</h1>' in page
+    assert 'carry the belief forward' in page and "Bayes' rule" in page and 'read the move' in page
+    assert page.count('<tr><td>') >= 47 + 6                                # the model's table and every hour
+    assert "The model's own figure:" in page
+    old = {k: v for k, v in h.items() if k not in ('A', 'mu', 'var')}       # a reading from before K11
+    assert decide_steps(old) == [] and 'appears from the next hourly reading' in decided_page(
+        dict(row, hmm={'BTC': old}), 'BTC')
+    assert 'one regime.' in decided_page(dict(row, hmm={'BTC': {'two_states': False, 'sd_day': [0.02],
+                                                               'bic_gain': 3.0, 'fit_hours': 4320}}), 'BTC')
+    assert 'href="/calm-wild?coin=BTC"' in tile('BTC', {'price': 1.0}, h)   # the tile leads to it
