@@ -1414,8 +1414,10 @@ eventually pin (T1).
   book; a live agent's trades are their own cards), and the readout
   contract carries it as `agent` — the score, its words and the open paper
   positions — which the panel draws as the account's agent box. A paper
-  agent fleet with no rows reads no venue, so its readout needs no keys:
-  paper needs no subaccount; a live one does.
+  agent fleet with no rows reads no venue, so its readout — and the
+  digest's section — need no keys: paper needs no subaccount; a live one
+  does. The panel reads an agent's fleet though it has no bots (a fleet
+  with neither bots nor an agent block is a fresh world and is not read).
 
 - **J2** The agent's working program does the arithmetic of technical
   analysis in code, so a model — or the owner by hand — only judges
@@ -2020,3 +2022,10 @@ that pins it (T1).
   127.0.0.1), so the workstation runs the suite as GitHub's runners do.
   *(2026-10-10: a door spec fetched a live price — green here, red on the
   public edition's CI, where Bybit answers 403)*
+
+- **T13** No tracked file carries a Telegram bot token, in its name or its
+  text (digits, then `AA…`: a shape nothing else has). The suite lists the
+  tracked files (every file, in an exported tree) and refuses any match.
+  *(2026-10-11: a file named with the live bot token was committed by a
+  blind `git add -A` on 2026-10-07 and sat in the private repo four days;
+  the sweep of added lines never sees a filename)*

@@ -134,3 +134,40 @@ def spec_T5_every_spec_id_is_defined_once():
     ids = re.findall(r'^- \*\*([A-Z][0-9]+[a-z]?)\*\*', text, re.M)
     twice = [i for i, n in collections.Counter(ids).items() if n > 1]
     assert ids and not twice, f'SPEC ids defined more than once: {twice}'
+
+
+TOKEN = re.compile(r'\b\d{8,10}[: ]AA[A-Za-z0-9_-]{30,}')       # a Telegram bot token's shape
+
+
+def _tracked_files():
+    import subprocess
+    if (ROOT / '.git').exists():
+        out = subprocess.run(['git', '-C', str(ROOT), 'ls-files', '-z'], capture_output=True, text=True)
+        return [ROOT / p for p in out.stdout.split('\0') if p]
+    return [p for p in ROOT.rglob('*') if p.is_file() and '__pycache__' not in p.parts]
+
+
+def spec_T13_no_tracked_file_carries_a_bot_token_in_its_name_or_its_text():
+    """2026-10-11: a file NAMED with the live Telegram bot token sat in docs/
+    for four days — committed by a blind `git add -A`, invisible to the
+    sweep of added lines. No tracked file's name or text may carry one.
+    (A 64-hex private key is not scanned: curve constants, hashes and
+    signatures share its shape; keys live only in .env, mode 600, P2.)"""
+    bad = []
+    for p in _tracked_files():
+        rel = str(p.relative_to(ROOT))
+        if TOKEN.search(rel):
+            bad.append(f'{rel}: a token in the NAME')
+        try:
+            if TOKEN.search(p.read_text(errors='ignore')):
+                bad.append(f'{rel}: a token in the text')
+        except OSError:
+            continue
+    assert not bad, bad
+
+
+def spec_T13_the_token_scan_catches_what_it_says():
+    secret = 'AA' + 'GcZ4UyzyxAbgYQDBknsu092hdwxSClJC8'      # built here, so this file carries none
+    assert TOKEN.search(f'docs/1234567890 {secret}.txt')
+    assert TOKEN.search(f'TELEGRAM_BOT_TOKEN=1234567890:{secret}')
+    assert not TOKEN.search('8986924277 is a number') and not TOKEN.search('AAGcZ4 short')

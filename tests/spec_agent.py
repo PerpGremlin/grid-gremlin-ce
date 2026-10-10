@@ -401,3 +401,41 @@ def spec_J6_paper_needs_no_keys_the_readout_of_a_paper_agent_fleet_runs_without_
             raise AssertionError('a live agent fleet read without keys')
     finally:
         os.environ.update(saved)
+
+
+def spec_J5_the_panel_and_the_digest_read_a_paper_agent_fleet_with_no_bots_and_no_keys():
+    """Found live 2026-10-11: the panel skipped the readout for every fleet
+    with no bots (a just-initialised world), so the agent's box never came;
+    the digest asked for keys the paper agent does not have."""
+    import os
+    import time
+    from gridgremlin.agent_paper import book_path, save_book
+    from gridgremlin.digest import section
+    from panel.server import Handler
+    d, f = _fleet(paper=True)
+    save_book(book_path(f), [_closed(4, 0.7, 1)])
+    saved = {k: os.environ.pop(k) for k in list(os.environ) if k.startswith('BYBIT_AGENT_')}
+    try:
+        class H(Handler):
+            hours = 24
+        Handler._cache.pop(str(f), None)
+        c = H._read_contract(H, str(f))
+        assert c['agent']['score']['closed'] == 1 and c['bots'] == {}
+        now = time.time()
+        lines, tag, _ = section(str(f), now, now - now % 86400, archive_root=str(d / 'daily'),
+                                kept_root=str(d / 'fills'), state={})
+        assert lines[0].endswith('· agent') and any(ln.startswith('agent (paper): closed 1') for ln in lines)
+        f.write_text(json.dumps(dict(json.loads(f.read_text()), agent=dict(LIMITS, paper=False))))
+        try:
+            section(str(f), now, now - now % 86400, archive_root=str(d / 'daily'),
+                    kept_root=str(d / 'fills'), state={})
+        except PermissionError as e:
+            assert 'no keys' in str(e)                       # live: keys, as every account
+        else:
+            raise AssertionError('a live agent fleet was read without keys')
+    finally:
+        os.environ.update(saved)
+        Handler._cache.pop(str(f), None)
+    empty = Path(tempfile.mkdtemp()) / 'fleet.json'
+    empty.write_text(json.dumps({'bots': []}))
+    assert H._read_contract(H, str(empty))['bots'] == {}         # a fresh world still skips the readout
