@@ -1455,7 +1455,7 @@ def page_links(table=False, view='all'):
     q = '' if view == 'all' else f'?view={view}'
     return ((f'<a href="/{q}">cards</a>' if table else f'<a href="/table{q}">table</a>')
             + '<a href="/control">control</a><a href="/setup">set up a bot</a><a href="/trade">new trade</a>'
-              '<a href="/rehearse">rehearse a grid</a><a href="/results">results</a>'
+              '<a href="/rehearse">rehearse a grid</a><a href="/results">results</a><a href="/calm-wild">calm or wild</a>'
               '<a href="/export">export snapshot</a><a href="/key">key</a>')
 
 
@@ -1466,7 +1466,7 @@ def side_nav():
     return ('<div class="page"><nav class="side"><h3>pages</h3>'
             '<a href="/">back to your bots</a><a href="/table">table</a>'
             '<a href="/control">control</a><a href="/setup">new bot</a><a href="/trade">new trade</a>'
-            '<a href="/rehearse">rehearse a grid</a><a href="/results">results</a>'
+            '<a href="/rehearse">rehearse a grid</a><a href="/results">results</a><a href="/calm-wild">calm or wild</a>'
             '<a href="/export">export snapshot</a>'
             '<a href="/key">key</a><a href="javascript:history.back()">&larr; back</a>'
             '<span class="dim">leaving a form saves nothing</span>'

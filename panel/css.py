@@ -120,7 +120,7 @@ padding-left:calc(var(--gap)*1.5);border-left:1px solid var(--line)}
 .markets h2{font-size:1.1em;margin:0 0 var(--gap-s)}
 .mtiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(19em,1fr));gap:var(--gap);margin-top:var(--gap)}
 .mtile{border:1px solid var(--line);border-radius:6px;padding:.6em .8em;display:grid;gap:.25em;font-size:.92em;min-width:0}
-.mtile .mhead{font-size:1.1em}
+.mtile .mhead{font-size:1.1em}.mtile a.plain{display:inline;padding:0;margin:0;background:none;border:0;border-bottom:1px dotted var(--accent);border-radius:0;color:var(--fg)}.mtile a.plain:hover{background:none;color:var(--accent)}.cwtab td,.cwtab th{padding:.2em .7em;text-align:right;white-space:nowrap}.cwtab td:first-child,.cwtab th:first-child{text-align:left}.cwsteps{display:grid;gap:.8em;max-width:62em}.cwsteps code{font-size:.95em}
 .mtile svg.mini{display:block;margin:.15em 0}
 .calm{color:var(--calm)}.wild{color:var(--wild)}
 .gauge{display:inline-block;width:5em;height:.5em;background:var(--line);border-radius:3px;vertical-align:middle;overflow:hidden}

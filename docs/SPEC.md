@@ -1245,6 +1245,17 @@ eventually pin (T1).
   says "one regime" and names no wild state. An unreadable feed is said,
   never guessed. Display only: no bot reads it. *(the owner, 2026-10-11:
   the research made live, for the panel's market half)*
+- **K11** How it decided, live. The hourly reading carries its fitted model
+  (the transition table, each state's drift and spread), and `/calm-wild`
+  (linked from each coin's tile and the side panel) shows it for one coin:
+  the model's table; the last hour worked through in the filter's three
+  steps with the real numbers — carry the belief forward, read each
+  state's bell curve at the move, Bayes' rule; then every hour of the last
+  two days redone beside the model's own figure. The page repeats the
+  arithmetic from the reading rather than trusting it, and lands on the
+  model's figure; a reading without the model, or one regime, says so.
+  Display only. *(the owner, 2026-10-11: "build the how it decided page …
+  the type of stuff id be happy to build into the display")*
 - **U55** The dash reads as the owner reads it. A fleet file's `label` is
   what the panel calls the fleet (forty characters at most); without one,
   the venue and the file's environment word. Every card is a column with

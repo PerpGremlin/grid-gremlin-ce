@@ -166,7 +166,7 @@ def spec_U67_the_fleet_page_has_a_markets_half_from_the_readings():
     html_ = market_column(row, now=1000.0 + 13 * 60)
     col = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', html_))           # the text a reader sees
     assert 'read 13 min ago' in col and 'fear &amp; greed 64 (Greed)' in col
-    assert html_.index('<b>BTC</b>') < html_.index('<b>ADA</b>')
+    assert html_.index('?coin=BTC" title="how it decided">BTC</a></b>') < html_.index('>ADA</a></b>')
     assert '82,908.1' in col and '-0.35%' in col and 'leaning down' in col and 'ADX 30' in col
     assert '7% wild · 24 h in, typical 12 h' in col and 'calm ±1.1%/day · wild ±3.6%/day' in col
     assert '-1.6%/yr' in col and '63% of accounts long (leaning long)' in col and 'depth ±1% 16.7M' in col

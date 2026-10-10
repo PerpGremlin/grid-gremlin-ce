@@ -71,12 +71,117 @@ def calm_wild(h):
             f'<div class="dim">calm ±{h["sd_day"][0]:.1%}/day · wild ±{h["sd_day"][1]:.1%}/day</div>')
 
 
+def decide_steps(h):
+    """K11: each of the last two days' hours redone from the reading's own
+    model — the three steps the filter takes — so the page shows its
+    working. Hour j moves from close j-1 to close j; its prior comes from
+    the model's figure after hour j-1. Returns one dict per hour, oldest
+    first; [] when the reading carries no model."""
+    import math
+    A, mu, var = h.get('A'), h.get('mu'), h.get('var')
+    closes, pw = h.get('closes_48h') or [], h.get('p_wild_48h') or []
+    if not (A and mu and var) or len(closes) < 2 or len(pw) != len(closes):
+        return []
+    def pdf(x, m, v):
+        return math.exp(-(x - m) ** 2 / (2 * v)) / math.sqrt(2 * math.pi * v)
+    out = []
+    for j in range(1, len(closes)):
+        if closes[j - 1] <= 0 or closes[j] <= 0:
+            continue
+        r = math.log(closes[j] / closes[j - 1])
+        before = pw[j - 1]
+        prior = before * A[1][1] + (1 - before) * A[0][1]        # step 1: carry the belief forward
+        lc, lw = pdf(r, mu[0], var[0]), pdf(r, mu[1], var[1])    # step 2: each state's bell curve at the move
+        tot = prior * lw + (1 - prior) * lc
+        post = prior * lw / tot if tot > 0 else prior            # step 3: Bayes' rule
+        out.append({'ago_h': len(closes) - 1 - j, 'close': closes[j], 'move': r, 'before': before,
+                    'prior': prior, 'like_calm': lc, 'like_wild': lw, 'after': post, 'model': pw[j]})
+    return out
+
+
+def decided_page(row, coin, now=None):
+    """K11: how the hidden model decided calm or wild for one coin — the
+    fitted model, the last hour worked through in three steps with the real
+    numbers, then every hour of the last two days redone beside the model's
+    own figure. Display only, from the newest reading."""
+    import math
+    now = time.time() if now is None else now
+    coins = coins_of(row or {})
+    nav = ' · '.join(f'<b class="on">{html.escape(c)}</b>' if c == coin else f'<a href="/calm-wild?coin={html.escape(c)}">{html.escape(c)}</a>'
+                     for c in coins)
+    head = f'<h1>how it decided — {html.escape(coin)}</h1><p>{nav}</p>'
+    h = ((row or {}).get('hmm') or {}).get(coin)
+    if not h:
+        return head + '<p class="dim">no reading for this coin yet</p>'
+    if h.get('unread'):
+        return head + f'<p class="dim">unread: {html.escape(str(h["unread"]))}</p>'
+    if not h.get('two_states'):
+        return head + (f'<p><b>one regime.</b> Over {h.get("fit_hours", 0) / 24:.0f} days a single bell curve '
+                       f'(±{h["sd_day"][0]:.1%} a day) explains this coin\'s hourly moves as well as two states do '
+                       f'once the extra numbers are paid for (BIC gain {h.get("bic_gain") or 0:,.1f}, needs more than 10). '
+                       'With no distinct wild state there is nothing to decide between.</p>')
+    steps = decide_steps(h)
+    if not steps:
+        return head + '<p class="dim">this reading carries no model to show — the working appears from the next hourly reading</p>'
+    A, mu, var = h['A'], h['mu'], h['var']
+    sdh = [math.sqrt(v) for v in var]
+    age = max(0, int((now - row['t']) / 60))
+    model = (f'<h2>the model <span class="dim">fitted {h["fit_age_h"]:.0f} h ago on {h["fit_hours"] / 24:.0f} days of hourly moves · '
+             f'reading {age} min old</span></h2>'
+             '<table class="cwtab"><tr><th></th><th>calm</th><th>wild</th></tr>'
+             f'<tr><td>a typical hour moves</td><td>±{sdh[0]:.3%}</td><td>±{sdh[1]:.3%}</td></tr>'
+             f'<tr><td>a typical day moves</td><td>±{h["sd_day"][0]:.2%}</td><td>±{h["sd_day"][1]:.2%}</td></tr>'
+             f'<tr><td>drift an hour</td><td>{mu[0]:+.4%}</td><td>{mu[1]:+.4%}</td></tr>'
+             f'<tr><td>stays the next hour</td><td>{A[0][0]:.1%}</td><td>{A[1][1]:.1%}</td></tr>'
+             f'<tr><td>switches the next hour</td><td>{A[0][1]:.1%}</td><td>{A[1][0]:.1%}</td></tr>'
+             f'<tr><td>a spell lasts, typically</td><td>{1 / (1 - A[0][0]):.0f} h</td><td>{1 / (1 - A[1][1]):.0f} h</td></tr>'
+             '</table>'
+             f'<p class="dim">Two states beat one bell curve by {h.get("bic_gain") or 0:,.0f} on BIC (more than 10 is strong). '
+             f'Wild moves {h.get("separation") or 0:.1f}× as much as calm.</p>')
+    s = steps[-1]
+    w = s['prior'] * s['like_wild']
+    c = (1 - s['prior']) * s['like_calm']
+    last = ('<h2>the last hour, worked through</h2><ol class="cwsteps">'
+            f'<li><b>carry the belief forward.</b> After the hour before, the model was {s["before"]:.1%} sure it was wild. '
+            f'Wild stays wild {A[1][1]:.1%} of the time; calm turns wild {A[0][1]:.1%}. So before looking at this hour:<br>'
+            f'<code>{s["before"]:.3f} × {A[1][1]:.3f} + {1 - s["before"]:.3f} × {A[0][1]:.3f} = <b>{s["prior"]:.3f}</b></code> chance of wild.</li>'
+            f'<li><b>read the move.</b> The price went {s["move"]:+.3%} this hour. How likely is a move that size in each state? '
+            f'Each state\'s bell curve, read at the move:<br><code>calm (±{sdh[0]:.3%}): {s["like_calm"]:,.2f}</code> · '
+            f'<code>wild (±{sdh[1]:.3%}): {s["like_wild"]:,.2f}</code><br>'
+            + ('The move suits calm better' if s['like_calm'] > s['like_wild'] else 'The move suits wild better')
+            + f' — {max(s["like_calm"], s["like_wild"]) / max(min(s["like_calm"], s["like_wild"]), 1e-300):,.1f}× as likely. '
+            '<span class="dim">These are heights of the curves, not chances: only how they compare matters.</span></li>'
+            f'<li><b>combine them (Bayes\' rule).</b> Each side\'s prior times its likelihood, then divide by the total:<br>'
+            f'<code>wild {s["prior"]:.3f} × {s["like_wild"]:,.2f} = {w:,.2f}</code> · '
+            f'<code>calm {1 - s["prior"]:.3f} × {s["like_calm"]:,.2f} = {c:,.2f}</code><br>'
+            f'<code>{w:,.2f} ÷ ({w:,.2f} + {c:,.2f}) = <b>{s["after"]:.1%}</b></code> wild — '
+            f'<b class="{"wild" if s["after"] > 0.5 else "calm"}">{"wild" if s["after"] > 0.5 else "calm"}</b>. '
+            f'<span class="dim">The model\'s own figure: {s["model"]:.1%}.</span></li></ol>')
+    rows = ''.join(
+        f'<tr><td>{"now" if x["ago_h"] == 0 else str(x["ago_h"]) + " h ago"}</td><td class="num">{x["close"]:,.6g}</td>'
+        f'<td class="num {_num_cls(x["move"])}">{x["move"]:+.3%}</td><td class="num">{x["prior"]:.1%}</td>'
+        f'<td class="num">{x["like_calm"]:,.1f}</td><td class="num">{x["like_wild"]:,.1f}</td>'
+        f'<td class="num"><b class="{"wild" if x["after"] > 0.5 else "calm"}">{x["after"]:.1%}</b></td>'
+        f'<td class="num dim">{x["model"]:.1%}</td></tr>'
+        for x in reversed(steps))
+    table = ('<h2>the last two days, hour by hour <span class="dim">newest first</span></h2>'
+             f'{mini_chart(h.get("closes_48h"), h.get("p_wild_48h"), height=60)}'
+             '<div class="scroll"><table class="cwtab"><tr><th>hour</th><th>close</th><th>move</th><th>wild before (step 1)</th>'
+             '<th>calm fits (step 2)</th><th>wild fits</th><th>wild after (step 3)</th><th>model\'s figure</th></tr>'
+             f'{rows}</table></div>'
+             '<p class="dim">"redone here" and "the model\'s figure" agree to rounding: the page repeats the model\'s '
+             'arithmetic from the reading, it does not trust it. A wild after above 50% names the hour wild. Display only — '
+             'no bot reads this.</p>')
+    return head + model + last + table
+
+
 def tile(coin, m, h):
     price = m.get('price')
     ch = m.get('change_24h_pct')
     f8 = m.get('funding_8h_pct')
     rows = [
-        f'<div class="mhead"><b>{html.escape(coin)}</b>'
+        f'<div class="mhead"><b><a class="plain" href="/calm-wild?coin={html.escape(coin)}" '
+        f'title="how it decided">{html.escape(coin)}</a></b>'
         + (f' <span class="num">{price:,.6g}</span>' if price else '')
         + (f' <span class="num {_num_cls(ch)}">{ch:+.2f}%</span>' if ch is not None else '')
         + ' <span class="dim">24 h</span></div>',

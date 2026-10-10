@@ -201,6 +201,21 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(tidy(body).encode())
             return
+        if self.path.split('?')[0] == '/calm-wild':                  # K11
+            from gridgremlin.market import latest
+            from panel.reference import KEEP_JS
+            from .markets import coins_of, decided_page
+            from .render import PAGE_END, side_nav
+            row = latest()
+            q = dict(urllib.parse.parse_qsl(self.path.partition('?')[2]))
+            coin = q.get('coin') or (coins_of(row or {}) or ['BTC'])[0]
+            body = (f'<!doctype html><meta charset="utf-8"><title>how it decided</title><style>{CSS}</style>'
+                    f'{side_nav()}<main>{decided_page(row, coin[:12])}</main>{PAGE_END}{KEEP_JS}')
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(tidy(body).encode())
+            return
         if self.path == '/results':                                   # R24
             from panel.reference import KEEP_JS
             from .render import PAGE_END, results_page, side_nav
