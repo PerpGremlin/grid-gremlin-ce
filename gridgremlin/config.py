@@ -1005,6 +1005,12 @@ def validate_fleet(data, where='fleet'):
         'agent': (__import__('gridgremlin.agent', fromlist=['validate_agent']).validate_agent(
             data['agent'], f'{where}.agent') if data.get('agent') is not None else None),
     }
+    if fleet['agent'] and not fleet['agent']['paper'] and not fleet['watchdog']:
+        # J3: a live agent's loss for the day is read from the snapshots its
+        # watchdog names — the door's check and the engine's flatten alike;
+        # without one the limit could never see a loss
+        _refuse(f"{where}: a live agent fleet (paper off) names its 'watchdog' — "
+                "the day's loss limit is read from that watchdog's snapshots (J3)")
     rows, refused = [], []
     for i, row in enumerate(bots):
         try:

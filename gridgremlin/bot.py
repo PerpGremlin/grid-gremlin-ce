@@ -88,6 +88,9 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
         self.capped = None             # D56: the account cap's reason, set
                                        # by the fleet each cycle; None = free
         self.notional_now = 0.0        # D56: |held| at mark, in quote
+        self.close_request = None      # L7: a trade's close request, handed
+                                       # over by the fleet from the trades
+                                       # file (durable there, not E3 state)
         self.margin_view = None        # V14: the venue's margin on the
                                        # position, read each cycle (public,
                                        # derived — not E3 state)
@@ -328,6 +331,11 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
                     and abs(held) > 0):
                 return self._end_round_stop(truth, held, reason)   # X11
             self._execute_stop(truth, held, reason)
+            return None
+        if self.close_request:                                     # L7
+            r = self.close_request
+            self._execute_stop(truth, held, f"closed on request by {r.get('by')}: "
+                               f"{r.get('reason') or 'no reason given'} (L7)", flatten=True)
             return None
         if cfg.get('max_loss'):                                    # X14
             reason = self._max_loss_hit(truth, held, basis, now)

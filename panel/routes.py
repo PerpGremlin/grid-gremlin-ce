@@ -1099,6 +1099,17 @@ written config (§11).</p>
                           botid, int((now - 7 * 86400) * 1000))
         return self._page(position_page(fi, self.labels[fi], botid, contract, belief, prices, fills))
 
+    def _live_trade(self, fi, botid):
+        """L7: the trades file of fleet `fi` when `botid` is a trade there
+        still running (not stood down), else None."""
+        from gridgremlin.tombstones import Tombstones, path_for
+        from gridgremlin.trades import trade_status, trades_path
+        f = self.fleets[min(fi, len(self.fleets) - 1)]
+        raw = json.loads(Path(f).read_text())
+        path = trades_path(f, raw)
+        live = trade_status(path, botid, Tombstones(str(path_for(f, raw)))) == 'live'
+        return path if live else None
+
     def _trades_of(self, fi):
         """One fleet's trades file and validated rows, for the trade page."""
         from gridgremlin.trades import fleet_rows, trades_path
@@ -1158,8 +1169,23 @@ written config (§11).</p>
                                    '(--units or --supervise) — §12/§13')
         q = dict(urllib.parse.parse_qsl(self.path.split('?', 1)[1]))
         fi, botid = int(_f(q.get('fleet')) or 0), q.get('bot', '')
-        got = self._run_close(fi, botid, dry=True)
         b = _html.escape(botid)
+        if self._live_trade(fi, botid):
+            # L7: a running trade is closed by its own bot, never from
+            # outside — the panel writes the request, the fleet acts on it
+            return self._page(
+                f'<h1>close trade {b}</h1>'
+                '<p class="say">The fleet closes this trade at market within a '
+                'cycle: one reduce-only market order for what it holds, sent by '
+                'the trade itself, which then stands down. It cannot be undone.</p>'
+                '<form method="post" action="/close">'
+                '<input type="hidden" name="gg" value="1">'
+                f'<input type="hidden" name="fleet" value="{fi}">'
+                f'<input type="hidden" name="bot" value="{b}">'
+                f'type the trade\'s name to close it: <input name="confirm" '
+                f'size="18" placeholder="{b}"> '
+                '<button class="danger">close at market</button></form>')
+        got = self._run_close(fi, botid, dry=True)
         if 'refused' in got:
             return self._page(refusal_box('cannot close', got['refused']))
         if not got['held']:
@@ -1193,8 +1219,22 @@ written config (§11).</p>
             return self._page(refusal_box(
                 'not closed', f'the typed name must be exactly {botid} — '
                               'a click is not a decision'))
-        got = self._run_close(int(_f(form.get('fleet')) or 0), botid,
-                              dry=False)
+        fi = int(_f(form.get('fleet')) or 0)
+        path = self._live_trade(fi, botid)
+        if path:                                                    # L7
+            from gridgremlin.trades import TradeError, request_close
+            try:
+                req = request_close(path, botid, 'owner', 'close trade on the panel')
+            except (TradeError, OSError) as e:
+                return self._page(refusal_box('not closed', _html.escape(str(e))))
+            Handler._cache.pop(self.fleets[min(fi, len(self.fleets) - 1)], None)
+            return self._page(
+                f'<h1>{_html.escape(botid)}: close requested</h1>'
+                f'<p class="say">Requested by {_html.escape(req["by"])} at '
+                f'{_html.escape(req["t"])}. The fleet closes it at market within a '
+                'cycle and the trade stands down; its card then offers <b>clear</b>.</p>'
+                '<p><a href="/">back to your bots</a></p>')
+        got = self._run_close(fi, botid, dry=False)
         if 'refused' in got:
             return self._page(refusal_box('not closed', got['refused']))
         left = got.get('left') or 0.0

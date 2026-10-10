@@ -22,7 +22,7 @@ import time
 VERBS = ('read', 'intent')
 
 
-def handle(fleet_path, command, now_s=None):
+def handle(fleet_path, command, now_s=None, fetch=None):
     """The door, pure but for the fleet's files: returns (exit code, text)."""
     from .agent import read_state, submit
     from .config import ConfigError, validate_fleet
@@ -38,18 +38,25 @@ def handle(fleet_path, command, now_s=None):
     if not fleet.get('agent'):
         return 1, json.dumps({'refused': 'this fleet has no agent block — the owner has not opened it'})
     if verb == 'read':
-        st = read_state(fleet_path, now_s)
         lim = fleet['agent']
-        return 0, json.dumps({'limits': lim, 'open': st['open'],
-                              'intents_left_this_hour': max(0, lim['max_intents_hour'] - st['intents_last_hour']),
-                              'day_loss': st['day_loss'], 'paper': lim['paper'],
-                              'utc': time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(now_s))}, sort_keys=True)
+        st = read_state(fleet_path, now_s, lim['paper'], fetch)
+        out = {'limits': lim, 'open': st['open'],
+               'intents_left_this_hour': max(0, lim['max_intents_hour'] - st['intents_last_hour']),
+               'day_loss': st['day_loss'], 'paper': lim['paper'],
+               'utc': time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(now_s))}
+        if lim['paper']:
+            day = int(now_s) - int(now_s) % 86_400
+            out['closed_today'] = [{'id': p['id'], 'market': p['market'], 'side': p['side'],
+                                    'entry': p['entry'], **p['closed']}
+                                   for p in st['book'] if p['closed'] and p['closed']['t'] >= day * 1000]
+        return 0, json.dumps(out, sort_keys=True)
     try:
         intent = json.loads(words[1]) if len(words) > 1 else None
     except ValueError as e:
         return 1, json.dumps({'refused': f'the intent is not JSON: {e}'})
-    verdict, text = submit(fleet_path, intent, now_s)
-    return (0 if verdict in ('queued', 'paper') else 1), json.dumps({'verdict': verdict, 'text': text})
+    verdict, text = submit(fleet_path, intent, now_s, fetch)
+    return ((0 if verdict in ('queued', 'paper', 'closed', 'close_requested') else 1),
+            json.dumps({'verdict': verdict, 'text': text}))
 
 
 def main(argv):

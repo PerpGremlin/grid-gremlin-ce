@@ -40,7 +40,7 @@ def _read(path):
     return rows
 
 
-META = ('opened', 'by', 'reason', 'confidence')      # the trade's own record, not the bot's terms
+META = ('opened', 'by', 'reason', 'confidence', 'close')   # the trade's own record, not the bot's terms
 
 
 def validate_trade(row, where='trade'):
@@ -124,6 +124,40 @@ def clear_trade(path, botid, tombstones_path=None):
     return gone
 
 
+def request_close(path, botid, by, reason=''):
+    """L7: ask the running fleet to close one trade at market — the
+    request rides in the trade's own record ({t, by, reason}); the fleet's
+    TradeWatch hands it to the trade's bot, which flattens under its own
+    link and stands down. The first request stands (idempotent). Returns
+    the request in force; a trade not in the file is refused."""
+    with locked(path):
+        rows = _read(path)
+        for r in rows:
+            try:
+                same = _botid(validate_trade(r)) == botid
+            except ConfigError:
+                same = False
+            if same:
+                if r.get('close'):
+                    return r['close']
+                r['close'] = {'t': utc_stamp(), 'by': str(by), 'reason': str(reason or '')[:200]}
+                write_json(path, rows)
+                return r['close']
+    raise TradeError(f'{botid}: not a trade in this file — nothing to close')
+
+
+def trade_status(path, botid, tombstones):
+    """'live' while the trade's row stands and its bot has not stood down,
+    'ended' once tombstoned, None when it is not a trade of this file."""
+    try:
+        rows, _ = load_trades(path)
+    except TradeError:
+        return None
+    if not any(_botid(c) == botid for c in rows):
+        return None
+    return 'ended' if tombstones.has(botid) else 'live'
+
+
 class TradeWatch:
     """L1: notices the trades file changing (by mtime, one stat a cycle) and
     builds each new trade into the running fleet. `build(cfg)` is the
@@ -135,6 +169,22 @@ class TradeWatch:
         self.path, self.bots, self.identities = Path(path), bots, identities
         self.build, self.notifier, self.clients = build, notifier, clients
         self.mtime = self._mtime()
+        try:                                    # L7: a request made before a restart stands
+            self._hand_over_closes(load_trades(self.path)[0])
+        except TradeError:
+            pass
+
+    def _hand_over_closes(self, rows):
+        """L7: each close request to its trade's running bot, once."""
+        by_id = {b.botid: b for b in self.bots}
+        for cfg in rows:
+            req = (cfg.get('_record') or {}).get('close')
+            bot = by_id.get(_botid(cfg))
+            if req and bot is not None and bot.alive and getattr(bot, 'close_request', None) is None:
+                bot.close_request = req
+                self.notifier.event('stop', bot.botid, f"close requested by {req.get('by')}: "
+                                                      f"{req.get('reason') or 'no reason given'} — "
+                                                      'closing at market this cycle (L7)')
 
     def _mtime(self):
         try:
@@ -188,6 +238,7 @@ class TradeWatch:
                                 f"trade opened live: {cfg['side']} {cfg['symbol']} "
                                 f"{cfg['capital']:g} at {cfg['leverage']:g}x (L1)")
             out[botid] = 'built'
+        self._hand_over_closes(rows)
         return out
 
 

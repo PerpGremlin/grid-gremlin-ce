@@ -777,6 +777,15 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
                     notifier.event('warn', 'fleet',
                                    f'fleet file watch: {type(e).__name__}: '
                                    f'{e} — running on (F12)')
+                if fleet.get('agent') and not fleet['agent']['paper']:
+                    try:                                     # J3: the day's loss, enforced here
+                        from .agent import enforce_day_loss
+                        asked = enforce_day_loss(fleet_path, fleet['agent'], time.time())
+                        if asked:
+                            notifier.event('warn', 'fleet', f"the agent's day-loss limit is reached: "
+                                                            f"closing {', '.join(asked)} (J3/L7)", urgent=True)
+                    except Exception as e:                   # noqa: BLE001
+                        notifier.event('warn', 'fleet', f'agent day-loss check: {type(e).__name__}: {e} (J3)')
                 try:
                     trade_watch.poll()
                 except Exception as e:                       # noqa: BLE001

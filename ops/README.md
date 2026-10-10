@@ -92,7 +92,15 @@ What runs, from the inside out:
     then runs `ssh <alias> read` and `ssh <alias> 'intent {...}'`. The fleet
     file's `agent` block holds the limits (`paper: true` until the owner
     says otherwise); its trades land in the trades file like any other, and
-    every intent in `logs/agent-intents-<fleet>.jsonl`.
+    every intent in `logs/agent-intents-<fleet>.jsonl`. In paper its
+    positions are `logs/agent-paper-<fleet>.json`, judged against Bybit's
+    public 1-minute candles each time the door is used; `read` lists them
+    and what closed today, `'intent {"market": "BTCUSDT", "side": "close"}'`
+    closes a market's, and `python3 -m gridgremlin.agent_score
+    configs/fleet.agent.json` prints the score (J5). Live (`paper: false`)
+    the fleet file must name its `watchdog` — the day's loss is read from
+    that watchdog's snapshots — and a `close` or the day's limit writes a
+    close request the running fleet acts on (L7).
 
 > **Retired: the box-side Claude** — triage on failure, the Telegram relay
 > and the daily range review, kept in the private tree's `ops/retired/`
