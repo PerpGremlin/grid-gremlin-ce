@@ -139,3 +139,39 @@ def spec_U66_a_cards_fold_aligns_its_headings_with_their_numbers():
     assert '.card details.fold td:first-child,.card details.fold th:first-child{text-align:left;width:auto}' in CSS
     # two classes outrank the info pages' bare `details td` wherever each sits (specificity, not order)
     assert 'details td{text-align:left}' in CSS
+
+
+def spec_U67_the_fleet_page_has_a_markets_half_from_the_readings():
+    """The owner: half the screen for the bots, half for what helps a trader
+    navigate. The tiles come from the newest market reading (D67) and the
+    hidden model's (K10); display only."""
+    from panel.markets import calm_wild, coins_of, market_column, mini_chart
+    from panel.render import render
+    row = {'t': 1000.0, 'fear_greed': {'score': 64, 'label': 'Greed', 'avg_7d': 67, 'avg_30d': 66},
+           'markets': {
+               'bybit:linear:BTCUSDT': {'symbol': 'BTCUSDT', 'price': 82908.1, 'change_24h_pct': -0.35,
+                                        'committed': 3_000_000, 'regime': 'leaning down', 'adx_4h': 30.2,
+                                        'funding_8h_pct': -0.0015, 'oi_change_24h_pct': 0.5, 'long_pct': 63,
+                                        'crowding': 'leaning long', 'depth_1pct': 16.7e6, 'atr_pct_4h': 0.86},
+               'bybit:spot:BTCUSDT': {'symbol': 'BTCUSDT', 'price': 82900.0, 'committed': 0},
+               'bybit:linear:ADAUSDT': {'symbol': 'ADAUSDT', 'price': 0.71, 'committed': 2_000}},
+           'hmm': {'BTC': {'two_states': True, 'state': 'calm', 'p_wild': 0.07, 'spell_h': 24,
+                           'sd_day': [0.011, 0.036], 'typical_spell_h': [12, 4],
+                           'closes_48h': [100 + i for i in range(48)], 'p_wild_48h': [0.0] * 40 + [0.6] * 8},
+                   'ADA': {'two_states': False, 'state': 'one regime', 'sd_day': [0.03]}}}
+    assert coins_of(row) == ['BTC', 'ADA']                               # the most capital first
+    import re
+    html_ = market_column(row, now=1000.0 + 13 * 60)
+    col = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', html_))           # the text a reader sees
+    assert 'read 13 min ago' in col and 'fear &amp; greed 64 (Greed)' in col
+    assert html_.index('<b>BTC</b>') < html_.index('<b>ADA</b>')
+    assert '82,908.1' in col and '-0.35%' in col and 'leaning down' in col and 'ADX 30' in col
+    assert '7% wild · 24 h in, typical 12 h' in col and 'calm ±1.1%/day · wild ±3.6%/day' in col
+    assert '-1.6%/yr' in col and '63% of accounts long (leaning long)' in col and 'depth ±1% 16.7M' in col
+    assert '<b>one regime</b>' in html_ and 'no distinct wild state' in col   # ADA: no wild state named
+    assert mini_chart([1, 2, 3], [0.0, 0.9, 0.0]).count('<rect') == 1 and mini_chart([5], []) == ''
+    assert 'unread' in calm_wild({'unread': 'no route'}) and 'not read yet' in calm_wild(None)
+    assert 'no market reading yet' in market_column(None)
+    page = render([], market=row)
+    assert '<div class="split">' in page and '<aside class="markets">' in page
+    assert '<aside class="markets">' not in render([], table=True, market=row)      # the table keeps its width

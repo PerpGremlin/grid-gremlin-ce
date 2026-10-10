@@ -274,3 +274,90 @@ def spec_K9_the_readout_contract_carries_the_market_words():
                               {('linear', 'BTC'): 'hyperliquid'}, 0) == {}
     finally:
         mk.STORE = saved
+
+
+# --- K10: calm or wild — the hidden model's reading -------------------------------------
+
+def spec_K10_the_hidden_model_recovers_a_known_one():
+    import math
+    import random
+    from gridgremlin.hmm import best_fit, sample
+    rng = random.Random(3)
+    obs, _ = sample([0.5, 0.5], [[0.97, 0.03], [0.06, 0.94]], [0.0002, -0.0004],
+                    [0.004 ** 2, 0.015 ** 2], 6000, rng)
+    pi, A, mu, var, ll = best_fit(obs, 2)
+    assert abs(A[0][0] - 0.97) < 0.02 and abs(A[1][1] - 0.94) < 0.03
+    assert abs(math.sqrt(var[0]) - 0.004) < 0.0006 and abs(math.sqrt(var[1]) - 0.015) < 0.002
+    assert var[0] < var[1]                                     # state 0 is always the calm one
+
+
+def _hourly_feed(hours, wild_tail, seed=7, t_end=1_800_000_000_000):
+    """A fake Bybit kline endpoint: `hours` hourly candles, calm (±0.25% an
+    hour) then the last `wild_tail` wild (±2%)."""
+    import random
+    from urllib.parse import parse_qs, urlparse
+    rng = random.Random(seed)
+    c, rows = 100.0, []
+    for i in range(hours):
+        t = t_end - (hours - 1 - i) * 3_600_000
+        c *= 1 + rng.gauss(0, 0.02 if i >= hours - wild_tail else 0.0025)
+        rows.append([str(t), str(c), str(c * 1.001), str(c * 0.999), str(c), '1', '1'])
+    calls = []
+
+    def fetch(url):
+        q = {k: v[0] for k, v in parse_qs(urlparse(url).query).items()}
+        calls.append(url)
+        end, limit = int(q['end']), int(q['limit'])
+        sel = [r for r in rows if int(r[0]) <= end][-limit:]
+        return {'result': {'list': list(reversed(sel))}}           # newest first, as Bybit answers
+    return fetch, calls, t_end
+
+
+def spec_K10_the_reading_filters_hourly_from_a_daily_fit_and_says_calm_or_wild():
+    from gridgremlin.market import HMM_REFIT_S, read_hmm
+    fetch, calls, t_end = _hourly_feed(24 * 200, wild_tail=30)
+    now = t_end / 1000 + 60
+    cache = {}
+    r = read_hmm(fetch, 'BTC', cache, now)
+    assert r['state'] == 'wild' and r['p_wild'] > 0.9 and 20 <= r['spell_h'] <= 35
+    assert r['sd_day'][0] < r['sd_day'][1] and r['fit_age_h'] < 0.1
+    fitted = cache['BTC']['fit_t']
+    n = len(calls)
+    read_hmm(fetch, 'BTC', cache, now + 3600)                      # an hour later: the same fit
+    assert cache['BTC']['fit_t'] == fitted and len(calls) == n + 1   # one page, the filter's
+    read_hmm(fetch, 'BTC', cache, now + HMM_REFIT_S + 1)           # a day later: refitted
+    assert cache['BTC']['fit_t'] > fitted
+    assert r['separation'] > 5 and r['two_states'] and r['bic_gain'] > 10   # the states truly differ
+    calm, _, t2 = _hourly_feed(24 * 200, wild_tail=0)
+    flat = read_hmm(calm, 'ETH', {}, t2 / 1000)
+    # no wild spell: two states are not worth their parameters, and it says so — never "wild"
+    assert flat['two_states'] is False and flat['state'] == 'one regime' and 'p_wild' not in flat
+
+    def down(url):
+        raise OSError('no route')
+    assert 'unread' in read_hmm(down, 'SOL', {}, now)               # never a crash, never a guess
+    assert 'too few' in read_hmm(_hourly_feed(200, 0)[0], 'XRP', {}, t_end / 1000)['unread']
+
+
+def spec_K10_the_newest_reading_is_read_from_the_end_of_the_file():
+    import json
+    import tempfile
+    from pathlib import Path
+    from gridgremlin.market import latest
+    p = Path(tempfile.mkdtemp()) / 'market.jsonl'
+    assert latest(p) is None
+    big = 'x' * 30_000                                     # long lines: the tail window must grow
+    p.write_text(''.join(json.dumps({'t': i, 'pad': big}) + '\n' for i in range(40)))
+    assert latest(p)['t'] == 39
+    p.write_text(json.dumps({'t': 1, 'pad': 'y' * 200_000}) + '\n')   # one line, longer than the window
+    assert latest(p)['t'] == 1
+    p.write_text(json.dumps({'t': 1}) + '\n' + json.dumps({'t': 2}) + '\n\n')
+    assert latest(p)['t'] == 2
+
+
+def spec_K10_the_reading_keeps_two_days_for_the_mini_chart():
+    from gridgremlin.market import read_hmm
+    fetch, _, t_end = _hourly_feed(24 * 200, wild_tail=10)
+    r = read_hmm(fetch, 'BTC', {}, t_end / 1000 + 60)
+    assert len(r['closes_48h']) == 48 and len(r['p_wild_48h']) == 48
+    assert r['p_wild_48h'][-1] > 0.9 and r['p_wild_48h'][0] < 0.5          # the wild tail at the end

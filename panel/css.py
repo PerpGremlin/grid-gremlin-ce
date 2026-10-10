@@ -16,9 +16,11 @@ from panel.chart import _f
 
 CSS = """:root{--bg:#14161a;--fg:#d6dae0;--dim:#7a828c;--line:#262a30;
 --pos:#5dbb7c;--neg:#d4756b;--accent:#8ab4d8;--accent-soft:#8ab4d82e;
+--calm:#5fb3c2;--wild:#e59a4c;
 --gap:1em;--gap-s:.5em}
 :root.light{--bg:#f5f4f0;--fg:#232629;--dim:#6f6a60;--line:#ddd8d0;
---pos:#2e7d4f;--neg:#b04a40;--accent:#3a6ea5;--accent-soft:#3a6ea524}
+--pos:#2e7d4f;--neg:#b04a40;--accent:#3a6ea5;--accent-soft:#3a6ea524;
+--calm:#2f7d8c;--wild:#c26a12}
 body{background:var(--bg);color:var(--fg);font:14px/1.5 monospace;margin:2em}
 .scroll{overflow-x:auto;max-width:100%}table.fleet{width:100%}table.fleet td,table.fleet th{white-space:nowrap}
 table{border-collapse:collapse}td,th{padding:.35em .8em;
@@ -109,4 +111,20 @@ padding:.2em 1em}details{margin:.6em 0}summary{cursor:pointer;
 color:var(--accent)}details td{text-align:left}details td:first-child
 {width:22em}input,select{background:var(--bg);color:var(--fg);
 border:1px solid var(--line);font:inherit;padding:.15em .3em}
-.only-coin .u-value,.only-coin .u-cost,.only-coin .u-sep,.only-value .u-coin,.only-value .u-cost,.only-value .u-sep,.only-cost .u-coin,.only-cost .u-value,.only-cost .u-sep{display:none}"""
+.only-coin .u-value,.only-coin .u-cost,.only-coin .u-sep,.only-value .u-coin,.only-value .u-cost,.only-value .u-sep,.only-cost .u-coin,.only-cost .u-value,.only-cost .u-sep{display:none}
+/* U67: the fleet page in two halves — the bots, and the markets beside them */
+.split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 calc(var(--gap)*1.5);align-items:start}
+.split>.bots{min-width:0}
+.markets{position:sticky;top:3.2em;align-self:start;max-height:calc(100vh - 4em);overflow:auto;min-width:0;
+padding-left:calc(var(--gap)*1.5);border-left:1px solid var(--line)}
+.markets h2{font-size:1.1em;margin:0 0 var(--gap-s)}
+.mtiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(19em,1fr));gap:var(--gap);margin-top:var(--gap)}
+.mtile{border:1px solid var(--line);border-radius:6px;padding:.6em .8em;display:grid;gap:.25em;font-size:.92em;min-width:0}
+.mtile .mhead{font-size:1.1em}
+.mtile svg.mini{display:block;margin:.15em 0}
+.calm{color:var(--calm)}.wild{color:var(--wild)}
+.gauge{display:inline-block;width:5em;height:.5em;background:var(--line);border-radius:3px;vertical-align:middle;overflow:hidden}
+.gauge i{display:block;height:100%;background:var(--wild)}
+@media (max-width:1100px){.split{display:block}.markets{position:static;max-height:none;overflow:visible;
+padding-left:0;border-left:0;border-top:1px solid var(--line);margin-top:calc(var(--gap)*1.5);padding-top:var(--gap)}}
+"""

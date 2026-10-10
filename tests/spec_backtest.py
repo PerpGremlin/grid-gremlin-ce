@@ -522,3 +522,20 @@ def spec_T11_the_panel_reads_the_account_from_the_default_fleets_snapshot():
     got = H._account_for(H, {'venue': 'bybit'})
     assert got == {'equity': 100000.0, 'mm': 3000.0, 'label': 'main'}        # the default account first
     assert H._account_for(H, {'venue': 'hyperliquid'}) is None              # no fleet on that venue
+
+
+def spec_T14_a_research_gate_pauses_entries_and_never_exits():
+    """The owner's question: does pausing a grid in a wild market help? The
+    replay takes `entries(i, bar)`; False pauses the bar's entries, exits
+    keep working (D56's shape)."""
+    from gridgremlin.backtest import backtest
+    cfg, a = _t10()
+    swing = [{'t': i * 3_600_000, 'o': p, 'h': p + 260, 'l': p - 260, 'c': p}
+             for i, p in enumerate([60_000.0, 59_600.0, 60_400.0, 59_500.0, 60_500.0] * 8)]
+    free = backtest(cfg, a, swing)
+    shut = backtest(cfg, a, swing, entries=lambda i, bar: False)
+    assert free['entry_fills'] > 0 and shut['entry_fills'] == 0 and shut['trips'] == 0
+    assert shut['paused_bars'] == len(swing) and free['paused_bars'] == 0
+    half = backtest(cfg, a, swing, entries=lambda i, bar: i < 20)           # open, then paused
+    assert 0 < half['entry_fills'] < free['entry_fills'] and half['paused_bars'] == 20
+    assert half['trips'] >= 1                                               # the held lots still exit

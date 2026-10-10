@@ -30,7 +30,7 @@ MM_RATE = 0.005            # Bybit's base maintenance tier, linear and inverse
 
 def backtest(cfg, adapter, bars, fee_rate=BYBIT_MAKER, funding_rate_hourly=0.0,
              bar_hours=1.0, spread_bps=1.0, funding=None, mm_rate=MM_RATE,
-             account=None):
+             account=None, entries=None):
     events = sorted(funding or [], key=lambda e: e['t'])      # before `funding` is the sum
     long = cfg['side'] == 'long'
     sign = 1.0 if long else -1.0
@@ -72,7 +72,12 @@ def backtest(cfg, adapter, bars, fee_rate=BYBIT_MAKER, funding_rate_hourly=0.0,
         return funding_total[0]
     funding_total = [0.0]
 
-    for bar in bars:
+    paused_bars = 0
+    for n_bar, bar in enumerate(bars):
+        # T14: a research gate — `entries(i, bar)` False pauses new entries for
+        # the bar (exits keep working, as D56's cap); asked at the bar's open
+        allow = entries is None or entries(n_bar, bar)
+        paused_bars += 0 if allow else 1
         new = slide_offset(cfg, offset, bar['o'])
         if new == offset:
             beyond = 0
@@ -92,6 +97,8 @@ def backtest(cfg, adapter, bars, fee_rate=BYBIT_MAKER, funding_rate_hourly=0.0,
         for o in desired:
             if o['side'] == ('Buy' if long else 'Sell'):        # entries
                 through = bar['l'] < o['price'] if long else bar['h'] > o['price']
+                if through and not allow:
+                    continue                                     # T14: paused
                 if through:
                     basis = adapter.average_entry(basis, held, o['price'], o['qty'])
                     held_steps += int(round(o['qty'] / step))
@@ -155,7 +162,7 @@ def backtest(cfg, adapter, bars, fee_rate=BYBIT_MAKER, funding_rate_hourly=0.0,
         peak = max(peak, equity)
         max_drawdown = max(max_drawdown, peak - equity)
 
-    return {'alone_liquidation': alone,
+    return {'alone_liquidation': alone, 'paused_bars': paused_bars,
             'account_mmr': (None if not acct else
                             {'start': (acct.get('mm') or 0.0) / acct['equity'],
                              'peak': mmr_peak, 'reaches_100': mmr_cross,

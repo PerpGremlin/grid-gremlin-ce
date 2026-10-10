@@ -1232,6 +1232,19 @@ eventually pin (T1).
   thin. A bot whose market was not read carries nothing; no readings yet is
   said as such. Display only, like the rest of K.
 
+- **K10** Calm or wild: the market readings carry each coin's two-state
+  hidden Markov model of its Bybit hourly returns (`gridgremlin/hmm.py`,
+  Baum-Welch). It is refitted once a day on the last 180 days (kept in
+  `logs/market-hmm.json`) and filtered every hour over the last 500 hours
+  from the hours up to now only: the probability of the wild state, how
+  long the current state has held, each state's daily spread and typical
+  spell, how far apart the states are, and the last 48 hours' closes and
+  P(wild) for a mini chart. The newest reading is read from the end of the
+  file, never the whole of it. Two states are named only when
+  they beat one bell curve by BIC (by 10 or more): otherwise the reading
+  says "one regime" and names no wild state. An unreadable feed is said,
+  never guessed. Display only: no bot reads it. *(the owner, 2026-10-11:
+  the research made live, for the panel's market half)*
 - **U55** The dash reads as the owner reads it. A fleet file's `label` is
   what the panel calls the fleet (forty characters at most); without one,
   the venue and the file's environment word. Every card is a column with
@@ -1318,6 +1331,17 @@ eventually pin (T1).
   folded tables align each heading with its numbers (right), the first
   column left and as wide as it needs — the info pages' `details td` rule
   had reached into them. *(the owner, 2026-10-11)*
+- **U67** The fleet page is two halves on a wide screen — the bots, and the
+  markets beside them (stacked on a phone, bots first; the table keeps its
+  width). The markets half reads the newest market reading (D67, K10, from
+  the end of its file) and draws a tile per coin the fleets trade, the most
+  capital first: price and its day, the last 48 hours with the wild hours
+  shaded, calm or wild with its probability and spell (or "one regime"),
+  the ADX trend, funding per 8 hours and a year, open interest, crowding,
+  depth, the typical 4-hour candle; and the reading's age and the fear and
+  greed index above them. No reading: said. Display only. *(the owner,
+  2026-10-11: "halving the screen with bots, then the other half … to help
+  traders navigate the markets")*
 - **L1** A new trade joins a running fleet within a cycle. The trade watch
   stats the trades file once a cycle; a changed file's new rows are each
   built by the fleet's own builder (`main.build_market_bot`, the one every
@@ -2026,6 +2050,10 @@ that pins it (T1).
   and the verdict says the start, the peak and the first bar it would have
   reached 100%. No snapshot: nothing claimed. *(the owner, 2026-10-11:
   "cant we just use MMR that the exchange shows?")*
+- **T14** The grid's replay takes a research gate: `entries(i, bar)`, asked
+  at each bar's open; False pauses that bar's entries while every exit keeps
+  working (D56's shape), and the run counts the paused bars. No row and no
+  fleet sets it: research uses it to ask whether pausing helps.
 - **T12** A spec never reaches the network: the runner refuses name
   resolution for anything but loopback (the panel's specs serve on
   127.0.0.1), so the workstation runs the suite as GitHub's runners do.
