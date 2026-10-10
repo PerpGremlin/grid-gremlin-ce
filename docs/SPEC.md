@@ -241,7 +241,8 @@ eventually pin (T1).
   still closed at zero spread, from entries bought twice)*
 
 ## W — the window
-
+ When a lagging list catches up, the log says after how many cycles
+  (log-only), so the lag is measured, not guessed.
 - **W1** The window limits placement, never cancellation.
 - **W2** One named window anchor, used by every consumer — no raw-vs-sticky split
   between the window and the planner. *(audit 3.4; CONCEPTS §12·N4)*

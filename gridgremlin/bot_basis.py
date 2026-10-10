@@ -175,6 +175,7 @@ class BasisMixin:
         entry = self._entry_side.lower()
         want = abs(held)
         slack = want * 0.02 + self.adapter.qty_step
+        escalated = False
         for days in (2, HISTORY_WINDOW_DAYS):     # the newest cover almost always
             try:
                 fills = self._own_fills(days)
@@ -189,6 +190,7 @@ class BasisMixin:
                 self._rungs_lag += 1
                 if self._rungs_lag < RUNGS_LAG_CYCLES:
                     return cached[1] if cached else None
+                escalated = True
                 if self._rungs_lag == RUNGS_LAG_CYCLES:
                     self.notify.event(
                         'warn', self.botid,
@@ -216,6 +218,12 @@ class BasisMixin:
                 self._rungs_seen = (
                     want, frozenset(self._fill_id(f) for f in fills),
                     max((f['time_ms'] for f in fills), default=0))
+                if self._rungs_lag and not escalated:
+                    # G26, measured: how long the venue's fill list lagged
+                    # the position — the log's, for the loose end's count
+                    self.notify.event('net', self.botid,
+                                      f'fill list caught up after {self._rungs_lag} '
+                                      'cycle(s) (G26)')
                 self._rungs_lag = 0       # this account is the new baseline
                 return rungs
         return None
