@@ -976,3 +976,38 @@ def spec_F29_the_expiry_calendar_pages_a_week_out_and_names_what_ran_out():
     assert page[1].startswith('2026-10-09') and 'today' in page[1]
     assert page[-1].endswith('key E') and 'confirm' in page[-1]
     assert ex.render([], today) == '(an empty calendar)'
+
+
+def spec_R23_the_fleets_log_keeps_time_at_the_end_of_each_line():
+    """The fleet's own notifier ends each line with its UTC time; every
+    reader keys on the start, so a stamped kill is still a kill to the
+    digest and the phone; the specs' own notifiers print no time."""
+    import contextlib
+    import io
+    import os
+    import re
+    from pathlib import Path
+    from gridgremlin.digest import log_events
+    from gridgremlin.events import Notifier
+    from gridgremlin.main import make_notifier
+    saved = {k: os.environ.pop(k, None) for k in ('TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID')}
+    try:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            n = make_notifier()
+            n.event('kill', 'linBTCUSDTl', 'round complete')
+            n.event('net', 'linBTCUSDTl', 'fill list caught up after 3 cycle(s) (G26)')
+        lines = out.getvalue().splitlines()
+        assert re.fullmatch(r'\[ship\] kill linBTCUSDTl: round complete @\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ', lines[0])
+        assert lines[1].startswith('[log] net linBTCUSDTl: fill list caught up') and lines[1].endswith('Z')
+        log = Path(tempfile.mkdtemp()) / 'fleet-x.log'
+        log.write_text(out.getvalue() + '[ship] margin linX: refused @2026-10-11T00:00:00Z\n')
+        counts, _ = log_events(log, 0)
+        assert counts['kills'] == 1 and counts['margin'] == 1
+    finally:
+        for k, v in saved.items():
+            if v is not None:
+                os.environ[k] = v
+    got = []
+    Notifier(sink=got.append).event('kill', 'b', 'x')
+    assert got == ['[ship] kill b: x']                     # a spec's capture stays exact

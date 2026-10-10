@@ -69,8 +69,9 @@ def net(book, mark=None):
 
 def log_events(path, offset):
     """What the log said since the last digest: (counts, new offset). The
-    log carries no clock, so the digest keeps its place; a log smaller than
-    the place was rotated, and is read from its start."""
+    digest keeps its place by offset (lines carry their time at the end
+    since R23, the start unchanged); a log smaller than the place was
+    rotated, and is read from its start."""
     counts = {'kills': 0, 'stop/trail closes': 0, 'refused orders': 0,
               'fill lags (G26)': 0, 'margin': 0, 'tracebacks': 0}
     try:

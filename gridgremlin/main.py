@@ -724,9 +724,10 @@ def _project_margin(clients, cfgs, notifier):
 def make_notifier():
     token = os.environ.get('TELEGRAM_BOT_TOKEN')
     chat = os.environ.get('TELEGRAM_CHAT_ID')
+    from .events import stamped_print
     if token and chat:
-        return TelegramNotifier(token, chat)
-    return Notifier()
+        return TelegramNotifier(token, chat, sink=stamped_print)   # R23: the log keeps time
+    return Notifier(sink=stamped_print)
 
 
 def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,

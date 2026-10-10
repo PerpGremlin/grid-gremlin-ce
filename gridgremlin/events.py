@@ -15,6 +15,15 @@ URGENT_REPEAT = 900.0        # an urgent line that recurs: said first, then
                              # cycle for 286 cycles, 2026-10-05)
 
 
+def stamped_print(line):
+    """R23: the fleet's own log line, with its UTC time at the END — every
+    reader keys on the line's start ('[ship] kill …'), so the start stays
+    as it was. The fleet's log carried no clock until 2026-10-11, and a lag
+    it said could not be measured."""
+    from .fmt import utc_stamp
+    print(f'{line} @{utc_stamp()}', flush=True)
+
+
 class Notifier:
     def __init__(self, ship_orders=False, sink=None):
         self.ship_orders = ship_orders

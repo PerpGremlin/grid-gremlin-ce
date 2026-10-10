@@ -159,11 +159,11 @@ def spec_J1_the_door_has_two_verbs_and_the_owner_names_the_fleet():
     assert code == 2 and 'the door knows read, intent' in text
     code, text = handle(str(f), '', NOON)
     assert code == 2
-    code, text = handle(str(f), 'read', NOON)
+    code, text = handle(str(f), 'read', NOON, _flat_market())
     got = json.loads(text)
     assert code == 0 and got['paper'] is True and got['intents_left_this_hour'] == 3 and got['open'] == []
-    code, text = handle(str(f), 'intent ' + json.dumps(GOOD), NOON)
-    assert code == 0 and json.loads(text)['verdict'] == 'paper'
+    code, text = handle(str(f), 'intent ' + json.dumps(GOOD), NOON, _flat_market())
+    assert code == 0 and json.loads(text)['verdict'] == 'paper'      # a fake market: specs never fetch (T6)
     code, text = handle(str(f), 'intent {not json', NOON)
     assert code == 1 and 'not JSON' in text
     plain = Path(tempfile.mkdtemp()) / 'fleet.json'

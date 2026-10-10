@@ -1078,6 +1078,11 @@ eventually pin (T1).
 - **R22** A card counted over the 30-day cap says where its fills start when that
   is later than the cap: "never flat in 30 d; its fills start 4.4 d ago", not
   "last 30 d". *(audit 2026-10-06: a "last 30 d" card counted 4.4 days)*
+- **R23** The fleet's log keeps time: every line the fleet process prints
+  ends with its UTC time (` @2026-10-11T04:12:33Z`). The time goes at the
+  end because every reader keys on the start (`[ship] kill …` — the digest,
+  the phone, the replay); the specs' own notifiers print no time. *(2026-10-11:
+  a fill-list lag could not be measured — the log carried no clock)*
 - **R9** The readout counts SAME-RUNG exits: an exit filling at a price the book
   entered at. It needs no basis, so a truncated window cannot fake it. Read it as a
   RATIO, not a verdict — in a netted engine (G12) a rung legitimately flips between
@@ -1976,3 +1981,8 @@ that pins it (T1).
   (G21) is honoured in whole bars: the trigger must still hold at the open of
   ⌈confirm_seconds / bar⌉ further bars. *(the 48-day post-mortem: an hourly replay
   carried 3× the live short inventory)*
+- **T6** A spec never reaches the network: the runner refuses name
+  resolution for anything but loopback (the panel's specs serve on
+  127.0.0.1), so the workstation runs the suite as GitHub's runners do.
+  *(2026-10-10: a door spec fetched a live price — green here, red on the
+  public edition's CI, where Bybit answers 403)*

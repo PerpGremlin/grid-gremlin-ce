@@ -102,3 +102,24 @@ def spec_C10_the_primitives_exist_once():
         if re.search(r'(?<![\d.])0\.0002\b|(?<![\d.])0\.00055\b', code):
             offenders.append(f'{p.name}: a fee rate as a literal')
     assert not offenders, offenders
+
+
+def spec_T6_a_spec_never_reaches_the_network():
+    """The runner refuses name resolution for anything but loopback, so a
+    spec that fetches a live price fails here as it does on GitHub's
+    runners (spec_J1, 2026-10-10) — never only after a CE push."""
+    import socket
+    import urllib.request
+    try:
+        socket.getaddrinfo('api.bybit.com', 443)
+    except OSError as e:
+        assert 'never reach the network (T6)' in str(e)
+    else:
+        raise AssertionError('a spec resolved a public host')
+    try:
+        urllib.request.urlopen('https://api.bybit.com/v5/market/time', timeout=2)
+    except OSError as e:
+        assert 'T6' in str(e) or 'T6' in str(getattr(e, 'reason', ''))
+    else:
+        raise AssertionError('a spec reached the network')
+    assert socket.getaddrinfo('127.0.0.1', 80)                    # the panel's specs still serve
