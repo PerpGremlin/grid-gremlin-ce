@@ -1388,7 +1388,11 @@ eventually pin (T1).
   0.7, 0.7 and above), and whether higher bands win at least as often. No
   verdict before 200 closed trades: the score says how many remain. The
   nightly digest carries it under the agent fleet's section (the paper
-  book; a live agent's trades are their own cards).
+  book; a live agent's trades are their own cards), and the readout
+  contract carries it as `agent` — the score, its words and the open paper
+  positions — which the panel draws as the account's agent box. A paper
+  agent fleet with no rows reads no venue, so its readout needs no keys:
+  paper needs no subaccount; a live one does.
 
 - **J2** The agent's working program does the arithmetic of technical
   analysis in code, so a model — or the owner by hand — only judges

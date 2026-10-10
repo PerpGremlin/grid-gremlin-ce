@@ -931,8 +931,9 @@ def main(argv):
     from .trades import with_trades
     fleet = with_trades(argv[0], fleet)          # L5: a trade is a bot to every reader
     from .exchange.env import select_account
-    select_account(fleet['account'])                  # H5
-    now_ms = int(time.time() * 1000)
+    if fleet['bots'] or not (fleet.get('agent') or {}).get('paper'):
+        select_account(fleet['account'])              # H5 — a paper agent with no rows
+    now_ms = int(time.time() * 1000)                  # reads no venue, so needs no keys (J6)
     since_ms = now_ms - int(hours * 3600 * 1000)
     by_venue, key_of, inverse_ids = {}, {}, set()
     strat_of, entry_sides, closers, side_of = {}, {}, {}, {}
@@ -1168,6 +1169,14 @@ def main(argv):
                                      key_of[b][1]),
                          behind=behind.get(b)))
                 for b in botids}
+        if fleet.get('agent'):                       # J5: the agent's box on the panel
+            from .agent_paper import book_path, load_book
+            from .agent_score import view
+            try:
+                contract['agent'] = view(load_book(book_path(argv[0])) if fleet['agent']['paper'] else [],
+                                         fleet['agent'])
+            except (OSError, ValueError) as e:
+                contract['agent'] = {'error': f'the paper book is unreadable: {e}'}
         print(json.dumps(contract))
         return 0
     print(f'last {hours:g}h · grid profit = realized − fees (D8) · '

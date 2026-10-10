@@ -102,6 +102,16 @@ What runs, from the inside out:
     that watchdog's snapshots — and a `close` or the day's limit writes a
     close request the running fleet acts on (L7).
 
+    **Starting phase 1 (paper).** `configs/fleet.agent.json` ships in paper
+    with no bots; paper reads only public candles, so it needs no
+    subaccount, no exchange keys and no fleet unit. Two steps, both the
+    owner's: the door's key line above in `authorized_keys`, and the agent
+    fleet added to the panel's and the digest's unit lines (re-render with
+    `configs/fleet.agent.json` among `MORE_FLEET_CONFIGS`, then
+    `daemon-reload` and restart `gg-panel`) so its box and score show.
+    Going live later needs the subaccount's keys, a watchdog in the fleet
+    file, `paper: false` and a fleet unit — each on the owner's word.
+
 > **Retired: the box-side Claude** — triage on failure, the Telegram relay
 > and the daily range review, kept in the private tree's `ops/retired/`
 > (never exported, like `ops/research/`; its README says why).

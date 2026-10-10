@@ -1383,7 +1383,7 @@ def spec_U19_an_edit_that_changes_nothing_writes_the_file_it_read():
             wd_path = os.path.join(CONFIGS, '..', fleet['watchdog'])
             wd_text = open(wd_path, encoding='utf-8').read()
             wd = json.loads(wd_text)
-        venue = fleet['bots'][0].get('venue', 'bybit')
+        venue = (fleet['bots'][0] if fleet['bots'] else {}).get('venue', 'bybit')   # an agent fleet has none (J3)
         for old in fleet['bots']:
             if old.get('strategy') == 'portfolio':
                 continue                                   # D78: no form

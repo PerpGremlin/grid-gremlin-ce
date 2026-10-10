@@ -1,0 +1,25 @@
+{
+  "_note": "D80 phase 1 (paper): the agent's fleet — no bots of its own; its trades arrive through the door (gridgremlin.agent_door, ops/README) and, in paper, live only in logs/agent-paper-agent.json. The limits are the owner's to set and only a merged main changes them (J3). Turning paper off needs a watchdog named here (J3) and the owner's word.",
+  "account": "agent",
+  "label": "Bybit demo · agent",
+  "bots": [],
+  "agent": {
+    "markets": [
+      "BTCUSDT",
+      "ETHUSDT",
+      "SOLUSDT"
+    ],
+    "max_notional": 1000,
+    "max_gross": 2000,
+    "max_leverage": 5,
+    "max_loss_day": 100,
+    "max_intents_hour": 4,
+    "min_stop_pct": 0.003,
+    "max_stop_pct": 0.02,
+    "session_utc": [
+      0,
+      24
+    ],
+    "paper": true
+  }
+}
