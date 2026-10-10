@@ -22,6 +22,28 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))  # make `gridgremlin` importable
 
+LOOPBACK = ('localhost', '127.0.0.1', '::1', '')
+
+
+def _no_network():
+    """T6: a spec never reaches the network. Name resolution for anything but
+    loopback is refused — the panel's specs serve on 127.0.0.1 — so the
+    workstation runs the suite as GitHub's runners do (Bybit answers them
+    403): a spec that fetched a live price passed here and failed there
+    (spec_J1, 2026-10-10). Code that tolerates a dead network still runs."""
+    import socket
+    real = socket.getaddrinfo
+
+    def guarded(host, *a, **k):
+        h = host.decode() if isinstance(host, bytes) else (host or '')
+        if h not in LOOPBACK:
+            raise OSError(f'specs never reach the network (T6): {h}')
+        return real(host, *a, **k)
+    socket.getaddrinfo = guarded
+
+
+_no_network()
+
 
 def _load(path):
     module_spec = importlib.util.spec_from_file_location(path.stem, path)
