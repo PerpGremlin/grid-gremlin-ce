@@ -1990,7 +1990,24 @@ that pins it (T1).
   (G21) is honoured in whole bars: the trigger must still hold at the open of
   ⌈confirm_seconds / bar⌉ further bars. *(the 48-day post-mortem: an hourly replay
   carried 3× the live short inventory)*
-- **T6** A spec never reaches the network: the runner refuses name
+- **T10** The grid's rehearsal charges the market's own funding: a Bybit
+  futures grid's window reads the settlements (public), and each one the
+  held position crosses is paid or received at its rate on the notional at
+  that bar's close; unread or not read for the market (spot, Hyperliquid,
+  a DCA bot) is said as "not modelled", never as nothing. Margin is the
+  account's, which one row cannot know, and D34 buys an adverse slide from
+  free balance — so the replay trades as decided and only says when the
+  row on its capital alone would first have met its maintenance margin
+  (Bybit's base tier, 0.5%) at a bar's worst price: a risk line, never a
+  refusal or a stop.
+- **T11** The rehearsal projects the account's MMR, the exchange's own
+  liquidation gauge (maintenance margin over equity; Bybit liquidates at
+  100%): from the account's latest snapshot — the venue's default account,
+  named — each bar's worst price adds the row's maintenance margin and P&L,
+  and the verdict says the start, the peak and the first bar it would have
+  reached 100%. No snapshot: nothing claimed. *(the owner, 2026-10-11:
+  "cant we just use MMR that the exchange shows?")*
+- **T12** A spec never reaches the network: the runner refuses name
   resolution for anything but loopback (the panel's specs serve on
   127.0.0.1), so the workstation runs the suite as GitHub's runners do.
   *(2026-10-10: a door spec fetched a live price — green here, red on the

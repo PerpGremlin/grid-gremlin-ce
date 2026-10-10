@@ -103,6 +103,11 @@ def rehearse_bot_form(bot_json, days='7'):
             '</form>')
 
 
+def _day_utc(t_ms):
+    import time as _t
+    return _t.strftime('%d %b %H:%M UTC', _t.gmtime(t_ms / 1000)) if t_ms else 'time unknown'
+
+
 def verdict(draft, out, typed=None, bot_json=None, days='7'):
     import html as _html
     form = (rehearse_bot_form(bot_json, days) if bot_json
@@ -118,8 +123,10 @@ def verdict(draft, out, typed=None, bot_json=None, days='7'):
     rows = ''.join(
         f'<tr><td>{k}</td>{money(v)}</tr>' for k, v in
         [('profit from closed rounds' if dca else 'grid profit',
-          out['grid_profit']), ('fees', -out['fees']),
-         ('net', out['net']), ('total (incl. open)', out['total']),
+          out['grid_profit']), ('fees', -out['fees'])]
+        + ([('funding (the market\'s own)', -out['funding'])]
+           if out.get('funding_modelled') else [])
+        + [('net', out['net']), ('total (incl. open)', out['total']),
          ('hold benchmark', out['hold_benchmark']),
          ('max drawdown', -out['max_drawdown'])])
     curve = curve_svg(out.get('equity_curve') or [])
@@ -152,9 +159,29 @@ def verdict(draft, out, typed=None, bot_json=None, days='7'):
         head = (f"{draft.get('symbol')} {draft.get('side')} "
                 f"{draft.get('lower')}–{draft.get('upper')} x "
                 f"{draft.get('rungs')} — {out['bars']} bars")
+        alone = out.get('alone_liquidation')
+        risk = ('' if draft.get('market_type') == 'spot' else
+                '<tr><td>on its capital alone</td><td style="text-align:left;white-space:normal">'
+                + (f"would have been liquidated at {alone['price']:,.6g} holding "
+                   f"{alone['held']:.10g} ({_html.escape(_day_utc(alone['t']))}) — the account's "
+                   'cross margin is what really decides' if alone else
+                   'never reached its maintenance margin in this window')
+                + '</td></tr>')
+        am = out.get('account_mmr')
+        if am:                                   # T11: the exchange's own gauge, projected
+            cross = am.get('reaches_100')
+            risk = ('<tr><td>account MMR</td><td style="text-align:left;white-space:normal">'
+                    f"{_html.escape(str(am.get('label') or 'the account'))} now {am['start']:.1%}; "
+                    f"with this bot at its worst {am['peak']:.1%}"
+                    + (f" — <b class='neg'>it would have reached 100% (liquidation) at "
+                       f"{cross['price']:,.6g}, {_html.escape(_day_utc(cross['t']))}</b>" if cross else
+                       ' — never 100%')
+                    + '</td></tr>' + risk)
         detail = (f"<tr><td>trips / entry fills</td>"
                   f"<td>{out['trips']} / {out['entry_fills']}</td></tr>"
-                  + holding)
+                  + holding + risk
+                  + ('' if out.get('funding_modelled') or draft.get('market_type') == 'spot' else
+                     '<tr><td>funding</td><td>not modelled for this market</td></tr>'))
         foot = ('window shown, never annualised. beat the hold benchmark '
                 'or hold.')
     note = (f"from a rehearsal over {days} days: net {out['net']:+,.2f}, "

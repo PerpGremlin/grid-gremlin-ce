@@ -399,3 +399,126 @@ def spec_T3a_an_inverse_row_rehearses_in_the_adapters_own_maths_instead_of_being
     q = 5000.0 / 50000.0                                                       # the linear rung: 0.1 BTC
     assert abs(l['grid_profit'] - q * 10000.0) < 1e-6                          # linear: the same trade, in quote (1,000 too)
     assert abs(l['fees'] - (q * 50000.0 + q * 60000.0) * 0.0002) < 1e-6       # on qty × price, as before (2.2)
+
+
+# --- T10/T11: funding at the market's settlements; the margin gauges --------------------
+
+def _t10():
+    from gridgremlin.adapters import LinearAdapter
+    from gridgremlin.config import validate_config
+    adapter = LinearAdapter({'symbol': 'BTCUSDT', 'qty_step': 0.001, 'price_tick': 0.1,
+                             'min_qty': 0.001, 'min_notional': 5.0, 'settle_coin': 'USDT'})
+    cfg = validate_config({'market_type': 'linear', 'symbol': 'BTCUSDT', 'side': 'long',
+                           'capital': 1000.0, 'leverage': 10, 'upper': 61000.0,
+                           'lower': 59000.0, 'rungs': 21, 'spacing_type': 'fixed'})
+    return cfg, adapter
+
+
+def _fall(n, start=60050.0, step=100.0, t0=0, h=3_600_000):
+    return [{'t': t0 + i * h, 'o': start - step * i, 'h': start - step * i + 20,
+             'l': start - step * (i + 1), 'c': start - step * (i + 1) + 10} for i in range(n)]
+
+
+def spec_T10_funding_is_the_markets_settlements_held_through():
+    from gridgremlin.backtest import backtest
+    cfg, a = _t10()
+    bars = _fall(10)
+    plain = backtest(cfg, a, bars)
+    assert plain['funding'] == 0.0 and plain['funding_modelled'] is False
+    events = [{'t': 8 * 3_600_000, 'rate': 0.001},                 # inside bar 7, held by then
+              {'t': -5, 'rate': 0.5}, {'t': 99 * 3_600_000, 'rate': 0.5}]   # outside: never charged
+    r = backtest(cfg, a, bars, funding=events)
+    assert r['funding_modelled'] is True and r['funding'] > 0        # a long pays positive funding
+    assert abs(r['net'] - (plain['net'] - r['funding'])) < 1e-9
+    held_at = r['funding'] / 0.001                                  # the notional it was charged on
+    assert 0 < held_at < cfg['capital'] * cfg['leverage'] * 1.2
+    flat = backtest(cfg, a, bars, funding_rate_hourly=0.0001)        # the old flat rate still works
+    assert flat['funding'] > 0 and flat['funding_modelled'] is True
+
+
+def spec_T10_on_its_capital_alone_is_a_risk_line_never_a_stop():
+    """D34 buys beyond capital from free balance, so the replay trades as
+    decided; the line only says when the row alone would have met its
+    maintenance margin."""
+    from gridgremlin.backtest import backtest
+    cfg, a = _t10()
+    crash = _fall(40, step=400.0)
+    r = backtest(cfg, a, crash)
+    alone = r['alone_liquidation']
+    assert alone is not None and 0 < alone['price'] < 60050.0 and alone['held'] > 0
+    calm = backtest(cfg, a, _fall(3, step=10.0))
+    assert calm['alone_liquidation'] is None
+    assert len(r['equity_curve']) == 40                             # it kept trading after
+
+
+def spec_T11_the_accounts_mmr_is_projected_from_the_exchanges_own_gauge():
+    """The owner: "cant we just use MMR that the exchange shows?" — the
+    account as it is now, plus the row at each bar's worst price: the peak,
+    and the first bar it reaches 100% (Bybit liquidates there)."""
+    from gridgremlin.backtest import backtest
+    cfg, a = _t10()
+    roomy = backtest(cfg, a, _fall(10), account={'equity': 100_000.0, 'mm': 5_000.0, 'label': 'demo'})
+    am = roomy['account_mmr']
+    assert abs(am['start'] - 0.05) < 1e-12 and am['peak'] > 0.05 and am['reaches_100'] is None
+    assert am['label'] == 'demo'
+    thin = backtest(cfg, a, _fall(40, step=400.0), account={'equity': 1_500.0, 'mm': 900.0})
+    cross = thin['account_mmr']['reaches_100']
+    assert cross is not None and thin['account_mmr']['peak'] >= 1.0 and cross['t'] is not None
+    assert backtest(cfg, a, _fall(3))['account_mmr'] is None         # no account given: nothing claimed
+
+
+def spec_T10_T11_the_verdict_says_funding_the_alone_line_and_the_accounts_mmr():
+    from gridgremlin.backtest import backtest
+    from panel.forms import verdict
+    cfg, a = _t10()
+    bars = _fall(40, step=400.0)
+    out = backtest(cfg, a, bars, funding=[{'t': 3_600_000 * 5 + 1, 'rate': 0.001}],
+                   account={'equity': 1_500.0, 'mm': 900.0, 'label': 'Bybit demo'})
+    out.update(bars=len(bars), hold_benchmark=0.0, bar_minutes=60)
+    page = verdict(dict(cfg), out)
+    assert "funding (the market's own)" in page
+    assert 'on its capital alone' in page and 'would have been liquidated at' in page
+    assert 'account MMR' in page and 'Bybit demo now 60.0%' in page and 'reached 100% (liquidation)' in page
+    out2 = backtest(cfg, a, _fall(3, step=10.0))
+    out2.update(bars=3, hold_benchmark=0.0, bar_minutes=60)
+    page2 = verdict(dict(cfg), out2)
+    assert 'not modelled for this market' in page2 and 'never reached its maintenance margin' in page2
+    assert 'account MMR' not in page2
+
+
+def spec_T10_funding_is_read_only_for_a_bybit_futures_grid_and_unread_is_said():
+    from gridgremlin.backtest_cli import window_funding
+    bars = [{'t': 0, 'o': 1, 'h': 1, 'l': 1, 'c': 1}]
+    for draft in ({'market_type': 'spot', 'symbol': 'BTCUSDT'},
+                  {'market_type': 'linear', 'symbol': 'BTC', 'venue': 'hyperliquid'},
+                  {'market_type': 'linear', 'symbol': 'BTCUSDT', 'strategy': 'martingale'}):
+        assert window_funding(draft, bars, 60) is None
+    assert window_funding({'market_type': 'linear', 'symbol': 'BTCUSDT'}, [], 60) is None
+    # unreachable (the suite refuses the network, T6): None — said as not modelled, never as nothing
+    assert window_funding({'market_type': 'linear', 'symbol': 'BTCUSDT'}, bars, 60) is None
+
+
+def spec_T11_the_panel_reads_the_account_from_the_default_fleets_snapshot():
+    import json
+    import tempfile
+    from pathlib import Path
+    from panel.server import Handler
+    d = Path(tempfile.mkdtemp())
+    (d / 'configs').mkdir()
+    (d / 'logs').mkdir()
+    row = {'market_type': 'linear', 'symbol': 'BTCUSDT', 'side': 'long', 'capital': 100.0, 'leverage': 2,
+           'upper': 70000.0, 'lower': 50000.0, 'rungs': 11}
+    for name, account, eq, rate in (('sub', 'carry', 5000.0, 0.2), ('main', None, 100000.0, 0.03)):
+        (d / 'configs' / f'watchdog.{name}.json').write_text(json.dumps({'snapshot': f'logs/s-{name}.jsonl'}))
+        fleet = {'watchdog': f'configs/watchdog.{name}.json', 'bots': [row]}
+        if account:
+            fleet['account'] = account
+        (d / 'configs' / f'fleet.{name}.json').write_text(json.dumps(fleet))
+        (d / 'logs' / f's-{name}.jsonl').write_text(json.dumps({'t': 1, 'equity': eq, 'mm_rate': rate, 'bots': {}}) + '\n')
+
+    class H(Handler):
+        fleets = (str(d / 'configs' / 'fleet.sub.json'), str(d / 'configs' / 'fleet.main.json'))
+        labels = ('sub', 'main')
+    got = H._account_for(H, {'venue': 'bybit'})
+    assert got == {'equity': 100000.0, 'mm': 3000.0, 'label': 'main'}        # the default account first
+    assert H._account_for(H, {'venue': 'hyperliquid'}) is None              # no fleet on that venue
