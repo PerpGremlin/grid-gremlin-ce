@@ -971,6 +971,15 @@ eventually pin (T1).
   page comes once, the reminder on the watchdog's interval, and
   "recovered" when the date is moved on. An unreadable calendar is one
   breach, not a silent watch. Nothing renews anything.
+- **F30** A Bybit linear symbol's risk tier is the LARGEST its leverage
+  allows (the legs' highest; Bybit keeps one per symbol), so the leverage
+  buys the room it was chosen for — never one below the legs' ladders nor
+  below what the venue already holds (its positions at mark and resting
+  opening orders: a slide holds beyond capital, D34). When even that tier
+  cannot hold it, the smallest that can, and its maximum clamps the
+  leverage, said. *(D83, 2026-10-11: at 50x the build asked for the 3.8M
+  tier — the ladders' sum — under 4.34M already held; Bybit refused it,
+  110048, and the 50x tier's 8.5M never opened)*
 - **F28** The runbook (`docs/RUNBOOK.md`, D75) names what exists: every unit
   the templates in `ops/systemd/` render (by its `grid-gremlin3-` or `gg-`
   name), every timer, every phone command the phone answers, the close tool,

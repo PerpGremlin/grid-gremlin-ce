@@ -787,6 +787,27 @@ stands unless the owner corrects it.
   position per side of a market per account. Built in stages: the engine
   and the owner's command first; the form and the agent's door next.
 
+- **D82 — A recurring margin refusal pages once, then hourly (2026-10-11).**
+  Bybit's risk tier refused the stress test's BTC long at 75x and paged
+  about six times an hour (a margin refusal and its backoff each time). The
+  owner chose both answers offered: the BTC long to 70x, Bybit's own
+  suggestion, so the next tier opens and the test goes on; and *"do B and
+  C"* — a margin refusal or a backoff reaches the phone the first time,
+  then at most hourly with how often it came ("still (6x in 85 min): …"),
+  as D60 already says an urgent warning. The log keeps every one; a kill is
+  never held; the fleet's start says everything as before. Amends D60.
+
+- **D83 — The risk tier the leverage allows (2026-10-11).** The stress
+  test's BTCUSDT legs went to 50x for the room Bybit's 50x tier holds
+  (8.5M of position and orders, against 4.4M at 70x), with capital raised
+  so every order kept its size. The build still picked the smallest tier
+  that fit the ladders, deliberately, for the lower maintenance rate — and
+  sized it from the ladders alone, under what the slide already held, so
+  Bybit refused it. Offered: the fix (never below what is held) and the
+  rule (the largest tier the leverage allows). The owner: *"build the fix
+  and use the largest tier rule"*. The maintenance rate is the tier's
+  (1.0% at 50x against 0.77% at 65x): the owner's trade of margin for room.
+
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
 inline above.*

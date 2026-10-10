@@ -10,6 +10,9 @@ PHONE_KINDS = ('kill', 'margin', 'backoff', 'fleet')
 PERSIST_COUNT = 5            # the same bot's same warning this many times...
 PERSIST_WINDOW = 900.0       # ...inside this many seconds is persisting
 PERSIST_REPEAT = 3600.0      # and is said again at most this often
+REFUSAL_REPEAT = 3600.0      # D82: a margin refusal or backoff that recurs:
+                             # said first, then hourly with its count (the
+                             # owner, 2026-10-11: a tier cap paged ~6/hour)
 URGENT_REPEAT = 900.0        # an urgent line that recurs: said first, then
                              # at most this often (the SUI refusal, every
                              # cycle for 286 cycles, 2026-10-05)
@@ -90,6 +93,11 @@ class TelegramNotifier(Notifier):
             text = self._recurring(botid, text)
             if text is None:
                 return
+        elif kind in ('margin', 'backoff') and not self.startup:      # D82
+            text = self._recurring(botid, f'{kind}: {text}', REFUSAL_REPEAT)
+            if text is None:
+                return
+            text = text.replace(f'{kind}: ', '', 1)
         prefix = f'{icon} ' if icon else ''
         label = kind if botid == kind else f'{kind} {botid}'   # phone too:
         self._buffer.append(f'{prefix}{label}: {text}')        # no "fleet fleet"
@@ -97,20 +105,21 @@ class TelegramNotifier(Notifier):
         # arrives (the audit's M6) — it flushes NOW, rate limit or not
         self._maybe_flush(force=(kind == 'kill'))
 
-    def _recurring(self, botid, text):
+    def _recurring(self, botid, text, every=URGENT_REPEAT):
         """D60: an urgent line is said the first time; the same bot's same
         line (its numbers aside) is then held and said again at most every
-        URGENT_REPEAT, with how often it came meanwhile."""
+        `every` (URGENT_REPEAT; REFUSAL_REPEAT for margin and backoff, D82),
+        with how often it came meanwhile."""
         import re
         now = self._clock()
         key = (botid, re.sub(r'[0-9.]+', '#', text))
         last = self._urgent.get(key)
-        if last is None or now - last[0] >= URGENT_REPEAT:
+        if last is None or now - last[0] >= every:
             held = 0 if last is None else last[1]
             self._urgent[key] = [now, 0]
             if len(self._urgent) > 500:
                 self._urgent = {k: v for k, v in self._urgent.items()
-                                if now - v[0] < URGENT_REPEAT}
+                                if now - v[0] < REFUSAL_REPEAT}
             if held:
                 return (f'still ({held + 1}x in {(now - last[0]) / 60:.0f} '
                         f'min): {text}')

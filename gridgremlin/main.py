@@ -635,10 +635,41 @@ def build_fleet(fleet_path, notifier, allow_mainnet=False):
     return fleet, clients, bots
 
 
+def symbol_exposure(client, symbol):
+    """D83: what the venue already counts against the symbol's risk tier —
+    its positions at mark and its resting opening orders (Bybit's "combined
+    value of positions and orders"). 0 when unreadable: the ladders decide."""
+    try:
+        t = client.read_symbol_truth('linear', symbol)
+    except Exception:                                        # noqa: BLE001
+        return 0.0
+    mark = t.get('mark') or 0.0
+    pos = sum((p.get('size') or 0.0) * mark for p in (t.get('positions') or {}).values())
+    orders = sum((o.get('qty') or 0.0) * (o.get('price') or 0.0)
+                 for o in t.get('orders') or [] if not o.get('reduce_only'))
+    return pos + orders
+
+
+def pick_tier(tiers, symbol_lev, need):
+    """D83: the LARGEST tier the symbol's leverage allows — the room the
+    owner chose the leverage for (Bybit: 50x holds 8.5M on BTCUSDT, 70x
+    4.4M) — and never one below `need` (the ladders, or what the venue
+    already holds): when even that tier is too small, the smallest that fits
+    `need`, whose own maximum then clamps the leverage (the 110048 rule).
+    Returns (tier, clamped)."""
+    allowed = [t for t in tiers if not t['max_leverage'] or t['max_leverage'] >= symbol_lev]
+    tier = max(allowed, key=lambda t: t['limit']) if allowed else None
+    if tier is not None and need <= tier['limit']:
+        return tier, False
+    return next((t for t in tiers if need <= t['limit']), tiers[-1]), True
+
+
 def _ensure_symbol_capacity(bots, base_notifier):
-    """Hedge-aware, ONCE per (venue, symbol): the risk tier fits the SUM of
-    both legs' ladders (a small hedge leg must never downgrade the big one —
-    the 110048 incident), and buy/sell leverage are set per leg."""
+    """Hedge-aware, ONCE per (venue, symbol): the risk tier is the largest
+    the symbol's leverage allows, never below the SUM of both legs' ladders
+    nor what the venue already holds (D83; a small hedge leg must never
+    downgrade the big one — the 110048 incident), and buy/sell leverage are
+    set per leg."""
     notifier = _vn(base_notifier, 'bybit')       # this function IS bybit-only
     groups = {}
     for b in bots:
@@ -646,9 +677,10 @@ def _ensure_symbol_capacity(bots, base_notifier):
             groups.setdefault(b.cfg['symbol'], []).append(b)
     for symbol, legs in groups.items():
         client = legs[0].client
-        need = sum(b.cfg['ladder_notional'] for b in legs)
-        tiers = client.risk_limit_tiers('linear', symbol)
-        tier = next((t for t in tiers if need <= t['limit']), tiers[-1])
+        ladders = sum(b.cfg['ladder_notional'] for b in legs)
+        need = max(ladders, symbol_exposure(client, symbol))      # D83: never below what is held
+        tiers = sorted(client.risk_limit_tiers('linear', symbol), key=lambda t: t['limit'])
+        tier, _ = pick_tier(tiers, max(b.cfg['leverage'] for b in legs), need)
         for idx in (1, 2):        # both hedge indexes, always
             try:
                 client.set_risk_limit('linear', symbol, tier['id'], idx)

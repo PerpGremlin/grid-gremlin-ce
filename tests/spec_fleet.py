@@ -1011,3 +1011,67 @@ def spec_R23_the_fleets_log_keeps_time_at_the_end_of_each_line():
     got = []
     Notifier(sink=got.append).event('kill', 'b', 'x')
     assert got == ['[ship] kill b: x']                     # a spec's capture stays exact
+
+
+# --- D83: the risk tier the leverage allows, never below what is held ------------------
+
+BTC_TIERS = [{'id': i + 1, 'limit': lim, 'mm_rate': mm, 'max_leverage': lev} for i, (lev, lim, mm) in enumerate(
+    ((150, 300_000, .0033), (100, 2_000_000, .005), (90, 2_600_000, .0056), (80, 3_200_000, .0063),
+     (75, 3_800_000, .0067), (70, 4_400_000, .0071), (65, 5_000_000, .0077), (55, 5_600_000, .0091),
+     (50, 8_500_000, .01), (45, 10_000_000, .013)))]          # Bybit's BTCUSDT, read 2026-10-11
+
+
+def spec_F30_D83_the_tier_is_the_largest_the_leverage_allows_never_below_what_is_held():
+    from gridgremlin.main import pick_tier
+    assert pick_tier(BTC_TIERS, 50, 3_402_000) == (BTC_TIERS[8], False)          # 50x: the 8.5M tier
+    assert pick_tier(BTC_TIERS, 70, 4_340_000) == (BTC_TIERS[5], False)          # 70x: 4.4M holds it
+    tier, clamped = pick_tier(BTC_TIERS, 70, 4_500_000)                          # held beyond 70x's room
+    assert tier == BTC_TIERS[6] and clamped                                      # 65x tier; the leverage clamps
+    assert pick_tier(BTC_TIERS, 5, 50_000_000) == (BTC_TIERS[-1], True)          # beyond every tier: the last
+
+
+def spec_F30_D83_the_build_sets_the_largest_tier_and_counts_what_the_venue_holds():
+    """Found live 2026-10-11: at 50x the build asked for the 3.8M tier — the
+    ladders' sum — while the BTC long's slide held 4.34M in position and
+    orders; Bybit refused it (110048) and the 50x room never opened.
+    Sabotage: sizing the tier from the ladders alone asks for tier 5."""
+    from types import SimpleNamespace
+    from gridgremlin.events import Notifier
+    from gridgremlin.main import _ensure_symbol_capacity
+
+    class Venue:
+        def __init__(self, held_btc, orders):
+            self.risk, self.lev, self.held, self.orders = [], [], held_btc, orders
+
+        def risk_limit_tiers(self, cat, sym):
+            return list(reversed(BTC_TIERS))                  # any order: the build sorts
+
+        def read_symbol_truth(self, cat, sym):
+            return {'mark': 82_800.0, 'positions': {1: {'size': self.held}},
+                    'orders': self.orders}
+
+        def set_risk_limit(self, cat, sym, rid, idx):
+            self.risk.append((rid, idx))
+
+        def set_leverage(self, cat, sym, lev):
+            self.lev.append(lev)
+
+    def legs(v, lev):
+        return [SimpleNamespace(client=v, botid=f'linBTCUSDT{s}', cfg={
+            'venue': 'bybit', 'market_type': 'linear', 'symbol': 'BTCUSDT', 'leverage': lev,
+            'ladder_notional': n}) for s, n in (('l', 3_262_000.0), ('s', 140_000.0))]
+    resting = [{'qty': 1.0, 'price': 79_000.0, 'reduce_only': False}] * 30 + \
+              [{'qty': 5.0, 'price': 90_000.0, 'reduce_only': True}]        # exits never count
+    lines = []
+    v = Venue(22.905, resting)
+    _ensure_symbol_capacity(legs(v, 50), Notifier(sink=lines.append))
+    assert v.risk == [(9, 1), (9, 2)] and v.lev == [50]                       # the 50x tier's 8.5M
+    v = Venue(22.905, resting)
+    bots = legs(v, 70)
+    _ensure_symbol_capacity(bots, Notifier(sink=lines.append))
+    assert v.risk == [(6, 1), (6, 2)] and v.lev == [70]                       # 4.27M held fits 70x's 4.4M
+    v = Venue(25.0, resting)                                                   # 4.44M: beyond 70x's room
+    bots = legs(v, 70)
+    _ensure_symbol_capacity(bots, Notifier(sink=lines.append))
+    assert v.risk == [(7, 1), (7, 2)] and v.lev == [65]
+    assert any('leverage clamped 70 -> 65' in ln for ln in lines)
