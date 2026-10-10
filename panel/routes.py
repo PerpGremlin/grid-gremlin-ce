@@ -84,9 +84,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def _read_contract(self, fleet):
         raw = json.loads(Path(fleet).read_text()) if Path(fleet).exists() \
             else {}
-        if not raw.get('bots'):
+        if not raw.get('bots') and not raw.get('agent'):
             # a just-initialised world: nothing to report on yet, and the
-            # engine's own report would (rightly) refuse an empty fleet
+            # engine's own report would (rightly) refuse an empty fleet —
+            # an agent's fleet has no bots by design and is read (J5)
             return {'window_hours': self.hours,
                     'generated_ms': int(time.time() * 1000),
                     'bots': {}, 'unowned': {}}

@@ -116,10 +116,13 @@ def section(fleet_path, now, day_start, archive_root='logs/daily',
     from .trades import with_trades
     fleet = with_trades(fleet_path, fleet)          # L5: a trade is a bot to every reader
     from .exchange.env import select_account
-    select_account(fleet['account'])                  # H5
+    if fleet['bots'] or not (fleet.get('agent') or {}).get('paper'):
+        select_account(fleet['account'])              # H5 — a paper agent with no rows
+                                                      # reads no venue (J6)
     tag = fleet_tag(fleet_path)
     venue = fleet['bots'][0]['venue'] if fleet['bots'] else ''
-    head = VENUE_ICONS.get(venue, venue) + f' · {tag}'
+    head = (VENUE_ICONS.get(venue, venue) + f' · {tag}' if venue
+            else f"{fleet.get('label') or tag} · {tag}")          # an agent's fleet has no bots
     day = time.strftime('%Y-%m-%d', time.gmtime(now))
     arch = Path(archive_root) / tag / f'{day}.json'
     try:
