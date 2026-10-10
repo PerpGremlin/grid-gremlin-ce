@@ -84,14 +84,13 @@ def spec_P2_the_token_becomes_a_cookie_and_the_page_renders_the_contract():
                                      headers={'Cookie': 'gg=tok123'})
         html = op.open(req).read().decode()
         assert 'spoADAUSDTl' in html and 'HOLDING' in html
-        assert '910.57' in html
         assert '<svg' in html and 'circle' in html      # the range strip
         assert 'watchdog swept 41s ago' in html
         # U56: the numbers are the position's own page, behind the same cookie
         req = urllib.request.Request(f'{base}/position?fleet=0&bot=spoADAUSDTl',
                                      headers={'Cookie': 'gg=tok123'})
         html = op.open(req).read().decode()
-        assert 'as the exchange shows it' in html and '<td>0.207</td>' in html
+        assert 'as the exchange shows it' in html and '<td>0.207</td>' in html and '910.57' in html
         # settlement: 910.57 * 0.2017 * (1 - 0.0025) = 183.20
         assert '183.2' in html, 'stop-now estimate missing or wrong'
         assert '9% of 9,700' in html          # 910.57 / 9700 utilization
@@ -413,7 +412,7 @@ def spec_V8_the_export_is_the_same_renderer_frozen():
     from panel.server import render
     live = render([('demo', CONTRACT)])
     frozen = render([('demo', CONTRACT)], static='Fri, 08 Aug 2026')
-    assert 'spoADAUSDTl' in frozen and '910.57' in frozen
+    assert 'spoADAUSDTl' in frozen and 'HOLDING' in frozen
     assert 'http-equiv="refresh"' in live
     assert 'http-equiv="refresh"' not in frozen
     assert '/control' in live and '/control' not in frozen
@@ -738,7 +737,7 @@ def spec_U53_every_money_figure_names_its_coin():
     inv['watchdog']['belief']['bots']['invBTCUSDl'] = {
         'alive': True, 'position': 11424.0,
         'margin': {'im': 0.013488, 'mm': 0.001214, 'leverage': 10.0, 'liq': None}}
-    assert 'margin IM 0.013488 BTC · MM 0.001214 BTC' in render([('demo', inv)])
+    assert 'margin IM 0.013488 BTC · MM 0.001214 BTC' in _everything(inv)
     assert venue_money({'terms': {'a': {'quote': 'USDT'}, 'b': {'quote': 'USDC'}}}) == 'USDC/USDT'
     assert venue_money({'bots': {'linBTCl': None}, 'terms': {'linBTCl': {'quote': 'USDC'}}}) == 'USDC'
     assert 'size and committed in USDT' in _everything(dict(
@@ -875,13 +874,13 @@ def spec_D70_a_capped_bot_says_so_on_its_card():
     c['bots']['spoADAUSDTl']['position'] = 0.0
     c['watchdog']['belief']['bots']['spoADAUSDTl'] = {'alive': True, 'position': 0.0,
                                                       'capped': 'bots holding 8 >= 8'}
-    page = render([('demo', c)])
+    page = _everything(c)
     assert '<div class="neg">waiting: bots holding 8 >= 8 — opens nothing until it clears' in page
     c['bots']['spoADAUSDTl']['position'] = 910.57
     c['watchdog']['belief']['bots']['spoADAUSDTl']['capped'] = 'notional 55,000 >= 50,000'
-    page = render([('demo', c)])
+    page = _everything(c)
     assert '<div class="neg">capped: notional 55,000 >= 50,000 — adds nothing, exits run' in page
-    assert 'waiting:' not in render([('demo', CONTRACT)]) and 'capped:' not in render([('demo', CONTRACT)])
+    assert 'waiting:' not in _everything(CONTRACT) and 'capped:' not in _everything(CONTRACT)
 
 
 def spec_D76_a_spot_card_says_wallet_book_and_what_is_not_its():
@@ -894,15 +893,15 @@ def spec_D76_a_spot_card_says_wallet_book_and_what_is_not_its():
                                   'coin': 'ADA',
                                   'spot': {'wallet': 2040.0, 'book': 910.57, 'outside': 1129.43,
                                            'explained': 1100.0, 'unexplained': 29.43}}}
-    page = render([('demo', c)])
+    page = _everything(c)
     assert ("<div class=\"dim\">wallet 2,040 ADA · this bot's book 910.57 · 1,129.43 not this "
             "bot's — the inverse books' P&amp;L and fees since 2026-10-08 account for 1,100; "
             '29.43 unexplained (funding not counted)') in page
     c['terms']['spoADAUSDTl']['spot'].update(explained=100.0, unexplained=1029.43)
-    assert '<div class="neg">wallet 2,040 ADA' in render([('demo', c)])      # mostly unexplained: red
+    assert '<div class="neg">wallet 2,040 ADA' in _everything(c)      # mostly unexplained: red
     c['terms']['spoADAUSDTl']['spot'] = {'wallet': 2040.0, 'book': 910.57, 'outside': 1129.43,
                                          'explained': None, 'unexplained': None}
-    page = render([('demo', c)])
+    page = _everything(c)
     assert "1,129.43 not this bot's</div>" in page and 'account for' not in page   # no ledger: no claim
     assert "<tr><td>wallet · this bot's book · not this bot's</td>" in KEY
 
@@ -930,14 +929,14 @@ def spec_X14_the_card_shows_how_much_of_the_loss_limit_is_used():
     c = copy.deepcopy(CONTRACT)
     c.setdefault('watchdog', {}).setdefault('belief', {}).setdefault(
         'bots', {})['spoADAUSDTl'] = row['bots']['spoADAUSDTl']
-    html = render([('demo', c)])
+    html = _everything(c)
     assert 'loss limit: down 12.40 of 50 USDT (25% used)' in html
     c['watchdog']['belief']['bots']['spoADAUSDTl']['loss']['result'] = -40.0
     assert '<div class="neg">loss limit: down 40.00 of 50 USDT (80% used)' \
-        in render([('demo', c)])
+        in _everything(c)
     c['watchdog']['belief']['bots']['spoADAUSDTl']['loss']['result'] = 7.0
-    assert 'loss limit: down 0.00 of 50 USDT (0% used)' in render([('demo', c)])
-    assert 'loss limit' not in render([('demo', CONTRACT)])
+    assert 'loss limit: down 0.00 of 50 USDT (0% used)' in _everything(c)
+    assert 'loss limit' not in _everything(CONTRACT)
 
 
 def _many():
@@ -1063,9 +1062,9 @@ def spec_U15_long_and_short_read_at_a_glance():
     A coloured tag and a coloured edge on the card; the tag in the table."""
     from panel.server import CSS, render
     cards = render([('demo', _dead())])
-    assert '<div class="card long"><div><span class="side long">LONG</span>' \
+    assert '<div class="card long slim"><div><span class="side long">LONG</span>' \
         in cards
-    assert '<div class="card short"><div><span class="side short">SHORT' \
+    assert '<div class="card short slim"><div><span class="side short">SHORT' \
         in cards
     table = render([('demo', _dead())], table=True)
     assert '<td><span class="side short">SHORT</span> linAVAXUSDTs' in table
@@ -1160,19 +1159,19 @@ def spec_U16_a_card_states_its_investment_and_leverage():
     c = copy.deepcopy(CONTRACT)
     c['terms'] = {'spoADAUSDTl': {'capital': 3000.0, 'leverage': 1.0,
                                   'notional': 3000.0}}
-    page = render([('demo', c)])
+    page = _everything(c)
     assert ('investment 3,000 USDT · up to 3,000 USDT in the market') in page
     assert 'x</b>' not in page                        # 1x is not said
     c['terms']['spoADAUSDTl'] = {'capital': 2000.0, 'leverage': 10.0,
                                  'notional': 20000.0}
-    page = render([('demo', c)])
+    page = _everything(c)
     assert 'investment 2,000 USDT at <b>10x</b> · up to 20,000 USDT in the market' \
         in page
-    assert 'investment' not in render([('demo', CONTRACT)])   # no terms: none
+    assert 'investment' not in _everything(CONTRACT)   # no terms: none
     c['terms']['spoADAUSDTl'] = {'capital': 46600.0, 'leverage': 75.0,
                                  'notional': 3495000.0}
     assert 'investment 46,600 USDT at <b>75x</b> · up to 3,495,000 USDT in the market' \
-        in render([('demo', c)])                      # never 3.5e+06
+        in _everything(c)                      # never 3.5e+06
 
 
 def spec_V14_a_card_shows_the_exchanges_margin_on_the_position():
@@ -1192,12 +1191,12 @@ def spec_V14_a_card_shows_the_exchanges_margin_on_the_position():
     c = copy.deepcopy(CONTRACT)
     c.setdefault('watchdog', {}).setdefault('belief', {}).setdefault(
         'bots', {})['spoADAUSDTl'] = row['bots']['spoADAUSDTl']
-    page = render([('demo', c)])
+    page = _everything(c)
     assert 'margin IM 1,842.50 USDT · MM 92.10 USDT · at 10x on the exchange' in page
     B.margin_view = {'im': 300.0, 'mm': None, 'leverage': None}   # HL's shape
     row = snapshot_row([B()], {'equity': 1.0, 'mm_rate': 0.0}, 0)
     c['watchdog']['belief']['bots']['spoADAUSDTl'] = row['bots']['spoADAUSDTl']
-    assert '>margin IM 300.00 USDT</div>' in render([('demo', c)])
+    assert '>margin IM 300.00 USDT</div>' in _everything(c)
     B.margin_view = None                                          # flat
     assert 'margin' not in snapshot_row([B()], {'equity': 1.0,
                                                 'mm_rate': 0.0}, 0)['bots'][
@@ -1359,7 +1358,7 @@ def spec_U36_a_card_names_the_market_the_leverage_and_the_growing_add_ons():
          'terms': {'linSOLUSDTs': dict(dca, capital=5000, leverage=10.0)},
          'watchdog': {'belief': {'age_s': 2, 'bots': {
              'linSOLUSDTs': {'alive': True, 'position': 0.0}}}}}
-    page = render([('demo', c)])
+    page = _everything(c)
     assert 'DCA on futures, USDT/USDC-margined · 10x leverage · ' in page
     assert page.index('DCA on futures') < page.index('investment 5,000')
 
@@ -1395,7 +1394,7 @@ def spec_U46_every_link_is_a_button_and_no_words_run_together():
     c = copy.deepcopy(CONTRACT)
     c['terms'] = {'spoADAUSDTl': {'capital': 1000, 'leverage': 75.0,
                                   'market_type': 'linear', 'strategy': 'grid'}}
-    page = render([('demo', c)])
+    page = _everything(c)
     assert '75x leverage' in page                    # the kind line is there
     text = re.sub(r'<[^>]+>', '', re.sub(r'</div>|<br>', '\n', page))
     assert not re.search(r'leverage(holding|held)', text)
@@ -1514,7 +1513,7 @@ def spec_D63_a_capped_card_says_where_its_fills_start():
     b = c['bots']['spoADAUSDTl']
     b.update(counted_from='cap', counted_since_ms=0,
              first_ms=c['generated_ms'] - int(4.4 * 86400000))
-    page = render([('demo', c)])
+    page = _everything(c)
     assert 'never flat in 30 d; its fills start 4.4 d ago' in page
     assert 'last 30 d, never flat in it' not in page
 
@@ -1537,16 +1536,16 @@ def spec_V17_a_card_says_where_the_exchange_liquidates_it():
     c = copy.deepcopy(CONTRACT)                     # the card's mark: 0.2017
     c.setdefault('watchdog', {}).setdefault('belief', {}).setdefault(
         'bots', {})['spoADAUSDTl'] = row['bots']['spoADAUSDTl']
-    page = render([('demo', c)])
+    page = _everything(c)
     assert '<div class="neg">liquidates at 0.195 · 3.3% away' in page, page[-3000:]
     B.margin_view['liq'] = 0.1500                   # far: said, not red
     c['watchdog']['belief']['bots']['spoADAUSDTl'] = snapshot_row(
         [B()], {'equity': 1.0, 'mm_rate': 0.0}, 0)['bots']['spoADAUSDTl']
-    assert '<div class="dim">liquidates at 0.15 · 25.6% away' in render([('demo', c)])
+    assert '<div class="dim">liquidates at 0.15 · 25.6% away' in _everything(c)
     B.margin_view['liq'] = None                     # cross, no price stated
     c['watchdog']['belief']['bots']['spoADAUSDTl'] = snapshot_row(
         [B()], {'equity': 1.0, 'mm_rate': 0.0}, 0)['bots']['spoADAUSDTl']
-    assert 'liquidates at' not in render([('demo', c)])
+    assert 'liquidates at' not in _everything(c)
 
 
 def spec_V17_the_bot_keeps_the_venues_liquidation_price():
@@ -1648,35 +1647,76 @@ def spec_U57_the_card_judges_the_price_against_the_slid_window_and_a_quiet_bot_s
     assert 'no fills' in html and 'price 0.2017 —' in html and 'above the bottom' in html
 
 
-def spec_U58_a_cards_lower_half_folds_and_the_side_panel_folds_every_card_at_once():
-    """The owner (2026-10-09), after U56 moved the numbers to their own
-    page: the cards are still long — fold what sits under the bar, keep
-    the numbers link, and give one switch that folds or opens every card
-    so the screen can be bigger and smaller. Open by default; a per-card
-    click is remembered either way; an export shows it open."""
+def spec_U68_a_card_is_slim_and_its_numbers_page_is_live():
+    """The owner (2026-10-11): "far too much for a card … looks like pionex
+    at first", the rest on the numbers page, live, for every position type;
+    the bots and the markets side by side on a laptop's window. A card
+    keeps the side, the name, the state, the money with its return on the
+    investment, the run rate, the range — and only what needs the owner
+    now (capped, near liquidation, the loss limit half used, a thin book).
+    The numbers page refreshes in place."""
     import copy
+    from panel.css import CSS
+    from panel.render import card, portfolio_card, position_page
+    c = copy.deepcopy(CONTRACT)
+    c['terms'] = {'spoADAUSDTl': {'capital': 1000.0, 'leverage': 1.0, 'market_type': 'spot', 'strategy': 'grid'}}
+    belief = c['watchdog']['belief']['bots']
+    belief['spoADAUSDTl'] = {'alive': True, 'position': 910.57}
+    b = c['bots']['spoADAUSDTl']
+    slim = card(0, 'spoADAUSDTl', b, c, belief)
+    assert '<div class="card long slim">' in slim and 'HOLDING' in slim
+    assert '<span class="big' in slim and '% </span>' not in slim and 'on 1,000</span>' in slim  # the return on the investment
+    assert '<div class="rng">' in slim and "numbers</a>" in slim                  # the range, the door to the rest
+    for gone in ('investment 1,000', 'margin IM', '<div class="numbers">', 'stop-now', 'grid on spot'):
+        assert gone not in slim, gone
+    full = card(0, 'spoADAUSDTl', b, c, belief, full=True)
+    assert 'investment 1,000' in full and '<div class="numbers">' in full and 'grid on spot' in full
+    # what needs the owner now stays on the slim card, red
+    belief['spoADAUSDTl'] = dict(belief['spoADAUSDTl'], margin={'im': 1.0, 'mm': 0.5, 'leverage': 5.0, 'liq': 0.195},
+                                 loss={'limit': 50.0, 'result': -30.0})
+    slim = card(0, 'spoADAUSDTl', b, c, belief)
+    assert '<div class="neg">liquidates at 0.195 · 3.3% away</div>' in slim
+    assert '<div class="neg">loss limit 60% used (30.00 of 50)</div>' in slim
+    belief['spoADAUSDTl']['margin']['liq'] = 0.10                                  # far: the page's, not the card's
+    belief['spoADAUSDTl']['loss']['result'] = -5.0
+    slim = card(0, 'spoADAUSDTl', b, c, belief)
+    assert 'liquidates' not in slim and 'loss limit' not in slim
+    # the portfolio's card is slim too: its assets and facts are the page's
+    from spec_portfolio_view import CONTRACT as PC
+    pb = PC['watchdog']['belief']['bots']
+    pslim = portfolio_card(0, 'pfocarry', PC, pb)
+    assert '<div class="card pfo slim">' in pslim and 'since its anchor' in pslim
+    assert '<table>' not in pslim and 'stack <b>' not in pslim
+    assert '<table>' in portfolio_card(0, 'pfocarry', PC, pb, full=True)
+    # the numbers page is live: the page's script swaps it in place
+    page = position_page(0, 'demo', 'spoADAUSDTl', c, belief)
+    assert page.startswith('<meta name="gg-refresh" content="')
+    # the split holds down to a laptop's window
+    assert '@media (max-width:860px){.split{display:block}' in CSS and 'max-width:1100px){.split' not in CSS
+
+
+def spec_U58_a_cards_lower_half_folds_and_the_side_panel_folds_every_card_at_once():
+    """The owner (2026-10-09): fold what sits under the bar, with one switch
+    for every card. U68 (2026-10-11) made the fleet page's cards slim, so
+    the fold lives on the position's page and the cards' switch is gone;
+    the accounts' switch (U59) stays. A click is remembered either way; an
+    export shows the fold open."""
+    import copy
+    from panel.render import position_page
     from panel.server import render
     from panel.reference import KEEP_JS
     c = copy.deepcopy(CONTRACT)
     html = render([('demo', c)])
-    # every card: the lines under the bar sit in one open fold with its own key
-    assert html.count('<details class="fold" data-k="0:') >= len(c['bots'])
+    assert '<details class="fold"' not in html                                   # slim: nothing to fold
+    assert 'data-cls="fold"' not in html and 'data-cls="acct">folded</a>' in html  # U59's switch stays
+    belief = c['watchdog']['belief']['bots']
     bot = next(b for b, v in c['bots'].items() if v is not None and c['ranges'].get(b))
-    assert f'<details class="fold" data-k="0:{bot}:fold" open><summary>details</summary>' in html
-    i = html.index(f'data-k="0:{bot}:fold"')
-    start = html.rindex('<div class="card ', 0, i)
-    assert start < html.index('<div class="rng">', start) < i          # the bar stays above the fold
-    assert 'numbers</a>' in html                                                  # U56's link stays
-    # the side panel: one switch, both ways, cards only
-    assert 'javascript:ggFold(\'folded\',\'fold\')" data-fold="folded" data-cls="fold">folded</a>' in html
-    assert 'javascript:ggFold(\'open\',\'fold\')" data-fold="open" data-cls="fold">full</a>' in html
-    assert 'data-fold="folded">' not in render([('demo', c)], table=True)   # the table folds nothing
-    # the script remembers a closed fold as well as an open one, and the switch
+    page = position_page(0, 'demo', bot, c, belief)
+    assert f'<details class="fold" data-k="0:{bot}:fold" open><summary>details</summary>' in page
+    i = page.index(f'data-k="0:{bot}:fold"')
+    assert page.rindex('<div class="card ', 0, i) < page.index('<div class="rng">', page.rindex('<div class="card ', 0, i)) < i
     assert "open[d.dataset.k]=d.open?1:0" in KEEP_JS and "window.ggFold=function(k,c)" in KEEP_JS
     assert "S.setItem('gg-fold:'+c,k)" in KEEP_JS
-    # an export carries no script: the fold is open as written
-    out = render([('demo', c)], static='2026-10-09 12:00 UTC')
-    assert f'data-k="0:{bot}:fold" open>' in out and 'ggFold' not in out
 
 
 def spec_U59_an_account_folds_to_its_heading_and_box_and_the_side_panel_folds_every_account():
@@ -1695,7 +1735,7 @@ def spec_U59_an_account_folds_to_its_heading_and_box_and_the_side_panel_folds_ev
         assert h1 < box < html.index(f'data-k="acct:{i}"', h1)      # heading, box, then the fold
     assert 'javascript:ggFold(\'folded\',\'acct\')" data-fold="folded" data-cls="acct">folded</a>' in html
     assert 'javascript:ggFold(\'open\',\'acct\')" data-fold="open" data-cls="acct">full</a>' in html
-    assert 'data-cls="fold">folded</a>' in html                       # the cards switch is its own
+    assert 'data-cls="fold">folded</a>' not in html                   # U68: the cards' switch is gone
     # one link beside each account's count folds or opens that account's cards alone
     for i in (0, 1):
         assert f'bots <a href="javascript:ggFoldIn({i})" data-foldin="{i}" class="tier">fold cards</a>' in html

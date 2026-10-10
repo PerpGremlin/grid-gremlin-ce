@@ -242,18 +242,17 @@ def spec_K9_the_card_says_its_markets_regime_red_when_thin():
     import copy
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from spec_panel import CONTRACT
-    from panel.server import render
+    from spec_panel import CONTRACT, _everything
     c = copy.deepcopy(CONTRACT)
     c['market'] = {'spoADAUSDTl': {'line': 'ranging · ADX 18 · ATR 1.2%/4h',
                                    'thin': True, 'regime': 'ranging', 'age_s': 8000}}
-    page = render([('demo', c)])
+    page = _everything(c)
     assert ('<div class="neg">market ranging · ADX 18 · ATR 1.2%/4h · THIN for this fleet'
             ' · read 2 h ago') in page
     c['market']['spoADAUSDTl'].update(thin=False, age_s=30)
-    assert '<div class="dim">market ranging · ADX 18 · ATR 1.2%/4h</div>' in render([('demo', c)])
+    assert '<div class="dim">market ranging · ADX 18 · ATR 1.2%/4h</div>' in _everything(c)
     del c['market']
-    assert 'market ranging' not in render([('demo', c)])
+    assert 'market ranging' not in _everything(c)
 
 
 def spec_K9_the_readout_contract_carries_the_market_words():

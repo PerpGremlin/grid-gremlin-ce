@@ -125,6 +125,6 @@ padding-left:calc(var(--gap)*1.5);border-left:1px solid var(--line)}
 .calm{color:var(--calm)}.wild{color:var(--wild)}
 .gauge{display:inline-block;width:5em;height:.5em;background:var(--line);border-radius:3px;vertical-align:middle;overflow:hidden}
 .gauge i{display:block;height:100%;background:var(--wild)}
-@media (max-width:1100px){.split{display:block}.markets{position:static;max-height:none;overflow:visible;
+@media (max-width:860px){.split{display:block}.markets{position:static;max-height:none;overflow:visible;
 padding-left:0;border-left:0;border-top:1px solid var(--line);margin-top:calc(var(--gap)*1.5);padding-top:var(--gap)}}
 """

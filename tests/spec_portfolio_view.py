@@ -33,7 +33,9 @@ CONTRACT = {'window_hours': 6.0, 'generated_ms': 0, 'unowned': {}, 'ranges': {},
 
 
 def spec_H6_the_card_says_the_three_truths_and_the_exchange_counts_the_row():
-    html = cards_section(0, 'demo', CONTRACT)
+    from panel.render import position_page
+    html = cards_section(0, 'demo', CONTRACT) + position_page(           # U68: the facts are the page's
+        0, 'demo', 'pfocarry', CONTRACT, CONTRACT['watchdog']['belief']['bots'])
     assert 'carry portfolio' in html and 'PORTFOLIO' in html
     assert '<div class="card pfo">' in html and '<div class="two"><div>' in html   # two columns inside
     from panel.reference import KEY

@@ -583,6 +583,7 @@ def card(idx, botid, b, contract, belief, full=False):
             head += f'<div class="pnl">{kept}</div>'
         held = (f'holding {pos:.10g} (belief)' if abs(pos) > 1e-12
                 else 'holding nothing')
+        _quiet_held = held                        # U68: the slim card says it too
         mark = (contract.get('marks') or {}).get(botid)             # U57: a quiet bot has a price too
         more, note = '', ''
         limit = (f'{abs(pos) / ceil * 100:.0f}% of {ceil:,.4g}' if ceil
@@ -620,6 +621,17 @@ def card(idx, botid, b, contract, belief, full=False):
             span = f"last {contract['window_hours']:g}h"
         # U45: the money in its own box — the total, then what it is made of
         net = b['realized'] - b['fees']
+        cap = ((contract.get('terms') or {}).get(botid) or {}).get('capital')
+        roi = (f' <span class="{_num_cls(total)}">{total / cap * 100:+.2f}%</span>'
+               f' <span class="dim">on {cap:,.0f}</span>' if cap else '')
+        # U68: the card's money at a glance, as the bot pages of the big
+        # venues show it; every other line is the numbers page's
+        slim_head = (f'<div class="pnl {_num_cls(total)}">'
+                     f'<span class="big {_num_cls(total)}">{total:+,.2f}</span> {money_coin}{coin}{roi}'
+                     f' <span class="dim">· {span}</span>'                 # D63: what the figure covers
+                     f'<div class="parts">{pnl_parts(net, b["unreal_at_mark"], b.get("funding"))}</div>'
+                     f'{run_rate(b, contract, cap, bool(((contract.get("terms") or {}).get(botid) or {}).get("trade")))}'
+                     '</div>')
         head = (f'<div class="pnl {_num_cls(total)}">'
                 f'<span class="big {_num_cls(total)}">{total:+,.2f}</span> '
                 f'{money_coin}{coin} <span class="dim">after fees, {span}</span>'
@@ -664,8 +676,11 @@ def card(idx, botid, b, contract, belief, full=False):
     more += ladder_box(idx, botid, (contract.get('terms') or {}).get(botid), open_=True)   # U52
     if not full:
         more = ''                                 # U56: the numbers are the page's
+    alerts = []                                   # U68: what a slim card still says
     capped = (belief.get(botid) or {}).get('capped')
     if capped:
+        alerts.append(f'capped: {capped} — adds nothing, exits run' if pos else
+                      f'waiting: {capped} — opens nothing until it clears')
         # D56/D70: the account's cap holds this bot back — a flat one
         # opens nothing, a holding one adds nothing
         held += ('</div><div class="neg">'
@@ -677,9 +692,13 @@ def card(idx, botid, b, contract, belief, full=False):
         # far the mark is from it (2026-10-06: HYPE, isolated, went with no
         # line on its card saying how close it stood)
         away = abs(mark - mv['liq']) / mark * 100
+        if away < 10:
+            alerts.append(f"liquidates at {mv['liq']:,.6g} · {away:.1f}% away")
         held += (f'</div><div class="{"neg" if away < 5 else "dim"}">'
                  f"liquidates at {mv['liq']:,.6g} · {away:.1f}% away")
     mkt = (contract.get('market') or {}).get(botid)
+    if mkt and mkt.get('thin'):
+        alerts.append(f"market {mkt.get('line') or ''} · THIN for this fleet")
     if mkt and mkt.get('line'):
         # D67: the market's regime beside the bot that trades it; red when
         # the book is thin for this fleet
@@ -762,6 +781,8 @@ def card(idx, botid, b, contract, belief, full=False):
         # X14: the engine's own count, from its last snapshot
         down = max(0.0, -loss['result'])
         used = down / loss['limit']
+        if used >= 0.5:
+            alerts.append(f"loss limit {used:.0%} used ({down:,.2f} of {loss['limit']:,.6g})")
         held += (f'</div><div class="{"neg" if used >= 0.75 else "dim"}">'
                  f"loss limit: down {down:,.2f} of {loss['limit']:,.6g} "
                  f'{money_coin} ({used:.0%} used)')
@@ -784,6 +805,19 @@ def card(idx, botid, b, contract, belief, full=False):
         # the close page asks the exchange itself
         links += (f" · <a href='/close?fleet={idx}&bot={botid}'>close "
                   'position</a>')
+    if not full:
+        # U68 (the owner: "far too much for a card … looks like pionex at
+        # first", the rest on the numbers page, live): the side, the name,
+        # the state; the money; the range; only what needs the owner now
+        warn = ''.join(f'<div class="neg">{a}</div>' for a in alerts)
+        return (f'<div class="card {side} slim"><div>'
+                f'<span class="side {side}">{side.upper()}</span> <b>'
+                f'{_plain_name(botid, contract, b)}</b>{note} '
+                f'{state_tag(state, cls)}</div>'
+                f'<div>{slim_head if b is not None else head}</div>'
+                + ('' if b is not None else f'<div class="dim">{_quiet_held}</div>')
+                + f'{where}{warn}'
+                f'<div class="dim foot"><span>{botid}</span><span>{links}</span></div></div>')
     # U58: the lines under the bar fold behind one word, so a card can be
     # small; the click is remembered per card, and the side panel folds or
     # opens every card at once (the owner, 2026-10-09: "toggle all so it
@@ -1087,6 +1121,13 @@ def portfolio_card(idx, botid, contract, belief, full=False):
     # and three money lines ran past a 21em card's border (the owner, 2026-10-08)
     # U55: three cards wide, not the page; the money and the facts side by
     # side, the assets below, the footer aligned with every other card's
+    if not full:                                  # U68: the slim card
+        lev = (f'<div class="dim">{v["leverage"]:.2f}× the equity'
+               + (f' · borrowed {v["borrowed"]:,.0f}' if v.get('borrowed') else '') + '</div>'
+               if v and v.get('leverage') else '')
+        return (f'<div class="card pfo slim"><div><span class="side pfo">PORTFOLIO</span> <b>{name}</b> '
+                f'{state_tag(state, cls)}</div><div class="dim">{kind}</div><div>{head}</div>{lev}'
+                f'<div class="dim foot"><span>{botid}</span><span>{links}</span></div></div>')
     return (f'<div class="card pfo"><div><span class="side pfo">PORTFOLIO</span> <b>{name}</b> '
             f'{state_tag(state, cls)}</div><div class="dim">{kind}</div>'
             f'<div class="two"><div>{head}</div><div>{facts}</div></div>'
@@ -1147,7 +1188,8 @@ def position_page(idx, label, botid, contract, belief, prices=None, fills=()):
             rng = dict(rng, lower=rng['lower'] + off * gap, upper=rng['upper'] + off * gap)
         liq = ((belief.get(botid) or {}).get('margin') or {}).get('liq')
         xch += price_boxes(prices, rng, liq, fills)
-    return (f'<h1>{label} · {_plain_name(botid, contract, b) if (terms or {}).get("strategy") != "portfolio" else botid[3:] + " portfolio"}</h1>'
+    return (f'<meta name="gg-refresh" content="{REFRESH_S}">'      # U68: live, in place
+            f'<h1>{label} · {_plain_name(botid, contract, b) if (terms or {}).get("strategy") != "portfolio" else botid[3:] + " portfolio"}</h1>'
             f'{xch}<div class="cards one">{card(idx, botid, b, contract, belief, full=True)}</div>'
             '<p><a href="/">&larr; fleet</a></p>')
 
@@ -1497,12 +1539,9 @@ def nav_panel(table, view):
         f'<b class="on">{words}</b>' if key == view else
         f'<a href="{here}{"" if key == "all" else "?view=" + key}">{words}</a>'
         for key, words in VIEWS)
-    # U58: every card's lower half, folded or open at once — where U22's
-    # show-all switch was; the numbers themselves live on the position's
-    # page (U56)
+    # U58's switch for every card's lower half went with U68: a slim card
+    # has nothing to fold; the numbers live on the position's page (U56)
     numbers = ('' if table else
-               '<h3>cards</h3><a href="javascript:ggFold(\'open\',\'fold\')" data-fold="open" data-cls="fold">full</a>'
-               '<a href="javascript:ggFold(\'folded\',\'fold\')" data-fold="folded" data-cls="fold">folded</a>'
                # U59: every account's cards behind its heading and its box
                '<h3>accounts</h3><a href="javascript:ggFold(\'open\',\'acct\')" data-fold="open" data-cls="acct">full</a>'
                '<a href="javascript:ggFold(\'folded\',\'acct\')" data-fold="folded" data-cls="acct">folded</a>')
