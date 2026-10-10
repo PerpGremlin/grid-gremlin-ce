@@ -1207,6 +1207,7 @@ def cards_section(idx, label, contract, view='all', scripted=True):
             f'{pnl_parts(net, sum(opened) if opened else None, funding)}'
             f'</div>{exchange_since_first(contract)}{exchange_leverage(contract)}</div>'
             f'{equity_boxes(contract)}'                                          # U63
+            f'{agent_box(contract)}'                                             # J5
             # U59: the account folds to its heading and its box; the side
             # panel folds or opens every account at once
             f'<details class="acct" data-k="acct:{idx}" open><summary>'
@@ -1441,6 +1442,35 @@ def nav_panel(table, view):
             f'{numbers}<h3>size in</h3>{size}<h3>leverage</h3>{lev}'
             '<button class="quiet theme" onclick="document.documentElement.'
             'classList.toggle(\'light\')">theme</button></nav>')
+
+
+def _open_pnl(p):
+    v = p.get('open_pnl')
+    return '—' if v is None else f'<span class="{_num_cls(v)}">{v:+,.2f}</span>'
+
+
+def agent_box(contract):
+    """J5: an agent fleet's score and its open paper positions, from the
+    readout contract; nothing for any other fleet."""
+    a = contract.get('agent')
+    if not a:
+        return ''
+    if a.get('error'):
+        return f'<div class="pnl"><span class="dim">agent</span> {html.escape(a["error"])}</div>'
+    rows = ''.join(
+        f"<tr><td>{html.escape(str(p['id']))}</td><td>{html.escape(p['side'])} {html.escape(p['market'])}</td>"
+        f"<td>{p['notional']:,.2f}</td><td>{p['entry']:,.6g}</td><td>{p['stop']:,.6g} / {p['tp']:,.6g}</td>"
+        f"<td>{'—' if p.get('mark') is None else format(p['mark'], ',.6g')}</td>"
+        f"<td>{_open_pnl(p)}</td>"
+        f"<td class='dim'>{html.escape(str(p.get('reason') or ''))[:80]}</td></tr>"
+        for p in a['open'])
+    table = ('<table><tr class="dim"><td>id</td><td>position</td><td>notional</td><td>entry</td>'
+             f'<td>stop / take profit</td><td>mark</td><td>open</td><td>reason</td></tr>{rows}</table>'
+             if rows else '<p class="dim">no open paper position</p>')
+    words = '<br>'.join(html.escape(ln) for ln in a['text'].splitlines())
+    return (f'<div class="pnl"><span class="dim">agent · {"paper" if a["paper"] else "live"} · '
+            f'{html.escape(", ".join(a["markets"]))} · day-loss limit {a["max_loss_day"]:,.6g}</span>'
+            f'<div class="parts">{words}</div>{table}</div>')
 
 
 def render(labelled, static=None, table=False, view='all'):

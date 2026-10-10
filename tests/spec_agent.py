@@ -349,3 +349,55 @@ def spec_J5_the_digest_carries_the_agents_score():
     assert 'no verdict: 198 closed trades to go' in text
     assert 'paper book only' in agent_lines(f, validate_agent(dict(LIMITS, paper=False)))[0]
 
+
+
+def spec_J5_the_panel_draws_the_agents_box_from_the_readout():
+    from gridgremlin.agent_score import view
+    from panel.render import agent_box
+    lim = validate_agent(dict(LIMITS))
+    book = [_closed(10, 0.8, 1), dict(_pos(), mark=101.0, open_pnl=4.5, reason='<b>held</b> the low')]
+    v = view(book, lim)
+    assert v['paper'] and v['score']['closed'] == 1 and len(v['open']) == 1 and v['open'][0]['mark'] == 101.0
+    html_ = agent_box({'agent': v})
+    assert 'agent · paper · BTCUSDT, ETHUSDT · day-loss limit 100' in html_
+    assert 'closed 1 · open 1' in html_ and 'long BTCUSDT' in html_ and '+4.50' in html_
+    assert '&lt;b&gt;held&lt;/b&gt;' in html_ and '<b>held</b>' not in html_       # the model's words, escaped
+    assert agent_box({}) == '' and 'no open paper position' in agent_box({'agent': view([], lim)})
+    assert 'unreadable' in agent_box({'agent': {'error': 'the paper book is unreadable: x'}})
+
+
+def spec_J3_the_shipped_agent_fleet_is_paper_with_no_bots_and_validates():
+    from gridgremlin.config import validate_fleet
+    raw = json.loads((Path(__file__).resolve().parents[1] / 'configs' / 'fleet.agent.json').read_text())
+    f = validate_fleet(raw)
+    assert f['agent']['paper'] is True and f['bots'] == [] and f['account'] == 'agent'
+
+
+def spec_J6_paper_needs_no_keys_the_readout_of_a_paper_agent_fleet_runs_without_them():
+    """Phase 1 reads only public candles: the door, the book, the score and
+    the panel's readout of a paper agent fleet with no rows need no venue
+    keys — so paper needs no subaccount. A live one still asks for them."""
+    import contextlib
+    import io
+    import os
+    from gridgremlin import report
+    from gridgremlin.agent_paper import book_path, save_book
+    d, f = _fleet(paper=True)
+    save_book(book_path(f), [_closed(10, 0.8, 1)])
+    saved = {k: os.environ.pop(k) for k in list(os.environ) if k.startswith('BYBIT_AGENT_')}
+    try:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            assert report.main([str(f), '--json']) == 0
+        c = json.loads(out.getvalue())
+        assert c['bots'] == {} and c['agent']['score']['closed'] == 1
+        f.write_text(json.dumps(dict(json.loads(f.read_text()), agent=dict(LIMITS, paper=False))))
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                report.main([str(f), '--json'])
+        except PermissionError as e:
+            assert 'no keys' in str(e)
+        else:
+            raise AssertionError('a live agent fleet read without keys')
+    finally:
+        os.environ.update(saved)

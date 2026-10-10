@@ -69,6 +69,18 @@ def render(s):
     return '\n'.join(lines)
 
 
+def view(book, limits):
+    """J5 for the readout contract: the score, its words, and the open paper
+    positions as the door last settled them — what the panel's agent box
+    draws. Pure."""
+    s = score(book)
+    return {'paper': limits['paper'], 'score': s, 'text': render(s),
+            'max_loss_day': limits['max_loss_day'], 'markets': limits['markets'],
+            'open': [{k: p.get(k) for k in ('id', 'market', 'side', 'notional', 'entry', 'stop', 'tp',
+                                             'mark', 'open_pnl', 'reason', 'confidence')}
+                     for p in book if not p.get('closed')]}
+
+
 def main(argv):
     if len(argv) != 1:
         print('usage: python3 -m gridgremlin.agent_score configs/fleet.agent.json')

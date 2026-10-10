@@ -62,6 +62,10 @@ coins on spot at equal weights, each hedged one for one by its inverse
 perpetual, the funding collected and compounded, rebalanced daily; pure
 carry, no leverage. It is edited in the file, not the form, and it starts
 from its capital in cash on a demo account.
+`fleet.agent.json`: the agent experiment (docs/AGENT.md) in paper — no
+bots and no keys; a model sends trade intents through one door, they are
+filled on paper and judged by the market's 1-minute candles, and the score
+says whether its discretion beats doing nothing (ops/README §15).
 
 ## What to try, and what to look at
 

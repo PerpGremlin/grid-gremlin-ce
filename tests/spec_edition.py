@@ -63,11 +63,15 @@ def spec_F21_the_examples_build_and_show_every_mechanic_once():
     from gridgremlin.main import BYBIT_LINK_LIMIT
     from gridgremlin.watchdog import validate_watchdog
     files = sorted(glob.glob(str(EXAMPLES / 'fleet*.json')))
-    assert len(files) == 3                      # Bybit demo, Hyperliquid testnet, the portfolio (D78)
+    assert len(files) == 4      # Bybit demo, Hyperliquid testnet, the portfolio (D78), the agent (D80)
     seen = set()
     for f in files:
         v = validate_fleet(json.loads(Path(f).read_text()))
         assert not v['refused'], v['refused']
+        if v.get('agent'):                      # paper, no bots, no venue read: no watchdog (J3/J6)
+            assert v['agent']['paper'] is True and v['bots'] == [] and not v['watchdog']
+            seen.add('agent')
+            continue
         validate_watchdog(json.loads((ROOT / v['watchdog']).read_text()))
         for cfg in v['bots']:
             if cfg.get('strategy') == 'portfolio':
@@ -84,7 +88,7 @@ def spec_F21_the_examples_build_and_show_every_mechanic_once():
                 if cfg.get(k):
                     seen.add(k)
     assert seen >= {'slide', 'max_loss', 'take_profit_tranches', 'breakeven_ladder',
-                    'trailing_stop_pct', 'repeat', 'stop', 'portfolio'}, seen
+                    'trailing_stop_pct', 'repeat', 'stop', 'portfolio', 'agent'}, seen
 
 
 def spec_F22_the_doctor_says_what_is_missing_and_what_is_next():
@@ -119,5 +123,5 @@ def spec_F22_the_doctor_says_what_is_missing_and_what_is_next():
     assert not ok and 'does not answer — OSError: timed out' in text
     text, ok = doctor.run(['--specs'], env_path=str(env), fleet_root=str(EXAMPLES),
                           probes={'bybit': lambda e: None, 'specs': lambda: '7 specs, 0 failed (1.0s)'})
-    assert ok and 'fleets: fleet.demo.json: 11 bot(s); fleet.hl.testnet.json: 5 bot(s)' in text
+    assert ok and 'fleets: fleet.agent.json: 0 bot(s); fleet.demo.json: 11 bot(s); fleet.hl.testnet.json: 5 bot(s)' in text
     assert 'specs: 7 specs, 0 failed' in text and text.endswith('in a second terminal')
