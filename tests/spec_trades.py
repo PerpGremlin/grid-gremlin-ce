@@ -356,3 +356,29 @@ def spec_L7_the_panels_close_trade_asks_the_fleet_for_a_running_trade():
         Handler.units = saved
         close()
 
+
+
+def spec_R24_the_results_page_draws_each_bots_curve_and_the_markets_that_left():
+    from panel.render import page_links, results_page, side_nav
+    c = {'since_first': {'linBTCUSDTl': {'series': [[0, 0.0], [60000, 1.5], [120000, 3.25]], 'fills': 3,
+                                         'first_ms': 1_760_000_000_000, 'whole': True},
+                         'linETHUSDTl': None},
+         'gone': {'linSOLUSDTs': {'series': [[0, 0.0], [1000, -2.0]], 'fills': 2, 'first_ms': 1_759_000_000_000,
+                                  'last_ms': 1_759_100_000_000, 'partial': True}}}
+    page = results_page([('demo', c), ('hl', {})])
+    assert '<h2>demo</h2>' in page and 'linBTCUSDTl' in page and '+3.25' in page and '<svg' in page
+    assert 'markets that left the fleet' in page and 'linSOLUSDTs' in page and '-2.00' in page
+    assert 'market left the fleet; last fill' in page and 'nothing kept yet' in page
+    assert 'linETHUSDTl' not in page                       # nothing kept for it: no row
+    assert 'href="/results"' in page_links() and 'href="/results"' in side_nav()
+
+
+def spec_R24_the_panel_serves_the_results_page():
+    from spec_setup import _call, _served_fleet
+    base, d, close = _served_fleet()
+    try:
+        page = _call(base, '/results')
+        assert '<title>results</title>' in page and 'results since the first kept fill' in page
+        assert 'href="/results"' in page                      # it wears the navigation (U60)
+    finally:
+        close()

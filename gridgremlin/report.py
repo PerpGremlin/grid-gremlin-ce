@@ -188,7 +188,7 @@ def attribute(fills, botids, closers=None, entry_sides=None):
 
 
 def ledger(fills, botids, inverse_ids=(), entry_sides=None, closers=None,
-           grids=None, rounders=()):
+           grids=None, rounders=(), series=None):
     """R1/R3: time-ordered fills -> books keyed by botid, or by
     ('unowned', symbol) — external activity is reported, never dropped.
     R6: rung and entry side ride along so the activity layer can count.
@@ -201,7 +201,9 @@ def ledger(fills, botids, inverse_ids=(), entry_sides=None, closers=None,
     no later close can land at zero, so its rounds counted nothing (ADA,
     692 fills and no round). At a NEW base order's first fill the book is
     re-anchored flat: identity, not inference. A split base order shares
-    one link and anchors once."""
+    one link and anchors once.
+    R24: with `series` (a dict) each bot's net after fees is recorded after
+    every fill, (time_ms, realized - fees) — the results page's curve."""
     books, entry_sides = {}, entry_sides or {}
     closers, grids = closers or {}, grids or {}
     last_base = {}
@@ -242,7 +244,49 @@ def ledger(fills, botids, inverse_ids=(), entry_sides=None, closers=None,
                    f['side'], f['price'], f['qty'], f['fee'],
                    inverse=key in inverse_ids, rung=rung, own_entry=own,
                    entry_side=entry_sides.get(key))
+        if series is not None and isinstance(key, str):              # R24
+            series.setdefault(key, []).append((f['time_ms'], book['realized'] - book['fees']))
     return books
+
+
+SERIES_POINTS = 200
+
+
+def thin(points, n=SERIES_POINTS):
+    """R24: a curve of at most n points — evenly through it, the last kept."""
+    if len(points) <= n:
+        return [list(p) for p in points]
+    step = len(points) / (n - 1)
+    out = [points[int(i * step)] for i in range(n - 1)] + [points[-1]]
+    return [list(p) for p in out]
+
+
+GONE_ID = __import__('re').compile(r'^(lin|inv|spo)[A-Z0-9]+[ls]$')
+
+
+def gone_books(fills, live_ids):
+    """R24: the bots whose market has left the fleet — their fills are
+    kept, but book to no card. A link names its bot (`<botid>-<rung>-<gen>`,
+    I1); each such bot not in the fleet is booked from its own linked fills
+    alone (a venue-created close carries no link and is not counted, said
+    as `partial`), with its curve."""
+    ids = {}
+    for f in fills:
+        b = (f.get('link_id') or '').split('-', 1)[0]
+        if b not in live_ids and GONE_ID.match(b):
+            ids.setdefault(b, []).append(f)
+    out = {}
+    for b, own in ids.items():
+        side = 'buy' if b.endswith('l') else 'sell'
+        own = sorted(own, key=lambda f: f['time_ms'])
+        series = {}
+        book = ledger(own, [b], {b} if b.startswith('inv') else (), {b: side},
+                      series=series).get(b) or new_book()
+        book['series'] = thin(series.get(b, []))
+        book['last_ms'] = own[-1]['time_ms']
+        book['partial'] = True
+        out[b] = book
+    return out
 
 
 def per_trip(book, truncated=False):
@@ -413,8 +457,10 @@ def kept_books(fleet_path, fresh, venue_of, key_of, since_ms, inverse_ids,
             books[b] = dict(new_book(), fills=len(own), whole=False,
                             first_ms=own[0]['time_ms'], realized=None)
             continue
+        series = {}
         book = ledger(counted, [b], inverse_ids, entry_sides, closers,
-                      grids, rounders=rounders).get(b) or new_book()
+                      grids, rounders=rounders, series=series).get(b) or new_book()
+        book['series'] = thin(series.get(b, []))                     # R24
         book['whole'] = True
         if opened is not None:
             book['opened'] = {k: opened[k] for k in ('time_ms', 'qty',
@@ -428,6 +474,7 @@ def kept_books(fleet_path, fresh, venue_of, key_of, since_ms, inverse_ids,
             venue_of[(market_type, symbol)], market_type, symbol))
         behind[b] = None if done is not None and done >= since_ms \
             else (done or 0)
+    books['_gone'] = gone_books(merged, set(key_of))                 # R24
     return books, behind
 
 
@@ -1119,6 +1166,7 @@ def main(argv):
     since_first = kept_books(argv[0], fresh, venue_of, key_of, since_ms,
                              inverse_ids, entry_sides, closers, grids,
                              rounders, kept_held(fleet, held))
+    gone = since_first[0].pop('_gone', {}) if since_first else {}    # R24
     # D63: funding over each book's own window, one pull from the earliest
     starts = {b: (books[b].get('counted_since_ms') or since_ms)
               for b in botids if b in books}
@@ -1158,6 +1206,11 @@ def main(argv):
                         and k[0] == 'unowned'}}
         if since_first is not None:                  # R18: the kept ledger
             sf_books, behind = since_first
+            contract['gone'] = {                     # R24: the markets that left
+                b: dict(public_book(bk, None, 'long' if b.endswith('l') else 'short',
+                                    None, b[3:-1]),
+                        series=bk['series'], last_ms=bk['last_ms'], partial=True)
+                for b, bk in gone.items()}
             contract['since_first'] = {
                 b: (None if b not in sf_books else
                     {'fills': sf_books[b]['fills'], 'whole': False,
@@ -1167,7 +1220,7 @@ def main(argv):
                     dict(public_book(sf_books[b], marks.get(key_of[b]),
                                      side_of.get(b), strat_of.get(b),
                                      key_of[b][1]),
-                         behind=behind.get(b)))
+                         behind=behind.get(b), series=sf_books[b].get('series') or []))
                 for b in botids}
         if fleet.get('agent'):                       # J5: the agent's box on the panel
             from .agent_paper import book_path, load_book
