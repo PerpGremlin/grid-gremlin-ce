@@ -200,6 +200,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(tidy(body).encode())
             return
+        if self.path == '/results':                                   # R24
+            from panel.reference import KEEP_JS
+            from .render import PAGE_END, results_page, side_nav
+            body = (f'<!doctype html><meta charset="utf-8"><title>results</title><style>{CSS}</style>'
+                    f'{side_nav()}{results_page(self._labelled())}{PAGE_END}{KEEP_JS}')
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(tidy(body).encode())
+            return
         base, _, query = self.path.partition('?')
         view = dict(urllib.parse.parse_qsl(query)).get('view', 'all')
         body = (json.dumps({lb: c for lb, c in self._labelled()})

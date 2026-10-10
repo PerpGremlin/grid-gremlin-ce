@@ -1022,3 +1022,41 @@ def spec_D63_hl_books_total_in_usdc_whatever_the_coin_is_called():
     assert settle_quote('hyperliquid', 'BTC') == 'USDC'
     assert settle_quote('bybit', 'BTCUSDT') == 'USDT'
     assert settle_quote('bybit', 'BTCPERP') == 'USDC'
+
+
+# --- R24: the results page's curve, and the markets that left ---------------------------
+
+def spec_R24_the_ledger_records_net_after_every_fill_and_the_curve_is_thinned():
+    from gridgremlin.report import ledger, thin
+    fills = [{'time_ms': 1000 * i, 'side': s, 'price': p, 'qty': 1.0, 'fee': 0.1,
+              'link_id': f'linBTCUSDTl-{r}-{i}', 'symbol': 'BTCUSDT', 'market_type': 'linear'}
+             for i, (s, p, r) in enumerate((('buy', 100.0, 3), ('sell', 101.0, 4), ('buy', 100.0, 3)))]
+    series = {}
+    book = ledger(fills, ['linBTCUSDTl'], entry_sides={'linBTCUSDTl': 'buy'}, series=series)['linBTCUSDTl']
+    pts = series['linBTCUSDTl']
+    assert [t for t, _ in pts] == [0, 1000, 2000]
+    assert abs(pts[-1][1] - (book['realized'] - book['fees'])) < 1e-12 and abs(pts[1][1] - (1.0 - 0.2)) < 1e-12
+    assert ledger(fills, ['linBTCUSDTl'], entry_sides={'linBTCUSDTl': 'buy'})['linBTCUSDTl']['fills'] == 3
+    many = [(i, float(i)) for i in range(1000)]
+    t = thin(many, 200)
+    assert len(t) == 200 and t[0] == [0, 0.0] and t[-1] == [999, 999.0]
+    assert thin(many[:5]) == [list(p) for p in many[:5]]
+
+
+def spec_R24_a_bot_whose_market_left_the_fleet_is_booked_from_its_own_links():
+    from gridgremlin.report import gone_books
+    fills = [{'time_ms': 5, 'side': 'sell', 'price': 3000.0, 'qty': 1.0, 'fee': 0.5,
+              'link_id': 'linETHUSDTs-2-9', 'symbol': 'ETHUSDT', 'market_type': 'linear'},
+             {'time_ms': 9, 'side': 'buy', 'price': 2970.0, 'qty': 1.0, 'fee': 0.5,
+              'link_id': 'linETHUSDTs-1-10', 'symbol': 'ETHUSDT', 'market_type': 'linear'},
+             {'time_ms': 7, 'side': 'buy', 'price': 1.0, 'qty': 1.0, 'fee': 0.0,
+              'link_id': 'linBTCUSDTl-0-1', 'symbol': 'BTCUSDT', 'market_type': 'linear'},
+             {'time_ms': 8, 'side': 'buy', 'price': 1.0, 'qty': 1.0, 'fee': 0.0,
+              'link_id': 'pfocarry-x', 'symbol': 'BTCUSDT', 'market_type': 'spot'},
+             {'time_ms': 8, 'side': 'buy', 'price': 1.0, 'qty': 1.0, 'fee': 0.0,
+              'link_id': '', 'symbol': 'BTCUSDT', 'market_type': 'linear'}]
+    gone = gone_books(fills, {'linBTCUSDTl'})
+    assert set(gone) == {'linETHUSDTs'}                      # the live bot, a portfolio row and no link: none
+    g = gone['linETHUSDTs']
+    assert g['partial'] and g['last_ms'] == 9 and g['fills'] == 2
+    assert abs(g['series'][-1][1] - (30.0 - 1.0)) < 1e-9     # sold 3000, bought back 2970, fees 1

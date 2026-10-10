@@ -1083,6 +1083,15 @@ eventually pin (T1).
   end because every reader keys on the start (`[ship] kill …` — the digest,
   the phone, the replay); the specs' own notifiers print no time. *(2026-10-11:
   a fill-list lag could not be measured — the log carried no clock)*
+- **R24** The results page (`/results`) says what every bot has made after
+  fees since its first kept fill, as a curve: the ledger records each bot's
+  realized less fees after every fill, thinned to 200 points (evenly, the
+  last kept), carried in the readout as each `since_first` book's `series`.
+  A bot whose market has left the fleet — its fills kept, its card gone — is
+  found by the botid in its own links (`<botid>-<rung>-<gen>`, I1) and
+  booked from those alone, said as partial since a venue-made close carries
+  no link; the readout carries those as `gone`. A record that is not whole
+  is listed, never summed.
 - **R9** The readout counts SAME-RUNG exits: an exit filling at a price the book
   entered at. It needs no basis, so a truncated window cannot fake it. Read it as a
   RATIO, not a verdict — in a netted engine (G12) a rung legitimately flips between
