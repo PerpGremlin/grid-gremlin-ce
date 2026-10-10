@@ -1443,9 +1443,9 @@ def spec_U56_a_cards_numbers_live_on_the_positions_own_page_and_the_show_all_swi
     belief = ((C.get('watchdog') or {}).get('belief') or {}).get('bots', {})
     c = card(0, 'spoADAUSDTl', C['bots']['spoADAUSDTl'], C, belief)
     assert '<div class="numbers">' not in c and "href='/position?fleet=0&bot=spoADAUSDTl'>numbers</a>" in c
-    assert c.count('<details') == 1 and 'class="fold"' in c        # U58: only the lower half folds, never the numbers
+    assert '<details' not in c                                  # U68: a slim card folds nothing
     page = position_page(0, 'demo', 'spoADAUSDTl', C, belief)
-    assert page.startswith('<h1>demo · ADAUSDT long grid spot</h1><h3>as the exchange shows it</h3>'
+    assert page.startswith('<meta name="gg-refresh" content="15"><h1>demo · ADAUSDT long grid spot</h1><h3>as the exchange shows it</h3>'
                            '<div class="scroll"><table class="xch">')                      # U62: scrolls, never cut
     assert '<th>entry price</th>' in page and '<td>0.207</td>' in page and '<th>unrealised P&amp;L</th>' in page
     assert '<div class="numbers"><h3>the numbers</h3><table>' in page and '<tr><td>fills</td><td>3</td></tr>' in page

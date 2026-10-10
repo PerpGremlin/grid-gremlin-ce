@@ -1266,7 +1266,7 @@ eventually pin (T1).
   moved by the offset times the lattice's gap, and the card says how far
   it slid. The readout carries every configured bot's mark, so a quiet
   bot shows where the price sits in its range too.
-- **U58** A card's lower half folds. What sits under the money box and the
+- **U58** A card's lower half folds (on the position's page since U68). What sits under the money box and the
   range bar — holding, kind, liquidation, market, margin, investment, loss
   limit; a portfolio's assets table — sits behind one summary word, open
   by default; the page's script remembers each card's click either way,
@@ -1342,6 +1342,20 @@ eventually pin (T1).
   greed index above them. No reading: said. Display only. *(the owner,
   2026-10-11: "halving the screen with bots, then the other half … to help
   traders navigate the markets")*
+- **U68** A card is slim; its numbers page is live. On the fleet page a
+  card says the side, the name, the state, the money with its return on
+  the investment and what the figure covers, the run rate, the range —
+  and only what needs the owner now, red: capped or waiting, liquidation
+  within 10%, the loss limit half used, a thin book. A quiet bot's card
+  says what it holds. The portfolio's card says the kind, the money and
+  the leverage; its assets and facts are its page's. Every other line —
+  the kind, the holding, margin, investment, the wallet, the numbers, the
+  ladder — is the position's page (U56), which refreshes in place (U61).
+  The fold and its side-panel switch (U58) leave the fleet page; the two
+  halves (U67) hold down to an 860-pixel window. *(the owner, 2026-10-11:
+  "far too much for a card … looks like pionex at first", the rest on the
+  numbers page, live, for every position type; the split so "we dont
+  have to scroll down a whole screen")*
 - **L1** A new trade joins a running fleet within a cycle. The trade watch
   stats the trades file once a cycle; a changed file's new rows are each
   built by the fleet's own builder (`main.build_market_bot`, the one every

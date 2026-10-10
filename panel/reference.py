@@ -138,12 +138,14 @@ completed rounds; safety orders filled this window; the deepest rung
 reached. Depth near max SOs = the schedule nearly exhausted.</td></tr>
 <tr><td>hold benchmark</td><td class="dim">what the same capital would
 have done just holding over the same window. Beat it or hold.</td></tr>
-<tr><td>numbers (button)</td><td class="dim">the position's own page (U56):
-the position as the exchange shows it, then every number laid open.</td></tr>
-<tr><td>details / assets (fold)</td><td class="dim">a card's lower half —
-holding, kind, margin, market, limits; a portfolio's assets — behind one
-word (U58). Click to fold or open; the card remembers. <b>cards: full /
-folded</b> in the side panel sets them all.</td></tr>
+<tr><td>numbers (button)</td><td class="dim">the position's own page (U56),
+live: the position as the exchange shows it, then every number laid open. A
+card on the fleet page is slim (U68) — its money, run rate and range, and
+only what needs you now, in red.</td></tr>
+<tr><td>details / assets (fold)</td><td class="dim">on the position's page,
+the card's lower half — holding, kind, margin, market, limits; a portfolio's
+assets — behind one word (U58). Click to fold or open; it is
+remembered.</td></tr>
 <tr><td>… trade (card)</td><td class="dim">a single long or short with its
 own exit (D81): its take profit, its stop watched at the mark, who opened it
 when. <b>close trade</b> ends it early with one reduce-only market order;
