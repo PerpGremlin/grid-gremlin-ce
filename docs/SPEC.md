@@ -620,7 +620,10 @@ eventually pin (T1).
   through the preflight's door, named by symbol and side, counted against
   `max_failed_bots`, and the rest start. The panel's whole-fleet gate refuses it
   before it is written. *(2026-10-06: one row of dust rungs raised out of the
-  build and held a whole fleet in a restart loop)*
+  build and held a whole fleet in a restart loop)* The shipped examples
+  place at the venue's real minimums. *(2026-10-11: the example BTC long put
+  0.00079 BTC at its top grid, under Bybit's 0.001, and the whole-fleet gate
+  refused every new bot on the example fleet)*
 - **C6** A row that fails validation is never silently skipped. *(D7, amended by
   D52)* Today: it is set aside BY NAME — `fleet['refused']` carries where it was,
   its symbol and side, and the refusal verbatim; the build announces each one
@@ -1419,6 +1422,17 @@ eventually pin (T1).
   (`?mtab=`), so the refresh keeps it, with the view. Each coin leads to
   its market data page. *(the owner, 2026-10-11: "a heading for each of the
   data types … tabs on the RHS")*
+- **U73** The review says how a grid fits the market it would trade, beside
+  the what-if: the gap between grids; what a round trip nets after two
+  maker fees; the round trips the grid's own walk would have made over the
+  last month's 4-hour candles (a piece bought at a level and sold at the
+  one above — a wiggle across one level completes nothing; a short the
+  mirror); the grid profit a day and as a year, grid profit only; the share
+  of closes inside the range; the funding a day at full size and the
+  coin's calm-or-wild reading. A gap under the two fees, or a range the
+  price closed inside less than half the month, is said in red. An
+  estimate, said so; checked against the rehearsal (round trips within 12%
+  on four grids). *(the owner, 2026-10-11, the grid planner)*
 - **L1** A new trade joins a running fleet within a cycle. The trade watch
   stats the trades file once a cycle; a changed file's new rows are each
   built by the fleet's own builder (`main.build_market_bot`, the one every

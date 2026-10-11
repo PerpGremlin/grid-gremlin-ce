@@ -12,7 +12,7 @@
       "market_type": "linear",
       "lower": 70000,
       "upper": 90000,
-      "rungs": 21,
+      "rungs": 15,
       "slide": {
         "direction": "both",
         "trigger_rungs": 2,

@@ -2093,3 +2093,76 @@ def spec_U60_every_page_wears_the_panels_navigation():
             assert page.index('<nav class="side">') < page.index('<main>'), path
     finally:
         close()
+
+
+def spec_U73_the_review_says_how_a_grid_fits_the_market():
+    """The owner (2026-10-11), the grid planner: the review already draws
+    the grid on its price, the what-if and the rehearsal; it says how the
+    grid fits the market too — the gap, what a round trip nets after two
+    maker fees, the round trips the grid's own walk would have made over
+    the candles (a piece bought at a level, sold at the one above — a
+    wiggle across one level completes nothing), the profit a day, the share
+    of closes inside the range; a gap under the fees, or a range the price
+    mostly left, said in red."""
+    from gridgremlin.config import validate_config
+    from panel.fit import fit_numbers, fit_section
+    cfg = validate_config({'symbol': 'BTCUSDT', 'side': 'long', 'capital': 1000.0, 'leverage': 5,
+                           'lower': 90.0, 'upper': 110.0, 'rungs': 21, 'spacing_type': 'fixed', 'market_type': 'linear'})
+    def bar(i, o, h, low, c):
+        return {'t': i * 14_400_000, 'o': o, 'h': h, 'l': low, 'c': c}
+    # down a level, up a level, ten times: ten round trips
+    swing = [bar(i, 100.5, 100.5, 98.5, 98.5) if i % 2 == 0 else bar(i, 98.5, 100.5, 98.5, 100.5) for i in range(20)]
+    f = fit_numbers(cfg, swing)
+    assert f['trips'] == 10 and abs(f['gap'] - 1 / 100) < 1e-12
+    assert abs(f['net_trip'] - 5000 / 21 * (0.01 - 2 * f['fee'])) < 1e-9
+    assert abs(f['per_day'] - 10 * f['net_trip'] / (20 * 4 / 24)) < 1e-9 and f['inside'] == 1.0
+    # a wiggle back and forth across one level: crossings, no round trip
+    wiggle = [bar(i, 100.2, 100.2, 99.8, 99.8) if i % 2 == 0 else bar(i, 99.8, 100.2, 99.8, 100.2) for i in range(40)]
+    assert fit_numbers(cfg, wiggle)['trips'] == 0
+    # a short is the mirror: up a level then down a level
+    short = dict(cfg, side='short')
+    up_down = [bar(i, 99.5, 101.5, 99.5, 101.5) if i % 2 == 0 else bar(i, 101.5, 101.5, 99.5, 99.5) for i in range(20)]
+    assert fit_numbers(short, up_down)['trips'] == 10 and fit_numbers(cfg, up_down)['trips'] >= 9
+    html = fit_section(cfg, swing, {'markets': {'bybit:linear:BTCUSDT': {'funding_8h_pct': 0.01}},
+                                    'hmm': {'BTC': {'two_states': True, 'state': 'calm', 'p_wild': 0.04, 'sd_day': [0.011, 0.036]}}})
+    assert '<h2 class="dim">how it fits this market</h2>' in html and 'round trips over the last' in html
+    assert 'funding a day if every buy filled (5,000 held, +0.0100% / 8 h now)' in html and '-1.50' in html
+    assert '<b class="calm">calm</b>' in html and 'Not a forecast' in html
+    tight = validate_config(dict(lower=99.9, upper=100.1, rungs=21, symbol='BTCUSDT', side='long', capital=1000.0,
+                                 leverage=5, market_type='linear'))
+    assert 'earns less than the two fees it pays' in fit_section(tight, swing)
+    away = [bar(i, 120, 121, 119, 120) for i in range(20)]
+    assert 'closed inside this range only 0%' in fit_section(cfg, away)
+    assert fit_section({'strategy': 'martingale', 'symbol': 'BTCUSDT'}, swing) == ''        # a DCA has no lattice
+
+
+def spec_C5_the_shipped_examples_place_at_the_venues_real_minimums():
+    """Found 2026-10-11 by the setup flow on the public edition: the example
+    BTC long (300 at 5x over 21 grids) put 0.00079 BTC at its top grid,
+    under Bybit's 0.001 minimum — and the fleet is checked whole, so no bot
+    could be added to the example fleet. Every example grid row places at
+    the minimums measured on Bybit that day."""
+    import json
+    from pathlib import Path
+    from gridgremlin.config import check_placeable, validate_config
+    MINIMUM = {'BTCUSDT': 0.001, 'ETHUSDT': 0.01, 'XRPUSDT': 0.1, 'SOLUSDT': 0.1, 'DOGEUSDT': 1.0,
+               'ADAUSDT': 1.0, 'AVAXUSDT': 0.1, 'DOTUSDT': 0.1, 'LTCUSDT': 0.1}          # measured 2026-10-11
+    class Venue:
+        def __init__(self, sym):
+            self.min = MINIMUM[sym]
+        def qty_from_notional(self, notional, price):
+            return notional / price
+        def meets_minimum(self, qty, price):
+            return qty >= self.min
+    checked = 0
+    for name in ('fleet.demo.json',):
+        root = Path(__file__).resolve().parents[1]                   # the public tree's configs ARE the examples
+        ex = root / 'configs' / 'examples' if (root / 'configs' / 'examples').is_dir() else root / 'configs'
+        rows = json.loads((ex / name).read_text())['bots']
+        for r in rows:
+            if r['symbol'] not in MINIMUM or r.get('market_type', 'linear') != 'linear' or r.get('strategy') == 'martingale':
+                continue
+            cfg = validate_config(dict(r))
+            check_placeable(cfg, Venue(r['symbol']), r['symbol'])
+            checked += 1
+    assert checked >= 3
