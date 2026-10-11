@@ -1,5 +1,5 @@
 """The strip pinned to the top (U50) and the exchange figures it shows: network badges, leverage, MMR, the totals. Out of render.py (D91 step 3)."""
-from gridgremlin.report import card_total
+from gridgremlin.report import contract_tiers, card_total
 from .card import since_first_total
 from .drawings import equity_svg
 from .html_bits import _num_cls, units_of
@@ -58,17 +58,6 @@ TIER_NAMES = {('bybit', 'demo'): 'Demo Trading', ('bybit', 'testnet'): 'Testnet'
               ('bybit', 'mainnet'): 'Mainnet',
               ('hyperliquid', 'testnet'): 'Testnet',
               ('hyperliquid', 'mainnet'): 'Mainnet'}
-
-
-def contract_tiers(contract):
-    """D65: each venue's network — first as the running fleet connected to
-    it (its snapshot), else as the readout's own client did."""
-    belief = ((contract.get('watchdog') or {}).get('belief') or {})
-    tiers = dict(belief.get('tiers') or {})
-    for venue, fig in (contract.get('account') or {}).items():
-        if venue not in tiers and fig and fig.get('tier'):
-            tiers[venue] = fig['tier']
-    return tiers
 
 
 def tier_badge(contract):

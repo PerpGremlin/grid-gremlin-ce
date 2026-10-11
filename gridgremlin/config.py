@@ -1,8 +1,10 @@
 # Config doctrine (SPEC C1-C7). The RENAMED/RETIRED tables are
 # docs/archive/MIGRATION.md's refusal column, all of it. The why lives in docs/SPEC.md.
 
+import json
 import math
 import difflib
+from pathlib import Path
 
 MATCH_CUTOFF = 0.7  # the one difflib cutoff (C1)
 
@@ -1083,3 +1085,21 @@ def _account_name(v, where):
         _refuse(f"{where}: 'account' is a short lower-case name — 'default', or one "
                 'whose keys .env carries as BYBIT_<NAME>_API_KEY / HL_<NAME>_SUBACCOUNT (H5)')
     return v
+
+
+def fleet_label(f):
+    """U55: the dash's name for a fleet — the file's own `label` when it
+    carries one (the owner: "bybit demo subaccount 1"), else the venue and
+    the file stem's environment word."""
+    stem = Path(f).stem.replace('fleet.', '')
+    try:
+        raw = json.loads(Path(f).read_text())
+        if raw.get('label'):
+            return str(raw['label']).strip()
+        bots = raw.get('bots') or []
+        venue = bots[0].get('venue', 'bybit') if bots else None
+    except (OSError, ValueError, AttributeError):
+        venue = None
+    if not venue:
+        return stem
+    return f"{venue} {stem.split('.')[-1]}"

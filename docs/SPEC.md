@@ -1502,6 +1502,17 @@ eventually pin (T1).
   apart; a query link carries `&amp;`, never a bare `&`; the help column
   of the form keeps its width beside a long dropdown. The README lists the
   watchdog's and the agent's keys. *(the bug hunt, 2026-10-11)*
+- **U77** Show mode (D86): the showcase says only what the private side
+  allowed. `gridgremlin.show` rebuilds each bot from named fields — coin,
+  side, kind, market, state, return on its own capital from its first
+  trade, days, trips (a portfolio row valued from its own snapshot, H6;
+  state from the fleet's snapshot) — and adds dollar amounts and leverage
+  only with `--amounts`; a fleet on real money is refused. The showcase
+  (`showcase/`, on common and ggdata only, D91) serves GET alone on two
+  paths — the page and the file — with no link, form, script, cookie or
+  key, a strict CSP, and a market table allowlisted too (never a fleet's
+  committed or thin). Paper is labelled paper; engineering, not financial
+  advice. *(D86, 2026-10-11)*
 - **L1** A new trade joins a running fleet within a cycle. The trade watch
   stats the trades file once a cycle; a changed file's new rows are each
   built by the fleet's own builder (`main.build_market_bot`, the one every

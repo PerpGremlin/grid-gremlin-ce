@@ -851,6 +851,17 @@ def _market_for(key_of, venue_of, now_ms):
         return {}
 
 
+def contract_tiers(contract):
+    """D65: each venue's network — first as the running fleet connected to
+    it (its snapshot), else as the readout's own client did."""
+    belief = ((contract.get('watchdog') or {}).get('belief') or {})
+    tiers = dict(belief.get('tiers') or {})
+    for venue, fig in (contract.get('account') or {}).items():
+        if venue not in tiers and fig and fig.get('tier'):
+            tiers[venue] = fig['tier']
+    return tiers
+
+
 def card_total(b):
     """D63: a contract book's total, the one sum every renderer shows —
     realised after fees, plus the funding paid or received, plus the open
