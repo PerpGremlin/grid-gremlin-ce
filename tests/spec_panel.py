@@ -1565,7 +1565,7 @@ def spec_D65_the_panel_can_never_set_the_network():
     from pathlib import Path
     from panel.create import merge_proposal, validate_whole
     root = Path(__file__).resolve().parents[1] / 'panel'
-    for f in sorted(root.glob('*.py')):
+    for f in sorted(root.rglob("*.py")):              # panel/pages/ too (the review)
         src = f.read_text()
         for word in ('allow_mainnet', 'allow-mainnet', 'BYBIT_DEMO',
                      'BYBIT_TESTNET', 'HL_TESTNET', "'.env'", '".env"'):

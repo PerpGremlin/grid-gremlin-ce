@@ -268,7 +268,19 @@ def submit(fleet_path, intent, now_s=None, fetch=None):
     """Check one intent and act on it: paper — filled on paper at the last
     price (J6.1); live — appended to the trades file through D81's
     validator. `side: close` closes the agent's positions on that market.
-    Returns (verdict, text); every intent is logged with its verdict."""
+    Returns (verdict, text); every intent is logged with its verdict.
+
+    J7 (the review, 2026-10-11): the check and the act are one step under
+    the fleet's agent lock — two sessions at once each read the state
+    before either acted, and between them passed the hourly count and the
+    gross limit. The locks inside are on other files (the paper book, the
+    trades file), so this one cannot deadlock with them."""
+    from .durable import locked
+    with locked(intents_log_path(fleet_path)):
+        return _submit(fleet_path, intent, now_s, fetch)
+
+
+def _submit(fleet_path, intent, now_s=None, fetch=None):
     from .config import market_rows, validate_fleet
     from .trades import TradeError, add_trade, trades_path
     now_s = now_s or time.time()

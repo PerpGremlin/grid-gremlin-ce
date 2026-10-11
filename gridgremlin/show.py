@@ -29,7 +29,7 @@ NETWORKS = {'demo': 'paper (exchange demo)', 'testnet': 'testnet'}
 
 
 class RealMoney(Exception):
-    pass
+    """A fleet not shown: real money, or a network the readout could not say."""
 
 
 def _parts(botid):
@@ -81,8 +81,12 @@ def show_bot(botid, b, terms, record, now_ms, amounts=False, belief=None):
 
 def show_account(label, contract, amounts=False):
     tiers = contract_tiers(contract)
-    if any(t == 'mainnet' for t in tiers.values()):
-        raise RealMoney(f'{label}: real money — the public page shows paper only (D86)')
+    # fail closed (the review, 2026-10-11): a fleet whose network the
+    # readout could not say — no snapshot, a failed account read — is not
+    # paper until it says so; only demo and testnet are shown
+    if not tiers or any(t not in NETWORKS for t in tiers.values()):
+        raise RealMoney(f'{label}: network {sorted(set(tiers.values())) or "unknown"} — '
+                        'the public page shows paper only (D86)')
     now_ms = contract.get('generated_ms') or int(time.time() * 1000)
     terms = contract.get('terms') or {}
     records = contract.get('since_first') or {}

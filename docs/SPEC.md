@@ -1535,6 +1535,11 @@ eventually pin (T1).
   key, a strict CSP, and a market table allowlisted too (never a fleet's
   committed or thin). Paper is labelled paper; engineering, not financial
   advice. *(D86, 2026-10-11)*
+- **U77b** The showcase fails closed: a fleet whose network the readout
+  cannot name is refused like real money; `/show.json` serves only the
+  generation time, the amounts flag and the accounts; a malformed file
+  still serves a page; a half-sent request times out (10 s) and past 64
+  connections a new one is closed on arrival. *(the review, 2026-10-11)*
 - **L1** A new trade joins a running fleet within a cycle. The trade watch
   stats the trades file once a cycle; a changed file's new rows are each
   built by the fleet's own builder (`main.build_market_bot`, the one every
@@ -1636,6 +1641,10 @@ eventually pin (T1).
   closed them first; live, it writes a close request for each of the
   agent's trades on that market (L7). A market that cannot be read closes
   nothing.
+- **J7** The agent door's check and act are one step under the fleet's
+  agent lock: simultaneous intents are judged one after another, each
+  seeing what the last one opened — parallel sessions cannot pass the
+  hourly count or the gross limit between them. *(the review, 2026-10-11)*
 - **J5** The score is computed from the closed positions alone: P&L after
   fees against flat, the worst drawdown of the closed P&L, the hit rate,
   the average win and loss, fees as a share of gross, the count by how each
