@@ -860,6 +860,19 @@ stands unless the owner corrects it.
   duplicate, the panel split, the data layer lifted out, the repo tidied,
   the showcase. The owner: *"yes to the shape, order and names, go ahead."*
   `docs/ARCHITECTURE.md` is the reference.
+- **D92 — A portfolio row runs alone on its subaccount (2026-10-12).** Asked
+  whether a borrowing row may share its account, the owner first wanted the
+  freedom kept — *"we do our best to do the math … make note if it diverges"*
+  — and then, weighing how others do it (one subaccount per strategy, a
+  reconciliation of the parts where they share): *"you sold me on
+  subaccounts."* Each portfolio row has its subaccount to itself; the
+  engine does not refuse a sibling (the cash log keeps its cash apart and
+  the card says it shares margin, H2), but the owner's fleets keep the rows
+  alone. The carry subaccount's BTCUSDT hedge pair retires — *"it was just
+  to see if they could coexist. they can, but they screw the math up."* A
+  bot leaves a fleet for good by `gridgremlin.retire` (X15c): tombstone,
+  its own orders cancelled, its position closed, then the row out of the
+  file.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

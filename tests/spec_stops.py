@@ -663,6 +663,55 @@ def spec_X15_a_running_bot_and_a_spot_holding_are_refused():
     assert venue.orders == []
 
 
+class _RetireVenue(_CloseVenue):
+    """The close venue with resting orders, one of them another bot's."""
+
+    def __init__(self, positions, orders):
+        super().__init__(positions)
+        self.resting, self.cancelled = list(orders), []
+
+    def read_symbol_truth(self, market_type, symbol, funding_interval=480.0):
+        return dict(super().read_symbol_truth(market_type, symbol), orders=list(self.resting))
+
+    def cancel_order(self, market_type, symbol, order_id):
+        self.cancelled.append(order_id)
+        self.resting = [o for o in self.resting if o['order_id'] != order_id]
+
+
+class _Tombs:
+    def __init__(self):
+        self.d = {}
+
+    def has(self, b):
+        return b in self.d
+
+    def add(self, b, why):
+        self.d[b] = why
+
+
+def spec_X15c_retiring_a_bot_tombstones_cancels_what_it_owns_and_closes():
+    """D92: a bot leaving a fleet for good — tombstone first, then every
+    order it owns and nothing else, then its position, re-read after."""
+    from gridgremlin.retire import retire_bot
+    orders = [{'link_id': 'linBTCUSDTs-3-a1', 'order_id': 'o1'},
+              {'link_id': 'linBTCUSDTs--2-b2', 'order_id': 'o2'},   # a slid rung
+              {'link_id': 'linBTCUSDTl-4-c3', 'order_id': 'o3'},    # the long's: not ours
+              {'link_id': 'hand-placed', 'order_id': 'o4'}]
+    venue = _RetireVenue({1: {'side': 'Buy', 'size': 0.05, 'avg_entry': 11.0},
+                          2: {'side': 'Sell', 'size': 0.021, 'avg_entry': 11.2}}, orders)
+    tombs = _Tombs()
+    look = retire_bot(_short_row(), venue, ADAPTER, tombs, 'why', dry=True)
+    assert look == {'botid': 'linBTCUSDTs', 'dry': True, 'orders': 2, 'held': 0.021,
+                    'tombstoned': False}
+    assert venue.cancelled == [] and venue.orders == [] and not tombs.d   # looking does nothing
+    done = retire_bot(_short_row(), venue, ADAPTER, tombs, 'retired (D92)')
+    assert tombs.d == {'linBTCUSDTs': 'retired (D92)'}
+    assert venue.cancelled == ['o1', 'o2'] and done['orders_left'] == []
+    assert venue.orders == [('Buy', '0.021', 2, True)] and done['held_left'] == 0.0
+    assert [o['order_id'] for o in venue.resting] == ['o3', 'o4'] and venue.positions[1]['size'] == 0.05
+    assert 'refused' in retire_bot(_short_row(market_type='spot', side='long'), venue, ADAPTER, tombs, 'x')
+
+
 def spec_X15b_on_hyperliquid_the_close_command_waits_for_the_fleet():
     """HL nonces are per wallet: a second signer beside the running fleet
     collides with it. The command asks F3's lock; held, it refuses before
@@ -705,6 +754,42 @@ def spec_X15b_on_hyperliquid_the_close_command_waits_for_the_fleet():
     finally:
         held.close()
     assert not fleet_running(str(d / 'f.json'))
+
+
+def spec_X15c_retire_waits_for_its_fleet_and_has_no_way_to_mainnet():
+    """Beside its running fleet the bot would place its orders back: the
+    command refuses before any client is built. And D25's run half is
+    passed shut on both venues."""
+    import inspect
+    import io
+    import json
+    import sys
+    import tempfile
+    from pathlib import Path
+    import gridgremlin.retire as rt
+    from gridgremlin.main import acquire_fleet_lock
+    d = Path(tempfile.mkdtemp()) / 'configs'
+    d.mkdir()
+    (d / 'wd.json').write_text(json.dumps({
+        'tag': 't', 'snapshot': 's', 'state': 'st', 'staleness_seconds': 9,
+        'mm_rate_max': 0.5, 'equity_min': 10, 're_alert_seconds': 9, 'assumes_sole_actor': True}))
+    (d / 'f.json').write_text(json.dumps({'watchdog': str(d / 'wd.json'), 'bots': [
+        {'venue': 'bybit', 'market_type': 'linear', 'symbol': 'BTCUSDT', 'side': 'long',
+         'capital': 100, 'leverage': 2, 'lower': 50000, 'upper': 60000, 'rungs': 5}]}))
+    (d.parent / 'logs').mkdir()
+    held = acquire_fleet_lock(str(d.parent / 'logs' / 'bybit.demo.lock'))
+    try:
+        out, saved = io.StringIO(), sys.stdout
+        sys.stdout = out
+        try:
+            code = rt.main([str(d / 'f.json'), 'linBTCUSDTl', '--dry'])
+        finally:
+            sys.stdout = saved
+        assert code == 1 and 'stop it first' in json.loads(out.getvalue())['refused']
+    finally:
+        held.close()
+    src = inspect.getsource(rt)
+    assert src.count('refuse_mainnet(client, False, False)') == 2 and 'allow_mainnet=True' not in src
 
 
 def spec_X15_the_close_command_has_no_way_to_mainnet():
