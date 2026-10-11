@@ -1386,6 +1386,12 @@ eventually pin (T1).
   inverse, 90 days). Display only. *(the owner, 2026-10-11: "say i held
   100k of BTC with an 85K USDT debt … what would that look like over an
   entire year?")*
+- **U70** The phone's market report, live, on the markets half: the same
+  messages the session opens send (D67), built by the same function from
+  the newest reading, under the tiles, so the page and the phone cannot
+  disagree. An unreadable reading says so. *(the owner, 2026-10-11: "the
+  market data we send to TG as a live stream on the same half of the page
+  as the HMM results")*
 - **L1** A new trade joins a running fleet within a cycle. The trade watch
   stats the trades file once a cycle; a changed file's new rows are each
   built by the fleet's own builder (`main.build_market_bot`, the one every
@@ -1439,6 +1445,12 @@ eventually pin (T1).
   panel's close trade ran the close command, which refuses a bot that has
   not stood down — the button could never close a live trade)*
 
+- **L8** A trade's card offers only what a trade can do. A trade is not a
+  fleet row: no edit, copy or remove (they answered "not in this fleet");
+  a live trade offers close trade, an ended one clear, and close position
+  only when its holding is known to be open (a trade ended by its take
+  profit answered "nothing to close"). *(the owner, 2026-10-11, on tilt's
+  BTC trade)*
 ## J — the agent (D80)
 
 - **J1** The agent's one door is a forced command behind a restricted ssh

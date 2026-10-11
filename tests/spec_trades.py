@@ -208,6 +208,35 @@ def spec_L6_a_trades_card_says_it_is_a_trade_with_its_exit_and_offers_its_close(
     assert "<a href='/trade'>clear</a>" in render([('demo', c)])
 
 
+def spec_L8_a_trades_card_offers_only_what_a_trade_can_do():
+    """The owner (2026-10-11), on tilt's BTC trade after its take profit:
+    "close" answered nothing to close, "remove" answered not in this fleet.
+    A trade is not a fleet row: its card offers no edit, copy or remove;
+    a live one offers close trade, an ended one clear — and close position
+    only when its holding is known to be open."""
+    import copy
+    from panel.render import card
+    sys.path.insert(0, str(Path(__file__).parent))
+    from spec_panel import CONTRACT
+    c = copy.deepcopy(CONTRACT)
+    bot = 'linBTCUSDTl'
+    c['bots'][bot] = dict(next(v for v in c['bots'].values() if v), side='long', strategy='martingale', position=0.0)
+    c.setdefault('terms', {})[bot] = {'market_type': 'linear', 'strategy': 'martingale', 'leverage': 3, 'trade': True,
+                                      'tp_pct': 0.006, 'stop_pct': 0.006}
+    belief = c['watchdog']['belief']['bots']
+    belief[bot] = {'alive': False, 'position': None}                     # ended by its take profit
+    for full in (False, True):
+        html = card(0, bot, c['bots'][bot], c, belief, full=full)
+        assert '/edit?' not in html and 'copy=' not in html and 'mode=remove' not in html, full
+        assert "<a href='/trade'>clear</a>" in html and 'close position' not in html, full
+    belief[bot] = {'alive': False, 'position': 0.004}                    # stopped holding: the close stays
+    html = card(0, bot, dict(c['bots'][bot], position=0.004), c, belief)
+    assert "close position</a>" in html and "<a href='/trade'>clear</a>" in html
+    grid = 'spoADAUSDTl'                                                 # a fleet row keeps its links
+    g = card(0, grid, c['bots'][grid], c, belief)
+    assert f"/edit?fleet=0&bot={grid}'>edit</a>" in g and 'mode=remove' in g and f'copy={grid}' in g
+
+
 def spec_L6_the_panels_trade_form_opens_refuses_with_the_typing_kept_and_clears():
     """The owner's door on the panel: the form, a refusal that keeps what was
     typed, a trade queued in the account's trades file through the bot

@@ -225,4 +225,17 @@ def market_column(row, now=None):
                if fg.get('score') is not None else ''))
     markets, hmm = row.get('markets') or {}, row.get('hmm') or {}
     tiles = ''.join(tile(c, _pick(markets, c), hmm.get(c)) for c in coins_of(row) if _pick(markets, c))
-    return f'<aside class="markets">{head}<div class="mtiles">{tiles}</div></aside>'
+    return f'<aside class="markets">{head}<div class="mtiles">{tiles}</div>{phone_report(row, now)}</aside>'
+
+
+def phone_report(row, now):
+    """U70: the market report the phone is sent at each session's open,
+    built the same way from the newest reading — live beside the tiles."""
+    from gridgremlin.market import report
+    try:
+        texts = report(row, now)
+    except (KeyError, TypeError, ValueError) as e:
+        return f'<p class="dim">the phone\'s report: unreadable ({html.escape(type(e).__name__)})</p>'
+    body = ''.join(f'<div class="tgmsg">{html.escape(t)}</div>' for t in texts)
+    return ('<h2>as the phone gets it <span class="dim">the market report, from the same reading · '
+            'sent at 00, 08 and 16 UTC</span></h2>' + body)
