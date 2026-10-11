@@ -219,18 +219,25 @@ def liquidations(coin, now, days=1, collect_root=None):
             bars.append(f'<rect x="{h * bw:.1f}" y="80" width="{max(1.0, bw * 0.8):.1f}" '
                         f'height="{lg / top * 76:.1f}" fill="var(--neg)"/>')
     tl, ts_ = sum(b[0] for b in buckets), sum(b[1] for b in buckets)
+    by_venue = {}
+    for r in rows:
+        v = r.get('venue') or 'okx'
+        by_venue[v] = by_venue.get(v, 0.0) + r['usd']
+    venues = ' · '.join(f'{VENUE_WORD.get(v, v)} {_fmt(u, "USD")}' for v, u in sorted(by_venue.items(), key=lambda kv: -kv[1]))
     big = sorted(rows, key=lambda r: -r['usd'])[:8]
     items = ''.join(f'<tr><td>{time.strftime("%m-%d %H:%M", time.gmtime(r["ts"] / 1000))} UTC</td>'
+                    f'<td>{html.escape(VENUE_WORD.get(r.get("venue") or "okx", r.get("venue") or "okx"))}</td>'
                     f'<td class="{"neg" if r["side"] == "long" else "pos"}">{r["side"]}</td>'
                     f'<td class="num">{r["px"]:,.6g}</td><td class="num">{_fmt(r["usd"], "USD")}</td></tr>' for r in big)
     return (f'<div class="legend"><span class="lg"><i style="background:var(--neg)"></i>longs liquidated '
             f'<b>{_fmt(tl, "USD")}</b></span><span class="lg"><i style="background:var(--pos)"></i>shorts liquidated '
-            f'<b>{_fmt(ts_, "USD")}</b></span><span class="lg dim">{len(rows)} orders, the last {days * 24} h, OKX</span></div>'
+            f'<b>{_fmt(ts_, "USD")}</b></span><span class="lg dim">{len(rows)} orders, the last {days * 24} h — {venues}</span></div>'
             f'<svg class="achart" viewBox="0 0 {W} 160" width="100%" preserveAspectRatio="none" style="height:160px" role="img">'
             f'<line x1="0" x2="{W}" y1="80" y2="80" stroke="var(--line)"/>' + ''.join(bars) + '</svg>'
-            '<div class="scroll"><table class="cwtab"><tr><th>when</th><th>position</th><th>price</th><th>size</th></tr>'
+            '<div class="scroll"><table class="cwtab"><tr><th>when</th><th>venue</th><th>position</th><th>price</th><th>size</th></tr>'
             f'{items}</table></div><p class="dim">A long liquidated is a forced sell (the price fell to it); a short, a '
-            'forced buy. OKX only: Bybit and Binance publish theirs only as a live stream.</p>')
+            'forced buy. OKX read every five minutes; Bybit recorded live from its stream (when the stream unit runs). '
+            'Binance\'s futures stream is closed to this server\'s country.</p>')
 
 
 def asset_page(coin, coins, span='7d', now=None, root=None, unread=None, collect_root=None):

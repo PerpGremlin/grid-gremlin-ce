@@ -117,7 +117,7 @@ def read_liquidations(fetch, coin, since_ms, pages=5):
                 px = float(r['bkPx'])
                 out[(ts, r.get('posSide'), r['bkPx'], r['sz'])] = {
                     'ts': ts, 'side': r.get('posSide') or ('long' if r.get('side') == 'sell' else 'short'),
-                    'px': px, 'coins': coins, 'usd': coins * px}
+                    'px': px, 'coins': coins, 'usd': coins * px, 'venue': 'okx'}
         if not rows or min(int(r['ts']) for r in rows) <= since_ms:
             break
         after = min(int(r['ts']) for r in rows)
