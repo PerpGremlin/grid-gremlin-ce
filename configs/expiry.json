@@ -12,6 +12,12 @@
     "where": "Bybit → subaccount → API management"
   },
   {
+    "name": "Bybit demo API key (tilt subaccount)",
+    "expires": null,
+    "note": "the tilt fleet's keys (the second subaccount, keyed 2026-10-09)",
+    "where": "Bybit → subaccount → API management"
+  },
+  {
     "name": "Hyperliquid testnet API wallet",
     "expires": null,
     "note": "an API wallet has a validity the app shows when it is made",
@@ -46,5 +52,11 @@
     "expires": null,
     "note": "a free plan's check can lapse; the renewal or review date",
     "where": "the uptime service"
+  },
+  {
+    "name": "Agent door key (restricted SSH key)",
+    "expires": null,
+    "note": "the forced-command key the agent's door answers to (D81); no expiry by itself; listed so a rotation has a date",
+    "where": "the box's authorized keys"
   }
 ]
