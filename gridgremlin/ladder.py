@@ -282,17 +282,28 @@ def position_cap(cfg, adapter, rungs):
     return sum(adapter.qty_from_notional(nt, p) for nt, p in zip(notionals, rungs))
 
 
-def lots_free(cap, held_base, lot_qty):
-    """G10: whole lots of headroom under the cap, measured off HELD."""
+def lots_free(cap, held_base, lot_qty, adapter=None):
+    """G10: whole lots of headroom under the cap, measured off HELD. D87:
+    given the adapter, counted in whole steps — the cap floored (a step
+    that is not there is not headroom), the holding and the lot to their
+    nearest step — so no float epsilon decides a lot."""
     if cap is None or lot_qty <= 0:
         return None                                # unbounded
+    if adapter is not None:
+        lot_s = max(1, adapter.to_steps(lot_qty))
+        return max(0, (adapter.to_steps(cap, 'floor') - adapter.to_steps(abs(held_base))) // lot_s)
     return max(0, int((cap - abs(held_base)) / lot_qty + 1e-9))
 
 
-def lots_held(sellable, lot_qty):
-    """G7: the suppression count, measured off SELLABLE."""
+def lots_held(sellable, lot_qty, adapter=None):
+    """G7: the suppression count, measured off SELLABLE. D87: given the
+    adapter, in whole steps — any step of a lot held counts the lot."""
     if lot_qty <= 0:
         return 0
+    if adapter is not None:
+        lot_s = max(1, adapter.to_steps(lot_qty))
+        held_s = max(0, adapter.to_steps(sellable))
+        return -(-held_s // lot_s)
     # ceil, not round: at exactly half a lot held, round() suppressed
     # nothing and the nearest entry re-armed with half its lot unexited
     # (audit 2026-08-07 LOW). Suppress while ANY of the lot is held.
@@ -401,7 +412,7 @@ def plan_grid(cfg, adapter, split_ref, held_base=0.0, basis=None,
     rungs = grid_rungs(cfg, adapter, offset)
     lot_qty = lot(cfg, adapter, split_ref)
     sellable = sellable_base(cfg, adapter, held_base)
-    suppressed = lots_held(sellable, lot_qty)
+    suppressed = lots_held(sellable, lot_qty, adapter)                # D87: whole steps
     floor, held_set = None, None
     from_fills = held_rungs is not None
     if cfg.get('exit_floor', 'rung') == 'rung':
@@ -449,7 +460,7 @@ def plan_grid(cfg, adapter, split_ref, held_base=0.0, basis=None,
         orders.append({'rung': i, 'side': exit_side, 'price': price, 'qty': qty,
                        'reduce_only': exits_ro})
 
-    free = lots_free(position_cap(cfg, adapter, rungs), held_base, lot_qty)
+    free = lots_free(position_cap(cfg, adapter, rungs), held_base, lot_qty, adapter)   # D87
     if held_set is not None:                     # G7 by identity (G23)
         armed = [(i, p) for i, p in parts['entries'] if i not in held_set]
     else:                                        # G7 by count (the proxy)
@@ -533,15 +544,16 @@ def plan_martingale(cfg, adapter, base_price, split_ref, held_base=0.0,
     whatever is held — a tranche exit shrinks the holding, not the ladder."""
     sign = -1.0 if cfg['side'] == 'long' else 1.0
     entry_side = 'Buy' if cfg['side'] == 'long' else 'Sell'
-    orders, cum = [], 0.0
+    orders, cum = [], 0                          # D87: the running total in whole steps
+    held_s = adapter.to_steps(max(0.0, held_base))
     for n, (notional, cumdev) in enumerate(martingale_schedule(cfg)):
         price = adapter.round_price(base_price * (1.0 + sign * cumdev))
         qty = adapter.round_qty(adapter.qty_from_notional(notional * scale,
                                                           price))
-        cum += qty
+        cum += adapter.to_steps(qty)
         if n == 0:
             continue
-        if held_base >= cum - 1e-12 or n in filled_rungs:
+        if held_s >= cum or n in filled_rungs:
             continue
         if (cfg['side'] == 'long') == (price >= split_ref):
             continue

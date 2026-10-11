@@ -73,6 +73,31 @@ class _Adapter:
         M23 exists to end (3.19 - 1.59 floored to 1.59, replay 2026-10-04)."""
         return float(_round_to_step(qty, self.qty_step))
 
+    # --- whole steps and ticks (D87) ------------------------------------------
+
+    def to_steps(self, qty, mode='round'):
+        """D87: a quantity as a whole number of the venue's steps — 'round'
+        for a quantity that IS on the grid (a holding, a fill: float noise a
+        hair either side of a step is not a step), 'floor' for one that is a
+        bound (a cap: never count a step that is not there; a millionth of a
+        step of float noise is forgiven)."""
+        q = _d(qty) / _d(self.qty_step)
+        if mode == 'floor':
+            return int((q + Decimal('0.000001')).to_integral_value(rounding=ROUND_DOWN))
+        return int(q.to_integral_value(rounding=ROUND_HALF_UP))
+
+    def from_steps(self, steps):
+        """D87: whole steps back to the venue's quantity, exactly."""
+        return float(_d(self.qty_step) * int(steps))
+
+    def to_ticks(self, price):
+        """D87: a price as a whole number of the venue's ticks (nearest)."""
+        return int((_d(price) / _d(self.price_tick)).to_integral_value(rounding=ROUND_HALF_UP))
+
+    def from_ticks(self, ticks):
+        """D87: whole ticks back to the venue's price, exactly."""
+        return float(_d(self.price_tick) * int(ticks))
+
     def fmt_price(self, price):
         return _fmt(_round_to_step(price, self.price_tick))
 
