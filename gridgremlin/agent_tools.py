@@ -139,11 +139,7 @@ def _p(v):
     return f'{v:,.2f}' if abs(v) >= 100 else f'{v:,.4f}' if abs(v) >= 1 else f'{v:.6g}'
 
 
-def _q(v):
-    """A quote amount, compact: 21.1M, 845k."""
-    if v is None:
-        return '—'
-    return f'{v / 1e6:,.1f}M' if v >= 1e6 else f'{v / 1e3:,.0f}k' if v >= 1e3 else f'{v:,.0f}'
+from common.fmt import usd_compact as _q             # D91: one of each  # noqa: E402
 
 
 def _n(v, f='.1f'):

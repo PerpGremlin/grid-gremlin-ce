@@ -7,6 +7,7 @@ import html
 import math
 import time
 
+from common.fmt import usd_compact
 from common.venues import VENUE_WORD as _VENUES
 from gridgremlin.marketdata import SERIES, series
 
@@ -53,9 +54,7 @@ def _fmt(v, unit):
     if v is None:
         return '—'
     if unit == 'USD':
-        a = abs(v)
-        return (f'{v / 1e9:,.2f}B' if a >= 1e9 else f'{v / 1e6:,.1f}M' if a >= 1e6
-                else f'{v / 1e3:,.0f}k' if a >= 1e3 else f'{v:,.0f}')
+        return usd_compact(v)                             # D91: one of each
     if unit == 'share':
         return f'{v:.1%}'
     if unit == '%':
@@ -137,7 +136,7 @@ def legend(lines, kind, unit):
         last = s[-1][1] if s else None
         colour = VENUE_COLOUR.get(_venue(name).split('_')[0], 'var(--fg)')
         parts.append(f'<span class="lg"><i style="background:{colour}"></i>{html.escape(VENUE_WORD.get(_venue(name), _venue(name)))} '
-                     f'<b class="{_num_cls(last) if kind == "bars" else ""}">{_fmt(last, unit)}</b></span>')
+                     f'<b class="{_num_cls(last) if kind == "bars" and last is not None else ""}">{_fmt(last, unit)}</b></span>')
     if kind == 'bars':
         tot = sum(s[-1][1] for s in lines.values() if s)
         parts.append(f'<span class="lg">last hour together <b class="{_num_cls(tot)}">{_fmt(tot, unit)}</b></span>')

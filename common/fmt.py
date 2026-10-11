@@ -39,6 +39,16 @@ def big_si(v):
     return f'{v:,.0f}'
 
 
+def usd_compact(v):
+    """15.65B, 47.8M, 845k, 500 — the pages' dollar figures (D91: one of each;
+    the copies wrote "0k" for 500, or "15650.0M" with no billions)."""
+    if v is None:
+        return '—'
+    a = abs(v)
+    return (f'{v / 1e9:,.2f}B' if a >= 1e9 else f'{v / 1e6:,.1f}M' if a >= 1e6
+            else f'{v / 1e3:,.0f}k' if a >= 1e3 else f'{v:,.0f}')
+
+
 def pct(v, nd=2, sign=True):
     """+1.23% — or a dash for nothing."""
     if v is None:
