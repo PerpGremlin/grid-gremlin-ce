@@ -147,7 +147,8 @@ systemctl --user enable --now grid-gremlin3-<fleet>.service           # each fle
 systemctl --user enable --now grid-gremlin3-<fleet>-watchdog.timer    # each fleet
 systemctl --user enable --now grid-gremlin3-logrotate.timer grid-gremlin3-fills.timer \
   grid-gremlin3-archive.timer grid-gremlin3-digest.timer \
-  grid-gremlin3-market.timer grid-gremlin3-market-report.timer
+  grid-gremlin3-market.timer grid-gremlin3-market-report.timer \
+  grid-gremlin3-collector.timer
 systemctl --user enable --now grid-gremlin3-phone.service gg-panel.service
 loginctl enable-linger $USER        # units survive logout
 ```

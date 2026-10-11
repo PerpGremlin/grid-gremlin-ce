@@ -1,0 +1,11 @@
+[Unit]
+Description=Grid Gremlin v3 collector — every five minutes
+
+[Timer]
+# minutes ending 0 and 5: every watchdog slot (*:1/5 … *:4/5) is taken, and
+# the hourly market reading (:33), the ledger (:27) and logrotate (:52) sit
+# off it. Not Persistent: a snapshot missed while the box was down is a gap.
+OnCalendar=*:0/5
+
+[Install]
+WantedBy=timers.target

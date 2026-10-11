@@ -1303,6 +1303,14 @@ eventually pin (T1).
   the day's taker flow). Each venue's funding is kept too — Bybit linear and
   inverse, Binance, OKX — as a yearly rate at that market's own settlement
   interval. Display only.
+- **K14** The collector (D84). Every five minutes, per coin the market
+  reading names: Coinbase's whole spot book and OKX's deep perpetual book
+  (its contracts × their value), summed into bands of 0.1% of a reference
+  price held for the UTC day, within ±5% of the mid; and OKX's liquidation
+  orders newer than the last run, in coins and USD, paged back until they
+  meet it so a burst is not lost. Kept under `logs/collect/` seven days; a
+  coin a venue does not list is not asked; a venue that fails is named and
+  the rest read. Keyless, public endpoints; display only.
 - **U55** The dash reads as the owner reads it. A fleet file's `label` is
   what the panel calls the fleet (forty characters at most); without one,
   the venue and the file's environment word. Every card is a column with
@@ -1458,6 +1466,13 @@ eventually pin (T1).
   price closed inside less than half the month, is said in red. An
   estimate, said so; checked against the rehearsal (round trips within 12%
   on four grids). *(the owner, 2026-10-11, the grid planner)*
+- **U74** A coin's page shows the collector's (K14) last day of the book as a
+  heatmap — time across, price up the side, bids below and asks above shaded
+  by size on a log scale, the price line over it, the largest band named —
+  and its liquidations as hourly bars (longs liquidated below the line,
+  shorts above) with the largest listed, over a day or a week. Nothing
+  collected: said. *(the owner, 2026-10-11: "i want to have liquidity
+  heatmaps")*
 - **L1** A new trade joins a running fleet within a cycle. The trade watch
   stats the trades file once a cycle; a changed file's new rows are each
   built by the fleet's own builder (`main.build_market_bot`, the one every
