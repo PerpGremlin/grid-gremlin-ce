@@ -235,6 +235,16 @@ def snapshot_row(bots, wallet, now, tiers=None):
                      for b in bots}}
 
 
+def cap_holds(was, why, wallet):
+    """F15d (the review, 2026-10-11): an unread wallet is not a cleared cap.
+    A cycle whose wallet read failed — or read no equity — keeps the last
+    verdict until a read says otherwise (E9: unknown is never zero); one
+    failed read used to clear the cap and let every flat bot open."""
+    if was and not why and (wallet.get('unread') or wallet.get('equity') is None):
+        return was
+    return why
+
+
 def cap_verdict(caps, mm_rate, bots, equity=None, im_rate=None):
     """D56, pure: the reason the account is at its cap, or None. mm_rate is
     the venue's own; notional is every living bot's position at mark (the
@@ -252,7 +262,9 @@ def cap_verdict(caps, mm_rate, bots, equity=None, im_rate=None):
             and mm_rate >= caps['mm_rate_max']):
         return f"maintenance margin {mm_rate:.1%} >= {caps['mm_rate_max']:.1%}"
     lev_max = caps.get('effective_leverage_max')
-    if lev_max is not None and equity:
+    if lev_max is not None and equity is not None:
+        if equity <= 0:                     # the review: zero was falsy and judged nothing
+            return f"account equity {equity:,.2f} — no room for leverage"
         lev = notional / equity
         if lev >= lev_max:
             return f"account leverage {lev:.2f}x >= {lev_max:g}x"
@@ -845,7 +857,7 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
                         # one venue's trouble must not starve the other's
                         # bots of their stop evaluation (audit 2026-08-07
                         # MED — the fleet-level twin of the per-bot M3)
-                        wallets[v] = {'equity': None, 'mm_rate': None}
+                        wallets[v] = {'equity': None, 'mm_rate': None, 'unread': True}
                         _vn(notifier, v).event(
                             'net', 'fleet',
                             f'wallet read failed: {type(e).__name__}: '
@@ -863,6 +875,7 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
                         why = cap_verdict(caps, wallets[v]['mm_rate'], mine,
                                           wallets[v].get('equity'), wallets[v].get('im_rate'))
                         was = capped_by.get(v)
+                        why = cap_holds(was, why, wallets[v])
                         if why and not was:
                             _vn(notifier, v).event(
                                 'margin', 'fleet',

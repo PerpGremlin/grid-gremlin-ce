@@ -122,17 +122,27 @@ def matches(desired, order, qty_rtol=QTY_RTOL, qty_step=None):
         return False
     if abs(order['price'] - desired['price']) > PRICE_EPS:
         return False
-    dq, oq = desired['qty'], order['qty']
-    if desired['reduce_only']:
-        # truncation-tolerant DOWN TO A POINT: the venue shrinks an exit to
-        # the position, but a resting order far below the desire is not
-        # truncation, it is a grown position with a stale cover — matching
-        # it forever left the growth unexited (audit 2026-08-07 MED). Below
-        # three quarters, replace (the diff makes it an amend).
-        return dq * 0.75 <= oq <= dq * (1.0 + qty_rtol)
-    if qty_step:
-        return abs(dq - oq) < qty_step * 0.5
-    return abs(dq - oq) <= qty_rtol * dq
+    dq = desired['qty']
+    # the review (2026-10-11): a part-filled order matches on its original
+    # size OR on what still rests — a spot exit's plan shrinks with the
+    # holding its fill sold, and the rest is then exactly the plan
+    filled = order.get('cum_exec_qty') or 0.0
+    sizes = (order['qty'],) + ((order['qty'] - filled,) if filled > 0 else ())
+    for oq in sizes:
+        if desired['reduce_only']:
+            # truncation-tolerant DOWN TO A POINT: the venue shrinks an exit to
+            # the position, but a resting order far below the desire is not
+            # truncation, it is a grown position with a stale cover — matching
+            # it forever left the growth unexited (audit 2026-08-07 MED). Below
+            # three quarters, replace (the diff makes it an amend).
+            if dq * 0.75 <= oq <= dq * (1.0 + qty_rtol):
+                return True
+        elif qty_step:
+            if abs(dq - oq) < qty_step * 0.5:
+                return True
+        elif abs(dq - oq) <= qty_rtol * dq:
+            return True
+    return False
 
 
 def diff(desired, resting, botid, qty_rtol=QTY_RTOL, qty_step=None):

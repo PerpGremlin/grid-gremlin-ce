@@ -380,15 +380,17 @@ class BasisMixin:
                     or (stop.get('emergency_pct') is not None
                         and hosts_position_stop(self.cfg)))
 
-    def _own_fills_all(self):
+    def _own_fills_all(self, days=2):
         """Every recent fill on OUR symbol — including ones with no link
-        (a liquidation carries none), which _own_fills deliberately drops."""
+        (a liquidation carries none), which _own_fills deliberately drops.
+        Two days for the round-end readers (M14, M22: the close just made);
+        _round_fills asks for its own fills' whole window."""
         hist = getattr(self.client, 'fills_history', None)
         if hist is None:
             return None       # the venue offers no account — unknowable
         now_ms = int(self._now() * 1000)
         return hist(self.cfg['market_type'], self.cfg['symbol'],
-                    now_ms - 2 * 86_400_000, now_ms)
+                    now_ms - days * 86_400_000, now_ms)
 
     def _round_fills(self):
         """M12/M13/R8: this bot's round history INCLUDING venue-created
@@ -398,13 +400,16 @@ class BasisMixin:
         invisible — audit 2026-08-07 H1). On a hedged symbol the exit
         SIDE disambiguates whose close an unlinked fill is."""
         linked = self._own_fills()
-        all_fills = self._own_fills_all()
+        # the review (2026-10-11): the venue's closes over the SAME window as
+        # the linked fills — over two days, a liquidation three days old
+        # vanished, its entries read as still held, and max_loss saw nothing
+        all_fills = self._own_fills_all(days=HISTORY_WINDOW_DAYS)
         if not all_fills:
             return linked
         exit_side = self._exit_side.lower()
-        seen = {f['time_ms'] for f in linked}
+        seen = {f.get('exec_id') or f['time_ms'] for f in linked}
         for f in all_fills:
-            if (f['time_ms'] not in seen
+            if ((f.get('exec_id') or f['time_ms']) not in seen
                     and not f.get('link_id')
                     and str(f.get('side', '')).lower() == exit_side
                     and (f.get('venue_closed') or f.get('venue_kind'))):
