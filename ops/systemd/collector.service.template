@@ -1,0 +1,9 @@
+[Unit]
+Description=Grid Gremlin v3 collector (D84) — the books and the liquidations, public endpoints, kept in logs/collect/ seven days, nothing acts on them
+
+[Service]
+Type=oneshot
+WorkingDirectory={{REPO_DIR}}
+Nice=10
+TimeoutStartSec=240
+ExecStart=/usr/bin/python3 -m gridgremlin.collector
