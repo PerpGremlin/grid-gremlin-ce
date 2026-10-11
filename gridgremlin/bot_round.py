@@ -753,8 +753,16 @@ class RoundMixin:
                 return {'round': 'expired'}
             if self.capped:                       # D56: the account is full;
                 return {'round': 'capped'}        # the next round waits
-            qty = adapter.round_qty(cfg['base_order_size'] * scale
-                                    / truth['mark'])
+            from .ladder import ladder_fits, order_qty
+            if not ladder_fits(cfg, truth['mark']):                 # D89
+                if not self._unplaceable_warned:
+                    self._unplaceable_warned = True
+                    self.notify.event(
+                        'warn', self.botid,
+                        f"the coin-sized ladder ({cfg['ladder_total_coins']:g}) needs more than "
+                        f"the capital at {truth['mark']:,.6g} — the round waits (D89)", urgent=True)
+                return {'round': 'unplaceable'}
+            qty = order_qty(cfg, adapter, cfg['base_order_size'] * scale, truth['mark'])
             if qty <= 0 or not adapter.meets_minimum(qty, truth['mark']):
                 if not self._unplaceable_warned:         # once, not once/sec
                     self._unplaceable_warned = True

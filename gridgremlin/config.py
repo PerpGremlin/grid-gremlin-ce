@@ -44,7 +44,7 @@ MARTINGALE_KEYS = COMMON_KEYS + (
     'take_profit_avg_pct', 'repeat', 'place_within_pct',
     'stop_cooldown_seconds', 'max_rounds', 'max_rounds_since',
     'max_hold_seconds', 'trailing_activation_pct', 'spot_borrow',
-    'spot_leverage', 'trade')
+    'spot_leverage', 'trade', 'size_in')
 STOP_KEYS = ('watch', 'level', 'rungs_beyond', 'server_side',
              'from_base_pct', 'confirm_seconds', 'action',
              'confirm_candle', 'emergency_pct')
@@ -660,6 +660,11 @@ def validate_martingale(row, where='row'):
         cfg['max_averaging_orders'] = _num(cfg, 'max_averaging_orders', where,
                                            least=1, most=50, required=True,
                                            integer=True)
+    # D89: order sizes in the quote (the default) or in the coin itself
+    size_in = cfg.get('size_in', 'quote')
+    if size_in not in ('quote', 'coin'):
+        _refuse(f"{where}: 'size_in' is quote or coin (D89), not {size_in!r}")
+    cfg['size_in'] = size_in
     _sched_d = cfg['deviation_pct']
     _sched_s = cfg['deviation_step_multiplier']
     _cum = sum(_sched_d * _sched_s ** i
@@ -830,6 +835,12 @@ def validate_martingale(row, where='row'):
     k, n = cfg['order_size_multiplier'], cfg['max_averaging_orders']
     total = cfg['base_order_size'] + sum(
         cfg['safety_order_size'] * k ** i for i in range(n))
+    if cfg['size_in'] == 'coin':
+        # D89: coins have no price here — the round asks at its open, at
+        # the mark (ladder_fits), and waits while the ladder would not fit
+        cfg['ladder_total_coins'] = total
+        cfg['ladder_total_notional'] = None
+        return cfg
     if total > cfg['ladder_notional'] + 1e-9:
         margin = total / leverage
         _refuse(f"{where}: the full ladder needs {total:.10g} notional "

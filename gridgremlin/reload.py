@@ -45,7 +45,7 @@ def _portfolio_terms(cfg):
 
 def _user_keys(cfg):
     """The row as written, minus the engine's derived values and notes."""
-    derived = {'ladder_notional', 'ladder_total_notional',
+    derived = {'ladder_notional', 'ladder_total_notional', 'ladder_total_coins',
                'max_rounds_since_ms', 'max_loss_since_ms'} | set(CARRIED)
     return {k: v for k, v in cfg.items()
             if k not in derived and not k.startswith('_')}

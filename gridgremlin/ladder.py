@@ -481,8 +481,29 @@ def plan_grid(cfg, adapter, split_ref, held_base=0.0, basis=None,
 
 # --- the martingale: the same maths, different data (M1, M2, M8) -------------
 
+def order_qty(cfg, adapter, size, price):
+    """D89: one DCA order's quantity — `size` in the quote (the default:
+    a notional, priced at `price`) or in the coin itself (`size_in: coin`;
+    an inverse market counts $1 contracts, so coins × price). Floored to
+    the venue's step."""
+    if cfg.get('size_in') == 'coin':
+        raw = size * price if adapter.market_type == 'inverse' else size
+    else:
+        raw = adapter.qty_from_notional(size, price)
+    return adapter.round_qty(raw)
+
+
+def ladder_fits(cfg, mark):
+    """D89: whether a coin-sized ladder fits the capital at this mark — the
+    check M2 makes at validation for a quote-sized one. True for quote."""
+    if cfg.get('size_in') != 'coin':
+        return True
+    return cfg['ladder_total_coins'] * mark <= cfg['ladder_notional'] + 1e-9
+
+
 def martingale_schedule(cfg):
-    """M2: [(notional, cumulative deviation)] — index 0 is the base order."""
+    """M2: [(size, cumulative deviation)] — index 0 is the base order; the
+    size is a notional in the quote, or coins under `size_in: coin` (D89)."""
     k = cfg['order_size_multiplier']
     s = cfg['deviation_step_multiplier']
     d = cfg['deviation_pct']
@@ -509,8 +530,11 @@ def ladder_summary(cfg):
     if tp is None:
         tp = (cfg.get('take_profit_tranches') or [{}])[0].get('at_avg_pct')
     rows, committed, coins = [], 0.0, 0.0
+    coin_sized = cfg.get('size_in') == 'coin'          # D89: sizes in coins
     for i, (notional, cumdev) in enumerate(martingale_schedule(cfg)):
         price = 1.0 + sign * cumdev
+        if coin_sized:                                 # in units of the base price
+            notional = notional * price
         committed += notional
         coins += notional / price
         avg = committed / coins
@@ -548,8 +572,7 @@ def plan_martingale(cfg, adapter, base_price, split_ref, held_base=0.0,
     held_s = adapter.to_steps(max(0.0, held_base))
     for n, (notional, cumdev) in enumerate(martingale_schedule(cfg)):
         price = adapter.round_price(base_price * (1.0 + sign * cumdev))
-        qty = adapter.round_qty(adapter.qty_from_notional(notional * scale,
-                                                          price))
+        qty = order_qty(cfg, adapter, notional * scale, price)    # D89
         cum += adapter.to_steps(qty)
         if n == 0:
             continue

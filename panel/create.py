@@ -334,9 +334,13 @@ def martingale_preview(cfg, mark):
     sched = martingale_schedule(cfg)
     sign = -1.0 if cfg['side'] == 'long' else 1.0
     rows, cum_n, cum_q = [], 0.0, 0.0
+    coin_sized = cfg.get('size_in') == 'coin'          # D89
     for i, (notional, cumdev) in enumerate(sched):
         price = mark * (1.0 + sign * cumdev)
-        qty = notional / price if price > 0 else 0.0
+        if coin_sized:
+            qty, notional = notional, notional * price
+        else:
+            qty = notional / price if price > 0 else 0.0
         cum_n += notional
         cum_q += qty
         rows.append({'rung': i, 'price': price, 'notional': notional,
