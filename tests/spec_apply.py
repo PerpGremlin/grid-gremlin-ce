@@ -133,6 +133,30 @@ def spec_E2_entry_qty_uses_relative_tolerance():
     assert not matches(want, _resting(3, 53000.0, 0.006))    # outside
 
 
+def spec_D88_an_entry_a_step_off_its_plan_is_corrected():
+    """The audit (2026-10-08), granted by the owner 2026-10-11: a resting
+    entry within 5% of its plan was accepted — wide for a desk. Given the
+    venue's step, an entry matches only within half a step: one step off is
+    a cancel and a create at the same price, which the pairing makes an
+    amend. Exits keep their truncation band; without a step, the old rule."""
+    import inspect
+    from gridgremlin import bot
+    step = 0.001
+    want = _desired(3, 53000.0, 0.008)
+    assert matches(want, _resting(3, 53000.0, 0.008), qty_step=step)
+    assert matches(want, _resting(3, 53000.0, 0.0084), qty_step=step)          # inside half a step
+    assert not matches(want, _resting(3, 53000.0, 0.009), qty_step=step)       # a step off
+    assert not matches(want, _resting(3, 53000.0, 0.0079 - 0.0005), qty_step=step)
+    assert matches(want, _resting(3, 53000.0, 0.0079))                        # no step: the 5% band
+    cancel, create = diff([want], [_resting(3, 53000.0, 0.009)], BOT, qty_step=step)
+    amends, cancels, creates = pair_amends(cancel, create, BOT)
+    assert len(amends) == 1 and cancels == [] and creates == []               # an amend, not a re-place
+    exit_want = _desired(12, 63000.0, 0.021, side='Sell', ro=True)
+    assert matches(exit_want, _resting(12, 63000.0, 0.019, side='Sell', ro=True), qty_step=step)  # truncation band
+    src = inspect.getsource(bot)
+    assert src.count('qty_step=step)') == 2                                   # both of the bot's diffs pass it
+
+
 # --- amend pairing: qty yes, price never -------------------------------------
 
 def spec_E2_same_price_qty_change_is_an_amend():

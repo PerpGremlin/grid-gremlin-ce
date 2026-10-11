@@ -554,11 +554,12 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
                               if d['side'] == self._entry_side] or desired
         if spot_lag:
             lagging = True                   # D58: our fill is in flight
-        to_cancel, _ = diff(desired, orders_view, self.botid)         # full
+        step = self.adapter.qty_step                                    # D88: entries to one step
+        to_cancel, _ = diff(desired, orders_view, self.botid, qty_step=step)    # full
         if defer_exits:
             to_cancel = [o for o in to_cancel
                          if o['side'] != self._exit_side]
-        _, to_create = diff(live, orders_view, self.botid)            # windowed
+        _, to_create = diff(live, orders_view, self.botid, qty_step=step)       # windowed
         if lagging:
             # G26: the plan above was drawn from an account that does not
             # add up — WHICH lots are held is unknown on both sides (a
