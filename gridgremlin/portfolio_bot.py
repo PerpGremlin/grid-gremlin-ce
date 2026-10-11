@@ -65,7 +65,7 @@ class RegimeReader:
     readings file has changed. Answers the reading's own word, or None."""
 
     def __init__(self, path=None):
-        from .market import STORE
+        from ggdata.market import STORE
         from pathlib import Path
         self.path = Path(path or STORE)
         self._mtime, self._row = None, None
@@ -76,7 +76,7 @@ class RegimeReader:
         except OSError:
             return None
         if m != self._mtime:
-            from .market import latest
+            from ggdata.market import latest
             self._mtime, self._row = m, latest(self.path)
         markets = (self._row or {}).get('markets') or {}
         for key in (f'bybit:spot:{coin}USDT', f'bybit:linear:{coin}USDT', f'bybit:inverse:{coin}USD'):

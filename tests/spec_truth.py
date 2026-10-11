@@ -2,7 +2,7 @@
 
 import os
 
-from gridgremlin.exchange.env import load_env
+from common.env import load_env
 from gridgremlin.exchange.errors import VenueError
 from gridgremlin.exchange.bybit.client import Client, detect_env
 from gridgremlin.exchange.bybit.truth import (TruthError,

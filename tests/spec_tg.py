@@ -2,7 +2,7 @@
 import inspect
 from pathlib import Path
 
-from gridgremlin.tg import bold_headings, payload
+from common.telegram import bold_headings, payload
 
 
 def spec_F20_the_label_is_bold_and_the_rest_is_escaped_verbatim():
@@ -43,7 +43,7 @@ def spec_P3_a_telegram_token_never_leaves_a_sender_in_an_error():
     import gridgremlin.events as ev
     import gridgremlin.phone as ph
     import gridgremlin.watchdog as wd
-    from gridgremlin.tg import redact
+    from common.telegram import redact
     token = 'SECRET-TOKEN-123'
     assert redact(f'https://api.telegram.org/bot{token}/x failed', token) == \
         'https://api.telegram.org/bot<token>/x failed'

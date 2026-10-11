@@ -2,7 +2,7 @@
 import json
 import tempfile
 
-from gridgremlin.liqstream import PING_S, URL, listen, parse
+from ggdata.liqstream import PING_S, URL, listen, parse
 
 
 def spec_D84_bybits_liquidations_are_recorded_as_they_stream():

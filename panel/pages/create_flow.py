@@ -174,7 +174,7 @@ class CreateFlowPages:
                 picture += (f'<p class="dim">no what-if: '
                             f'{_html.escape(str(e))}</p>')
             try:                   # U73: and how it fits the market it trades
-                from gridgremlin.market import latest
+                from ggdata.market import latest
                 from panel.fit import fit_section
                 picture += fit_section(vbot, self._bars_for(vbot), latest())
             except Exception as e:                          # noqa: BLE001

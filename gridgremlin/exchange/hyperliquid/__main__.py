@@ -2,7 +2,7 @@
 # Reads only; prints market data and schema verdicts, never account figures.
 import sys
 
-from ..env import load_env
+from common.env import load_env
 from .client import InfoClient
 from .truth import parse_instrument, read_symbol_truth, read_wallet
 

@@ -13,9 +13,9 @@ import sys
 import time
 from pathlib import Path
 
-from .durable import write_json
+from common.files import write_json
 from .report import card_total
-from .exchange.env import load_env
+from common.env import load_env
 
 STATE = Path('logs/relay.state.json')   # the channel's offset, shared on
                                         # purpose: one consumer, one place
@@ -367,7 +367,7 @@ def cmd_alerts(box, args):
 def cmd_market(box, args):
     """D67: the kept readings, as the session report says them — part n of
     a report too long for one message."""
-    from .market import latest, report
+    from ggdata.market import latest, report
     row = latest()
     if row is None:
         return 'no market readings yet — the hourly reading has not run'
@@ -420,7 +420,7 @@ class Telegram:
 
     def _call(self, method, body, timeout):
         import urllib.request
-        from .tg import redact                        # P3: never the token
+        from common.telegram import redact                        # P3: never the token
         req = urllib.request.Request(
             f'{self.base}/{method}', data=json.dumps(body).encode(),
             headers={'Content-Type': 'application/json'})
@@ -437,7 +437,7 @@ class Telegram:
                           wait + 15).get('result', [])
 
     def send(self, chat, text):
-        from .tg import payload                       # F20: heading in bold
+        from common.telegram import payload                       # F20: heading in bold
         self._call('sendMessage', payload(chat, text), 20)
 
 

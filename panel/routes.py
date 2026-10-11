@@ -210,7 +210,7 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             self.wfile.write(tidy(body).encode())
             return
         if self.path.split('?')[0] == '/asset':                      # U71
-            from gridgremlin.market import latest
+            from ggdata.market import latest
             from panel.reference import KEEP_JS
             from .asset import asset_page
             from .markets import coins_of
@@ -228,7 +228,7 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             self.wfile.write(tidy(body).encode())
             return
         if self.path.split('?')[0] == '/carry':                      # U69
-            from gridgremlin.market import latest
+            from ggdata.market import latest
             from panel.reference import KEEP_JS
             from .carry import carry_page
             from .nav import PAGE_END, side_nav
@@ -241,7 +241,7 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             self.wfile.write(tidy(body).encode())
             return
         if self.path.split('?')[0] == '/calm-wild':                  # K11
-            from gridgremlin.market import latest
+            from ggdata.market import latest
             from panel.reference import KEEP_JS
             from .markets import coins_of, decided_page
             from .nav import PAGE_END, side_nav
@@ -269,7 +269,7 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
         base, _, query = self.path.partition('?')
         view = dict(urllib.parse.parse_qsl(query)).get('view', 'all')
         if self.path != '/data' and base != '/table':
-            from gridgremlin.market import latest
+            from ggdata.market import latest
             try:
                 market = latest()                  # U67: the markets half, from the readings file
             except (OSError, ValueError):

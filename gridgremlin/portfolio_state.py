@@ -8,7 +8,8 @@
 import json
 from pathlib import Path
 
-from .durable import locked, write_json
+from common.files import write_json
+from .durable import locked
 
 
 class PortfolioStateError(Exception):

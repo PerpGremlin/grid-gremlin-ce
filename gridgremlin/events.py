@@ -66,8 +66,8 @@ class TelegramNotifier(Notifier):
     def _http(self, text):
         import json
         import urllib.request
-        from .tg import payload                       # F20: labels in bold
-        from .tg import redact                        # P3: never the token
+        from common.telegram import payload                       # F20: labels in bold
+        from common.telegram import redact                        # P3: never the token
         req = urllib.request.Request(
             f'https://api.telegram.org/bot{self.token}/sendMessage',
             data=json.dumps(payload(self.chat_id, text, every_line=True)).encode(),

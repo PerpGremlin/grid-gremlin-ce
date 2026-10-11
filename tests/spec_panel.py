@@ -1887,7 +1887,7 @@ def spec_U75_the_bug_hunts_findings_stay_fixed():
     import json as _json
     from pathlib import Path as _P
     from gridgremlin import expiry as ex
-    from gridgremlin.market import depth_reach_pct
+    from ggdata.market import depth_reach_pct
     from panel.markets import tile
     from panel.card import run_rate
     from panel.strip_view import tier_badge

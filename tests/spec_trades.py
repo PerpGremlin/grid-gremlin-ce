@@ -164,7 +164,7 @@ def spec_L5_every_reader_sees_a_trade_as_the_bot_it_is():
     trade a config row already covers is not added twice; an unreadable
     trades file adds nothing (the engine refuses to build beside it)."""
     import inspect
-    from gridgremlin import close, digest, kept_fills, market, report
+    from gridgremlin import close, digest, kept_fills, market_list, report
     from gridgremlin.trades import with_trades
     d = Path(tempfile.mkdtemp())
     (d / 'configs').mkdir()
@@ -181,7 +181,7 @@ def spec_L5_every_reader_sees_a_trade_as_the_bot_it_is():
     assert out['bots'][1]['account'] == 'default' and fleet['bots'] == [fleet['bots'][0]]
     (d / 'logs' / 'trades-x.json').write_text('{bad')
     assert with_trades(f, fleet) is fleet
-    for mod in (report, kept_fills, digest, market, close):
+    for mod in (report, kept_fills, digest, market_list, close):
         assert 'with_trades(' in inspect.getsource(mod), mod.__name__
 
 

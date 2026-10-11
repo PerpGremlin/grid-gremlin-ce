@@ -21,7 +21,8 @@ def main(argv):
     from .config import validate_fleet
     from .events import Notifier
     from .exchange.bybit.client import WriteClient
-    from .exchange.env import load_env, select_account
+    from common.env import load_env
+    from .exchange.env import select_account
     from .main import _logs_dir, build_portfolio, fleet_running
     from .portfolio_state import PortfolioState
     from .tombstones import Tombstones, path_for, remove

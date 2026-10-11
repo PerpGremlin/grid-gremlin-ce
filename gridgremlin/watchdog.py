@@ -9,7 +9,8 @@ import urllib.request
 from pathlib import Path
 
 from .config import ConfigError, _flag, _num, _reject_unknown
-from .exchange.env import load_env
+from common.env import load_env
+from common.telegram import send_telegram
 
 WATCHDOG_KEYS = ('tag', 'snapshot', 'state', 'staleness_seconds', 'mm_rate_max',
                  'equity_min', 'equity_drawdown_max', 're_alert_seconds',
@@ -149,27 +150,6 @@ def decide(state, breaches, now, re_alert_seconds):
     return pages, new_state
 
 
-def send_telegram(text):
-    """Direct page — the watchdog is its own process; a send failure RAISES so
-    state is never persisted over an undelivered page (it re-pages next tick,
-    and the unit's OnFailure alarm fires)."""
-    token = os.environ.get('TELEGRAM_BOT_TOKEN')
-    chat = os.environ.get('TELEGRAM_CHAT_ID')
-    if not (token and chat):
-        print('WATCHDOG HAS NO TELEGRAM CREDENTIALS — this page reached '
-              'NOBODY (journal only)', flush=True)
-        return
-    from .tg import payload, redact                   # F20: heading in bold
-    data = urllib.parse.urlencode(payload(chat, text)).encode()
-    try:
-        urllib.request.urlopen(
-            f'https://api.telegram.org/bot{token}/sendMessage', data,
-            timeout=20).read()
-    except OSError as e:                              # P3: never the token
-        raise OSError(redact(f'telegram: {e} {getattr(e, "url", "") or ""}',
-                             token)) from None
-
-
 def disk_used(path):
     """F25: the used fraction of the volume `path` lives on; None when the
     path does not exist yet (a fleet that has not written)."""
@@ -247,7 +227,7 @@ def main(argv):
         print(f"[{cfg['tag']}] {page}", flush=True)   # page re-pages next tick
     if pages:
         send_telegram(f"[{cfg['tag']}] " + '\n'.join(pages))
-    from .durable import write_json
+    from common.files import write_json
     write_json(statep, {'_peak': peak, '_alerts': new_alerts}, indent=None)
     print(f"[{cfg['tag']}] {'BREACHED' if breaches else 'ok'} "
           f'({len(breaches)} breach(es))', flush=True)

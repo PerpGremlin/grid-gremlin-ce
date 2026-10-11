@@ -11,7 +11,7 @@ happen (neither keeps a public history). Every five minutes, per coin:
 
 Kept per coin and day under logs/collect/, seven days. Keyless, public
 endpoints only; display only — no bot reads it. Run by a timer:
-  python3 -m gridgremlin.collector
+  python3 -m ggdata.collector
 """
 import json
 import math
@@ -170,7 +170,7 @@ def run(fetch, coins, now, root=None):
     for f in root.glob('*/*.jsonl'):
         if f.stem.split('-', 1)[1] < cut:
             f.unlink()
-    from .durable import write_json
+    from common.files import write_json
     write_json(state_p, state)
     return said
 

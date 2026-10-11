@@ -3,7 +3,7 @@
 # secrets, no account figures beyond what the operator asked to see.
 import sys
 
-from ..env import load_env
+from common.env import load_env
 from .client import Client
 from .truth import parse_instrument, read_symbol_truth, read_wallet
 
