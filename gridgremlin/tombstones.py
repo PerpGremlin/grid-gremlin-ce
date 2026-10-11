@@ -7,7 +7,8 @@ import json
 import time
 from pathlib import Path
 
-from .durable import locked, write_json
+from common.files import write_json
+from .durable import locked
 
 
 class TombstoneError(Exception):

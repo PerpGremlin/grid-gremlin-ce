@@ -1258,7 +1258,7 @@ eventually pin (T1).
   said as such. Display only, like the rest of K.
 
 - **K10** Calm or wild: the market readings carry each coin's two-state
-  hidden Markov model of its Bybit hourly returns (`gridgremlin/hmm.py`,
+  hidden Markov model of its Bybit hourly returns (`ggdata/hmm.py`,
   Baum-Welch). It is refitted once a day on the last 180 days (kept in
   `logs/market-hmm.json`) and filtered every hour over the last 500 hours
   from the hours up to now only: the probability of the wild state, how

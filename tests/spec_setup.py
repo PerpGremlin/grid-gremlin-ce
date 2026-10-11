@@ -455,7 +455,7 @@ def spec_P2_the_keys_stay_the_owners():
     import os
     import tempfile
     from pathlib import Path
-    from gridgremlin.exchange.env import load_env
+    from common.env import load_env
     d = Path(tempfile.mkdtemp())
     env = d / '.env'
     env.write_text('GG_SPEC_P2=1\n')

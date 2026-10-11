@@ -13,6 +13,8 @@ import os
 import tempfile
 from pathlib import Path
 
+from common.files import write_json
+
 # One file PER FLEET (2026-10-08): two fleets on one box shared
 # logs/slide_state.json, each holding its own copy since its build, and the
 # last writer won — the HL fleet's slide wrote back a copy taken before the
@@ -78,27 +80,6 @@ def refuse_legacy_state(fleet_path, fleet_raw):
                 f'configs/fleet.*.json --commit (one file per fleet, the old '
                 f'one kept under logs/archive/); refusing to build with it beside '
                 f'{state_path(fleet_path, fleet_raw, kind).name}')
-
-
-def write_json(path, obj, indent=1):
-    p = Path(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=str(p.parent), prefix=f'.{p.name}.')
-    try:
-        with os.fdopen(fd, 'w') as f:
-            f.write(json.dumps(obj, indent=indent))
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, str(p))
-    except BaseException:
-        with contextlib.suppress(FileNotFoundError):
-            os.unlink(tmp)
-        raise
-    dfd = os.open(str(p.parent), os.O_RDONLY)
-    try:
-        os.fsync(dfd)
-    finally:
-        os.close(dfd)
 
 
 @contextlib.contextmanager

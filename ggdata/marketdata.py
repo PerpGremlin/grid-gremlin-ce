@@ -230,7 +230,7 @@ def update(fetch, coins, now, root=None, pause=time.sleep):
     """Every coin's series fetched, merged and kept; returns what the
     reading says of it: the newest value of each series and what was not
     read, per coin."""
-    from .durable import write_json
+    from common.files import write_json
     said = {}
     for coin in coins:
         have = load(coin, root)

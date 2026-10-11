@@ -4,7 +4,8 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-from gridgremlin import market as mk
+from ggdata import market as mk
+from gridgremlin.market_list import markets_of
 
 
 def _candles(closes, wick=0.005):
@@ -154,7 +155,7 @@ def _fleets(d):
 
 def spec_K5_collect_keeps_every_reading_and_says_the_unread_part():
     d = Path(tempfile.mkdtemp())
-    row = mk.collect(_fleets(d), fetch=_bybit_canned(fail=('account-ratio',)), now=1_800_000_000)
+    row = mk.collect(markets_of(_fleets(d)), fetch=_bybit_canned(fail=('account-ratio',)), now=1_800_000_000)
     b = row['markets']['bybit:linear:BTCUSDT']
     assert b['unread'] == {'ratio': 'OSError: venue down'} and b.get('long_pct') is None
     assert b['price'] == 100.0 and abs(b['funding_8h_pct'] - 0.02) < 1e-12   # 4 h coin
@@ -179,7 +180,7 @@ def spec_K5_collect_keeps_every_reading_and_says_the_unread_part():
 
 def spec_K6_the_report_fits_telegram_and_says_each_coin_once():
     d = Path(tempfile.mkdtemp())
-    row = mk.collect(_fleets(d), fetch=_bybit_canned(), now=1_800_000_000)
+    row = mk.collect(markets_of(_fleets(d)), fetch=_bybit_canned(), now=1_800_000_000)
     msgs = mk.report(row, now=1_800_000_000)
     text = '\n'.join(msgs)
     assert text.count('📈 BTC') == 1 and 'ranging · ADX' in text
@@ -198,7 +199,7 @@ def spec_K6_the_report_fits_telegram_and_says_each_coin_once():
 
 
 def spec_K7_the_readings_module_is_read_only_and_keyless():
-    src = (Path(__file__).resolve().parents[1] / 'gridgremlin' / 'market.py').read_text()
+    src = (Path(__file__).resolve().parents[1] / 'ggdata' / 'market.py').read_text()
     for word in ('api_key', 'api_secret', 'X-BAPI-SIGN', 'private_key', 'WriteClient',
                  'ExchangeClient', '/exchange', 'order/create', 'sign_l1'):
         assert word not in src, word
@@ -208,7 +209,7 @@ def spec_K7_the_readings_module_is_read_only_and_keyless():
 def spec_K8_the_phone_answers_market_from_the_kept_readings():
     from gridgremlin import phone
     d = Path(tempfile.mkdtemp())
-    row = mk.collect(_fleets(d), fetch=_bybit_canned(), now=1_800_000_000)
+    row = mk.collect(markets_of(_fleets(d)), fetch=_bybit_canned(), now=1_800_000_000)
     store, saved = d / 'market.jsonl', mk.STORE
     mk.STORE = str(store)
     try:
@@ -223,7 +224,7 @@ def spec_K8_the_phone_answers_market_from_the_kept_readings():
 
 def spec_K9_the_newest_reading_sits_beside_each_bot_and_in_the_digest():
     d = Path(tempfile.mkdtemp())
-    row = mk.collect(_fleets(d), fetch=_bybit_canned(), now=1_800_000_000)
+    row = mk.collect(markets_of(_fleets(d)), fetch=_bybit_canned(), now=1_800_000_000)
     key_of = {'linBTCUSDTl': ('linear', 'BTCUSDT'), 'linBTCl': ('linear', 'BTC'),
               'linXRPUSDTs': ('linear', 'XRPUSDT')}
     venue_of = {('linear', 'BTCUSDT'): 'bybit', ('linear', 'BTC'): 'hyperliquid',
@@ -268,7 +269,7 @@ def spec_K9_the_readout_contract_carries_the_market_words():
     from gridgremlin import report as rp
     assert "'market': _market_for(key_of, venue_of, now_ms)" in inspect.getsource(rp.main)
     d = Path(tempfile.mkdtemp())
-    row = mk.collect(_fleets(d), fetch=_bybit_canned(), now=1_800_000_000)
+    row = mk.collect(markets_of(_fleets(d)), fetch=_bybit_canned(), now=1_800_000_000)
     store, saved = d / 'market.jsonl', mk.STORE
     mk.STORE = str(store)
     try:
@@ -288,7 +289,7 @@ def spec_K9_the_readout_contract_carries_the_market_words():
 def spec_K10_the_hidden_model_recovers_a_known_one():
     import math
     import random
-    from gridgremlin.hmm import best_fit, sample
+    from ggdata.hmm import best_fit, sample
     rng = random.Random(3)
     obs, _ = sample([0.5, 0.5], [[0.97, 0.03], [0.06, 0.94]], [0.0002, -0.0004],
                     [0.004 ** 2, 0.015 ** 2], 6000, rng)
@@ -321,7 +322,7 @@ def _hourly_feed(hours, wild_tail, seed=7, t_end=1_800_000_000_000):
 
 
 def spec_K10_the_reading_filters_hourly_from_a_daily_fit_and_says_calm_or_wild():
-    from gridgremlin.market import HMM_REFIT_S, read_hmm
+    from ggdata.market import HMM_REFIT_S, read_hmm
     fetch, calls, t_end = _hourly_feed(24 * 200, wild_tail=30)
     now = t_end / 1000 + 60
     cache = {}
@@ -350,7 +351,7 @@ def spec_K10_the_newest_reading_is_read_from_the_end_of_the_file():
     import json
     import tempfile
     from pathlib import Path
-    from gridgremlin.market import latest
+    from ggdata.market import latest
     p = Path(tempfile.mkdtemp()) / 'market.jsonl'
     assert latest(p) is None
     big = 'x' * 30_000                                     # long lines: the tail window must grow
@@ -363,7 +364,7 @@ def spec_K10_the_newest_reading_is_read_from_the_end_of_the_file():
 
 
 def spec_K10_the_reading_keeps_two_days_for_the_mini_chart():
-    from gridgremlin.market import read_hmm
+    from ggdata.market import read_hmm
     fetch, _, t_end = _hourly_feed(24 * 200, wild_tail=10)
     r = read_hmm(fetch, 'BTC', {}, t_end / 1000 + 60)
     assert len(r['closes_48h']) == 48 and len(r['p_wild_48h']) == 48
@@ -377,7 +378,7 @@ def spec_K11_the_how_it_decided_page_redoes_each_hour_from_the_reading():
     the filter's three steps — carry the belief forward, read each state's
     bell curve at the move, Bayes' rule — and lands on the model's own
     figure. A reading with no model, or one regime, says so."""
-    from gridgremlin.market import read_hmm
+    from ggdata.market import read_hmm
     from panel.markets import decide_steps, decided_page, tile
     fetch, _, t_end = _hourly_feed(24 * 200, wild_tail=10)
     h = read_hmm(fetch, 'BTC', {}, t_end / 1000 + 60)
@@ -386,7 +387,7 @@ def spec_K11_the_how_it_decided_page_redoes_each_hour_from_the_reading():
     # (a feed that never switches hides a wrong row of the table)
     import math
     import random
-    from gridgremlin.hmm import forward, sample
+    from ggdata.hmm import forward, sample
     A, mu, var = [[0.9, 0.1], [0.3, 0.7]], [0.0002, -0.0005], [0.003 ** 2, 0.012 ** 2]
     obs, _ = sample([0.75, 0.25], A, mu, var, 300, random.Random(5))
     alphas, _ = forward(obs, [0.75, 0.25], A, mu, var)
@@ -449,7 +450,7 @@ def spec_K12_the_reading_says_what_a_short_was_paid_and_what_a_loan_costs():
     and 90 days (linear and inverse; a coin with no inverse has none), as a
     yearly rate whatever the settlement interval. The history is kept and
     refetched only as it settles."""
-    from gridgremlin.market import CARRY_REFRESH_S, read_carry
+    from ggdata.market import CARRY_REFRESH_S, read_carry
     fetch, calls, t_end = _funding_feed()
     now = t_end / 1000 + 60
     cache = {}
@@ -542,7 +543,7 @@ def spec_K13_each_coins_market_data_is_kept_a_month_from_the_big_venues():
     kept 30 days, refetched only for the last two days once fresh; each
     source fails alone and is named; OKX's own name for gold."""
     import tempfile
-    from gridgremlin import marketdata as md
+    from ggdata import marketdata as md
     fetch, calls, t_end = _venues_feed()
     now = t_end / 1000 + 60
     root = tempfile.mkdtemp()
@@ -591,7 +592,7 @@ def spec_U71_a_coins_page_charts_its_market_data():
     — a chart for each kind of market data, the price behind, a day, a week
     or a month; what each says; an unread source named."""
     import tempfile
-    from gridgremlin import marketdata as md
+    from ggdata import marketdata as md
     from panel.asset import CHARTS, asset_page
     fetch, _, t_end = _venues_feed()
     now = t_end / 1000 + 60
@@ -656,7 +657,7 @@ def spec_K14_the_collector_records_the_books_and_every_liquidation():
     burst is not lost; seven days kept; a venue missing for a coin (gold on
     Coinbase) not asked, the rest read."""
     import tempfile
-    from gridgremlin import collector as c
+    from ggdata import collector as c
     c._CT.clear()
     now = 1_800_000_000.0
     fetch, calls = _collector_feed(int(now * 1000))
@@ -706,7 +707,7 @@ def spec_U74_a_coins_page_shows_the_book_heatmap_and_its_liquidations():
     liquidations as hourly bars, longs below the line and shorts above, with
     the largest listed. Nothing collected: said."""
     import tempfile
-    from gridgremlin import collector as c
+    from ggdata import collector as c
     from panel.asset import heatmap, liquidations
     c._CT.clear()
     now = 1_800_000_000.0

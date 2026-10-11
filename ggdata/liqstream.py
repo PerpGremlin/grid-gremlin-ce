@@ -9,7 +9,7 @@ Binance's futures streams accept the connection and send nothing from the
 box's country or the workstation's (measured 2026-10-11; its spot streams
 and its futures web requests answer) — so Binance is not here.
 
-  python3 -m gridgremlin.liqstream
+  python3 -m ggdata.liqstream
 """
 from common.symbols import coin_of
 import json

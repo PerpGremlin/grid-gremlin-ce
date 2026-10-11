@@ -72,7 +72,7 @@ def regime_from_bars(bars1h, hold_hours, bars4h=60):
     from the hourly ones) turned into the planner's word (regime_word) and
     believed only after it has held `hold_hours`, as the live bot does.
     Returns f(t_ms) -> 'up'|'down'|'range', to be called with t rising."""
-    from .market import adx, regime
+    from ggdata.market import adx, regime
     from .portfolio import regime_word
     four = []                                    # (close time, candle) of each 4h bar
     cur = None
@@ -210,7 +210,7 @@ def main(argv):
         print('no portfolio row' + (f" named {name}" if name else '') + ' in that fleet')
         return 2
     cfg = rows[0]
-    from .history import fetch_klines as fetch, fetch_funding, fetch_hl_funding as fetch_hl, hl_8h
+    from ggdata.history import fetch_klines as fetch, fetch_funding, fetch_hl_funding as fetch_hl, hl_8h
     end = int(time.time() * 1000) // 86_400_000 * 86_400_000
     start = end - (365 * years + 40) * 86_400_000
     coins = [a['coin'] for a in cfg['assets']]

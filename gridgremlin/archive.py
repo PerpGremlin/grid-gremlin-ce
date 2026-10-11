@@ -14,7 +14,7 @@ import time
 from common.fmt import utc_stamp
 from pathlib import Path
 
-from .durable import write_json
+from common.files import write_json
 
 
 def run_readout(fleet_path, hours=24.0):

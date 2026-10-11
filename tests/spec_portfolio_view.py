@@ -85,7 +85,7 @@ def _bars(n_hours, p0, drift, wobble, seed):
 
 
 def spec_H2_the_market_readings_cover_the_rows_legs():
-    from gridgremlin.market import markets_of
+    from gridgremlin.market_list import markets_of
     tmp = Path(tempfile.mkdtemp())
     fleet = {'bots': [{'strategy': 'portfolio', 'name': 'carry', 'capital': 90000,
                        'assets': [{'coin': 'BTC', 'weight': 0.5}, {'coin': 'ETH', 'weight': 0.5}],

@@ -7,7 +7,7 @@ WorkingDirectory={{REPO_DIR}}
 Nice=10
 Restart=always
 RestartSec=30
-ExecStart=/usr/bin/python3 -m gridgremlin.liqstream
+ExecStart=/usr/bin/python3 -m ggdata.liqstream
 
 [Install]
 WantedBy=default.target

@@ -37,7 +37,7 @@ def load_book(path):
 
 
 def save_book(path, rows):
-    from .durable import write_json
+    from common.files import write_json
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     write_json(path, rows)
 

@@ -6,7 +6,7 @@ import struct
 import threading
 import time
 
-from gridgremlin.ws import (OP_CLOSE, OP_CONT, OP_PING, OP_PONG, OP_TEXT, Closed, WebSocket,
+from ggdata.ws import (OP_CLOSE, OP_CONT, OP_PING, OP_PONG, OP_TEXT, Closed, WebSocket,
                             WebSocketError, accept_key, frame)
 
 

@@ -24,7 +24,7 @@ from pathlib import Path
 from .adapters import adapter_for
 from .apply import make_botid
 from .config import market_rows, ConfigError, validate_fleet
-from .exchange.env import load_env
+from common.env import load_env
 from .exchange.errors import VenueError
 
 

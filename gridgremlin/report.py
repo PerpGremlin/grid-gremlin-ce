@@ -11,7 +11,7 @@ from pathlib import Path
 from .apply import make_botid, rung_of
 from .config import market_rows, validate_fleet
 from .ladder import SEED_RUNG, fee_floor_for
-from .exchange.env import load_env
+from common.env import load_env
 from .exchange.errors import VenueError
 
 EPS = 1e-12
@@ -843,7 +843,7 @@ def money_units(venue, market_type, symbol):
 def _market_for(key_of, venue_of, now_ms):
     """D67: the newest kept market reading beside each bot; a store that
     cannot be read is said once and the cards carry nothing."""
-    from .market import for_bots, latest
+    from ggdata.market import for_bots, latest
     try:
         return for_bots(latest(), key_of, venue_of, now_ms / 1000.0)
     except (OSError, ValueError, KeyError) as e:

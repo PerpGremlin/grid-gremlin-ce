@@ -19,7 +19,7 @@ from .events import Notifier, TelegramNotifier, VenueNotifier
 from .exchange.bybit.client import WriteClient
 from .exchange.bybit.truth import parse_instrument
 from .exchange.errors import VenueError
-from .exchange.env import load_env
+from common.env import load_env
 from .ladder import grid_rungs, position_cap
 from .slide_state import SlideState, SlideStateError
 from .durable import (LegacyStateError, logs_dir, refuse_legacy_state,

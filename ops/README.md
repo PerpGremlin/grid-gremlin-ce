@@ -47,7 +47,7 @@ What runs, from the inside out:
 9. **The panel** (`panel.server`, `gg-panel`; since 2026-10-08 a façade over
    `panel/css.py`, `reference.py`, `render.py`, `forms.py`, `routes.py`) — the fleet on a screen
    (README §11), on a loopback port behind its token.
-10. **Market readings** (`gridgremlin.market`, hourly at :33, D67) — what a
+10. **Market readings** (`gridgremlin.market_list` over `ggdata.market`, hourly at :33, D67) — what a
     grid or DCA operator wants to know about each market the fleets are on,
     from public endpoints, kept in `logs/market.jsonl` beside the day's
     readout; a report paged at the session opens (00, 08, 16 UTC) by

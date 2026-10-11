@@ -5,9 +5,8 @@ on, read hourly from public endpoints and kept in logs/market.jsonl beside
 the day's readout, so a reading can later be set against the bots' own
 results. Nothing here acts: no bot reads this, no key is used.
 
-  python3 -m gridgremlin.market configs/a.json [configs/b.json]   # read, keep
-  python3 -m gridgremlin.market configs/a.json --send             # and page it
-  python3 -m gridgremlin.market configs/a.json --dry              # print only
+The markets to read come from the caller (D91); the hourly unit is the
+engine's `python3 -m gridgremlin.market_list <fleet.json> ... [--send] [--dry]`.
 """
 from common.http import get_json
 from common.rates import per_8h_pct
@@ -19,8 +18,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from .config import market_rows, validate_fleet
-from .exchange.truth import _f
+from common.fmt import float_or as _f  # C10: the one parser
 
 ADX_PERIOD = 14
 RANGING_BELOW, TRENDING_FROM = 20.0, 30.0        # ADX: Wilder's own bands
@@ -458,7 +456,7 @@ def load_carry(path=None):
 
 
 def save_carry(cache, path=None):
-    from .durable import write_json
+    from common.files import write_json
     p = Path(path or CARRY_STORE)
     p.parent.mkdir(exist_ok=True)
     write_json(p, cache)
@@ -472,39 +470,20 @@ def load_hmm(path=None):
 
 
 def save_hmm(cache, path=None):
-    from .durable import write_json
+    from common.files import write_json
     p = Path(path or HMM_STORE)
     p.parent.mkdir(exist_ok=True)
     write_json(p, cache)
 
 
-def markets_of(fleet_paths):
-    """Every (venue, market_type, symbol) a fleet trades, once, with what
-    the fleets put on it in quote: {key: committed}."""
-    out = {}
-    for fp in fleet_paths:
-        fleet = validate_fleet(json.loads(Path(fp).read_text()))
-        from .trades import with_trades
-        fleet = with_trades(fp, fleet)                # L5: a trade's market is read too
-        for cfg in market_rows(fleet):
-            key = (cfg['venue'], cfg['market_type'], cfg['symbol'])
-            put = cfg.get('ladder_total_notional') or cfg.get('ladder_notional') or 0.0
-            out[key] = out.get(key, 0.0) + float(put)
-        for cfg in fleet['bots']:                        # D78: the row's legs
-            if cfg.get('strategy') != 'portfolio':
-                continue
-            from .portfolio import leg_markets
-            for _, _, mt, sym, put in leg_markets(cfg):
-                key = (cfg['venue'], mt, sym)
-                out[key] = out.get(key, 0.0) + float(put)
-    return out
-
-
-def collect(fleet_paths, fetch=get_json, now=None, hl_testnet=True, hmm_cache=None, carry_cache=None):
+def collect(markets, fetch=get_json, now=None, hl_testnet=True, hmm_cache=None, carry_cache=None):
+    """One reading of `markets` — {(venue, market_type, symbol): what is put
+    there in quote}, the caller's list (D91: the engine turns its fleets into
+    it, gridgremlin.market_list; ggdata never reads a fleet)."""
     now = time.time() if now is None else now
     row = {'t': now, 'markets': {}, 'cross': {}}
     bases = []
-    for (venue, mt, symbol), put in markets_of(fleet_paths).items():
+    for (venue, mt, symbol), put in markets.items():
         key = f'{venue}:{mt}:{symbol}'
         row['markets'][key] = (read_hyperliquid(fetch, symbol, hl_testnet, put)
                                if venue == 'hyperliquid'
@@ -608,8 +587,6 @@ def session_name(t):
     return name
 
 
-
-
 def report(row, now=None):
     """The Telegram text, in messages under the cap: sentiment, every coin
     with its regime once and each of its markets, funding elsewhere, the
@@ -710,17 +687,14 @@ def digest_block(row, now=None):
     return lines
 
 
-def main(argv):
-    dry, send = '--dry' in argv, '--send' in argv
-    paths = [a for a in argv if not a.startswith('--')]
-    if not paths:
-        print('usage: python3 -m gridgremlin.market <fleet.json> ... [--send] [--dry]')
-        return 2
-    from .exchange.env import load_env
+def run(markets, send=False, dry=False):
+    """Read `markets`, keep the reading and each coin's series, and page the
+    report when asked (K1, K13). The engine's hourly unit calls this."""
+    from common.env import load_env
     load_env()
     import os
     hmm_cache, carry_cache = load_hmm(), load_carry()
-    row = collect(paths, hl_testnet=os.environ.get('HL_TESTNET', '').lower() == 'true',
+    row = collect(markets, hl_testnet=os.environ.get('HL_TESTNET', '').lower() == 'true',
                   hmm_cache=hmm_cache, carry_cache=carry_cache)
     if not dry:
         save_hmm(hmm_cache)
@@ -737,11 +711,7 @@ def main(argv):
     print(f"market: {len(row['markets'])} markets read, {unread} with a part unread",
           flush=True)
     if send:
-        from .watchdog import send_telegram
+        from common.telegram import send_telegram
         for text in texts:
             send_telegram(text)
     return 0
-
-
-if __name__ == '__main__':
-    sys.exit(main(sys.argv[1:]))

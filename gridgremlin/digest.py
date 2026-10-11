@@ -12,8 +12,8 @@ import time
 from pathlib import Path
 
 from .config import market_rows, VENUE_ICONS, validate_fleet
-from .durable import write_json
-from .exchange.env import load_env
+from common.files import write_json
+from common.env import load_env
 from .report import card_total
 
 STATE = Path('logs/digest.state.json')
@@ -264,7 +264,7 @@ def build(fleet_paths, now=None, **roots):
         parts.append('\n'.join(lines))
         if tag is not None:
             places[tag] = place
-    from .market import digest_block, latest                     # D67
+    from ggdata.market import digest_block, latest                     # D67
     try:
         parts.append('\n'.join(digest_block(latest(market_store), now)))
     except Exception as e:                                       # noqa: BLE001
@@ -283,7 +283,7 @@ def main(argv):
     print(text)
     if dry:
         return 0
-    from .watchdog import send_telegram
+    from common.telegram import send_telegram
     send_telegram(text[:3900])
     write_json(STATE, state)            # the log place moves only once sent
     return 0
