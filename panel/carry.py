@@ -8,7 +8,7 @@ import time
 
 from common.fmt import float_or
 
-from .render import _num_cls
+from .html_bits import _num_cls
 
 WINDOWS = (('last', 'last settlement'), ('d7', '7 days'), ('d30', '30 days'), ('d90', '90 days'))
 FEES_PCT = 0.35          # of the stack a year: in and out, and the daily rebalances

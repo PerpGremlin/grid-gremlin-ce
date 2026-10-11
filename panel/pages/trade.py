@@ -1,6 +1,6 @@
 """Trades (D81): the form, the list, opening and clearing one. Moved out of routes.py whole (D91 step 3): a mixin
 the Handler inherits."""
-from ..render import refusal_box
+from ..html_bits import refusal_box
 from panel.chart import _f
 from pathlib import Path
 import html

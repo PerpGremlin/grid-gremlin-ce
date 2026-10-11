@@ -1435,7 +1435,8 @@ def spec_U56_a_cards_numbers_live_on_the_positions_own_page_and_the_show_all_swi
     ran very long — "make each position have its own page … reads the data
     directly shown from the position when viewed in bybit dashboard". U22's
     switch (owner 2026-10-03) is retired with it: a card folds nothing."""
-    from panel.render import card, exchange_table, position_page
+    from panel.card import card
+    from panel.position_view import exchange_table, position_page
     from panel.server import render
     live = render([], table=False)
     assert 'show all</a>' not in live and 'ggAll(true)' not in live and '<h3>numbers</h3>' not in live
@@ -2077,7 +2078,7 @@ def spec_U60_every_page_wears_the_panels_navigation():
     the forms' one warning."""
     import urllib.request
     from panel.forms import BACK
-    from panel.render import PAGE_END, page_links, side_nav
+    from panel.nav import PAGE_END, page_links, side_nav
     assert BACK == side_nav() and BACK.startswith('<div class="page"><nav class="side">')
     for href in ('/', '/table', '/control', '/setup', '/rehearse', '/export', '/key'):
         assert f'href="{href}"' in side_nav(), href

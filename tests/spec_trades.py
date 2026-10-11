@@ -187,7 +187,7 @@ def spec_L5_every_reader_sees_a_trade_as_the_bot_it_is():
 
 def spec_L6_a_trades_card_says_it_is_a_trade_with_its_exit_and_offers_its_close():
     import copy
-    from panel.render import kind_line
+    from panel.card import kind_line
     from panel.server import render
     sys.path.insert(0, str(Path(__file__).parent))
     from spec_panel import CONTRACT
@@ -215,7 +215,7 @@ def spec_L8_a_trades_card_offers_only_what_a_trade_can_do():
     a live one offers close trade, an ended one clear — and close position
     only when its holding is known to be open."""
     import copy
-    from panel.render import card
+    from panel.card import card
     sys.path.insert(0, str(Path(__file__).parent))
     from spec_panel import CONTRACT
     c = copy.deepcopy(CONTRACT)
@@ -292,7 +292,7 @@ def spec_L1_a_live_trade_sets_its_symbols_leverage_as_the_start_does():
 
 
 def spec_L6_a_trades_rate_line_says_profit_not_grid_profit():
-    from panel.render import run_rate
+    from panel.card import run_rate
     gen = 10 * 86_400_000
     b = {'fills': 2, 'realized': 3.0, 'fees': 0.14, 'counted_from': 'flat', 'counted_since_ms': gen - 86_400_000}
     t = run_rate(b, {'generated_ms': gen, 'window_hours': 24}, 200.0, trade=True)
@@ -388,7 +388,8 @@ def spec_L7_the_panels_close_trade_asks_the_fleet_for_a_running_trade():
 
 
 def spec_R24_the_results_page_draws_each_bots_curve_and_the_markets_that_left():
-    from panel.render import page_links, results_page, side_nav
+    from panel.nav import page_links, side_nav
+    from panel.results import results_page
     c = {'since_first': {'linBTCUSDTl': {'series': [[0, 0.0], [60000, 1.5], [120000, 3.25]], 'fills': 3,
                                          'first_ms': 1_760_000_000_000, 'whole': True},
                          'linETHUSDTl': None},
