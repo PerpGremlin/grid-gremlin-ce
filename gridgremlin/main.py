@@ -235,11 +235,13 @@ def snapshot_row(bots, wallet, now, tiers=None):
                      for b in bots}}
 
 
-def cap_verdict(caps, mm_rate, bots):
+def cap_verdict(caps, mm_rate, bots, equity=None, im_rate=None):
     """D56, pure: the reason the account is at its cap, or None. mm_rate is
     the venue's own; notional is every living bot's position at mark (the
-    previous cycle's — a cap read one second late, never a guess). An
-    unknown mm_rate judges nothing on that leg."""
+    previous cycle's — a cap read one second late, never a guess). D85: the
+    account's leverage is that notional over the venue's equity; its free
+    margin is 1 − the venue's own initial-margin rate. An unknown reading
+    judges nothing on its leg."""
     if not caps:
         return None
     notional = sum(getattr(b, 'notional_now', 0.0) or 0.0
@@ -249,6 +251,16 @@ def cap_verdict(caps, mm_rate, bots):
     if (caps.get('mm_rate_max') is not None and mm_rate is not None
             and mm_rate >= caps['mm_rate_max']):
         return f"maintenance margin {mm_rate:.1%} >= {caps['mm_rate_max']:.1%}"
+    lev_max = caps.get('effective_leverage_max')
+    if lev_max is not None and equity:
+        lev = notional / equity
+        if lev >= lev_max:
+            return f"account leverage {lev:.2f}x >= {lev_max:g}x"
+    free_min = caps.get('free_margin_min')
+    if free_min is not None and im_rate is not None:
+        free = 1.0 - im_rate
+        if free <= free_min:
+            return f"free margin {free:.0%} <= {free_min:.0%} of equity"
     return None
 
 
@@ -848,7 +860,8 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
                 if caps:                                         # D56
                     for v in wallets:
                         mine = [b for b in bots if b.cfg['venue'] == v]
-                        why = cap_verdict(caps, wallets[v]['mm_rate'], mine)
+                        why = cap_verdict(caps, wallets[v]['mm_rate'], mine,
+                                          wallets[v].get('equity'), wallets[v].get('im_rate'))
                         was = capped_by.get(v)
                         if why and not was:
                             _vn(notifier, v).event(

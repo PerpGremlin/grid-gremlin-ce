@@ -912,25 +912,32 @@ def _validate_caps(v, where):
     """D56, opt-in: the account may not go past these. mm_rate_max is the
     venue's maintenance-margin rate (0..1); notional_max the sum of every
     bot's position at mark, in the quote coin; `holding_max` (D70) the most
-    bots that may hold at once. Any of the three; none = no cap. At the cap,
+    bots that may hold at once; `effective_leverage_max` (D85) the account's
+    notional over its equity; `free_margin_min` (D85) the share of equity
+    initial margin may not eat into. Any of them; none = no cap. At the cap,
     entries pause and exits run."""
     if v is None:
         return None
     w = f'{where}.account_caps'
     if not isinstance(v, dict) or not v:
         _refuse(f'{w}: an object with mm_rate_max and/or notional_max')
-    _reject_unknown(v, ('mm_rate_max', 'notional_max', 'holding_max'), w)
+    _reject_unknown(v, ('mm_rate_max', 'notional_max', 'holding_max',
+                        'effective_leverage_max', 'free_margin_min'), w)
     out = {'mm_rate_max': _fraction(v, 'mm_rate_max', w),
            'notional_max': _num(v, 'notional_max', w, least=0.0,
                                 least_open=True),
            # D70: the most bots that may hold a position at once
-           'holding_max': _num(v, 'holding_max', w, least=1.0)}
+           'holding_max': _num(v, 'holding_max', w, least=1.0),
+           # D85: the owner's own measure — notional ÷ equity, and equity kept unspent
+           'effective_leverage_max': _num(v, 'effective_leverage_max', w, least=0.0, least_open=True),
+           'free_margin_min': _fraction(v, 'free_margin_min', w)}
     if out['holding_max'] is not None:
         if not float(out['holding_max']).is_integer():
             _refuse(f'{w}.holding_max: a whole number of bots (D70)')
         out['holding_max'] = int(out['holding_max'])
     if all(out[k] is None for k in out):
-        _refuse(f'{w}: name mm_rate_max, notional_max or holding_max (D56, D70)')
+        _refuse(f'{w}: name mm_rate_max, notional_max, holding_max, '
+                'effective_leverage_max or free_margin_min (D56, D70, D85)')
     return out
 
 
