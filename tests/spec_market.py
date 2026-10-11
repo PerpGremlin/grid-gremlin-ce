@@ -480,6 +480,16 @@ def _venues_feed(t_end=1_800_000_000_000, hours=600, okx_missing=('XAUT',), okx_
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         lim = int(q.get('limit', 100))
         ts = [t_end - i * 3_600_000 for i in range(min(lim, hours))]           # newest first
+        e8 = [t_end - i * 8 * 3_600_000 for i in range(min(lim, 200))]           # settlements, newest first
+        if 'bybit' in u.netloc and 'funding/history' in u.path:
+            if q['category'] == 'inverse' and q['symbol'] == 'XAUTUSD':
+                return {'retCode': 10001, 'retMsg': 'params error: Symbol Invalid', 'result': {}}
+            return {'retCode': 0, 'result': {'list': [{'fundingRate': '0.0001', 'fundingRateTimestamp': str(t)} for t in e8]}}
+        if 'binance' in u.netloc and u.path.endswith('/fundingRate'):
+            return [{'fundingTime': t + 3, 'fundingRate': '0.00005'} for t in reversed(e8)]     # stamped past the hour
+        if 'okx' in u.netloc and 'funding-rate-history' in u.path:
+            return {'code': '0', 'data': [{'fundingTime': str(t), 'fundingRate': '-0.00002', 'realizedRate': '-0.00002'}
+                                          for t in [t_end - i * 3_600_000 for i in range(100)]]}   # hourly
         if 'bybit' in u.netloc:
             if u.path.endswith('/kline'):
                 return {'result': {'list': [[str(t), '100', '100', '100', '100', '1', '1'] for t in ts]}}
@@ -540,9 +550,13 @@ def spec_K13_each_coins_market_data_is_kept_a_month_from_the_big_venues():
     assert abs(lt['spread.bybit'] - 0.1 / 100 * 1e4) < 1e-9
     assert abs(lt['depth.bybit'] - (99.95 * 10 + 99.0 * 5 + 100.05 * 5 + 100.9 * 5)) < 1e-6  # 90 and 110 are past 1%
     assert said['BTC']['unread'] == {}
+    # funding as a yearly rate at each market's own interval: 8-hourly, Binance a few ms past, OKX hourly
+    assert abs(lt['funding.bybit'] - 0.0001 * 3 * 365) < 1e-12 and abs(lt['funding.bybit_inverse'] - 0.1095) < 1e-12
+    assert abs(lt['funding.binance'] - 0.00005 * 3 * 365) < 1e-12 and abs(lt['funding.okx'] + 0.00002 * 24 * 365) < 1e-12
+    assert all(int(t) % 60_000 == 0 for t in btc['funding.binance'])                    # landed on the minute
     assert len(btc['price']) == 600 and len(btc['top.okx_positions']) == 100
     # OKX's gold is XAU, and it has no gold spot market: only that one is unread
-    assert set(said['XAUT']['unread']) == {'spot.okx'} and 'retail.okx' in said['XAUT']['latest']
+    assert set(said['XAUT']['unread']) == {'spot.okx', 'funding.bybit_inverse'} and 'retail.okx' in said['XAUT']['latest']
     assert any('ccy=XAU&' in c for c in calls) and not any('ccy=XAUT' in c for c in calls)
     # fresh: the next hour asks for two days only
     calls.clear()
@@ -555,7 +569,7 @@ def spec_K13_each_coins_market_data_is_kept_a_month_from_the_big_venues():
     down, _, _ = _venues_feed(fail=('binance.com',))
     d = md.update(down, ['BTC'], now, root=tempfile.mkdtemp(), pause=lambda s: None)['BTC']
     assert {n for n in d['unread']} == {'retail.binance', 'top.binance_accounts', 'top.binance_positions',
-                                        'oi.binance', 'taker.binance', 'spot.binance',
+                                        'oi.binance', 'taker.binance', 'spot.binance', 'funding.binance',
                                         'spread.binance', 'depth.binance', 'imbalance.binance'}
     assert 'retail.okx' in d['latest'] and 'price' in d['latest']
     # the day's summary: OI summed over the venues, its change, the day's flow

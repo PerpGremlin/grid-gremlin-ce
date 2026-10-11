@@ -1278,7 +1278,9 @@ eventually pin (T1).
   two days only; each source fails alone and is named; a venue's own name
   for a coin is used (OKX's gold is XAU). The reading carries each coin's
   newest values and the day's summary (OI summed and its 24-hour change,
-  the day's taker flow). Display only.
+  the day's taker flow). Each venue's funding is kept too — Bybit linear and
+  inverse, Binance, OKX — as a yearly rate at that market's own settlement
+  interval. Display only.
 - **U55** The dash reads as the owner reads it. A fleet file's `label` is
   what the panel calls the fleet (forty characters at most); without one,
   the venue and the file's environment word. Every card is a column with
@@ -1407,6 +1409,7 @@ eventually pin (T1).
 - **U71** One coin's market data over time (`/asset?coin=BTC`, side panel
   **market data**, a coin's name on its tile): a chart for each kind (K13) —
   open interest per venue, the basis, top traders' and retail's long share,
+  funding a year per venue (inverse dashed),
   perpetual and spot taker flow (the venues summed, as bars), the book's
   spread, depth and imbalance — each with the price faint behind it on its
   own scale and its latest values in the legend, over 24 hours, 7 days or
