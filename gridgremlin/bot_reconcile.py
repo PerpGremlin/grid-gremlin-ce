@@ -14,6 +14,16 @@ class ReconcileMixin:
         cancels, placed (rung, side) keys, placed exit links, skipped)."""
         cfg, adapter = self.cfg, self.adapter
         amends, cancels, creates = pair_amends(to_cancel, to_create, self.botid)
+        # the review (2026-10-11): never amend a part-filled order — Bybit's
+        # amend takes the order's new TOTAL, so sending the size still wanted
+        # left part of a position without its exit (or, past half filled, a
+        # refused amend every cycle). Cancel it and place the rest fresh.
+        partial = [(o, w) for o, w in amends if (o.get('cum_exec_qty') or 0.0) > 0]
+        if partial:
+            amends = [(o, w) for o, w in amends if (o.get('cum_exec_qty') or 0.0) <= 0]
+            if now >= self._backoff_until:          # in a backoff (B7) it rests as it is:
+                cancels = list(cancels) + [o for o, _ in partial]   # no create would follow
+                creates = list(creates) + [w for _, w in partial]
 
         for order, want in amends:
             try:

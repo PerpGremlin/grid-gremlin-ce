@@ -180,7 +180,8 @@ class RoundMixin:
         out, used = [], 0.0
         for i, (p, sh) in enumerate(priced):
             if i == len(priced) - 1:
-                q = adapter.nearest_qty(max(abs(held) - used, 0.0))
+                from .ladder import last_lot
+                q = last_lot(adapter, max(abs(held) - used, 0.0))
             else:
                 q = adapter.round_qty(abs(held) * sh / total)
                 used += q

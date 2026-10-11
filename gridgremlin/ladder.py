@@ -493,12 +493,35 @@ def order_qty(cfg, adapter, size, price):
     return adapter.round_qty(raw)
 
 
+def last_lot(adapter, rest):
+    """M23a: what the last tranche takes of a holding — the rest, to the
+    NEAREST lot when the rest is on the lot grid and float subtraction put it
+    a hair under (M23: 3.19 - 1.59 floored to 1.59 left dust with no exit),
+    but FLOORED when the rest sits off the grid: a spot wallet net of its buy
+    fee rounded up sells more than is held, refused every cycle (the review,
+    2026-10-11)."""
+    q = adapter.nearest_qty(rest)
+    if q > rest + adapter.qty_step * 0.01:
+        q = adapter.round_qty(rest)
+    return q
+
+
 def ladder_fits(cfg, mark):
     """D89: whether a coin-sized ladder fits the capital at this mark — the
-    check M2 makes at validation for a quote-sized one. True for quote."""
+    check M2 makes at validation for a quote-sized one. True for quote.
+    Each order priced where it would fill: a short's safety orders sit
+    ABOVE the mark, so pricing them at it passed a ladder that costs more
+    than the capital (the review, 2026-10-11); a long's sit below and the
+    mark stays the conservative price. M12's reinvest factor scales the
+    sizes and the capital behind them alike, so it leaves the check as is."""
     if cfg.get('size_in') != 'coin':
         return True
-    return cfg['ladder_total_coins'] * mark <= cfg['ladder_notional'] + 1e-9
+    if cfg.get('side') == 'short':
+        cost = sum(coins * mark * (1.0 + dev)
+                   for coins, dev in martingale_schedule(cfg))
+    else:
+        cost = cfg['ladder_total_coins'] * mark
+    return cost <= cfg['ladder_notional'] + 1e-9
 
 
 def martingale_schedule(cfg):

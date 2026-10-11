@@ -308,6 +308,9 @@ eventually pin (T1).
   multiplier grows the coins; the capital check moves to the round's open, at
   the mark — a ladder the capital cannot carry there waits, said once. The
   panel's form carries the key.
+- **M2a** A coin-sized ladder (D89) is checked against its capital with
+  each order priced where it fills: a short's safety orders above the mark,
+  a long's at the mark (conservative). *(the review, 2026-10-11)*
 - **M3** A round is never without an exit: the whole-position TP is set before the
   round rests, and a target the market has run through closes at the target or better
   via reduce-only marketable limit. *(the stale-target incident)*
@@ -471,6 +474,10 @@ eventually pin (T1).
   since the rest of an on-grid holding is on the grid and float subtraction
   puts it a hair under (3.19 − 1.59 floored to 1.59 left 0.01 with no exit;
   replay 2026-10-04).
+- **M23a** The last tranche never sells more than is held: it rounds to the
+  nearest lot only when the rest is on the lot grid (M23's float hair), and
+  floors when the rest sits off it — a spot wallet net of its buy fee.
+  *(the review, 2026-10-11)*
 - **M24** A tranche exit shrinks the holding, not the ladder. M1 suppresses a
   safety rung when the holding covers the schedule's cumulative prefix; after a
   partial exit the holding no longer does, and the rung that already filled this
@@ -539,6 +546,12 @@ eventually pin (T1).
   remainder fills unlinked, and an unlinked reduce is an outside hand to D1.
   *(live 2026-10-04: the HL SOL grid's part-filled top-rung exit, amended,
   then killed as "an outside close")*
+- **I7** A part-filled order is matched on its original size or on what
+  still rests, and is never amended: when its size must change it is
+  cancelled and the rest placed fresh (Bybit's amend takes the order's new
+  total, filled part included — sending the size still wanted left part of
+  a position without its exit, or past half filled a refused amend every
+  cycle). In a backoff (B7) it rests as it is. *(the review, 2026-10-11)*
 
 ## V — venue and truth
 
@@ -771,6 +784,11 @@ eventually pin (T1).
   "down X of the limit", red from three quarters; the quick setup offers the limit
   as its one optional box; the what-if (U9) ends a move where the loss first
   reaches it, unless a stop ended it sooner.
+- **X14a** The loss limit walks the venue's own closes — liquidations,
+  hosted take-profits, venue stops, which carry no link — over the same
+  window as the bot's linked fills (30 days), deduplicated by exec id: over
+  two days a liquidation three days old vanished, its entries read as held,
+  and the limit saw no loss. *(the review, 2026-10-11)*
 
 - **X15** Closing what a stopped bot left open (D48): `python3 -m gridgremlin.close
   <fleet> <botid> [--dry]` sends one reduce-only market order for exactly what the
@@ -860,6 +878,10 @@ eventually pin (T1).
   (no order that adds exposure, exits run; reached and cleared said once,
   the card saying why). An unknown equity or initial-margin rate judges
   nothing on its leg. *(the owner, 2026-10-11)*
+- **F15d** An unread wallet is not a cleared cap: a cycle whose wallet read
+  failed, or read no equity, keeps the last cap verdict until a read says
+  otherwise (E9); and an account equity at or below zero is capped, never
+  skipped as falsy. *(the review, 2026-10-11)*
 - **F14** The watchdog's memory survives a torn write. Its state is written
   atomically (temp, fsync, rename, fsync the directory); an unreadable state
   file starts the memory again and pages once saying so — the cost is a
