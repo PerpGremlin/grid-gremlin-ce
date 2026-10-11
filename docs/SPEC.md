@@ -811,6 +811,14 @@ eventually pin (T1).
   (on a three-fleet box every fleet read as running, 2026-10-08); held, it
   refuses before any client is built — stop the fleet, or close by hand on
   the venue. The portfolio flatten (H4) asks the same way.
+- **X15c** A bot retires in three steps, with its fleet stopped (D92):
+  `python3 -m gridgremlin.retire <fleet.json> <botid> [--dry]` writes its
+  tombstone first (X7), cancels every order it owns by its link prefix and
+  no other (I1), closes what it holds with close's reduce-only market
+  order (X15), and re-reads: the orders and the size left are said. Beside
+  its running fleet it refuses before any client is built; never mainnet,
+  never spot; `--dry` changes nothing. Then the row leaves the file by a
+  PR.
 - **F1** Every fleet names a watchdog config, and its account guards (staleness,
   mm_rate, equity floor, drawdown) cover every bot. A per-bot position bound is
   opt-in (D32): present, it is checked; absent, the bot has no limit of its own. A
