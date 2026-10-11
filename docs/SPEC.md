@@ -838,6 +838,13 @@ eventually pin (T1).
   the holding ones are not held back by this leg. The snapshot carries each
   capped bot's reason and the card says it: a flat bot waits, a holding one
   adds nothing. Reached and cleared are each said once.
+- **F15c** The account-leverage cap and the free-margin floor (D85), legs of
+  F15's cap: `effective_leverage_max` — the venue's living bots' notional
+  over the venue's equity, at or past it capped; `free_margin_min` — 1 −
+  the venue's own initial-margin rate, at or under it capped. Capped as F15
+  (no order that adds exposure, exits run; reached and cleared said once,
+  the card saying why). An unknown equity or initial-margin rate judges
+  nothing on its leg. *(the owner, 2026-10-11)*
 - **F14** The watchdog's memory survives a torn write. Its state is written
   atomically (temp, fsync, rename, fsync the directory); an unreadable state
   file starts the memory again and pages once saying so — the cost is a
@@ -1704,6 +1711,14 @@ that pins it (T1).
   short in a rally and long in a fall, and the arithmetic entry invented
   ~40 points of the rehearsal's two-year return; the true neutral basket
   earned its funding, x1.13, at a 1% drawdown)*
+- **H8b** A portfolio row's hedge books rebuild from the venue's own fills:
+  every short leg's fills since the anchor replayed through today's book
+  (H8's harmonic entry, the inverse fee in the coin), set beside what was
+  stored; dry-run unless told to apply; refused while the fleet runs, and
+  refused when a rebuilt position disagrees with the stored one (a fill the
+  replay could not see). The spot side's books are not touched.
+  *(the owner, 2026-10-11: the carry row's realised figure kept the pre-H8
+  arithmetic — "do it")*
 - **H6** The card says the three truths. A portfolio's card shows the
   stack's value and coins, one line per asset (weight target → actual,
   hedge ratio target → actual, coins hedged, the regime word when the tilt

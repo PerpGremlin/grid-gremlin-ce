@@ -211,3 +211,29 @@ def spec_U67_the_fleet_page_has_a_markets_half_from_the_readings():
     page = render([], market=row)
     assert '<div class="split">' in page and '<aside class="markets">' in page
     assert '<aside class="markets">' not in render([], table=True, market=row)      # the table keeps its width
+
+
+def spec_H8b_a_portfolio_rows_hedge_books_rebuild_from_the_venues_fills():
+    """The owner (2026-10-11): rebuild the carry row's books from the
+    venue's fills — the stored realised figure kept the pre-H8 arithmetic.
+    Every short leg's fills replayed through today's book: the inverse
+    entry harmonic, realised in the coin; a disagreeing position refuses
+    the apply."""
+    from gridgremlin.portfolio_rebuild import compare, rebuild
+    fills = [{'side': 'sell', 'price': 100.0, 'qty': 1000.0, 'fee': 0.0},
+             {'side': 'sell', 'price': 125.0, 'qty': 1000.0, 'fee': 0.0},
+             {'side': 'buy', 'price': 110.0, 'qty': 2000.0, 'fee': 0.0}]
+    books = rebuild({'hedge:SOL': (fills, True)})
+    b = books['hedge:SOL']
+    avg = 2000.0 / (1000.0 / 100.0 + 1000.0 / 125.0)                        # harmonic: 111.11…
+    assert b['position'] == 0.0 and abs(b['realized'] - 2000.0 * (1 / 110.0 - 1 / avg)) < 1e-12
+    arithmetic = 2000.0 * (1 / 110.0 - 1 / 112.5)                           # the pre-H8 book's figure
+    assert abs(arithmetic - b['realized']) > 0.1                            # the error the rebuild clears
+    stored = {'hedge:SOL': {'position': 0.0, 'avg': 0.0, 'realized': arithmetic, 'fees': 0.0}}
+    lines, bad = compare(stored, books)
+    assert bad == [] and 'hedge:SOL: position 0 → 0' in lines[0] and 'realised' in lines[0]
+    lin = rebuild({'hedge:BTC': ([{'side': 'sell', 'price': 80000.0, 'qty': 0.01, 'fee': 0.4},
+                                  {'side': 'buy', 'price': 79000.0, 'qty': 0.004, 'fee': 0.16}], False)})['hedge:BTC']
+    assert abs(lin['position'] - 0.006) < 1e-12 and abs(lin['realized'] - 4.0) < 1e-9 and abs(lin['fees'] - 0.56) < 1e-12
+    _, bad = compare({'hedge:BTC': dict(lin, position=0.01)}, {'hedge:BTC': lin})
+    assert bad == ['hedge:BTC']                                             # a fill unseen: refused

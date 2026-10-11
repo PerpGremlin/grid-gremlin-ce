@@ -808,6 +808,47 @@ stands unless the owner corrects it.
   and use the largest tier rule"*. The maintenance rate is the tier's
   (1.0% at 50x against 0.77% at 65x): the owner's trade of margin for room.
 
+- **D84 — A collector for the book and the liquidations (2026-10-11).** The
+  owner asked for liquidity heatmaps and liquidations beside the market
+  data; neither keeps a public history, so they are recorded as they
+  happen: the order books every minute, binned by price, and the venues'
+  public liquidation streams, kept a bounded time on the box. A new unit,
+  started by the owner's word like every unit; keyless, public endpoints
+  only; display only — no bot reads it. The owner, granting the backlog's
+  proposals together: *"happy to do all, its all learning for me."*
+- **D85 — An account-leverage cap and a free-margin floor (2026-10-11).**
+  The owner's own measure of risk, as D56 already caps an account: opt-in
+  `effective_leverage_max` (stop adding at account notional ÷ equity = N)
+  and `free_margin_min` (keep this share of equity unspent). At the cap, as
+  D56: nothing new rests or is placed, every exit keeps working, the
+  account leaves it by its own selling; the card says why. Set by the
+  owner, so not against D29. Not to be called auto-deleveraging.
+- **D86 — A public face for the public edition (2026-10-11).** In this
+  order, each its own build: a read-only **show mode** for the panel (no
+  token in its address, no controls, no host or path, amounts optionally
+  as percentages); a **site and manual** on GitHub Pages from the
+  edition's documents; optionally a **live-ish page**, the export snapshot
+  published every few minutes. Paper labelled paper; engineering, not
+  financial advice; exchange names descriptive, never their marks. The
+  live panel is never exposed.
+- **D87 — Whole-number steps and ticks end to end (2026-10-11).** From the
+  2026-10-08 audit, before real money: quantities and prices held as whole
+  multiples of the venue's step and tick from the plan to the order, so no
+  float leaves a remainder the venue rounds away.
+- **D88 — The entry tolerance to one step (2026-10-11).** From the same
+  audit: `QTY_RTOL` from 5% to one step, reached through the amend path, so
+  a resting order a step off its plan is corrected rather than accepted.
+- **D89 — Fixed-coin averaging (2026-10-11).** A DCA's safety orders may be
+  sized in coins as well as in quote — the last 3Commas mechanic not built.
+  Opt-in per row; quote stays the default.
+- **D90 — The regime gate may read calm or wild (2026-10-11).** The owner
+  wants the gate (D73) and, offered it, the hidden model's word (K10) as an
+  input beside D67's regime: `only_in` may name calm or wild. D73's
+  condition stands for both: built only after the readings-vs-results look
+  (~2026-10-14) shows the word leads the losses. The 2026-10-11 research
+  found pausing a grid in wild hours cost more than it saved — the look
+  must show otherwise before a row opts in.
+
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
 inline above.*

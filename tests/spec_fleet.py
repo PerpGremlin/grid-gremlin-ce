@@ -166,7 +166,8 @@ def spec_D56_the_account_cap_is_opt_in_and_judged_on_mm_rate_and_notional():
     f = validate_fleet({'bots': [row], 'account_caps': {'mm_rate_max': 0.3,
                                                         'notional_max': 50000}})
     assert f['account_caps'] == {'mm_rate_max': 0.3, 'notional_max': 50000.0,
-                                 'holding_max': None}
+                                 'holding_max': None, 'effective_leverage_max': None,
+                                 'free_margin_min': None}
     for bad in ({}, {'mm_rate_max': 1.5}, {'notional_max': 0},
                 {'margin': 0.3}, {'notional_max': float('nan')}):
         try:
@@ -186,6 +187,47 @@ def spec_D56_the_account_cap_is_opt_in_and_judged_on_mm_rate_and_notional():
     assert cap_verdict({'mm_rate_max': 0.3}, None, bots) is None   # unknown: no
 
 
+def spec_D85_the_account_leverage_cap_and_the_free_margin_floor():
+    """The owner (2026-10-11), on D56: an account's risk is its leverage once
+    loaded — stop adding at notional ÷ equity = N, and keep a share of the
+    equity unspent. Opt-in, either or both, beside D56's legs; at the cap
+    entries pause and exits run (D56's own path); an unknown equity or
+    initial-margin rate judges nothing on its leg."""
+    from gridgremlin.config import ConfigError, validate_fleet
+    from gridgremlin.main import cap_verdict
+    row = {'market_type': 'linear', 'symbol': 'BTCUSDT', 'side': 'long',
+           'capital': 1000, 'lower': 80000, 'upper': 90000, 'rungs': 11}
+    f = validate_fleet({'bots': [row], 'account_caps': {'effective_leverage_max': 3,
+                                                        'free_margin_min': 0.25}})
+    assert f['account_caps']['effective_leverage_max'] == 3.0 and f['account_caps']['free_margin_min'] == 0.25
+    for bad in ({'effective_leverage_max': 0}, {'effective_leverage_max': -2}, {'free_margin_min': 1.5},
+                {'free_margin_min': -0.1}, {'effective_leverage_max': float('inf')}, {'leverage_max': 3}):
+        try:
+            validate_fleet({'bots': [row], 'account_caps': bad})
+        except ConfigError:
+            continue
+        raise AssertionError(f'{bad} was accepted')
+
+    class B:
+        def __init__(self, n, alive=True):
+            self.notional_now, self.alive = n, alive
+    bots = [B(200_000.0), B(100_000.0), B(999_999.0, alive=False)]          # 300k held by the living
+    lev = {'effective_leverage_max': 3}
+    assert cap_verdict(lev, None, bots, equity=100_000.0) == 'account leverage 3.00x >= 3x'
+    assert cap_verdict(lev, None, bots, equity=120_000.0) is None          # 2.5x: room
+    assert cap_verdict(lev, None, bots, equity=None) is None               # unknown: judges nothing
+    free = {'free_margin_min': 0.25}
+    assert cap_verdict(free, None, bots, im_rate=0.80) == 'free margin 20% <= 25% of equity'
+    assert cap_verdict(free, None, bots, im_rate=0.60) is None
+    assert cap_verdict(free, None, bots, im_rate=None) is None
+    both = {'effective_leverage_max': 5, 'free_margin_min': 0.25}
+    assert 'free margin' in cap_verdict(both, None, bots, equity=100_000.0, im_rate=0.9)
+    assert cap_verdict(both, None, bots, equity=100_000.0, im_rate=0.5) is None
+    import inspect
+    from gridgremlin import main
+    assert "wallets[v].get('equity'), wallets[v].get('im_rate'))" in inspect.getsource(main.run)   # the fleet passes both
+
+
 def spec_D70_the_holding_cap_holds_flat_bots_back_and_lets_holders_run():
     """3Commas' max active deals, fleet-wide: `holding_max` in account_caps.
     At the cap a flat bot opens nothing; the bots holding keep their
@@ -196,7 +238,8 @@ def spec_D70_the_holding_cap_holds_flat_bots_back_and_lets_holders_run():
            'capital': 1000, 'lower': 80000, 'upper': 90000, 'rungs': 11}
     f = validate_fleet({'bots': [row], 'account_caps': {'holding_max': 3}})
     assert f['account_caps'] == {'mm_rate_max': None, 'notional_max': None,
-                                 'holding_max': 3}
+                                 'holding_max': 3,
+                                 'effective_leverage_max': None, 'free_margin_min': None}
     for bad, frag in (({'holding_max': 0}, '>='), ({'holding_max': 2.5}, 'whole number'),
                       ({'holding_max': 'x'}, 'holding_max')):
         try:
