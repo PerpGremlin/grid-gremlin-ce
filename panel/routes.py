@@ -737,6 +737,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except Exception as e:                          # noqa: BLE001
                 picture += (f'<p class="dim">no what-if: '
                             f'{_html.escape(str(e))}</p>')
+            try:                   # U73: and how it fits the market it trades
+                from gridgremlin.market import latest
+                from panel.fit import fit_section
+                picture += fit_section(vbot, self._bars_for(vbot), latest())
+            except Exception as e:                          # noqa: BLE001
+                picture += (f'<p class="dim">no market fit: '
+                            f'{_html.escape(str(e))}</p>')
             say += (f'<h1 class="dim">in plain words</h1><p class="say">'
                     f'{_html.escape(sentence(vbot, mark))}</p>' + picture)
         if mode in ('create', 'edit'):
