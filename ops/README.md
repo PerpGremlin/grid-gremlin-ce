@@ -115,16 +115,6 @@ What runs, from the inside out:
     `daemon-reload` and restart `gg-panel`) so its box and score show.
     Going live later needs the subaccount's keys, a watchdog in the fleet
     file, `paper: false` and a fleet unit — each on the owner's word.
-16. **The showcase** (`showcase.server` and `gridgremlin.show`, U77, D86) —
-    the public face, the owner's to start. `show.timer` writes
-    `logs/show/show.json` every 15 minutes from the named fleets' readouts:
-    an allowlist (coin, side, kind, market, state, return on capital, days,
-    trips), dollar amounts and leverage only with `--amounts`, a real-money
-    fleet refused. `showcase.service` serves it with the public market
-    reading on 127.0.0.1:41950 — GET only, no key (no `.env`), no cookie,
-    no link into the desk. Reaching it from outside (a proxy or a tunnel to
-    that port) is a separate decision; the live panel is never what is
-    exposed.
 
 > **Retired: the box-side Claude** — triage on failure, the Telegram relay
 > and the daily range review, kept in the private tree's `ops/retired/`
@@ -165,8 +155,6 @@ systemctl --user enable --now grid-gremlin3-logrotate.timer grid-gremlin3-fills.
   grid-gremlin3-collector.timer
 systemctl --user enable --now grid-gremlin3-phone.service gg-panel.service \
   grid-gremlin3-liqstream.service
-# the showcase (D86) is the owner's to start, never part of a default install:
-#   systemctl --user enable --now grid-gremlin3-show.timer grid-gremlin3-showcase.service
 loginctl enable-linger $USER        # units survive logout
 ```
 
