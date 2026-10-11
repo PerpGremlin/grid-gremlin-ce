@@ -600,7 +600,7 @@ def spec_U71_a_coins_page_charts_its_market_data():
     md.update(fetch, ['BTC'], now, root=root, pause=lambda s: None)
     page = asset_page('BTC', ['BTC', 'ETH'], '7d', now=now, root=root, unread={'oi.okx': 'HTTPError'})
     assert '<h1>BTC <span class="dim">market data</span></h1>' in page
-    assert '<b class="on">7 days</b>' in page and 'href="/asset?coin=ETH&span=7d"' in page
+    assert '<b class="on">7 days</b>' in page and 'href="/asset?coin=ETH&amp;span=7d"' in page
     for heading, *_ in CHARTS:                                             # every kind, each its chart
         assert f'<h2>{heading.replace("&", "&amp;")}</h2>' in page, heading
     assert page.count('<svg class="achart"') == len(CHARTS)

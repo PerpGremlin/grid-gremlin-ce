@@ -44,7 +44,7 @@ class FleetAdminPages:
                 f'<h1>{botid}</h1><p class="dim">a portfolio row (D78) is edited in '
                 'the fleet file by hand — its assets, hedges, clock and risk are the '
                 'row\'s own terms; the setup form knows one market at a time. '
-                f'<a href="/edit?fleet={fi}&bot={botid}&mode=remove">remove</a> is '
+                f'<a href="/edit?fleet={fi}&amp;bot={botid}&amp;mode=remove">remove</a> is '
                 'here.</p><p><a href="/">&larr; fleet</a></p>')
         if q.get('mode') == 'remove':
             return self._page(

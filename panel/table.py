@@ -59,10 +59,10 @@ def section(idx, label, contract, view='all'):
                   '<td class="dim">—</td><td class="dim">—</td>'
                   '<td class="dim">—</td>'
                 + watch0
-                + f"<td class='dim'><a href='/edit?fleet={idx}&bot={botid}'>"
-                  f"edit</a> <a href='/edit?fleet={idx}&bot={botid}"
-                  f"&mode=remove'>remove</a> "
-                  f"<a href='/setup?fleet={idx}&copy={botid}'>copy</a>"
+                + f"<td class='dim'><a href='/edit?fleet={idx}&amp;bot={botid}'>"
+                  f"edit</a> <a href='/edit?fleet={idx}&amp;bot={botid}"
+                  f"&amp;mode=remove'>remove</a> "
+                  f"<a href='/setup?fleet={idx}&amp;copy={botid}'>copy</a>"
                   "</td></tr>")
             continue
         state = ('HOLDING' if abs(b['position']) > 1e-12 else 'FLAT')
@@ -96,9 +96,9 @@ def section(idx, label, contract, view='all'):
             f"{money(b['unreal_at_mark'])}{money(total)}"
             f"<td>{b['bought']:,.4g}</td><td>{b['sold']:,.4g}</td>"
             f"{edge}<td>{settle(b, floor)}</td>{watch}"
-            f"<td class='dim'><a href='/edit?fleet={idx}&bot={botid}'>edit"
-            f"</a> <a href='/edit?fleet={idx}&bot={botid}&mode=remove'>"
-            f"remove</a> <a href='/setup?fleet={idx}&copy={botid}'>copy</a>"
+            f"<td class='dim'><a href='/edit?fleet={idx}&amp;bot={botid}'>edit"
+            f"</a> <a href='/edit?fleet={idx}&amp;bot={botid}&amp;mode=remove'>"
+            f"remove</a> <a href='/setup?fleet={idx}&amp;copy={botid}'>copy</a>"
             "</td></tr>")
     return f"""
 <h1 id="fleet{idx}">{label} {tier_badge(contract)} — last {contract['window_hours']:g}h {sweep_note(contract)}

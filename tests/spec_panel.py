@@ -581,8 +581,8 @@ def spec_V10_a_card_says_the_bot_in_a_glance_and_keeps_every_number():
     for word in ('fills', 'realized', 'fees', 'unreal', 'bought', 'sold',
                  'stop-now est.', 'watcher'):
         assert f'<td>{word}</td>' in html, word      # nothing was dropped
-    for link in ("/edit?fleet=0&bot=spoADAUSDTl'>edit",
-                 '/setup?fleet=0&copy=spoADAUSDTl', 'mode=remove'):
+    for link in ("/edit?fleet=0&amp;bot=spoADAUSDTl'>edit",
+                 '/setup?fleet=0&amp;copy=spoADAUSDTl', 'mode=remove'):
         assert link in html
     assert '1 bots' in html and 'href="/table"' in html
     table = render([('demo', CONTRACT)], table=True)
@@ -684,10 +684,10 @@ def spec_U52_a_dca_card_folds_its_ladder_and_says_the_drop_it_covers():
              'avg_pct': -0.0412, 'to_tp_pct': 0.0652}]
     box = ladder_box(3, 'lin1000PEPEUSDTl', {'ladder': rows})
     assert box.startswith('<details data-k="3:lin1000PEPEUSDTl:ladder"><summary>the ladder: '
-                          'covers a move of <b>-9.00%</b>, then 96,000 committed at an '
+                          'covers a move of <b>-9.00%</b>, then 96,000.00 committed at an '
                           'average of -4.12%</summary>')
-    assert '<tr><td>base</td><td>+0.00%</td><td>1,500</td><td>1,500</td><td>+0.00%</td><td>+1.00%</td></tr>' in box
-    assert '<tr><td>6</td><td>-9.00%</td><td>48,000</td><td>96,000</td><td>-4.12%</td><td>+6.52%</td></tr>' in box
+    assert '<tr><td>base</td><td>+0.00%</td><td>1,500.00</td><td>1,500.00</td><td>+0.00%</td><td>+1.00%</td></tr>' in box
+    assert '<tr><td>6</td><td>-9.00%</td><td>48,000.00</td><td>96,000.00</td><td>-4.12%</td><td>+6.52%</td></tr>' in box
     assert ladder_box(0, 'x', {'capital': 1}) == '' and ladder_box(0, 'x', None) == ''
     c = {'window_hours': 6.0, 'generated_ms': 0, 'unowned': {},
          'bots': {'lin1000PEPEUSDTl': dict(CONTRACT['bots']['spoADAUSDTl'], strategy='martingale')},
@@ -1081,8 +1081,8 @@ def spec_X15_a_dead_bots_card_offers_the_close_and_says_DEAD():
     for c in (_dead(True), _dead(False)):          # fills in the window or
         page = render([('demo', c)])               # not: dead is said either way
         assert 'class="neg st st-dead"' in page and '>DEAD</span>' in page
-        assert "href='/close?fleet=0&bot=linAVAXUSDTs'>close position" in page
-    assert '/close?fleet=0&bot=spoADAUSDTl' not in render([('demo', _dead())])
+        assert "href='/close?fleet=0&amp;bot=linAVAXUSDTs'>close position" in page
+    assert '/close?fleet=0&amp;bot=spoADAUSDTl' not in render([('demo', _dead())])
     flat = _dead(True)                             # stood down flat, as HL
     flat['bots']['linAVAXUSDTs']['position'] = 0.0  # AVAX did after its last
     page = render([('demo', flat)])                # round (2026-10-06)
@@ -1913,3 +1913,63 @@ def spec_U75_the_bug_hunts_findings_stay_fixed():
     for private in ('agent door', 'authorized keys', 'carry', 'tilt', 'subaccount 1', 'the box'):
         assert private not in text, private
     assert ex.load_calendar(shipped) and all(e['expires'] is None for e in _json.loads(shipped.read_text()))
+
+
+def spec_U76_the_bug_hunts_nits_stay_fixed():
+    """The rest of the bug hunt (2026-10-11): a readout that crashed killed
+    the fleet page; a perpetual's edit page showed spot-only rows; the form
+    named accounts by their files; a DCA ladder mixed "45" with "67.5";
+    two same-venue lines shared one solid swatch; and query links carried a
+    bare '&'."""
+    import copy
+    import re
+    import subprocess
+    import tempfile
+    from pathlib import Path as _P
+    from panel.server import Handler, render
+    from panel.setup import SPOT_ONLY, advanced_page
+    from panel.card import ladder_box
+    from panel.asset import legend
+    # a readout that printed nothing: the last good one stays; with none, the section says so
+    fleet = _P(tempfile.mkdtemp()) / 'fleet.x.json'
+    fleet.write_text('{"bots": [{"symbol": "BTCUSDT"}]}')
+    saved_run = subprocess.run
+    subprocess.run = lambda *a, **k: subprocess.CompletedProcess(a, 1, '', 'Traceback…\nKeyError: boom\n')
+    try:
+        h = Handler.__new__(Handler)
+        h.hours = 6.0
+        Handler._cache.pop(str(fleet), None)
+        got = h._read_contract(str(fleet))
+        assert got['bots'] == {} and got['unavailable'] == 'KeyError: boom'
+        good = copy.deepcopy(CONTRACT)
+        Handler._cache[str(fleet)] = (0.0, good)
+        assert h._read_contract(str(fleet)) is good                       # the last good one stays
+    finally:
+        subprocess.run = saved_run
+        Handler._cache.pop(str(fleet), None)
+    page = render([('demo', got)])
+    assert 'readout unavailable' in page and 'KeyError: boom' in page
+    # a perpetual's edit page has no spot rows; a spot bot's keeps them
+    perp = advanced_page('grid', {'symbol': 'BTCUSDT', 'market_type': 'linear', 'side': 'long'}, ['bybit demo'], edit='linBTCUSDTl')
+    spot = advanced_page('grid', {'symbol': 'BTCUSDT', 'market_type': 'spot', 'side': 'long'}, ['bybit demo'], edit='spoBTCUSDTl')
+    for key in SPOT_ONLY:
+        assert f'name="{key}"' not in perp, key
+    assert 'name="holding"' in spot and 'name="spot_borrow"' in spot
+    assert '<b>bybit demo</b>' in perp                                   # the account's name, not its file
+    # the form's accounts are the dash's names (U55), by index
+    h = Handler.__new__(Handler)
+    h.fleets, h.labels = ('configs/fleet.demo.json', 'configs/fleet.x.json'), ('bybit demo', '')
+    assert h._fleet_labels() == ['bybit demo', 'fleet.x.json']
+    # one number format down the ladder, right-aligned
+    rows = [{'step': i, 'fill_pct': -0.01 * i, 'notional': n, 'committed': c, 'avg_pct': 0.0, 'to_tp_pct': 0.01}
+            for i, (n, c) in enumerate([(30, 30), (45, 75), (67.5, 142.5), (101.25, 243.75)])]
+    box = ladder_box(0, 'b', {'ladder': rows, 'quote': 'USDT'})
+    assert '<td>45.00</td>' in box and '<td>67.50</td>' in box and 'class="ladder"' in box
+    assert ladder_box(0, 'b', {'ladder': [dict(rows[0], notional=0.0015, committed=0.0015)]}).count('0.0015') >= 2
+    # a dashed line's swatch is dashed; the solid one is solid
+    lg = legend({'top.binance_accounts': [(0, 0.6)], 'top.binance_positions': [(0, 0.6)]}, 'line', '%')
+    assert lg.count('repeating-linear-gradient') == 1
+    # no query link carries a bare '&'
+    pages = render([('demo', copy.deepcopy(CONTRACT))]) + render([('demo', copy.deepcopy(CONTRACT))], table=True)
+    bare = re.findall(r"href=[\"']/[a-z-]+\?[^\"']*&(?!amp;)", pages)
+    assert not bare, bare[:3]

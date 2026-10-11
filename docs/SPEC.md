@@ -1491,6 +1491,17 @@ eventually pin (T1).
   the control link leads to a page that says control is off, not a bare
   404; the public example of the expiry calendar names no private
   infrastructure. *(the bug hunt, 2026-10-11)*
+- **U76** The rest of the bug hunt stays fixed: a readout that crashed or
+  printed nothing never kills the page — the last good one stays (its age
+  said), and with none the fleet's section says "readout unavailable" with
+  the readout's last line; a perpetual's edit page has no spot-only rows
+  (its market type is fixed); the setup form names accounts as the dash
+  does (U55), never by their files; a DCA ladder's amounts share one format
+  (two decimals, or significant figures under one) and right-align; a
+  dashed line's legend swatch is dashed, so two lines of one venue tell
+  apart; a query link carries `&amp;`, never a bare `&`; the help column
+  of the form keeps its width beside a long dropdown. The README lists the
+  watchdog's and the agent's keys. *(the bug hunt, 2026-10-11)*
 - **L1** A new trade joins a running fleet within a cycle. The trade watch
   stats the trades file once a cycle; a changed file's new rows are each
   built by the fleet's own builder (`main.build_market_bot`, the one every

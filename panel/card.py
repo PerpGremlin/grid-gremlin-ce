@@ -59,7 +59,9 @@ def ladder_box(idx, botid, terms, open_=False):
     def pct(v):
         return '—' if v is None else f'{v * 100:+.2f}%'
     def amount(v):
-        return f'{v:,.0f}' if abs(v) >= 1000 else f'{v:,.6g}'
+        # U76: one format down a column — two decimals, or significant
+        # figures for an amount under one (a coin-sized ladder, D89)
+        return f'{v:,.2f}' if abs(v) >= 1 else f'{v:.6g}'
     last = rows[-1]
     body = ''.join(
         f'<tr><td>{"base" if r["step"] == 0 else r["step"]}</td>'
@@ -69,7 +71,7 @@ def ladder_box(idx, botid, terms, open_=False):
     return (f'<details{" open" if open_ else ""} data-k="{idx}:{botid}:ladder"><summary>the ladder: '
             f'covers a move of <b>{pct(last["fill_pct"])}</b>, then '
             f'{amount(last["committed"])} committed at an average of '
-            f'{pct(last["avg_pct"])}</summary><table><tr><th>step</th>'
+            f'{pct(last["avg_pct"])}</summary><table class="ladder"><tr><th>step</th>'
             '<th>fills at</th><th>size</th><th>committed</th><th>average</th>'
             f'<th>to take-profit</th></tr>{body}</table>'
             '<div class="dim">from the base price; size and committed in '
@@ -179,11 +181,11 @@ def card(idx, botid, b, contract, belief, full=False):
     rng = (contract.get('ranges') or {}).get(botid)
     ceil = ((contract.get('watchdog') or {}).get('ceilings') or {}).get(botid)
     money_coin, margin_coin = units_of(botid, (contract.get('terms') or {}).get(botid))   # U53
-    links = (('' if full else f"<a href='/position?fleet={idx}&bot={botid}'>numbers</a>")
+    links = (('' if full else f"<a href='/position?fleet={idx}&amp;bot={botid}'>numbers</a>")
              + ('' if ((contract.get('terms') or {}).get(botid) or {}).get('trade') else
-                (' · ' if not full else '') + f"<a href='/edit?fleet={idx}&bot={botid}'>edit</a> · "
-                f"<a href='/setup?fleet={idx}&copy={botid}'>copy</a> · "
-                f"<a href='/edit?fleet={idx}&bot={botid}&mode=remove'>remove"
+                (' · ' if not full else '') + f"<a href='/edit?fleet={idx}&amp;bot={botid}'>edit</a> · "
+                f"<a href='/setup?fleet={idx}&amp;copy={botid}'>copy</a> · "
+                f"<a href='/edit?fleet={idx}&amp;bot={botid}&amp;mode=remove'>remove"
                 '</a>'))
     # L8: a trade is not a fleet row — edit, copy and remove answered "not in
     # this fleet" (the owner, 2026-10-11, on tilt's ended BTC trade); a trade
@@ -417,7 +419,7 @@ def card(idx, botid, b, contract, belief, full=False):
     if is_trade and state != 'DEAD' and not flat and not botid.startswith('spo'):
         # L6: a live trade can be ended early from its card — the close page
         # asks for its name and sends one reduce-only market order
-        links += (f" · <a href='/close?fleet={idx}&bot={botid}'>close trade</a>")
+        links += (f" · <a href='/close?fleet={idx}&amp;bot={botid}'>close trade</a>")
     elif is_trade and state == 'DEAD':
         links += " · <a href='/trade'>clear</a>"
     if state == 'DEAD' and not botid.startswith('spo') and not flat and not (
@@ -429,7 +431,7 @@ def card(idx, botid, b, contract, belief, full=False):
         # close (HL AVAX after its last round, 2026-10-06: the door led to
         # "nothing"); a holding the panel cannot see is still offered —
         # the close page asks the exchange itself
-        links += (f" · <a href='/close?fleet={idx}&bot={botid}'>close "
+        links += (f" · <a href='/close?fleet={idx}&amp;bot={botid}'>close "
                   'position</a>')
     if not full:
         # U68 (the owner: "far too much for a card … looks like pionex at
@@ -527,9 +529,9 @@ def portfolio_card(idx, botid, contract, belief, full=False):
     bl = belief.get(botid) or {}
     v = bl.get('portfolio') or {}
     q = terms.get('quote') or 'USDT'
-    links = (('' if full else f"<a href='/position?fleet={idx}&bot={botid}'>numbers</a> ")
-             + f"<a href='/edit?fleet={idx}&bot={botid}'>edit</a> "
-             f"<a href='/edit?fleet={idx}&bot={botid}&mode=remove'>remove</a>")
+    links = (('' if full else f"<a href='/position?fleet={idx}&amp;bot={botid}'>numbers</a> ")
+             + f"<a href='/edit?fleet={idx}&amp;bot={botid}'>edit</a> "
+             f"<a href='/edit?fleet={idx}&amp;bot={botid}&amp;mode=remove'>remove</a>")
     state = ('DEAD' if bl.get('alive') is False else 'NOT STARTED' if botid not in belief
              else 'HOLDING' if (v.get('stack_value') or 0) > 0 else 'RESTING')
     name = f"{botid[3:]} portfolio"

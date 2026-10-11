@@ -1,6 +1,7 @@
 """The panel's renderer: the cards, the table, the strip and the side panel,
 all from the readout's contract (§4: one renderer, two artefacts)."""
 from gridgremlin.report import card_total
+import html
 import time
 from .css import CSS
 from .reference import KEEP_JS
@@ -39,6 +40,10 @@ def cards_section(idx, label, contract, view='all', scripted=True):
                if scripted else '')               # an export has no script to run it
             +             f'{sweep_note(contract)} <span class="dim">(read {age}s ago; '
             f'refreshes every {REFRESH_S}s)</span></h1>'
+            + (f'<div class="refusal"><b>readout unavailable</b> — the engine\'s '
+               f'readout of this fleet failed; the panel tries again on a later refresh.'
+               f'<br>{html.escape(contract["unavailable"])}</div>'
+               if contract.get('unavailable') else '') +
             f'<div class="pnl {_num_cls(total)}"><span class="dim">this '
             'exchange</span> <span class="big '
             f'{_num_cls(total)}">{total:+,.2f}</span> {venue_money(contract)} '

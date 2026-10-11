@@ -1058,6 +1058,9 @@ def quick_page(fleets, chosen=0, symbols=()):
         'setting the config file accepts.</p>')
 
 
+SPOT_ONLY = ('assumed_avg_entry', 'holding', 'holding_since', 'spot_borrow', 'spot_leverage')
+
+
 def advanced_page(strategy, values, fleets, chosen=0, note='', edit=None,
                   alert='', symbols=()):
     """edit=<botid> turns the same form into the edit door: every setting
@@ -1065,6 +1068,10 @@ def advanced_page(strategy, values, fleets, chosen=0, note='', edit=None,
     groups = []
     dflts = engine_defaults(strategy)                      # U33
     for title, rows in SCHEMAS[strategy].items():
+        if edit and values.get('market_type') != 'spot':
+            # U76: a perpetual's edit page has no spot rows — its market
+            # type is fixed, so they could never apply
+            rows = [r for r in rows if r[0] not in SPOT_ONLY]
         body = ''.join(_field(n, k, lb, h, values.get(n),
                               fixed=bool(edit) and n in IDENTITY,
                               unit=values.get('size_unit'),

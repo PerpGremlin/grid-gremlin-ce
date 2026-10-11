@@ -122,7 +122,7 @@ def chart(lines, price, t0, t1, kind, unit):
             elif s:
                 out.append(f'<polyline fill="none" stroke="{VENUE_COLOUR.get(_venue(name).split("_")[0], "var(--fg)")}" '
                            f'stroke-width="1.6" vector-effect="non-scaling-stroke"'
-                           + (' stroke-dasharray="5 3"' if name.endswith(('accounts', 'inverse')) else '')
+                           + (' stroke-dasharray="5 3"' if _dashed(name) else '')
                            + ' points="' + ' '.join(f'{x(t):.1f},{y(v):.1f}' for t, v in s) + '"/>')
     out.append(f'<text x="{PAD_L - 6}" y="{PAD_Y + 4}" text-anchor="end" class="ax">{_fmt(hi, unit)}</text>'
                f'<text x="{PAD_L - 6}" y="{H - PAD_Y + 4}" text-anchor="end" class="ax">{_fmt(lo, unit)}</text>')
@@ -130,12 +130,20 @@ def chart(lines, price, t0, t1, kind, unit):
             + ''.join(out) + '</svg>')
 
 
+def _dashed(name):
+    return name.endswith(('accounts', 'inverse'))
+
+
 def legend(lines, kind, unit):
     parts = []
     for name, s in lines.items():
         last = s[-1][1] if s else None
         colour = VENUE_COLOUR.get(_venue(name).split('_')[0], 'var(--fg)')
-        parts.append(f'<span class="lg"><i style="background:{colour}"></i>{html.escape(VENUE_WORD.get(_venue(name), _venue(name)))} '
+        # U76: a dashed line's swatch is dashed too — two lines of one venue
+        # share its colour, and the dash is what tells them apart
+        swatch = (f'repeating-linear-gradient(90deg,{colour} 0 4px,transparent 4px 6px)'
+                  if _dashed(name) and kind != 'bars' else colour)
+        parts.append(f'<span class="lg"><i style="background:{swatch}"></i>{html.escape(VENUE_WORD.get(_venue(name), _venue(name)))} '
                      f'<b class="{_num_cls(last) if kind == "bars" and last is not None else ""}">{_fmt(last, unit)}</b></span>')
     if kind == 'bars':
         tot = sum(s[-1][1] for s in lines.values() if s)
@@ -249,9 +257,9 @@ def asset_page(coin, coins, span='7d', now=None, root=None, unread=None, collect
     names = ['price'] + [n for _, ns, _, _ in CHARTS for n in ns]
     kept = series(coin, names, t0, root)
     e = html.escape
-    picker = ' · '.join(f'<b class="on">{e(c)}</b>' if c == coin else f'<a href="/asset?coin={e(c)}&span={span}">{e(c)}</a>'
+    picker = ' · '.join(f'<b class="on">{e(c)}</b>' if c == coin else f'<a href="/asset?coin={e(c)}&amp;span={span}">{e(c)}</a>'
                         for c in coins)
-    spans = ' · '.join(f'<b class="on">{w}</b>' if k == span else f'<a href="/asset?coin={e(coin)}&span={k}">{w}</a>'
+    spans = ' · '.join(f'<b class="on">{w}</b>' if k == span else f'<a href="/asset?coin={e(coin)}&amp;span={k}">{w}</a>'
                        for k, w, _ in SPANS)
     price = kept.get('price') or []
     head = (f'<h1>{e(coin)} <span class="dim">market data</span></h1><p>{picker}</p><p>{spans}</p>')

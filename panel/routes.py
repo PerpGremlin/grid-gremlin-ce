@@ -103,7 +103,22 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             [sys.executable, '-m', 'gridgremlin.report', fleet,
              '--hours', str(self.hours), '--json'],
             capture_output=True, text=True, timeout=120)
-        data = json.loads(out.stdout)
+        try:
+            data = json.loads(out.stdout)
+        except ValueError:
+            # U76: the readout crashed or printed nothing. The last good
+            # one stays (its age is on the page); with none, the section
+            # says so with the readout's last line, and the next ask after
+            # the TTL tries again — the request never dies on it.
+            why = ((out.stderr or '').strip().splitlines() or
+                   [f'exit {out.returncode}, nothing printed'])[-1][:300]
+            print(f'panel: readout {fleet} unavailable: {why}', flush=True)
+            _, held = Handler._cache.get(fleet, (0.0, None))
+            if held is not None and not held.get('unavailable'):
+                return held
+            data = {'window_hours': self.hours,
+                    'generated_ms': int(time.time() * 1000),
+                    'bots': {}, 'unowned': {}, 'unavailable': why}
         Handler._cache[fleet] = (time.time(), data)
         return data
 
