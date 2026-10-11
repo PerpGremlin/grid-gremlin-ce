@@ -201,7 +201,9 @@ def tile(coin, m, h):
     if m.get('long_pct') is not None:
         parts.append(f'{m["long_pct"]:.0f}% of accounts long' + (f' ({m["crowding"]})' if m.get('crowding') else ''))
     if m.get('depth_1pct'):
-        parts.append(f'depth ±1% {m["depth_1pct"] / 1e6:,.1f}M')
+        reach = m.get('depth_reach_pct')
+        where = f'to ±{min(reach, 1.0):.2f}%' if reach is not None else 'in the book read'
+        parts.append(f'depth {where} {m["depth_1pct"] / 1e6:,.1f}M')
     if parts:
         rows.append('<div class="dim">' + ' · '.join(html.escape(p) for p in parts) + '</div>')
     if m.get('atr_pct_4h') is not None:

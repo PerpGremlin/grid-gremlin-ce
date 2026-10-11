@@ -268,17 +268,17 @@ def spec_X8_atomic_write_replaces_whole_and_keeps_the_bak():
 
 
 def spec_C1_control_is_opt_in_and_typed():
-    """§12: a panel launched without --unit has NO control surface; with
-    it, an unmatched typed confirmation does nothing."""
+    """§12: a panel launched without --unit has NO control surface — its
+    page says control is off and offers nothing to press (the bug hunt,
+    2026-10-11: a bare 404 behind a link on every page), and the action
+    is refused; with it, an unmatched typed confirmation does nothing."""
     srv, base = _serve(CONTRACT)
     try:
         req = urllib.request.Request(f'{base}/control',
                                      headers={'Cookie': 'gg=tok123'})
-        try:
-            urllib.request.urlopen(req)
-            assert False, 'control served unarmed'
-        except urllib.error.HTTPError as e:
-            assert e.code == 404
+        page = urllib.request.urlopen(req).read().decode()
+        assert 'is off on this' in page and '--units' in page
+        assert '<form' not in page.split('</nav>')[-1] and '<button' not in page.split('</nav>')[-1].replace('class="quiet theme"', '')
         req = urllib.request.Request(
             f'{base}/unit', data=b'gg=1&action=stop&confirm=wrong',
             method='POST', headers={'Cookie': 'gg=tok123'})
@@ -1872,3 +1872,41 @@ def spec_U64_a_card_says_how_long_it_has_run_and_its_grid_profit_per_day_and_a_y
     live['generated_ms'] = gen                       # the fixture's clock reads zero: no span, no line
     assert '<div class="rate">running 6 h · grid profit' in render([('demo', live)])   # the fixture's 6 h window
     assert '<div class="rate">' not in render([('demo', copy.deepcopy(CONTRACT))])
+
+
+def spec_U75_the_bug_hunts_findings_stay_fixed():
+    """The bug hunt (2026-10-11, the panel run on the example configs, 103
+    pages): a fleet with no known network shifted every later cell of the
+    top strip one place left; the table said RESTING where the card said
+    NOT STARTED; "depth ±1%" was read from a book that ends far inside 1%;
+    the run-rate line printed −0.00 and called a DCA's profit "grid"; the
+    public edition's example expiry calendar named private infrastructure."""
+    import copy
+    import json as _json
+    from pathlib import Path as _P
+    from gridgremlin import expiry as ex
+    from gridgremlin.market import depth_reach_pct
+    from panel.markets import tile
+    from panel.render import run_rate, tier_badge
+    from panel.server import render
+    assert tier_badge({}) == '<span></span>'                                   # an unknown network still fills its cell
+    c = copy.deepcopy(CONTRACT)
+    c['bots']['linXRPUSDTl'] = None                                            # configured, never started
+    c['watchdog']['belief']['bots'].pop('linXRPUSDTl', None)
+    row = render([('demo', c)], table=True).split('linXRPUSDTl')[1].split('</tr>')[0]
+    assert 'NOT STARTED' in row and 'RESTING' not in row
+    bids = [(99.9, 1), (99.8, 1)]
+    asks = [(100.1, 1), (100.25, 1)]
+    assert abs(depth_reach_pct(bids, asks, 100.0) - 0.2) < 1e-9               # the nearer edge of the book served
+    t = tile('ETH', {'price': 100.0, 'depth_1pct': 16.8e6, 'depth_reach_pct': 0.09}, None)
+    assert 'depth to ±0.09% 16.8M' in t and '±1%' not in t
+    b = {'realized': -0.001, 'fees': 0.0, 'fills': 3, 'counted_from': 'cap', 'first_ms': 8.64e7}
+    line = run_rate(b, {'generated_ms': 5 * 8.64e7}, 1000.0, trade=True)
+    assert '-0.00' not in line and '+0.00' in line and 'grid' not in line
+    root = _P(__file__).resolve().parents[1]                          # the public tree's configs ARE the examples
+    shipped = (root / 'configs' / 'examples' / 'expiry.json' if (root / 'configs' / 'examples').is_dir()
+               else root / 'configs' / 'expiry.json')
+    text = shipped.read_text().lower()
+    for private in ('agent door', 'authorized keys', 'carry', 'tilt', 'subaccount 1', 'the box'):
+        assert private not in text, private
+    assert ex.load_calendar(shipped) and all(e['expires'] is None for e in _json.loads(shipped.read_text()))

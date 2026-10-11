@@ -199,11 +199,14 @@ def run_rate(b, contract, capital=None, trade=False):
     shown = (gen - start) / 8.64e7
     net = b['realized'] - b['fees']
     per_day = net / days
+    if abs(per_day) < 0.005:                 # never "−0.00" (the bug hunt, 2026-10-11)
+        per_day = 0.0
     run = f'{shown:.1f} d' if shown >= 1 else f'{shown * 24:.0f} h'
-    word = '' if trade else 'grid '          # a trade (D81) has no grid
+    word = '' if trade else 'grid '          # a trade (D81) or a DCA has no grid
     line = (f'running {run} · {word}profit <b class="{_num_cls(per_day)}">{per_day:+,.2f}</b>/day')
     if capital:
         apr = net / capital / days * 365 * 100
+        apr = 0.0 if abs(apr) < 0.05 else apr
         line += f' · {word}APR <b class="{_num_cls(apr)}">{apr:+,.1f}%</b>'
     return f'<div class="rate">{line}</div>'
 
@@ -634,14 +637,14 @@ def card(idx, botid, b, contract, belief, full=False):
                      f'<span class="big {_num_cls(total)}">{total:+,.2f}</span> {money_coin}{coin}{roi}'
                      f' <span class="dim">· {span}</span>'                 # D63: what the figure covers
                      f'<div class="parts">{pnl_parts(net, b["unreal_at_mark"], b.get("funding"))}</div>'
-                     f'{run_rate(b, contract, cap, bool(((contract.get("terms") or {}).get(botid) or {}).get("trade")))}'
+                     f'{run_rate(b, contract, cap, bool(((contract.get("terms") or {}).get(botid) or {}).get("trade")) or ((contract.get("terms") or {}).get(botid) or {}).get("strategy") == "martingale")}'
                      '</div>')
         head = (f'<div class="pnl {_num_cls(total)}">'
                 f'<span class="big {_num_cls(total)}">{total:+,.2f}</span> '
                 f'{money_coin}{coin} <span class="dim">after fees, {span}</span>'
                 f'<div class="parts">'
                 f'{pnl_parts(net, b["unreal_at_mark"], b.get("funding"))}'
-                f'</div>{run_rate(b, contract, ((contract.get("terms") or {}).get(botid) or {}).get("capital"), bool(((contract.get("terms") or {}).get(botid) or {}).get("trade")))}'
+                f'</div>{run_rate(b, contract, ((contract.get("terms") or {}).get(botid) or {}).get("capital"), bool(((contract.get("terms") or {}).get(botid) or {}).get("trade")) or ((contract.get("terms") or {}).get(botid) or {}).get("strategy") == "martingale")}'
                 f'{since_first_line(contract, botid)}</div>')
         held = holding_html(pos, b['avg_cost'], mark, botid,
                             bool(b.get('inverse')), quote=money_coin)   # U44/U53
@@ -1039,7 +1042,10 @@ def tier_badge(contract):
         cls = 'tier-main' if env == 'mainnet' else 'tier-test'
         out.append(f'<a class="tier {cls}" href="/trading" title="what this '
                    f'means">{name}</a>')
-    return ' '.join(out)
+    # the strip's grid counts a cell per fleet for the badge: an unknown
+    # network still fills its cell (the bug hunt, 2026-10-11: a fleet down
+    # shifted every later cell one place left)
+    return ' '.join(out) or '<span></span>'
 
 
 def portfolio_total(contract):
@@ -1309,7 +1315,8 @@ def section(idx, label, contract, view='all'):
             alive = bl.get('alive')
             pos = bl.get('position') or 0.0
             state = ('DEAD' if alive is False else
-                     'HOLDING' if abs(pos) > 1e-12 else 'RESTING')
+                     'HOLDING' if abs(pos) > 1e-12 else
+                     'NOT STARTED' if botid not in belief else 'RESTING')   # as the card says (U34)
             cls = 'neg' if state == 'DEAD' else 'dim'
             wd0 = contract.get('watchdog') or {}
             ceil0 = (wd0.get('ceilings') or {}).get(botid)
@@ -1461,7 +1468,7 @@ def page_links(table=False, view='all'):
     block on the fleet page, a bar across the top of every other page."""
     q = '' if view == 'all' else f'?view={view}'
     return ((f'<a href="/{q}">cards</a>' if table else f'<a href="/table{q}">table</a>')
-            + '<a href="/control">control</a><a href="/setup">set up a bot</a><a href="/trade">new trade</a>'
+            + '<a href="/control">control</a><a href="/setup">new bot</a><a href="/trade">new trade</a>'
               '<a href="/rehearse">rehearse a grid</a><a href="/results">results</a><a href="/asset">market data</a><a href="/calm-wild">calm or wild</a><a href="/carry">carry</a>'
               '<a href="/export">export snapshot</a><a href="/key">key</a>')
 
