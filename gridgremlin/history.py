@@ -26,87 +26,35 @@ def _dedupe(rows, key='t'):
     return out
 
 
-def fetch_klines(symbol, minutes, start_ms, end_ms):
-    """Bybit linear candles with volume, oldest first, cached."""
+def _cached(name, make):
     STORE.mkdir(parents=True, exist_ok=True)
-    cache = STORE / f'{symbol}-{minutes}m-{start_ms // 86_400_000}-{end_ms // 86_400_000}.json'
+    cache = STORE / name
     if cache.exists():
         return json.loads(cache.read_text())
-    bars, cursor, step = [], start_ms, minutes * 60_000 * 1000
-    interval = 'D' if minutes == 1440 else str(minutes)
-    while cursor < end_ms:
-        q = urllib.parse.urlencode({'category': 'linear', 'symbol': symbol, 'interval': interval,
-                                    'start': cursor, 'end': min(cursor + step, end_ms), 'limit': 1000})
-        req = urllib.request.Request(f'{BYBIT}/v5/market/kline?{q}', headers={'User-Agent': 'grid-gremlin research'})
-        with urllib.request.urlopen(req, timeout=30) as r:
-            rows = json.load(r)['result'].get('list', [])
-        bars.extend({'t': int(x[0]), 'o': float(x[1]), 'h': float(x[2]), 'l': float(x[3]),
-                     'c': float(x[4]), 'v': float(x[5])} for x in rows)
-        cursor += step
-        time.sleep(0.15)
-    out = _dedupe(bars)
+    out = make()
     cache.write_text(json.dumps(out))
     return out
+
+
+def fetch_klines(symbol, minutes, start_ms, end_ms):
+    """Bybit linear candles with volume, oldest first, cached (ggdata, D91)."""
+    from ggdata.candles import candles
+    return _cached(f'{symbol}-{minutes}m-{start_ms // 86_400_000}-{end_ms // 86_400_000}.json',
+                   lambda: candles('bybit', 'linear', symbol, minutes, start_ms, end_ms))
 
 
 def fetch_funding(category, symbol, start_ms, end_ms):
-    """Bybit funding rates [{'t', 'rate'}], oldest first, cached."""
-    STORE.mkdir(parents=True, exist_ok=True)
-    cache = STORE / f'funding-{symbol}-{start_ms // 86_400_000}-{end_ms // 86_400_000}.json'
-    if cache.exists():
-        return json.loads(cache.read_text())
-    rows, cursor = [], end_ms
-    while cursor > start_ms:
-        q = urllib.parse.urlencode({'category': category, 'symbol': symbol, 'startTime': start_ms,
-                                    'endTime': cursor, 'limit': 200})
-        req = urllib.request.Request(f'{BYBIT}/v5/market/funding/history?{q}',
-                                     headers={'User-Agent': 'grid-gremlin research'})
-        with urllib.request.urlopen(req, timeout=30) as r:
-            page = json.load(r)['result'].get('list', [])
-        if not page:
-            break
-        rows.extend({'t': int(x['fundingRateTimestamp']), 'rate': float(x['fundingRate'])} for x in page)
-        oldest = min(int(x['fundingRateTimestamp']) for x in page)
-        if oldest >= cursor:
-            break
-        cursor = oldest - 1
-        time.sleep(0.15)
-    out = _dedupe(rows)
-    cache.write_text(json.dumps(out))
-    return out
+    """Bybit funding rates [{'t', 'rate'}], oldest first, cached (ggdata, D91)."""
+    from ggdata.funding import bybit_funding
+    return _cached(f'funding-{symbol}-{start_ms // 86_400_000}-{end_ms // 86_400_000}.json',
+                   lambda: bybit_funding(category, symbol, start_ms, end_ms))
 
 
 def fetch_hl_funding(coin, start_ms, end_ms):
-    """Hyperliquid's hourly funding [{'t', 'rate'}], oldest first, cached."""
-    STORE.mkdir(parents=True, exist_ok=True)
-    cache = STORE / f'funding-HL-{coin}-{start_ms // 86_400_000}-{end_ms // 86_400_000}.json'
-    if cache.exists():
-        return json.loads(cache.read_text())
-    rows, cursor = [], start_ms
-    while cursor < end_ms:
-        body = json.dumps({'type': 'fundingHistory', 'coin': coin, 'startTime': cursor,
-                           'endTime': end_ms}).encode()
-        req = urllib.request.Request(HL_INFO, data=body, headers={'Content-Type': 'application/json',
-                                                                  'User-Agent': 'grid-gremlin research'})
-        try:
-            with urllib.request.urlopen(req, timeout=30) as r:
-                page = json.load(r)
-        except urllib.error.HTTPError as e:
-            if e.code != 429:
-                raise
-            time.sleep(10.0)                  # the public info endpoint meters by the minute
-            continue
-        if not page:
-            break
-        rows.extend({'t': int(x['time']), 'rate': float(x['fundingRate'])} for x in page)
-        newest = max(int(x['time']) for x in page)
-        if newest <= cursor:
-            break
-        cursor = newest + 1
-        time.sleep(1.0)
-    out = _dedupe(rows)
-    cache.write_text(json.dumps(out))
-    return out
+    """Hyperliquid's hourly funding [{'t', 'rate'}], oldest first, cached (ggdata, D91)."""
+    from ggdata.funding import hl_funding
+    return _cached(f'funding-HL-{coin}-{start_ms // 86_400_000}-{end_ms // 86_400_000}.json',
+                   lambda: hl_funding(coin, start_ms, end_ms, network='mainnet'))
 
 
 def hl_8h(rows):

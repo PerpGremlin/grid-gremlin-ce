@@ -11,6 +11,7 @@ import time
 from pathlib import Path
 
 from common.rates import yearly
+from ggdata.funding import binance_funding, bybit_funding, okx_funding
 
 SERIES_DIR = 'logs/series'
 KEEP_S = 30 * 86_400
@@ -178,26 +179,20 @@ def fetch_coin(fetch, coin, have, now, pause=time.sleep):
     def funding():
         for cat, sym_, name in (('linear', sym, 'funding.bybit'), ('inverse', f'{coin}USD', 'funding.bybit_inverse')):
             def one(cat=cat, sym_=sym_, name=name):
-                d = fetch(f'{BYBIT}/funding/history?category={cat}&symbol={sym_}&limit={lim(name, 200)}')
-                if d.get('retCode', 0) != 0:
-                    raise ValueError(f"bybit {d.get('retCode')}: {d.get('retMsg')}")
-                put(name, yearly((r['fundingRateTimestamp'], float(r['fundingRate'])) for r in d['result']['list']))
+                rows = bybit_funding(cat, sym_, 0, now_ms, fetch, limit=lim(name, 200), pages=1, strict=True)
+                put(name, yearly((x['t'], x['rate']) for x in rows))
             source([name], one)
 
-        def binance_funding():
-            d = fetch(f'{BINANCE_F}/fapi/v1/fundingRate?symbol={sym}&limit={lim("funding.binance", 200)}')
-            if not isinstance(d, list):
-                raise ValueError(f'binance: {d}')
-            put('funding.binance', yearly((r['fundingTime'], float(r['fundingRate'])) for r in d))
-        source(['funding.binance'], binance_funding)
+        def binance_one():
+            rows = binance_funding(sym, limit=lim('funding.binance', 200), fetch=fetch)
+            put('funding.binance', yearly((x['t'], x['rate']) for x in rows))
+        source(['funding.binance'], binance_one)
 
-        def okx_funding():
+        def okx_one():
             pause(0.3)
-            d = fetch(f'https://www.okx.com/api/v5/public/funding-rate-history?instId={oc}-USDT-SWAP&limit={lim("funding.okx", 100)}')
-            if str(d.get('code')) != '0':
-                raise ValueError(f"okx {d.get('code')}: {d.get('msg')}")
-            put('funding.okx', yearly((r['fundingTime'], float(r['realizedRate'] or r['fundingRate'])) for r in d['data']))
-        source(['funding.okx'], okx_funding)
+            rows = okx_funding(f'{oc}-USDT-SWAP', limit=lim('funding.okx', 100), fetch=fetch)
+            put('funding.okx', yearly((x['t'], x['rate']) for x in rows))
+        source(['funding.okx'], okx_one)
     funding()
 
     for venue in ('bybit', 'binance'):            # the book has no history: a point an hour from now on

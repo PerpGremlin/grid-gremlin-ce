@@ -309,20 +309,9 @@ def public_bars(cfg, days=30, bar_minutes=240):
     import time
     end = int(time.time() * 1000)
     start = end - days * 86_400_000
-    if cfg.get('venue') == 'hyperliquid':
-        from gridgremlin.exchange.hyperliquid.client import InfoClient
-        raw = InfoClient(env='testnet')._transport(
-            {'type': 'candleSnapshot',
-             'req': {'coin': cfg['symbol'],
-                     'interval': f'{bar_minutes // 60}h',
-                     'startTime': start, 'endTime': end}})
-        return sorted(({'t': int(r['t']), 'o': float(r['o']),
-                        'h': float(r['h']), 'l': float(r['l']),
-                        'c': float(r['c'])} for r in raw or []),
-                      key=lambda b: b['t'])
-    from gridgremlin.exchange.bybit.klines import fetch_bars
-    return fetch_bars(cfg['market_type'], cfg['symbol'], bar_minutes,
-                      start, end)
+    from ggdata.candles import candles                           # D91: one candle fetcher
+    return candles(cfg.get('venue') or 'bybit', cfg['market_type'], cfg['symbol'], bar_minutes,
+                   start, end, network='testnet')
 
 
 def martingale_preview(cfg, mark):
