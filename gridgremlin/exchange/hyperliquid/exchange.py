@@ -5,7 +5,7 @@ nonce. The discipline mirrors the Bybit client's hard-won stances:
 
 - **Nonce = strictly-increasing ms timestamp per account.** HL rejects reused or
   stale nonces; two processes signing for one account WILL collide — the
-  single-fleet-process rule (docs/HYPERLIQUID.md §6.4) is load-bearing here.
+  single-fleet-process rule (one fleet process per account) is load-bearing here.
 - **Prices and sizes are STRINGS**, produced by the adapter's fmt_price/fmt_qty.
   A float sneaking in would hash differently than it serialises — so floats are
   refused at the msgpack layer and here by type check, never coerced.

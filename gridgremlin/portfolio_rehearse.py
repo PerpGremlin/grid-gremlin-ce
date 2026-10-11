@@ -1,7 +1,7 @@
 """H7 (D78): the portfolio row's rehearsal is its own planner run over
 history — hourly closes and funding per coin, the row's own gate and
 plan, the research's fees — one engine, no second model. The research
-harnesses (`ops/research/basket_carry.py`) measured the idea; this
+harnesses (`research/basket_carry.py`) measured the idea; this
 reproduces their numbers with the engine's code, and the panel's figures
 are the same function.
 

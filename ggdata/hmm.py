@@ -1,5 +1,5 @@
 # K10: a hidden Markov model of a market's returns (research 2026-10-11,
-# ops/research/hmm_regimes.py). A Gaussian HMM — each hidden state its own
+# research/hmm_regimes.py). A Gaussian HMM — each hidden state its own
 # mean and volatility — fitted by Baum-Welch with scaled forward-backward
 # passes. Pure maths, standard library only; nothing here reads a venue.
 # The live reading (market.read_hmm) fits it daily and filters hourly; the

@@ -87,18 +87,18 @@ RETIRED = {
     'exit_against': "retired: the exit floor is unconditional (SPEC G6) — there is "
                     "no 'rung' bypass",
     'arm_order': "retired: entries arm nearest-first; furthest-first returns only "
-                 "with a spec and a user (docs/archive/MIGRATION.md)",
+                 "with a spec and a user (SPEC C2)",
     'trail': "retired: edit 'upper'/'lower' instead — range edits flow through the "
              "normal diff (DECISIONS D10)",
     'sma_periods': "retired: the trail feature left v3 (D10); following is 'slide' (D28)",
     'trail_min': "retired: the trail feature left v3 (D10); the clamp is 'max_rungs' under 'slide' (D28)",
     'trail_max': "retired: the trail feature left v3 (D10); the clamp is 'max_rungs' under 'slide' (D28)",
     'levels': "martingale is restructured (DECISIONS D11): a base order plus "
-              "'max_averaging_orders' safety orders — see docs/archive/MIGRATION.md #3",
+              "'max_averaging_orders' safety orders — see SPEC M and README §4",
     'level_weights': "martingale is restructured (DECISIONS D11): sizing is "
                      "'order_size_multiplier' of the previous order",
     'first_entry': "martingale is restructured (DECISIONS D11): the round starts "
-                   "from a base order — see docs/archive/MIGRATION.md #3",
+                   "from a base order — see SPEC M and README §4",
     'take_profit_price': "retired: the absolute take-profit left with the "
                          "restructure (DECISIONS D11/D12); targets are relative",
 }
