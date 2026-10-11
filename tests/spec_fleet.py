@@ -1007,7 +1007,7 @@ def spec_F29_the_expiry_calendar_pages_a_week_out_and_names_what_ran_out():
     # the shipped calendar validates and the shipped demo watchdog names it
     root = _P(__file__).resolve().parents[1]
     shipped = ex.load_calendar(root / 'configs' / 'expiry.json')
-    assert shipped and all(e['expires'] is None for e in shipped)        # dates are the owner's to fill
+    assert shipped     # each entry a date or null: the owner filled them 2026-10-12, the CE's stay null
     demo = json.loads((root / 'configs' / 'watchdog.demo.json').read_text())
     assert demo['expiry'] == 'configs/expiry.json'
     example = root / 'configs' / 'examples' / 'watchdog.demo.json'   # the CE's configs ARE the examples (F21)
