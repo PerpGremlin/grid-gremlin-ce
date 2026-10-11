@@ -203,7 +203,7 @@ def spec_L6_a_trades_card_says_it_is_a_trade_with_its_exit_and_offers_its_close(
     c['watchdog']['belief']['bots'][bot] = {'alive': True, 'position': 1.0}
     html = render([('demo', c)])
     assert 'BTCUSDT long trade' in html
-    assert f"href='/close?fleet=0&bot={bot}'>close trade</a>" in html
+    assert f"href='/close?fleet=0&amp;bot={bot}'>close trade</a>" in html
     c['watchdog']['belief']['bots'][bot] = {'alive': False, 'position': None}
     assert "<a href='/trade'>clear</a>" in render([('demo', c)])
 
@@ -234,7 +234,7 @@ def spec_L8_a_trades_card_offers_only_what_a_trade_can_do():
     assert "close position</a>" in html and "<a href='/trade'>clear</a>" in html
     grid = 'spoADAUSDTl'                                                 # a fleet row keeps its links
     g = card(0, grid, c['bots'][grid], c, belief)
-    assert f"/edit?fleet=0&bot={grid}'>edit</a>" in g and 'mode=remove' in g and f'copy={grid}' in g
+    assert f"/edit?fleet=0&amp;bot={grid}'>edit</a>" in g and 'mode=remove' in g and f'copy={grid}' in g
 
 
 def spec_L6_the_panels_trade_form_opens_refuses_with_the_typing_kept_and_clears():

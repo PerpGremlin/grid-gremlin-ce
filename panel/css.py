@@ -109,7 +109,7 @@ details.acct{margin:0}details.acct>summary{color:var(--dim);margin:0 0 var(--gap
 .say{max-width:62em;font-size:1.1em;border-left:3px solid var(--accent);
 padding:.2em 1em}details{margin:.6em 0}summary{cursor:pointer;
 color:var(--accent)}details td{text-align:left}details td:first-child
-{width:22em}input,select{background:var(--bg);color:var(--fg);
+{width:22em}details td.dim{min-width:18em}table.ladder td:not(:first-child),table.ladder th:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}details select{max-width:18em}input,select{background:var(--bg);color:var(--fg);
 border:1px solid var(--line);font:inherit;padding:.15em .3em}
 .only-coin .u-value,.only-coin .u-cost,.only-coin .u-sep,.only-value .u-coin,.only-value .u-cost,.only-value .u-sep,.only-cost .u-coin,.only-cost .u-value,.only-cost .u-sep{display:none}
 /* U67: the fleet page in two halves — the bots, and the markets beside them */

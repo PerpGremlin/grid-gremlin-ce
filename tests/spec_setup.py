@@ -580,7 +580,7 @@ def spec_U6_a_refusal_returns_to_the_form_with_the_values_kept():
             'rungs': '21'})
         assert 'already in this fleet' in again        # one bot per market
         assert 'You already have a bot for this coin' in again
-        assert '/edit?fleet=0&bot=linETHUSDTl' in again    # the way forward
+        assert '/edit?fleet=0&amp;bot=linETHUSDTl' in again    # the way forward
         typo = _call(base, '/setup', {
             'how': 'advanced', 'strategy': 'grid', 'fleet': '0',
             'symbol': 'BTCUSDT', 'capital': 'lots'})
@@ -1443,7 +1443,7 @@ def spec_U56_a_cards_numbers_live_on_the_positions_own_page_and_the_show_all_swi
     from spec_panel import CONTRACT as C
     belief = ((C.get('watchdog') or {}).get('belief') or {}).get('bots', {})
     c = card(0, 'spoADAUSDTl', C['bots']['spoADAUSDTl'], C, belief)
-    assert '<div class="numbers">' not in c and "href='/position?fleet=0&bot=spoADAUSDTl'>numbers</a>" in c
+    assert '<div class="numbers">' not in c and "href='/position?fleet=0&amp;bot=spoADAUSDTl'>numbers</a>" in c
     assert '<details' not in c                                  # U68: a slim card folds nothing
     page = position_page(0, 'demo', 'spoADAUSDTl', C, belief)
     assert page.startswith('<meta name="gg-refresh" content="15"><h1>demo · ADAUSDT long grid spot</h1><h3>as the exchange shows it</h3>'

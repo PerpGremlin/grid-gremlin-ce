@@ -221,7 +221,11 @@ class CreateFlowPages:
             + ladder_html + '</details>')
 
     def _fleet_labels(self):
-        return [Path(f).name for f in self.fleets]
+        # U76: the account's name, as the dash says it (U55), not its file;
+        # the form's values are the fleet's index, so only the words change
+        labels = getattr(self, 'labels', None) or ()
+        return [labels[i] if i < len(labels) and labels[i] else Path(f).name
+                for i, f in enumerate(self.fleets)]
 
     def _fleet_bots(self):
         """U34: every bot in every fleet file -> the unit that runs it."""
@@ -260,7 +264,7 @@ class CreateFlowPages:
             botid = str(why).split(':', 1)[0]
             extra = ('<br>You already have a bot for this coin and '
                      'direction in this account, and there can be only '
-                     f'one. <a href="/edit?fleet={fi}&bot={botid}">Open '
+                     f'one. <a href="/edit?fleet={fi}&amp;bot={botid}">Open '
                      'that bot to change it</a>, or pick another coin or '
                      'the other direction below.')
         note = refusal_box(title, why, extra)
