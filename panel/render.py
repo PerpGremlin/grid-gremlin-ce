@@ -1407,11 +1407,8 @@ def coin_of(botid):
     """The coin a bot's position is counted in, from its id: linBTCUSDTl ->
     BTC, linBTCPERPl -> BTC, invBTCUSDl -> BTC, linSOLl (Hyperliquid) ->
     SOL."""
-    core = botid[3:-1] if len(botid) > 4 else botid
-    for quote in ('USDT', 'USDC', 'PERP', 'USD'):
-        if core.endswith(quote) and len(core) > len(quote):
-            return core[:-len(quote)]
-    return core
+    from common.symbols import coin_of as _coin       # D91: one of each
+    return _coin(botid[3:-1] if len(botid) > 4 else botid)
 
 
 def units_of(botid, terms):

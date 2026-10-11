@@ -16,7 +16,7 @@ from pathlib import Path
 from .apply import make_botid
 from .config import ConfigError, market_rows, validate_config, validate_fleet
 from .durable import locked, state_path, write_json
-from .fmt import utc_stamp
+from common.fmt import utc_stamp
 
 
 class TradeError(Exception):

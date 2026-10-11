@@ -9,7 +9,8 @@
 import sys
 import time
 
-from .market import SESSIONS, adx, atr_pct, fetch_json, read_bybit, regime
+from common.http import get_json as fetch_json
+from .market import SESSIONS, adx, atr_pct, read_bybit, regime
 
 BASE = 'https://api.bybit.com/v5'
 INTERVALS = {'1m': '1', '5m': '5', '15m': '15', '1h': '60', '4h': '240', '1d': 'D'}

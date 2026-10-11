@@ -135,8 +135,8 @@ def day_loss(book, now_ms):
 def minutes(symbol, start_ms, end_ms, fetch=None):
     """Bybit's public 1m candles from start to end, oldest first, paged."""
     from .agent_tools import BASE
-    from .market import fetch_json
-    fetch = fetch or fetch_json
+    from common.http import get_json
+    fetch = fetch or get_json
     out, cursor = {}, start_ms - start_ms % MINUTE
     while cursor <= end_ms:
         top = min(cursor + PAGE * MINUTE, end_ms)

@@ -195,10 +195,11 @@ def read_days(coin, kind, since, root=None):
 
 
 def main(argv):
-    from .market import fetch_json, latest
+    from common.http import get_json
+    from .market import latest
     row = latest() or {}
     coins = list(row.get('hmm') or {}) or ['BTC', 'ETH', 'SOL']
-    said = run(fetch_json, coins, time.time())
+    said = run(get_json, coins, time.time())
     bad = {c: s['unread'] for c, s in said.items() if s['unread']}
     print(f"collector: {len(said)} coins, {sum(s['liquidations'] or 0 for s in said.values())} new liquidations"
           + (f", unread {bad}" if bad else ''), flush=True)

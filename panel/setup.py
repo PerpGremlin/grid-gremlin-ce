@@ -16,7 +16,7 @@ import math
 import html
 import time
 
-from gridgremlin.fmt import utc_stamp
+from common.fmt import utc_stamp
 
 from gridgremlin.apply import check_link_fits, make_botid, widest_rung
 from gridgremlin.config import ConfigError

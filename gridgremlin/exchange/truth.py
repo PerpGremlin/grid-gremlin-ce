@@ -17,7 +17,7 @@ class TruthError(ValueError):
     """V1: a shape the engine must not trade from."""
 
 
-from ..fmt import float_or as _f  # noqa: E402  (C10: the one parser)
+from common.fmt import float_or as _f  # noqa: E402  (C10: the one parser)
 
 
 def _require(d, keys, what):

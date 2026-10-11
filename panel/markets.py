@@ -5,6 +5,9 @@ here and nothing here decides anything."""
 import html
 import time
 
+from common.rates import yearly_from_8h_pct
+from common.symbols import coin_of
+
 from .render import _num_cls
 
 
@@ -22,12 +25,7 @@ def coins_of(row):
     """The coins read, the most capital committed first."""
     seen = {}
     for m in (row.get('markets') or {}).values():
-        sym = m.get('symbol') or ''
-        coin = sym
-        for q in ('USDT', 'PERP', 'USDC', 'USD'):
-            if sym.endswith(q) and len(sym) > len(q):
-                coin = sym[:-len(q)]
-                break
+        coin = coin_of(m.get('symbol') or '')            # D91: one of each
         seen[coin] = seen.get(coin, 0.0) + float(m.get('committed') or 0.0)
     return [c for c, _ in sorted(seen.items(), key=lambda kv: -kv[1])]
 
@@ -194,7 +192,7 @@ def tile(coin, m, h):
                     f'{m.get("adx_4h") or 0:.0f}, 4 h</span></div>')
     if f8 is not None:
         rows.append(f'<div>funding <span class="num {_num_cls(f8)}">{f8:+.4f}%</span>/8 h '
-                    f'<span class="dim">· {f8 * 3 * 365:+.1f}%/yr</span></div>')
+                    f'<span class="dim">· {yearly_from_8h_pct(f8):+.1f}%/yr</span></div>')
     parts = []
     if m.get('oi_change_24h_pct') is not None:
         parts.append(f'OI {m["oi_change_24h_pct"]:+.1f}% 24 h')

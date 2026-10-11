@@ -6,7 +6,7 @@ the readings file; no venue is read here and nothing here decides anything."""
 import html
 import time
 
-from gridgremlin.fmt import float_or
+from common.fmt import float_or
 
 from .render import _num_cls
 

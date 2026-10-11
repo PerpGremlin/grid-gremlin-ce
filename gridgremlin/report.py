@@ -2,6 +2,7 @@
 # (D8's reporting model). Read-only by construction — no write client in this
 # module's import graph (R4). Usage:
 #   python3 -m gridgremlin.report <fleet.json> [--hours N]
+from common.symbols import coin_of
 import json
 import sys
 import time
@@ -521,7 +522,7 @@ def _hl_pull(rows, since_ms):
     return fills, marks
 
 
-from .fmt import float_or as _f_or_none  # noqa: E402  (C10: the one parser)
+from common.fmt import float_or as _f_or_none  # noqa: E402  (C10: the one parser)
 
 
 # --- R14: money is counted from the last flat -------------------------------
@@ -647,7 +648,7 @@ def _side_size(positions, side):
 
 # --- the table ---------------------------------------------------------------
 
-from .fmt import num as _n  # noqa: E402  (C10: one vocabulary)
+from common.fmt import num as _n  # noqa: E402  (C10: one vocabulary)
 
 
 def window_truncated(book, side):
@@ -763,7 +764,7 @@ def account_leverage(contract):
     return out
 
 
-from .fmt import big as _big  # noqa: E402  (C10)
+from common.fmt import big as _big  # noqa: E402  (C10)
 
 
 def leverage_lines(contract):
@@ -784,14 +785,8 @@ def leverage_lines(contract):
 
 
 def base_coin(symbol):
-    """An inverse contract's own coin, from its name: BTCUSD -> BTC,
-    ETHUSDH26 -> ETH. The part before the quote."""
-    sym = str(symbol or '')
-    for quote in ('USDT', 'USDC', 'USD'):
-        i = sym.find(quote)
-        if i > 0:
-            return sym[:i]
-    return sym or 'coin'
+    """An inverse contract's own coin, from its name (common.symbols, D91)."""
+    return coin_of(symbol) or 'coin'
 
 
 def settle_quote(venue, symbol):

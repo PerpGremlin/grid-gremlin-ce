@@ -8,7 +8,7 @@ the next write waits for it. Reads are not paced (E10 keeps them cheap).
 """
 import time
 
-from ..fmt import float_or
+from common.fmt import float_or
 
 
 class Pacer:

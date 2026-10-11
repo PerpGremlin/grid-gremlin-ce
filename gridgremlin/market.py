@@ -9,6 +9,10 @@ results. Nothing here acts: no bot reads this, no key is used.
   python3 -m gridgremlin.market configs/a.json --send             # and page it
   python3 -m gridgremlin.market configs/a.json --dry              # print only
 """
+from common.http import get_json
+from common.rates import per_8h_pct
+from common.symbols import coin_of
+from common.venues import venue_word
 import json
 import sys
 import time
@@ -36,13 +40,6 @@ SESSIONS = ((0, 'Asia'), (8, 'Europe'), (16, 'US'))
 
 
 # --- transport ---------------------------------------------------------------
-
-def fetch_json(url, timeout=15):
-    req = (url if isinstance(url, urllib.request.Request)
-           else urllib.request.Request(url, headers={'User-Agent': 'grid-gremlin'}))
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read().decode())
-
 
 def _read(fetch, url, pick):
     """One reading: its value, or the error said in its place."""
@@ -144,20 +141,6 @@ def depth_reach_pct(bids, asks, mark):
     return min(abs(1 - min(p for p, _ in bids) / mark), abs(max(p for p, _ in asks) / mark - 1)) * 100.0
 
 
-def funding_per_8h_pct(rate, interval_hours):
-    if rate is None or not interval_hours:
-        return None
-    return 100.0 * rate * 8.0 / interval_hours
-
-
-def base_of(symbol):
-    s = str(symbol)
-    for suffix in ('USDT', 'USDC', 'PERP', 'USD'):
-        if s.endswith(suffix) and len(s) > len(suffix):
-            return s[:-len(suffix)]
-    return s
-
-
 # --- the venues, public endpoints only ---------------------------------------
 
 def _candles_bybit(rows):
@@ -177,7 +160,7 @@ def read_bybit(fetch, category, symbol, committed=0.0):
                    change_24h_pct=(_f(t.get('price24hPcnt'), 0.0) or 0.0) * 100.0,
                    volume_24h=_f(t.get('volume24h' if inverse else 'turnover24h')),
                    oi=_f(t.get('openInterest')),
-                   funding_8h_pct=funding_per_8h_pct(
+                   funding_8h_pct=per_8h_pct(
                        _f(t.get('fundingRate')), _f(t.get('fundingIntervalHour'))))
     else:
         errors['ticker'] = err
@@ -233,7 +216,7 @@ def read_hyperliquid(fetch, coin, testnet=True, committed=0.0):
         mark = _f(c.get('markPx'))
         out.update(price=mark, volume_24h=_f(c.get('dayNtlVlm')),
                    oi=_f(c.get('openInterest')),
-                   funding_8h_pct=funding_per_8h_pct(_f(c.get('funding')), 1.0),
+                   funding_8h_pct=per_8h_pct(_f(c.get('funding')), 1.0),
                    oracle=_f(c.get('oraclePx')))
         prev = _f(c.get('prevDayPx'))
         if prev and mark:
@@ -300,7 +283,7 @@ def read_cross(fetch, base):
     out = {}
     for name, url, pick in CROSS:
         rate, err = _read(fetch, url.format(b=base), pick)
-        out[name] = (funding_per_8h_pct(rate, 8.0) if rate is not None
+        out[name] = (per_8h_pct(rate, 8.0) if rate is not None
                      else {'unread': err})
     rates = [v for v in out.values() if isinstance(v, float)]
     out['divergence'] = bool(rates) and any(r > 0 for r in rates) and any(r < 0 for r in rates)
@@ -541,7 +524,7 @@ def markets_of(fleet_paths):
     return out
 
 
-def collect(fleet_paths, fetch=fetch_json, now=None, hl_testnet=True, hmm_cache=None, carry_cache=None):
+def collect(fleet_paths, fetch=get_json, now=None, hl_testnet=True, hmm_cache=None, carry_cache=None):
     now = time.time() if now is None else now
     row = {'t': now, 'markets': {}, 'cross': {}}
     bases = []
@@ -550,7 +533,7 @@ def collect(fleet_paths, fetch=fetch_json, now=None, hl_testnet=True, hmm_cache=
         row['markets'][key] = (read_hyperliquid(fetch, symbol, hl_testnet, put)
                                if venue == 'hyperliquid'
                                else read_bybit(fetch, mt, symbol, put))
-        b = base_of(symbol)
+        b = coin_of(symbol)
         if b not in bases:
             bases.append(b)
     for b in bases:
@@ -592,10 +575,10 @@ def latest(path=None):
 
 # --- words -------------------------------------------------------------------
 
-from .fmt import pct as _pct  # noqa: E402  (C10)
+from common.fmt import pct as _pct  # noqa: E402  (C10)
 
 
-from .fmt import big_si as _big  # noqa: E402  (C10)
+from common.fmt import big_si as _big  # noqa: E402  (C10)
 
 
 def _px(v):
@@ -649,7 +632,6 @@ def session_name(t):
     return name
 
 
-VENUE_WORD = {'bybit': 'Bybit', 'hyperliquid': 'HL'}
 
 
 def report(row, now=None):
@@ -672,13 +654,13 @@ def report(row, now=None):
         blocks[0].append(f"🌡️ fear & greed unread ({fg['unread']})")
     by_base = {}
     for key, m in row['markets'].items():
-        by_base.setdefault(base_of(m['symbol']), []).append((key, m))
+        by_base.setdefault(coin_of(m['symbol']), []).append((key, m))
     for base, markets in by_base.items():
         lead = next((m for _, m in markets if m.get('regime')), markets[0][1])
         block = [f'📈 {base} · {ta_line(lead) or "no candles read"}']
         for key, m in markets:
             venue, mt, _ = key.split(':', 2)
-            where = VENUE_WORD.get(venue, venue) + ('' if mt == 'linear' else f' {mt}')
+            where = venue_word(venue, short=True) + ('' if mt == 'linear' else f' {mt}')
             unit = ' ' + base if mt == 'inverse' else ''
             block.append(f"{where} {_px(m.get('price'))} ({_pct(m.get('change_24h_pct'), 1)}) "
                          f"vol {_big(m.get('volume_24h'))}{unit} · {market_line(m)}")
@@ -740,11 +722,11 @@ def digest_block(row, now=None):
     lines = [head]
     by_base = {}
     for key, m in (row.get('markets') or {}).items():
-        by_base.setdefault(base_of(m['symbol']), []).append((key, m))
+        by_base.setdefault(coin_of(m['symbol']), []).append((key, m))
     for base, markets in by_base.items():
         lead = next((m for _, m in markets if m.get('regime')), markets[0][1])
         words = ta_line(lead) or 'no candles read'
-        thin_at = [VENUE_WORD.get(k.split(':')[0], k.split(':')[0])
+        thin_at = [venue_word(k.split(':')[0], short=True)
                    for k, m in markets if m.get('thin')]
         if thin_at:
             words += ' · thin on ' + ', '.join(sorted(set(thin_at)))
@@ -768,7 +750,7 @@ def main(argv):
         save_hmm(hmm_cache)
         save_carry(carry_cache)
         from .marketdata import update                     # K13: each coin's series, kept a month
-        row['series'] = update(fetch_json, list(row.get('hmm') or {}), time.time())
+        row['series'] = update(get_json, list(row.get('hmm') or {}), time.time())
     texts = report(row)
     if dry:
         print(json.dumps(row)[:400] + '…')

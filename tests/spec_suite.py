@@ -82,7 +82,8 @@ def spec_C10_the_primitives_exist_once():
     constants live in fmt.py and fees.py; a second definition anywhere in
     the engine or the panel is the drift the audit found (five parsers,
     five stamps, seven fee literals)."""
-    from gridgremlin import fees, fmt
+    from gridgremlin import fees
+    from common import fmt
     assert fmt.float_or('1.5') == 1.5 and fmt.float_or('x') is None and fmt.float_or(None, 0.0) == 0.0
     assert fmt.utc_stamp(0) == '1970-01-01T00:00:00Z' and fmt.utc_stamp().endswith('Z')
     assert fmt.num(1234.5) == '1,234.50' and fmt.num(None) == '—' and fmt.num(2, 0) == '2'
