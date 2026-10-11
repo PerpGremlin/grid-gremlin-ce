@@ -1787,7 +1787,7 @@ that pins it (T1).
   closes and 8h funding per coin with the research's fees (spot 0.1%,
   perp 0.02%, a 10% collateral haircut on the margin test) and answers
   equity (× start), the worst drawdown, funding, fees and the ticks that
-  placed. It reproduces the research harness (`ops/research/
+  placed. It reproduces the research harness (`research/
   basket_carry.py`) within 1.5 points of equity over 120 synthetic days,
   with the same drawdown and funding; the CLI fetches two years through
   the research's own fetchers (Hyperliquid's funding for an HL row).

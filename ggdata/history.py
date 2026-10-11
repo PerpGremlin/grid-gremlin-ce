@@ -1,7 +1,7 @@
 # Public market history for rehearsals (H7): Bybit's candles and funding
 # rates and Hyperliquid's funding, fetched once and cached under
 # logs/research/ by coin, interval and day span. No key. The engine's
-# rehearsal reads here; the research harnesses in ops/research/ import it
+# rehearsal reads here; the research harnesses in research/ import it
 # too — the engine never imports research (the 2026-10-08 audit).
 import json
 import time

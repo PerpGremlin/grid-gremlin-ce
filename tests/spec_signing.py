@@ -1,4 +1,4 @@
-"""SPEC V18: Hyperliquid signing and writes, stdlib-vendored (docs/HYPERLIQUID.md §6.1).
+"""SPEC V18: Hyperliquid signing and writes, stdlib-vendored (no crypto dependency: the engine is stdlib only).
 
 The crypto pipeline (keccak / msgpack / RFC6979-secp256k1 / EIP-712) is pinned
 BIT-FOR-BIT against the official hyperliquid-python-sdk's production test

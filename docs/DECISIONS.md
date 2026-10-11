@@ -1,4 +1,4 @@
-# Decisions — frozen 2026-08-04; D28 added 2026-09-25; D29–D36 2026-09-28; D37–D40 2026-10-02
+# Decisions — D1–D27 frozen 2026-08-04; each later D-number added on the day the owner decided it (dated in its entry)
 
 The owner's answers to every open call from `archive/ALIGNMENT.md` §13, `archive/LEAN.md` §4 and
 `SPEC.md`'s ⚠ markers, organised from the owner's written response plus a four-question

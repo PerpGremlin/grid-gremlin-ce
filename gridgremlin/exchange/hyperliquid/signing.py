@@ -1,4 +1,4 @@
-"""HL action signing — vendored minimal, PURE STDLIB (docs/HYPERLIQUID.md §6.1).
+"""HL action signing — vendored minimal, PURE STDLIB (no crypto dependency: the engine is stdlib only).
 
 The deliberate dependency decision: no eth-account/coincurve/msgpack. Everything
 a signed /exchange action needs is implemented here from primitives —
