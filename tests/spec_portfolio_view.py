@@ -203,7 +203,7 @@ def spec_U67_the_fleet_page_has_a_markets_half_from_the_readings():
     assert html_.index('/asset?coin=BTC" title="its market data">BTC</a></b>') < html_.index('>ADA</a></b>')
     assert '82,908.1' in col and '-0.35%' in col and 'leaning down' in col and 'ADX 30' in col
     assert '7% wild · 24 h in, typical 12 h' in col and 'calm ±1.1%/day · wild ±3.6%/day' in col
-    assert '-1.6%/yr' in col and '63% of accounts long (leaning long)' in col and 'depth ±1% 16.7M' in col
+    assert '-1.6%/yr' in col and '63% of accounts long (leaning long)' in col and 'depth in the book read 16.7M' in col
     assert '<b>one regime</b>' in html_ and 'no distinct wild state' in col   # ADA: no wild state named
     assert mini_chart([1, 2, 3], [0.0, 0.9, 0.0]).count('<rect') == 1 and mini_chart([5], []) == ''
     assert 'unread' in calm_wild({'unread': 'no route'}) and 'not read yet' in calm_wild(None)

@@ -1,27 +1,21 @@
 [
   {
-    "name": "Bybit demo API key (main demo account)",
+    "name": "Exchange API key (main account)",
     "expires": null,
-    "note": "Bybit demo keys: check the key's page for an expiry; rotate before it",
-    "where": "Bybit → API management"
+    "note": "check the key's page for an expiry; rotate before it",
+    "where": "the exchange's API management"
   },
   {
-    "name": "Bybit demo API key (carry subaccount)",
+    "name": "Exchange API key (each subaccount)",
     "expires": null,
-    "note": "the carry fleet's keys (BYBIT_CARRY_*)",
-    "where": "Bybit → subaccount → API management"
+    "note": "one entry per subaccount a fleet trades",
+    "where": "the exchange's subaccount API management"
   },
   {
-    "name": "Bybit demo API key (tilt subaccount)",
-    "expires": null,
-    "note": "the tilt fleet's keys (the second subaccount, keyed 2026-10-09)",
-    "where": "Bybit → subaccount → API management"
-  },
-  {
-    "name": "Hyperliquid testnet API wallet",
+    "name": "Hyperliquid API wallet",
     "expires": null,
     "note": "an API wallet has a validity the app shows when it is made",
-    "where": "HL testnet → API"
+    "where": "Hyperliquid → API"
   },
   {
     "name": "Telegram bot token",
@@ -32,19 +26,19 @@
   {
     "name": "Panel token",
     "expires": null,
-    "note": "rotated 2026-10-07; set the next rotation here",
-    "where": ".env on the box"
+    "note": "set the next rotation here",
+    "where": "the .env file"
   },
   {
-    "name": "GitHub deploy key (read-only)",
+    "name": "Deploy key (read-only)",
     "expires": null,
     "note": "no expiry by itself; listed so a rotation has a date",
-    "where": "GitHub → repo → deploy keys"
+    "where": "the repository's deploy keys"
   },
   {
-    "name": "VPS billing",
+    "name": "Server billing",
     "expires": null,
-    "note": "the renewal date of the box",
+    "note": "the renewal date of the server",
     "where": "the provider's console"
   },
   {
@@ -52,11 +46,5 @@
     "expires": null,
     "note": "a free plan's check can lapse; the renewal or review date",
     "where": "the uptime service"
-  },
-  {
-    "name": "Agent door key (restricted SSH key)",
-    "expires": null,
-    "note": "the forced-command key the agent's door answers to (D81); no expiry by itself; listed so a rotation has a date",
-    "where": "the box's authorized keys"
   }
 ]

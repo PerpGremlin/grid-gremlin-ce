@@ -162,7 +162,7 @@ def block(symbol, tfs=DEFAULT_TFS, category='linear', fetch=fetch_json, now_ms=N
                  f"funding {_n(m.get('funding_8h_pct'), '+.4f')}%/8h · "
                  f"OI 24h {_n(m.get('oi_change_24h_pct'), '+.1f')}% · "
                  f"accounts long {_n(m.get('long_pct'), '.0f')}% · "
-                 f"depth ±1% {_q(m.get('depth_1pct'))}"
+                 f"depth to ±{min(m.get('depth_reach_pct') or 1.0, 1.0):.2f}% {_q(m.get('depth_1pct'))}"
                  + (f" · unread: {', '.join(sorted(m['unread']))}" if m.get('unread') else ''))
     five = None
     for tf in tfs:

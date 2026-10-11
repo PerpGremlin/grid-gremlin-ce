@@ -1482,6 +1482,15 @@ eventually pin (T1).
   shorts above) with the largest listed, over a day or a week. Nothing
   collected: said. *(the owner, 2026-10-11: "i want to have liquidity
   heatmaps")*
+- **U75** What the bug hunt found stays fixed: an unknown network still fills
+  its cell in the top strip (one fleet down shifted every later cell); the
+  table and the card say the same state (NOT STARTED); a book's depth is
+  labelled with the reach of the book the venue served, never "±1%" from a
+  book that ends inside it (Bybit's read at 500 levels, as the book tab);
+  the run rate never prints −0.00 and calls a DCA's profit just profit;
+  the control link leads to a page that says control is off, not a bare
+  404; the public example of the expiry calendar names no private
+  infrastructure. *(the bug hunt, 2026-10-11)*
 - **L1** A new trade joins a running fleet within a cycle. The trade watch
   stats the trades file once a cycle; a changed file's new rows are each
   built by the fleet's own builder (`main.build_market_bot`, the one every

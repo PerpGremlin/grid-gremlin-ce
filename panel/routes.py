@@ -1101,8 +1101,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def _control_page(self):
         if not self.units and not self.supervise:
-            return self._deny(404, 'control is not armed on this panel '
-                                   '(--units or --supervise) — §12/§13')
+            # the side panel links here on every page: say what control is
+            # and that it is off, never a bare 404 (the bug hunt, 2026-10-11)
+            return self._page('<h1>control</h1><p>Starting and stopping the fleets from here is off on this '
+                              'panel. It is armed by starting the panel with <code>--units</code> (the units it '
+                              'may restart) or <code>--supervise</code> (on a laptop) — §12, §13.</p>'
+                              '<p><a href="/">&larr; fleet</a></p>')
         if self.supervise:
             from panel import supervise as sup
             rows = []

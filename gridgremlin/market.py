@@ -134,6 +134,16 @@ def depth_within(bids, asks, mark, pct=0.01):
             + sum(p * s for p, s in asks if p <= hi))
 
 
+def depth_reach_pct(bids, asks, mark):
+    """How far the book a venue served actually reaches, in percent of the
+    mark: the nearer of its last bid and last ask. A depth "within 1%" read
+    from a book that ends at ±0.1% is the book's depth, not 1%'s — the
+    figure is labelled with this (the bug hunt, 2026-10-11)."""
+    if not mark or not bids or not asks:
+        return None
+    return min(abs(1 - min(p for p, _ in bids) / mark), abs(max(p for p, _ in asks) / mark - 1)) * 100.0
+
+
 def funding_per_8h_pct(rate, interval_hours):
     if rate is None or not interval_hours:
         return None
@@ -189,13 +199,13 @@ def read_bybit(fetch, category, symbol, committed=0.0):
         else:
             errors['ratio'] = err
     book, err = _read(fetch, f'{base}/market/orderbook?category={category}'
-                      f'&symbol={symbol}&limit=200', lambda d: d['result'])
+                      f'&symbol={symbol}&limit=500', lambda d: d['result'])
     if book is not None:
         q = (lambda p, s: (float(p), float(s) / float(p))) if inverse \
             else (lambda p, s: (float(p), float(s)))
-        out['depth_1pct'] = depth_within([q(p, s) for p, s in book['b']],
-                                         [q(p, s) for p, s in book['a']],
-                                         out.get('price'))
+        bids, asks = [q(p, s) for p, s in book['b']], [q(p, s) for p, s in book['a']]
+        out['depth_1pct'] = depth_within(bids, asks, out.get('price'))
+        out['depth_reach_pct'] = depth_reach_pct(bids, asks, out.get('price'))
     else:
         errors['book'] = err
     k, err = _read(fetch, f'{base}/market/kline?category={category}&symbol={symbol}'
@@ -232,9 +242,10 @@ def read_hyperliquid(fetch, coin, testnet=True, committed=0.0):
         errors['ticker'] = f'{type(e).__name__}: {str(e)[:80]}'
     try:
         bids, asks = post({'type': 'l2Book', 'coin': coin})['levels']
-        out['depth_1pct'] = depth_within(
-            [(float(x['px']), float(x['sz'])) for x in bids],
-            [(float(x['px']), float(x['sz'])) for x in asks], out.get('price'))
+        bl = [(float(x['px']), float(x['sz'])) for x in bids]
+        al = [(float(x['px']), float(x['sz'])) for x in asks]
+        out['depth_1pct'] = depth_within(bl, al, out.get('price'))
+        out['depth_reach_pct'] = depth_reach_pct(bl, al, out.get('price'))
     except Exception as e:                                   # noqa: BLE001
         errors['book'] = f'{type(e).__name__}: {str(e)[:80]}'
     try:
@@ -616,7 +627,9 @@ def market_line(m):
             oi += f" ({_pct(m['oi_change_24h_pct'], 1)})"
         parts.append(oi)
     if m.get('depth_1pct') is not None:
-        d = f"depth {_big(m['depth_1pct'])}"
+        reach = m.get('depth_reach_pct')
+        d = (f"depth to ±{min(reach, 1.0):.2f}% {_big(m['depth_1pct'])}" if reach is not None
+             else f"depth {_big(m['depth_1pct'])}")
         if m.get('committed'):
             d += f" = {m['depth_1pct'] / m['committed']:.0f}× yours"
         parts.append(d)
