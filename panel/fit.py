@@ -11,7 +11,7 @@ import html
 from gridgremlin.fees import BYBIT_MAKER
 from gridgremlin.ladder import lattice_price
 
-from .render import _num_cls
+from .html_bits import _num_cls
 
 
 def _path(bar):

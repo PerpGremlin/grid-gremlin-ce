@@ -47,7 +47,7 @@ CONTRACT = {'window_hours': 6.0, 'generated_ms': 0, 'unowned': {},
 def _everything(c):
     """U56: the fleet page and every position's page — the numbers moved to
     the latter; a spec that pins a number reads both."""
-    from panel.render import position_page
+    from panel.position_view import position_page
     from panel.server import render
     belief = ((c.get('watchdog') or {}).get('belief') or {}).get('bots', {})
     return render([('demo', c)]) + ''.join(position_page(0, 'demo', b, c, belief)
@@ -772,7 +772,8 @@ def spec_U54_the_bots_can_be_arranged_by_strategy_or_by_coin():
     """The owner: "separate every strategy type on the dash … more options
     to organise". Two more arrangements: one heading per kind of bot, and
     one per coin across its products. Every bot once in each."""
-    from panel.render import VIEWS, grouped, render
+    from panel.nav import VIEWS, grouped
+    from panel.render import render
     c = {'window_hours': 6.0, 'generated_ms': 0, 'unowned': {},
          'bots': {'linBTCUSDTl': dict(CONTRACT['bots']['spoADAUSDTl'], strategy='grid'),
                   'spoBTCUSDTl': dict(CONTRACT['bots']['spoADAUSDTl'], strategy='grid'),
@@ -1657,7 +1658,8 @@ def spec_U68_a_card_is_slim_and_its_numbers_page_is_live():
     The numbers page refreshes in place."""
     import copy
     from panel.css import CSS
-    from panel.render import card, portfolio_card, position_page
+    from panel.card import card, portfolio_card
+    from panel.position_view import position_page
     c = copy.deepcopy(CONTRACT)
     c['terms'] = {'spoADAUSDTl': {'capital': 1000.0, 'leverage': 1.0, 'market_type': 'spot', 'strategy': 'grid'}}
     belief = c['watchdog']['belief']['bots']
@@ -1731,7 +1733,7 @@ def spec_U58_a_cards_lower_half_folds_and_the_side_panel_folds_every_card_at_onc
     the accounts' switch (U59) stays. A click is remembered either way; an
     export shows the fold open."""
     import copy
-    from panel.render import position_page
+    from panel.position_view import position_page
     from panel.server import render
     from panel.reference import KEEP_JS
     c = copy.deepcopy(CONTRACT)
@@ -1782,7 +1784,7 @@ def spec_U61_the_live_page_refreshes_in_place_and_never_reloads_whole():
     this same URL and swaps the strip and the cards in place, re-wiring
     what folds; without script the old whole-page refresh stands; an
     export refreshes nothing."""
-    from panel.render import REFRESH_S
+    from panel.html_bits import REFRESH_S
     from panel.server import KEEP_JS, render
     live = render([('demo', CONTRACT)])
     assert f'<meta name="gg-refresh" content="{REFRESH_S}">' in live
@@ -1804,7 +1806,7 @@ def spec_U62_the_table_and_the_exchange_view_scroll_sideways_and_the_strip_stack
     and the exchange view sit in a sideways-scrolling box with nothing
     truncated; on a narrow screen the strip stacks one account per row."""
     from panel.css import CSS
-    from panel.render import exchange_table
+    from panel.position_view import exchange_table
     from panel.server import render
     t = render([('demo', CONTRACT)], table=True)
     assert '<div class="scroll"><table class="fleet">' in t and '</table></div>' in t
@@ -1825,7 +1827,7 @@ def spec_U63_the_strip_carries_a_sparkline_and_the_box_the_days_and_the_weeks_li
     two points; an export carries the same lines; one series, no legend."""
     import copy
     import time
-    from panel.render import equity_svg
+    from panel.drawings import equity_svg
     from panel.server import render
     now = time.time()
     c = copy.deepcopy(CONTRACT)
@@ -1852,7 +1854,7 @@ def spec_U64_a_card_says_how_long_it_has_run_and_its_grid_profit_per_day_and_a_y
     days x 365, under a day counted as one. In the figure's own span —
     since last flat, since the first fill in the cap, or the window."""
     import copy
-    from panel.render import run_rate
+    from panel.card import run_rate
     gen = 10 * 86_400_000
     b = {'fills': 10, 'realized': 120.0, 'fees': 20.0, 'counted_from': 'flat',
          'counted_since_ms': gen - 4 * 86_400_000}
@@ -1887,7 +1889,8 @@ def spec_U75_the_bug_hunts_findings_stay_fixed():
     from gridgremlin import expiry as ex
     from gridgremlin.market import depth_reach_pct
     from panel.markets import tile
-    from panel.render import run_rate, tier_badge
+    from panel.card import run_rate
+    from panel.strip_view import tier_badge
     from panel.server import render
     assert tier_badge({}) == '<span></span>'                                   # an unknown network still fills its cell
     c = copy.deepcopy(CONTRACT)

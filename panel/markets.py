@@ -8,7 +8,7 @@ import time
 from common.rates import yearly_from_8h_pct
 from common.symbols import coin_of
 
-from .render import _num_cls
+from .html_bits import _num_cls
 
 
 def _pick(markets, coin):

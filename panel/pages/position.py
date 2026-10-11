@@ -10,7 +10,7 @@ import urllib.parse
 class PositionPages:
     def _position_page(self):
         """U56: one position, one page."""
-        from panel.render import position_page
+        from panel.position_view import position_page
         q = dict(urllib.parse.parse_qsl(self.path.split('?', 1)[1]))
         fi = min(int(_f(q.get('fleet')) or 0), len(self.fleets) - 1)
         botid = q.get('bot', '')

@@ -13,7 +13,8 @@ import sys
 import time
 from panel.chart import _f
 
-from .render import money, named, refusal_box, setup_button, sweep_html, windows_html
+from .html_bits import money, named, refusal_box
+from .fleet_bits import setup_button, sweep_html, windows_html
 from gridgremlin.apply import row_botid
 
 def rehearse_form(values=None):
@@ -308,7 +309,7 @@ def next_step_html(mode, unit, units):
 # (owner 2026-10-03): and one step back — a result page's "back" should
 # return to the page it came from, not only to the start.
 def _side():
-    from .render import side_nav
+    from .nav import side_nav
     return side_nav()
 
 

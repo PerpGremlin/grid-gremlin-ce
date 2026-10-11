@@ -16,7 +16,9 @@ from panel.chart import _f
 
 from .css import CSS
 from .reference import KEY, TRADING
-from .render import contract_tiers, named, refusal_box, render, tidy
+from .strip_view import contract_tiers
+from .html_bits import named, refusal_box, tidy
+from .render import render
 from .forms import BACK, FORM, next_step_html, other_half_html, other_side_html, rehearse_bot_form, unit_for_fleet, unit_refusal, verdict, waiting_for_restart
 from gridgremlin.apply import row_botid
 from .pages.rehearse import RehearsePages
@@ -198,7 +200,7 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
         if self.path.startswith('/rehearse?job='):
             return self._rehearse_job_page(self.path.split('job=', 1)[1][:16])
         if self.path == '/rehearse':
-            from panel.render import PAGE_END
+            from panel.nav import PAGE_END
             from panel.reference import KEEP_JS
             body = (f'<!doctype html><meta charset="utf-8">'
                     f'<title>rehearse</title><style>{CSS}</style>{BACK}{FORM}{PAGE_END}{KEEP_JS}')
@@ -212,7 +214,7 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             from panel.reference import KEEP_JS
             from .asset import asset_page
             from .markets import coins_of
-            from .render import PAGE_END, side_nav
+            from .nav import PAGE_END, side_nav
             row = latest() or {}
             q = dict(urllib.parse.parse_qsl(self.path.partition('?')[2]))
             coins = coins_of(row) or ['BTC']
@@ -229,7 +231,7 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             from gridgremlin.market import latest
             from panel.reference import KEEP_JS
             from .carry import carry_page
-            from .render import PAGE_END, side_nav
+            from .nav import PAGE_END, side_nav
             q = dict(urllib.parse.parse_qsl(self.path.partition('?')[2]))
             body = (f'<!doctype html><meta charset="utf-8"><title>carry</title><style>{CSS}</style>'
                     f'{side_nav()}<main>{carry_page(latest(), q)}</main>{PAGE_END}{KEEP_JS}')
@@ -242,7 +244,7 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             from gridgremlin.market import latest
             from panel.reference import KEEP_JS
             from .markets import coins_of, decided_page
-            from .render import PAGE_END, side_nav
+            from .nav import PAGE_END, side_nav
             row = latest()
             q = dict(urllib.parse.parse_qsl(self.path.partition('?')[2]))
             coin = q.get('coin') or (coins_of(row or {}) or ['BTC'])[0]
@@ -255,7 +257,8 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             return
         if self.path == '/results':                                   # R24
             from panel.reference import KEEP_JS
-            from .render import PAGE_END, results_page, side_nav
+            from .nav import PAGE_END, side_nav
+            from .results import results_page
             body = (f'<!doctype html><meta charset="utf-8"><title>results</title><style>{CSS}</style>'
                     f'{side_nav()}{results_page(self._labelled())}{PAGE_END}{KEEP_JS}')
             self.send_response(200)
@@ -483,7 +486,7 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
         self.send_response(200)
         self.send_header('Content-Type', 'text/html; charset=utf-8')
         self.end_headers()
-        from panel.render import PAGE_END
+        from panel.nav import PAGE_END
         from panel.reference import KEEP_JS
         self.wfile.write(tidy(f'<!doctype html><meta charset="utf-8">'
                               f'<title>grid-gremlin</title><style>{CSS}</style>'

@@ -22,7 +22,14 @@ from pathlib import Path
 
 from .css import (CSS)  # noqa: F401
 from .reference import (KEEP_JS, KEY, STATE_WORDS, TRADING)  # noqa: F401
-from .render import (COLS, REFRESH_S, SIZE_VIEWS, TIER_NAMES, VIEWS, WATCHDOG_OFF_S, _day, _num_cls, _plain_name, _row_note, _side_tag, card, cards_section, coin_of, contract_tiers, exchange_leverage, exchange_since_first, grouped, hero_strip, holding_html, kind_line, ladder_box, money, named, nav_panel, orders_line, pnl_parts, refusal_box, render, section, settle, setup_button, since_first_line, since_first_total, state_tag, strip, sweep_html, sweep_note, tidy, tier_badge, units_of, venue_money, windows_html)  # noqa: F401
+from .table import COLS, section
+from .html_bits import REFRESH_S, WATCHDOG_OFF_S, _day, _num_cls, coin_of, money, named, refusal_box, tidy, units_of
+from .nav import SIZE_VIEWS, VIEWS, grouped, nav_panel
+from .strip_view import TIER_NAMES, contract_tiers, exchange_leverage, exchange_since_first, hero_strip, tier_badge, venue_money
+from .card import _plain_name, _side_tag, card, holding_html, kind_line, ladder_box, orders_line, pnl_parts, settle, since_first_line, since_first_total, state_tag
+from .fleet_bits import _row_note, setup_button, sweep_html, sweep_note, windows_html
+from .render import cards_section, render
+from .drawings import strip  # noqa: F401
 from .forms import (BACK, FORM, curve_svg, next_step_html, other_half_html, other_side_html, rehearse_bot_form, rehearse_form, unit_for_fleet, unit_refusal, verdict, waiting_for_restart)  # noqa: F401
 from .routes import (CACHE_TTL_S, Handler)  # noqa: F401
 

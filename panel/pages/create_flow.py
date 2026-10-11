@@ -1,7 +1,7 @@
 """Setting up and editing a bot (U19): the setup page, the review with its chart, what-if and fit, the create and apply flow. Moved out of routes.py whole (D91 step 3): a mixin
 the Handler inherits."""
 from ..forms import next_step_html, other_half_html, other_side_html, rehearse_bot_form, unit_for_fleet
-from ..render import named, refusal_box, tidy
+from ..html_bits import named, refusal_box, tidy
 from gridgremlin.apply import row_botid
 from panel.chart import _f
 from pathlib import Path

@@ -78,7 +78,8 @@ def spec_U65_the_snapshot_carries_each_bots_price_and_the_page_draws_it_with_lev
     from types import SimpleNamespace
     from gridgremlin.equity_series import bot_fills, mark_windows, price_windows
     from gridgremlin.main import snapshot_row
-    from panel.render import position_page, price_svg
+    from panel.position_view import position_page
+    from panel.drawings import price_svg
     alive = SimpleNamespace(botid='linBTCUSDTl', alive=True, _last_pos=0.5, _last_mark=60000.0, offset=0)
     dead = SimpleNamespace(botid='linETHUSDTs', alive=False, _last_pos=None, _last_mark=3000.0, offset=0)
     row = snapshot_row([alive, dead], {'equity': 1000.0, 'mm_rate': 0.1}, 5.0)

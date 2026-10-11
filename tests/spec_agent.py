@@ -353,7 +353,7 @@ def spec_J5_the_digest_carries_the_agents_score():
 
 def spec_J5_the_panel_draws_the_agents_box_from_the_readout():
     from gridgremlin.agent_score import view
-    from panel.render import agent_box
+    from panel.results import agent_box
     lim = validate_agent(dict(LIMITS))
     book = [_closed(10, 0.8, 1), dict(_pos(), mark=101.0, open_pnl=4.5, reason='<b>held</b> the low')]
     v = view(book, lim)

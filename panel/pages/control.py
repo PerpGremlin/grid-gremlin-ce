@@ -1,7 +1,7 @@
 """Control (§12): the control page, starting and stopping units, closing what a stopped bot left open (X15). Moved out of routes.py whole (D91 step 3): a mixin
 the Handler inherits."""
 from ..forms import unit_for_fleet, unit_refusal, waiting_for_restart
-from ..render import named, refusal_box
+from ..html_bits import named, refusal_box
 from panel.chart import _f
 from pathlib import Path
 import html

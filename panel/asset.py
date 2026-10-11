@@ -11,7 +11,7 @@ from common.fmt import usd_compact
 from common.venues import VENUE_WORD as _VENUES
 from gridgremlin.marketdata import SERIES, series
 
-from .render import _num_cls
+from .html_bits import _num_cls
 
 W, H, PAD_L, PAD_R, PAD_Y = 900, 170, 64, 10, 14
 SPANS = (('24h', '24 hours', 1), ('7d', '7 days', 7), ('30d', '30 days', 30))

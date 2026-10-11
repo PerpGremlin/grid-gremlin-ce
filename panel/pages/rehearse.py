@@ -2,7 +2,7 @@
 the Handler inherits."""
 from ..css import CSS
 from ..forms import BACK, verdict
-from ..render import refusal_box
+from ..html_bits import refusal_box
 from pathlib import Path
 import json
 import secrets

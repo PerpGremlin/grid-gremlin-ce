@@ -5,7 +5,9 @@ from pathlib import Path
 
 from gridgremlin.config import validate_config
 from gridgremlin.portfolio_rehearse import rehearse
-from panel.render import cards_section, grouped, hero_strip, portfolio_total
+from panel.render import cards_section
+from panel.nav import grouped
+from panel.strip_view import hero_strip, portfolio_total
 
 VIEW = {'stack': {'BTC': {'coins': 0.75, 'value': 45000.0}, 'ETH': {'coins': 15.0, 'value': 45000.0}},
         'stack_value': 90000.0, 'cash': 120.5, 'parked': 0.0,
@@ -33,7 +35,7 @@ CONTRACT = {'window_hours': 6.0, 'generated_ms': 0, 'unowned': {}, 'ranges': {},
 
 
 def spec_H6_the_card_says_the_three_truths_and_the_exchange_counts_the_row():
-    from panel.render import position_page
+    from panel.position_view import position_page
     html = cards_section(0, 'demo', CONTRACT) + position_page(           # U68: the facts are the page's
         0, 'demo', 'pfocarry', CONTRACT, CONTRACT['watchdog']['belief']['bots'])
     assert 'carry portfolio' in html and 'PORTFOLIO' in html
@@ -116,7 +118,7 @@ def spec_H7_the_rehearsal_borrows_at_the_rows_rate():
 def spec_U66_every_accounts_box_and_the_strip_say_its_mmr():
     """The owner: "account MMR should be displayed for every account on the
     fleet page" — the exchange's own gauge, from the fleet's snapshot."""
-    from panel.render import MMR_WARN, exchange_mmr, hero_strip
+    from panel.strip_view import MMR_WARN, exchange_mmr, hero_strip
     calm = {'watchdog': {'belief': {'mm_rate': 0.279, 'age_s': 60}}}
     line = exchange_mmr(calm)
     assert 'account MMR <b class="dim">27.9%</b>' in line and 'liquidates at 100%' in line
