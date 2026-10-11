@@ -110,3 +110,30 @@ def spec_G7_G10_fuzz_lots_are_counted_whole_and_headroom_is_never_negative():
         cap = rng.choice((None, rng.uniform(0, 1000)))
         free = lots_free(cap, rng.uniform(-500, 500), lot_q)
         assert free is None if cap is None else free >= 0, (n, cap, free)
+
+
+def spec_D87_fuzz_lots_are_counted_in_whole_steps_even_at_scale():
+    """The audit (2026-10-08), granted 2026-10-11: whole steps end to end.
+    Given the adapter, lots held and lots of headroom are counted in whole
+    steps against the exact truth — including a holding of many millions of
+    tiny steps with float noise in it, where the old epsilon arithmetic
+    miscounted the headroom (measured: 5,840 of 40,000 such cases)."""
+    rng = random.Random(87)
+    for n in range(CASES):
+        step = rng.choice(STEPS)
+        a = LinearAdapter({'symbol': 'FUZZUSDT', 'qty_step': step, 'price_tick': 0.01,
+                           'min_qty': step, 'settle_coin': 'USDT'})
+        lot_s = rng.choice((1, 3, 7, 10, 1000))
+        lot = float(Decimal(str(step)) * lot_s)
+        k = rng.choice((rng.randint(0, 200), rng.randint(10**5, 10**8)))
+        extra = rng.choice((0, 0, 1, max(0, lot_s - 1)))
+        held_s = k * lot_s + extra
+        noisy = sum([lot] * 50) + float(Decimal(str(step)) * (held_s - 50 * lot_s)) if k >= 50 else \
+            float(Decimal(str(step)) * held_s)
+        assert lots_held(noisy, lot, a) == -(-held_s // lot_s), (n, step, lot_s, held_s)
+        cap_s = held_s + rng.randint(0, 5 * lot_s)
+        cap = float(Decimal(str(step)) * cap_s)
+        assert lots_free(cap, noisy, lot, a) == (cap_s - held_s) // lot_s, (n, step, lot_s, cap_s, held_s)
+        assert a.to_steps(a.from_steps(held_s)) == held_s and a.from_steps(a.to_steps(noisy)) == a.from_steps(held_s)
+        p = rng.uniform(0.0001, 200000)
+        assert a.from_ticks(a.to_ticks(p)) == a.round_price(p), (n, p)              # ticks agree with the edge

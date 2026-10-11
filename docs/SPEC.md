@@ -81,6 +81,16 @@ eventually pin (T1).
 - **A5** `position_idx` derives jointly from (side, reduce_only).
 - **A6** The adapter seam exists from day one even with one venue; a second venue is a
   slice, not a fork.
+- **A7** Whole steps and ticks (D87). The adapter turns a quantity into whole
+  steps and back (`to_steps`, `from_steps`) and a price into whole ticks and
+  back (`to_ticks`, `from_ticks`), exactly. A quantity on the grid (a
+  holding, a fill) rounds to its nearest step; a bound (a cap) floors, a
+  millionth of a step of float noise forgiven. The plan counts lots held,
+  lots of headroom and a DCA's running total in whole steps, so no float
+  epsilon decides a lot; the order's string is still produced once, at the
+  edge (A2). *(the 2026-10-08 audit, granted 2026-10-11: at many millions
+  of tiny steps the old epsilon arithmetic miscounted the headroom in 5,840
+  of 40,000 fuzzed cases; whole steps, in none)*
 
 ## G — the grid
 
