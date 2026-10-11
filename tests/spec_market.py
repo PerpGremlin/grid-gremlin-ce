@@ -463,3 +463,128 @@ def spec_K12_the_reading_says_what_a_short_was_paid_and_what_a_loan_costs():
     assert abs(c4['d7'] - 2 * btc['d7']) < 0.02                                         # twice the settlements, twice the pay
     short, _, _ = _funding_feed(days=20)                                                # too short for 90 days: none
     assert read_carry(short, ['BTC'], {}, now)['funding']['BTC']['linear']['d90'] is None
+
+
+def _venues_feed(t_end=1_800_000_000_000, hours=600, okx_missing=('XAUT',), okx_no_spot=('XAU',), fail=()):
+    """A fake Bybit, Binance and OKX answering every K13 endpoint: a flat
+    price of 100 (index 99.9), retail 60% long, top traders 45%, OI 1,000
+    coins, buys 10 over sells 8 an hour; OKX knows gold as XAU and has no
+    gold spot; any URL containing a word in `fail` raises."""
+    from urllib.parse import parse_qs, urlparse
+    calls = []
+    def fetch(url):
+        calls.append(url)
+        if any(f in url for f in fail):
+            raise OSError('down')
+        u = urlparse(url)
+        q = {k: v[0] for k, v in parse_qs(u.query).items()}
+        lim = int(q.get('limit', 100))
+        ts = [t_end - i * 3_600_000 for i in range(min(lim, hours))]           # newest first
+        if 'bybit' in u.netloc:
+            if u.path.endswith('/kline'):
+                return {'result': {'list': [[str(t), '100', '100', '100', '100', '1', '1'] for t in ts]}}
+            if 'index-price' in u.path:
+                return {'result': {'list': [[str(t), '99.9', '99.9', '99.9', '99.9'] for t in ts]}}
+            if 'account-ratio' in u.path:
+                return {'result': {'list': [{'buyRatio': '0.6', 'sellRatio': '0.4', 'timestamp': str(t)} for t in ts]}}
+            if 'open-interest' in u.path:
+                return {'result': {'list': [{'openInterest': '1000', 'timestamp': str(t)} for t in ts]}}
+            if 'orderbook' in u.path:
+                return {'result': {'b': [['99.95', '10'], ['99.0', '5'], ['90', '100']],
+                                   'a': [['100.05', '5'], ['100.9', '5'], ['110', '100']]}}
+        if 'binance' in u.netloc:
+            if u.path.endswith('/depth'):
+                return {'bids': [['99.95', '10']], 'asks': [['100.05', '10']]}
+            if u.path.endswith('/klines'):
+                return [[t, '100', '100', '100', '100', '18', 0, '1800', 0, '10', '1000', '0'] for t in ts]
+            ep = u.path.rsplit('/', 1)[1]
+            row = {'globalLongShortAccountRatio': {'longAccount': '0.6'}, 'topLongShortAccountRatio': {'longAccount': '0.45'},
+                   'topLongShortPositionRatio': {'longAccount': '0.45'}, 'openInterestHist': {'sumOpenInterestValue': '100000'},
+                   'takerlongshortRatio': {'buyVol': '10', 'sellVol': '8'}}[ep]
+            return [dict(row, timestamp=t) for t in reversed(ts)]
+        if 'okx' in u.netloc:
+            coin = q.get('ccy') or q.get('instId', '').split('-')[0]
+            if coin in okx_missing or (coin in okx_no_spot and q.get('instType') == 'SPOT'):
+                return {'code': '51012', 'msg': 'Token does not exist', 'data': []}
+            if 'taker-volume' in u.path:
+                return {'code': '0', 'data': [[str(t), '8', '10'] for t in ts[:72]]}
+            if 'open-interest-volume' in u.path:
+                return {'code': '0', 'data': [[str(t), '50000', '1'] for t in ts]}
+            if 'top-trader' in u.path:
+                return {'code': '0', 'data': [[str(t), str(0.45 / 0.55)] for t in ts[:100]]}
+            return {'code': '0', 'data': [[str(t), '1.5'] for t in ts]}
+        raise AssertionError(url)
+    return fetch, calls, t_end
+
+
+def spec_K13_each_coins_market_data_is_kept_a_month_from_the_big_venues():
+    """The owner (2026-10-11): positioning of retail and the top traders
+    across the big venues, open interest, basis, the book, spot net flows —
+    each coin's series from Bybit, Binance and OKX, merged into a file and
+    kept 30 days, refetched only for the last two days once fresh; each
+    source fails alone and is named; OKX's own name for gold."""
+    import tempfile
+    from gridgremlin import marketdata as md
+    fetch, calls, t_end = _venues_feed()
+    now = t_end / 1000 + 60
+    root = tempfile.mkdtemp()
+    said = md.update(fetch, ['BTC', 'XAUT'], now, root=root, pause=lambda s: None)
+    btc = md.load('BTC', root)
+    lt = said['BTC']['latest']
+    assert lt['price'] == 100.0 and abs(lt['basis.bybit'] - (100 / 99.9 - 1) * 100) < 1e-9
+    assert lt['retail.bybit'] == 0.6 and lt['retail.binance'] == 0.6 and abs(lt['retail.okx'] - 0.6) < 1e-12
+    assert lt['top.binance_positions'] == 0.45 and abs(lt['top.okx_positions'] - 0.45) < 1e-12
+    assert lt['oi.bybit'] == 1000 * 100 and lt['oi.binance'] == 100000 and lt['oi.okx'] == 50000
+    assert lt['taker.binance'] == 2 * 100 and lt['taker.okx'] == 2                          # coins × price; USD
+    assert lt['spot.binance'] == 2 * 1000 - 1800 and lt['spot.okx'] == 2 * 100              # USD; coins × price
+    assert abs(lt['spread.bybit'] - 0.1 / 100 * 1e4) < 1e-9
+    assert abs(lt['depth.bybit'] - (99.95 * 10 + 99.0 * 5 + 100.05 * 5 + 100.9 * 5)) < 1e-6  # 90 and 110 are past 1%
+    assert said['BTC']['unread'] == {}
+    assert len(btc['price']) == 600 and len(btc['top.okx_positions']) == 100
+    # OKX's gold is XAU, and it has no gold spot market: only that one is unread
+    assert set(said['XAUT']['unread']) == {'spot.okx'} and 'retail.okx' in said['XAUT']['latest']
+    assert any('ccy=XAU&' in c for c in calls) and not any('ccy=XAUT' in c for c in calls)
+    # fresh: the next hour asks for two days only
+    calls.clear()
+    md.update(fetch, ['BTC'], now + 3600, root=root, pause=lambda s: None)
+    assert all('limit=' not in c or 'limit=48' in c or 'orderbook' in c or 'depth' in c for c in calls), calls
+    # kept a month: points past 30 days are trimmed
+    later = md.merge(btc, {'price': {t_end + 31 * 86_400_000: 101.0}}, t_end / 1000 + 31 * 86400)
+    assert min(int(t) for t in later['price']) >= t_end + 86_400_000 and str(t_end + 31 * 86_400_000) in later['price']
+    # one venue down: its sources are named, the rest are read
+    down, _, _ = _venues_feed(fail=('binance.com',))
+    d = md.update(down, ['BTC'], now, root=tempfile.mkdtemp(), pause=lambda s: None)['BTC']
+    assert {n for n in d['unread']} == {'retail.binance', 'top.binance_accounts', 'top.binance_positions',
+                                        'oi.binance', 'taker.binance', 'spot.binance',
+                                        'spread.binance', 'depth.binance', 'imbalance.binance'}
+    assert 'retail.okx' in d['latest'] and 'price' in d['latest']
+    # the day's summary: OI summed over the venues, its change, the day's flow
+    day = said['BTC']['day']
+    assert day['oi'] == 100000 + 100000 + 50000 and abs(day['oi_24h_pct']) < 1e-9
+    assert day['taker_24h'] == 24 * 200 + 24 * 2 and day['spot_24h'] == 24 * 200 + 24 * 200
+
+
+def spec_U71_a_coins_page_charts_its_market_data():
+    """The owner (2026-10-11): an overview per asset, like Bybit's data tab
+    — a chart for each kind of market data, the price behind, a day, a week
+    or a month; what each says; an unread source named."""
+    import tempfile
+    from gridgremlin import marketdata as md
+    from panel.asset import CHARTS, asset_page
+    fetch, _, t_end = _venues_feed()
+    now = t_end / 1000 + 60
+    root = tempfile.mkdtemp()
+    md.update(fetch, ['BTC'], now, root=root, pause=lambda s: None)
+    page = asset_page('BTC', ['BTC', 'ETH'], '7d', now=now, root=root, unread={'oi.okx': 'HTTPError'})
+    assert '<h1>BTC <span class="dim">market data</span></h1>' in page
+    assert '<b class="on">7 days</b>' in page and 'href="/asset?coin=ETH&span=7d"' in page
+    for heading, *_ in CHARTS:                                             # every kind, each its chart
+        assert f'<h2>{heading.replace("&", "&amp;")}</h2>' in page, heading
+    assert page.count('<svg class="achart"') == len(CHARTS)
+    assert 'Not read this hour: OKX.' in page
+    assert 'Binance, by position size <b class="">45.0%</b>' in page        # the legend's latest
+    assert 'stroke="var(--dim)"' in page                                   # the price behind
+    assert 'fill="var(--pos)"' in page                                     # flow as bars, buys above
+    day = asset_page('BTC', ['BTC'], '24h', now=now, root=root)
+    assert '<b class="on">24 hours</b>' in day
+    assert 'nothing kept for this coin yet' in asset_page('ETH', ['BTC', 'ETH'], '7d', now=now, root=root)

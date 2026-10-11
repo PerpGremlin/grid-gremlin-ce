@@ -143,24 +143,38 @@ def spec_U66_a_cards_fold_aligns_its_headings_with_their_numbers():
     assert 'details td{text-align:left}' in CSS
 
 
-def spec_U70_the_phones_market_report_is_live_on_the_markets_half():
-    """The owner (2026-10-11): the market data sent to the phone, as a live
-    stream on the markets half. The same report, built the same way from the
-    newest reading, under the tiles; an unreadable reading says so."""
-    from gridgremlin.market import report
+def spec_U72_the_markets_half_is_tabs_with_a_heading_for_each_kind_of_data():
+    """The owner (2026-10-11): the phone's text is not needed on the page —
+    a heading for each kind of data, and tabs on the right-hand side. The
+    tabs: coins (the tiles), positioning (retail against the top traders,
+    per venue, and the gap), open interest and flow (summed over the
+    venues, the day's change, the day's taker flow on perpetuals and spot,
+    the basis), and the order book (spread, depth within 1%, imbalance).
+    The tab rides the address, so the page's refresh keeps it; the view
+    is kept with it. Each coin leads to its market data page (U71). The
+    phone's report on the page (U70) is retired by it."""
     from panel.markets import market_column
-    row = {'t': 1000.0, 'fear_greed': {'score': 61, 'label': 'Greed', 'avg_7d': 64, 'avg_30d': 66},
-           'markets': {'bybit:linear:BTCUSDT': {'symbol': 'BTCUSDT', 'price': 82933.4, 'change_24h_pct': 0.46,
-                                                'volume_24h': 4.1e9, 'committed': 1.0}},
-           'cross': {}, 'announcements': []}
-    col = market_column(row, now=1060.0)
-    assert '<h2>as the phone gets it' in col
-    for text in report(row, 1060.0):                                    # every message, as sent
-        import html as _h
-        assert f'<div class="tgmsg">{_h.escape(text)}</div>' in col
-    assert 'fear &amp; greed 61' in col and col.index('class="mtiles"') < col.index('as the phone gets it')
-    broken = dict(row, markets={'bybit:linear:BTCUSDT': {'price': 1.0}})   # no symbol: the report cannot build
-    assert "the phone's report: unreadable (KeyError)" in market_column(broken, now=1060.0).replace('&#x27;', "'")
+    row = {'t': 1000.0, 'markets': {'bybit:linear:BTCUSDT': {'symbol': 'BTCUSDT', 'price': 82933.4, 'committed': 1.0}},
+           'series': {'BTC': {'latest': {'retail.bybit': 0.626, 'retail.binance': 0.5926, 'retail.okx': 0.5918,
+                                         'top.binance_positions': 0.6068, 'top.okx_positions': 0.4939,
+                                         'basis.bybit': -0.0484, 'spread.bybit': 0.012, 'depth.bybit': 4.78e7,
+                                         'imbalance.bybit': -0.0006, 'spread.binance': 0.012, 'depth.binance': 8.8e7,
+                                         'imbalance.binance': -0.074},
+                              'day': {'oi': 1.56e10, 'oi_24h_pct': 1.25, 'taker_24h': -2.1e8, 'spot_24h': 3.4e7}}}}
+    coins = market_column(row, now=1060.0)
+    assert '<nav class="mtabs"><b class="on">coins</b><a href="/?mtab=positioning">positioning</a>' in coins
+    assert 'as the phone gets it' not in coins and 'class="mtiles"' in coins
+    pos = market_column(row, now=1060.0, tab='positioning')
+    assert '<b class="on">positioning</b>' in pos and '<h3>positioning' in pos
+    assert '<td class="num">63%</td><td class="num">59%</td><td class="num">59%</td><td class="num">61%</td><td class="num">49%</td>' in pos
+    assert '<td class="num neg">-5 pts</td>' in pos                       # (60.7%+49.4%)/2 − (62.6%+59.3%+59.2%)/3
+    assert 'href="/asset?coin=BTC#top"' in pos
+    oi = market_column(row, now=1060.0, tab='oi')
+    assert '<td class="num">15.60B</td>' in oi and '+1.2%' in oi and '-210.0M' in oi and '34.0M' in oi and '-0.048%' in oi
+    book = market_column(row, now=1060.0, tab='book')
+    assert '<td class="num">47.8M</td>' in book and '<td class="num neg">-7%</td>' in book
+    assert '<a href="/?view=longs&mtab=oi">' in market_column(row, now=1060.0, tab='book', view='longs')
+    assert '<b class="on">coins</b>' in market_column(row, now=1060.0, tab='nonsense')     # unknown: the tiles
 
 
 def spec_U67_the_fleet_page_has_a_markets_half_from_the_readings():
@@ -186,7 +200,7 @@ def spec_U67_the_fleet_page_has_a_markets_half_from_the_readings():
     html_ = market_column(row, now=1000.0 + 13 * 60)
     col = re.sub(r'\s+', ' ', re.sub(r'<[^>]+>', ' ', html_))           # the text a reader sees
     assert 'read 13 min ago' in col and 'fear &amp; greed 64 (Greed)' in col
-    assert html_.index('?coin=BTC" title="how it decided">BTC</a></b>') < html_.index('>ADA</a></b>')
+    assert html_.index('/asset?coin=BTC" title="its market data">BTC</a></b>') < html_.index('>ADA</a></b>')
     assert '82,908.1' in col and '-0.35%' in col and 'leaning down' in col and 'ADX 30' in col
     assert '7% wild · 24 h in, typical 12 h' in col and 'calm ±1.1%/day · wild ±3.6%/day' in col
     assert '-1.6%/yr' in col and '63% of accounts long (leaning long)' in col and 'depth ±1% 16.7M' in col

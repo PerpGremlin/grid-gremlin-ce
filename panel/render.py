@@ -1462,7 +1462,7 @@ def page_links(table=False, view='all'):
     q = '' if view == 'all' else f'?view={view}'
     return ((f'<a href="/{q}">cards</a>' if table else f'<a href="/table{q}">table</a>')
             + '<a href="/control">control</a><a href="/setup">set up a bot</a><a href="/trade">new trade</a>'
-              '<a href="/rehearse">rehearse a grid</a><a href="/results">results</a><a href="/calm-wild">calm or wild</a><a href="/carry">carry</a>'
+              '<a href="/rehearse">rehearse a grid</a><a href="/results">results</a><a href="/asset">market data</a><a href="/calm-wild">calm or wild</a><a href="/carry">carry</a>'
               '<a href="/export">export snapshot</a><a href="/key">key</a>')
 
 
@@ -1473,7 +1473,7 @@ def side_nav():
     return ('<div class="page"><nav class="side"><h3>pages</h3>'
             '<a href="/">back to your bots</a><a href="/table">table</a>'
             '<a href="/control">control</a><a href="/setup">new bot</a><a href="/trade">new trade</a>'
-            '<a href="/rehearse">rehearse a grid</a><a href="/results">results</a><a href="/calm-wild">calm or wild</a><a href="/carry">carry</a>'
+            '<a href="/rehearse">rehearse a grid</a><a href="/results">results</a><a href="/asset">market data</a><a href="/calm-wild">calm or wild</a><a href="/carry">carry</a>'
             '<a href="/export">export snapshot</a>'
             '<a href="/key">key</a><a href="javascript:history.back()">&larr; back</a>'
             '<span class="dim">leaving a form saves nothing</span>'
@@ -1593,7 +1593,7 @@ def agent_box(contract):
             f'<div class="parts">{words}</div>{table}</div>')
 
 
-def render(labelled, static=None, table=False, view='all', market=None):
+def render(labelled, static=None, table=False, view='all', market=None, mtab='coins'):
     """One renderer, two artefacts (§4): the live page, or — with
     static=timestamp-text — a self-contained export: no refresh, no
     actions, provenance stamped. The numbers can never diverge because
@@ -1617,7 +1617,7 @@ def render(labelled, static=None, table=False, view='all', market=None):
                 f'<noscript><meta http-equiv="refresh" content="{REFRESH_S}"></noscript>')
         if not table:                            # U67: the bots, and the markets beside them
             from .markets import market_column
-            body = f'<div class="split"><div class="bots">{body}</div>{market_column(market)}</div>'
+            body = f'<div class="split"><div class="bots">{body}</div>{market_column(market, tab=mtab, view=view)}</div>'
         body = f'<div class="page">{nav_panel(table, view)}<main>{body}</main></div>'
         chrome = KEEP_JS
     return f"""<!doctype html><meta charset="utf-8">

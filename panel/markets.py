@@ -180,13 +180,14 @@ def tile(coin, m, h):
     ch = m.get('change_24h_pct')
     f8 = m.get('funding_8h_pct')
     rows = [
-        f'<div class="mhead"><b><a class="plain" href="/calm-wild?coin={html.escape(coin)}" '
-        f'title="how it decided">{html.escape(coin)}</a></b>'
+        f'<div class="mhead"><b><a class="plain" href="/asset?coin={html.escape(coin)}" '
+        f'title="its market data">{html.escape(coin)}</a></b>'
         + (f' <span class="num">{price:,.6g}</span>' if price else '')
         + (f' <span class="num {_num_cls(ch)}">{ch:+.2f}%</span>' if ch is not None else '')
         + ' <span class="dim">24 h</span></div>',
         mini_chart((h or {}).get('closes_48h'), (h or {}).get('p_wild_48h')),
-        calm_wild(h),
+        calm_wild(h) + (f'<div><a class="plain dim" href="/calm-wild?coin={html.escape(coin)}">how it decided</a></div>'
+                        if h and h.get('two_states') else ''),
     ]
     if m.get('regime'):
         rows.append(f'<div>trend <b>{html.escape(m["regime"])}</b> <span class="dim">· ADX '
@@ -208,34 +209,112 @@ def tile(coin, m, h):
     return f'<div class="mtile">{"".join(r for r in rows if r)}</div>'
 
 
-def market_column(row, now=None):
-    """The markets half: a heading with the reading's age, the fear and
-    greed index, then a tile per coin. A missing reading says so."""
+MTABS = (('coins', 'coins'), ('positioning', 'positioning'), ('oi', 'open interest & flow'), ('book', 'order book'))
+
+
+def _share_cell(v):
+    return '<td class="num dim">—</td>' if v is None else f'<td class="num">{v:.0%}</td>'
+
+
+def _usd(v):
+    if v is None:
+        return '—'
+    a = abs(v)
+    return f'{v / 1e9:,.2f}B' if a >= 1e9 else f'{v / 1e6:,.1f}M' if a >= 1e6 else f'{v / 1e3:,.0f}k'
+
+
+def tab_positioning(row):
+    """Retail against the top traders, per coin and venue (K13)."""
+    rows = ''
+    for c in coins_of(row):
+        lt = (((row.get('series') or {}).get(c) or {}).get('latest') or {})
+        if not lt:
+            continue
+        retail = [lt.get(f'retail.{v}') for v in ('bybit', 'binance', 'okx')]
+        top = [lt.get('top.binance_positions'), lt.get('top.okx_positions')]
+        r = [x for x in retail if x is not None]
+        t = [x for x in top if x is not None]
+        gap = (sum(t) / len(t) - sum(r) / len(r)) if r and t else None
+        rows += (f'<tr><td><a class="plain" href="/asset?coin={html.escape(c)}#top">{html.escape(c)}</a></td>'
+                 + ''.join(_share_cell(x) for x in retail) + ''.join(_share_cell(x) for x in top)
+                 + ('<td class="num dim">—</td>' if gap is None else
+                    f'<td class="num {"pos" if gap > 0 else "neg"}">{gap * 100:+.0f} pts</td>') + '</tr>')
+    return ('<h3>positioning <span class="dim">share of accounts long</span></h3>'
+            '<div class="scroll"><table class="cwtab"><tr><th></th><th colspan="3">retail — all accounts</th>'
+            '<th colspan="2">top traders, by size</th><th></th></tr>'
+            '<tr><th>coin</th><th>Bybit</th><th>Binance</th><th>OKX</th><th>Binance</th><th>OKX</th><th>top − retail</th></tr>'
+            f'{rows}</table></div><p class="dim">Retail counts every account once; the top traders are the biggest by '
+            'margin, weighted by what they hold. A wide gap is the two camps leaning apart.</p>')
+
+
+def tab_oi(row):
+    """Open interest and the day's taker flow, per coin (K13)."""
+    rows = ''
+    for c in coins_of(row):
+        sr = ((row.get('series') or {}).get(c) or {})
+        d, lt = sr.get('day') or {}, sr.get('latest') or {}
+        if not d:
+            continue
+        ch, tk, sp, bs = d.get('oi_24h_pct'), d.get('taker_24h'), d.get('spot_24h'), lt.get('basis.bybit')
+        rows += (f'<tr><td><a class="plain" href="/asset?coin={html.escape(c)}#oi">{html.escape(c)}</a></td>'
+                 f'<td class="num">{_usd(d.get("oi"))}</td>'
+                 f'<td class="num {_num_cls(ch)}">{"—" if ch is None else f"{ch:+.1f}%"}</td>'
+                 f'<td class="num {_num_cls(tk)}">{_usd(tk)}</td><td class="num {_num_cls(sp)}">{_usd(sp)}</td>'
+                 f'<td class="num {_num_cls(bs)}">{"—" if bs is None else f"{bs:+.3f}%"}</td></tr>')
+    return ('<h3>open interest &amp; flow <span class="dim">Bybit, Binance and OKX together</span></h3>'
+            '<div class="scroll"><table class="cwtab"><tr><th>coin</th><th>OI</th><th>24 h</th>'
+            '<th>perp taker 24 h</th><th>spot taker 24 h</th><th>basis</th></tr>'
+            f'{rows}</table></div><p class="dim">Taker flow: market orders that crossed the spread, buys − sells, '
+            'in USD. Basis: the perpetual over the spot index.</p>')
+
+
+def tab_book(row):
+    """The book now: spread, depth within 1%, imbalance (K13)."""
+    rows = ''
+    for c in coins_of(row):
+        lt = (((row.get('series') or {}).get(c) or {}).get('latest') or {})
+        if not any(k.startswith('depth.') for k in lt):
+            continue
+        cells = ''
+        for v in ('bybit', 'binance'):
+            sp, dp, im = lt.get(f'spread.{v}'), lt.get(f'depth.{v}'), lt.get(f'imbalance.{v}')
+            cells += (f'<td class="num">{"—" if sp is None else f"{sp:.2f}"}</td><td class="num">{_usd(dp)}</td>'
+                      f'<td class="num {_num_cls(im)}">{"—" if im is None else f"{im:+.0%}"}</td>')
+        rows += f'<tr><td><a class="plain" href="/asset?coin={html.escape(c)}#spread">{html.escape(c)}</a></td>{cells}</tr>'
+    return ('<h3>order book <span class="dim">the last hour\'s snapshot</span></h3>'
+            '<div class="scroll"><table class="cwtab"><tr><th></th><th colspan="3">Bybit</th><th colspan="3">Binance</th></tr>'
+            '<tr><th>coin</th><th>spread</th><th>±1% depth</th><th>bids−asks</th><th>spread</th><th>±1% depth</th><th>bids−asks</th></tr>'
+            f'{rows}</table></div><p class="dim">Spread in hundredths of a percent; depth: resting orders within 1% of '
+            'the mid, in USD.</p>')
+
+
+def market_column(row, now=None, tab='coins', view='all'):
+    """The markets half: a heading with the reading's age and the fear and
+    greed index, the tabs (U72), then the chosen tab — the tiles, the
+    positioning, open interest and flow, or the book. A missing reading
+    says so."""
     now = time.time() if now is None else now
+    tab = tab if tab in dict(MTABS) else 'coins'
     if not row:
         return ('<aside class="markets"><h2>markets</h2><p class="dim">no market reading yet — '
                 'the hourly market job writes logs/market.jsonl</p></aside>')
     age = max(0, int((now - row['t']) / 60))
     fg = row.get('fear_greed') or {}
+    keep = '' if view == 'all' else f'view={html.escape(view)}&'
+    tabs = '<nav class="mtabs">' + ''.join(
+        f'<b class="on">{w}</b>' if k == tab else f'<a href="/?{keep}mtab={k}">{w}</a>' for k, w in MTABS) + '</nav>'
     head = (f'<h2>markets <span class="dim">read {age} min ago · hourly</span></h2>'
-            '<div class="dim">calm or wild: a hidden Markov model of each coin\'s hourly moves · '
-            'trend: the ADX indicator · funding: paid by longs when positive</div>'
             + (f'<div class="dim">fear &amp; greed {fg["score"]} ({html.escape(str(fg.get("label") or ""))}) '
                f'· 7-day {fg.get("avg_7d")} · 30-day {fg.get("avg_30d")}</div>'
-               if fg.get('score') is not None else ''))
+               if fg.get('score') is not None else '') + tabs)
+    if tab == 'positioning':
+        return f'<aside class="markets">{head}{tab_positioning(row)}</aside>'
+    if tab == 'oi':
+        return f'<aside class="markets">{head}{tab_oi(row)}</aside>'
+    if tab == 'book':
+        return f'<aside class="markets">{head}{tab_book(row)}</aside>'
     markets, hmm = row.get('markets') or {}, row.get('hmm') or {}
     tiles = ''.join(tile(c, _pick(markets, c), hmm.get(c)) for c in coins_of(row) if _pick(markets, c))
-    return f'<aside class="markets">{head}<div class="mtiles">{tiles}</div>{phone_report(row, now)}</aside>'
-
-
-def phone_report(row, now):
-    """U70: the market report the phone is sent at each session's open,
-    built the same way from the newest reading — live beside the tiles."""
-    from gridgremlin.market import report
-    try:
-        texts = report(row, now)
-    except (KeyError, TypeError, ValueError) as e:
-        return f'<p class="dim">the phone\'s report: unreadable ({html.escape(type(e).__name__)})</p>'
-    body = ''.join(f'<div class="tgmsg">{html.escape(t)}</div>' for t in texts)
-    return ('<h2>as the phone gets it <span class="dim">the market report, from the same reading · '
-            'sent at 00, 08 and 16 UTC</span></h2>' + body)
+    return (f'<aside class="markets">{head}<div class="dim">calm or wild: a hidden Markov model of each coin\'s '
+            'hourly moves · trend: the ADX indicator · funding: paid by longs when positive · a coin\'s name opens '
+            f'its market data</div><div class="mtiles">{tiles}</div></aside>')
