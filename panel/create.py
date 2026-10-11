@@ -126,7 +126,7 @@ def retype_refusal(jumps, form):
     return None
 
 
-from gridgremlin.fmt import float_or as _num_or_none  # noqa: E402  (C10)
+from common.fmt import float_or as _num_or_none  # noqa: E402  (C10)
 
 
 def validate_whole(fleet, wd, adapter_of):

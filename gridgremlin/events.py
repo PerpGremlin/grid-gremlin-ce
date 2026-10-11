@@ -23,7 +23,7 @@ def stamped_print(line):
     reader keys on the line's start ('[ship] kill …'), so the start stays
     as it was. The fleet's log carried no clock until 2026-10-11, and a lag
     it said could not be measured."""
-    from .fmt import utc_stamp
+    from common.fmt import utc_stamp
     print(f'{line} @{utc_stamp()}', flush=True)
 
 

@@ -11,6 +11,7 @@ and its futures web requests answer) — so Binance is not here.
 
   python3 -m gridgremlin.liqstream
 """
+from common.symbols import coin_of
 import json
 import signal
 import sys
@@ -36,7 +37,7 @@ def parse(message):
     for x in d.get('data') or []:
         try:
             sym = x['s']
-            coin = sym[:-4] if sym.endswith('USDT') else sym
+            coin = coin_of(sym)
             coins, px = float(x['v']), float(x['p'])
             out.append((coin, {'ts': int(x['T']), 'side': 'long' if x['S'] == 'Buy' else 'short',
                                'px': px, 'coins': coins, 'usd': coins * px, 'venue': 'bybit'}))

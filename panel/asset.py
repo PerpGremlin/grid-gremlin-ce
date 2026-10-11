@@ -7,6 +7,7 @@ import html
 import math
 import time
 
+from common.venues import VENUE_WORD as _VENUES
 from gridgremlin.marketdata import SERIES, series
 
 from .render import _num_cls
@@ -14,9 +15,9 @@ from .render import _num_cls
 W, H, PAD_L, PAD_R, PAD_Y = 900, 170, 64, 10, 14
 SPANS = (('24h', '24 hours', 1), ('7d', '7 days', 7), ('30d', '30 days', 30))
 VENUE_COLOUR = {'bybit': 'var(--wild)', 'binance': 'var(--calm)', 'okx': 'var(--s3)'}
-VENUE_WORD = {'bybit': 'Bybit', 'binance': 'Binance', 'okx': 'OKX',
-              'binance_accounts': 'Binance, by accounts', 'binance_positions': 'Binance, by position size',
-              'okx_positions': 'OKX, by position size', 'bybit_inverse': 'Bybit inverse'}
+VENUE_WORD = dict(_VENUES, binance_accounts='Binance, by accounts',      # the venues' names (common, D91)
+                  binance_positions='Binance, by position size',          # and the series' own labels
+                  okx_positions='OKX, by position size', bybit_inverse='Bybit inverse')
 
 # (heading, the series on it, how it is drawn, what it says)
 CHARTS = (

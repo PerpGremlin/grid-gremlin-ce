@@ -74,12 +74,16 @@ def spec_K3_depth_is_quote_within_the_band_and_inverse_sizes_are_dollars():
 
 
 def spec_K4_funding_is_said_per_8h_whatever_the_venue_charges_by():
-    assert abs(mk.funding_per_8h_pct(0.0001, 8.0) - 0.01) < 1e-12
-    assert abs(mk.funding_per_8h_pct(0.0001, 4.0) - 0.02) < 1e-12     # Bybit 4 h coins
-    assert abs(mk.funding_per_8h_pct(0.0000125, 1.0) - 0.01) < 1e-12  # HL, hourly
-    assert mk.funding_per_8h_pct(None, 8.0) is None
-    assert mk.base_of('BTCUSDT') == 'BTC' and mk.base_of('BTCPERP') == 'BTC'
-    assert mk.base_of('ETHUSD') == 'ETH' and mk.base_of('SOL') == 'SOL'
+    from common.rates import per_8h_pct, yearly_from_8h_pct
+    from common.symbols import coin_of
+    assert abs(per_8h_pct(0.0001, 8.0) - 0.01) < 1e-12
+    assert abs(per_8h_pct(0.0001, 4.0) - 0.02) < 1e-12     # Bybit 4 h coins
+    assert abs(per_8h_pct(0.0000125, 1.0) - 0.01) < 1e-12  # HL, hourly
+    assert per_8h_pct(None, 8.0) is None and abs(yearly_from_8h_pct(0.01) - 10.95) < 1e-9
+    # D91: one coin-name function for every symbol shape the copies handled between them
+    for sym, coin in (('BTCUSDT', 'BTC'), ('BTCUSDC', 'BTC'), ('BTCPERP', 'BTC'), ('ETHUSD', 'ETH'),
+                      ('SOLUSDH26', 'SOL'), ('USDCUSDT', 'USDC'), ('SOL', 'SOL'), ('', ''), (None, '')):
+        assert coin_of(sym) == coin, (sym, coin_of(sym))
 
 
 def _bybit_canned(fail=()):

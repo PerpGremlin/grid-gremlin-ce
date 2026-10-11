@@ -4,6 +4,7 @@ along the last month's candles: how often the price crossed a grid, so how
 many round trips and roughly what they would have made after fees; how
 much of the month the price sat inside the range; the funding at full size
 and the coin's calm-or-wild reading. Display only; an estimate, said so."""
+from common.symbols import coin_of
 import bisect
 import html
 
@@ -72,7 +73,7 @@ def fit_section(cfg, bars, row=None):
         return ''
     f = fit_numbers(cfg, bars)
     sym = cfg['symbol']
-    coin = sym[:-4] if sym.endswith('USDT') else sym[:-4] if sym.endswith('PERP') else sym[:-3] if sym.endswith('USD') else sym
+    coin = coin_of(sym)                                   # D91: one of each
     lines = []
     m = ((row or {}).get('markets') or {}).get(f"bybit:{cfg.get('market_type', 'linear')}:{sym}") or {}
     f8 = m.get('funding_8h_pct')

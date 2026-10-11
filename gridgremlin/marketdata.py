@@ -10,6 +10,8 @@ import json
 import time
 from pathlib import Path
 
+from common.rates import yearly
+
 SERIES_DIR = 'logs/series'
 KEEP_S = 30 * 86_400
 FULL_IF_OLDER_S = 12 * 3600          # a series this stale is refetched whole
@@ -51,18 +53,6 @@ OKX_NAME = {'XAUT': 'XAU'}        # OKX trades gold itself, not Tether's token; 
 def _share(ratio):
     """A long/short ratio as the share long."""
     return ratio / (1.0 + ratio) if ratio is not None and ratio >= 0 else None
-
-
-def _yearly(points):
-    """Funding settlements [(ms, rate)] as yearly rates: each rate times the
-    settlements a year at that market's own interval (8 h, 4 h, 1 h). The
-    times land on the hour (Binance stamps a few milliseconds past)."""
-    pts = sorted((int(t) // 60_000 * 60_000, r) for t, r in points)
-    out = []
-    for i, (t, r) in enumerate(pts):
-        step = (pts[i + 1][0] - t) if i + 1 < len(pts) else (t - pts[i - 1][0]) if i else 8 * H
-        out.append((t, r * (365 * 86_400_000 / step) if step > 0 else None))
-    return out
 
 
 def _okx(fetch, url, pause):
@@ -191,14 +181,14 @@ def fetch_coin(fetch, coin, have, now, pause=time.sleep):
                 d = fetch(f'{BYBIT}/funding/history?category={cat}&symbol={sym_}&limit={lim(name, 200)}')
                 if d.get('retCode', 0) != 0:
                     raise ValueError(f"bybit {d.get('retCode')}: {d.get('retMsg')}")
-                put(name, _yearly((r['fundingRateTimestamp'], float(r['fundingRate'])) for r in d['result']['list']))
+                put(name, yearly((r['fundingRateTimestamp'], float(r['fundingRate'])) for r in d['result']['list']))
             source([name], one)
 
         def binance_funding():
             d = fetch(f'{BINANCE_F}/fapi/v1/fundingRate?symbol={sym}&limit={lim("funding.binance", 200)}')
             if not isinstance(d, list):
                 raise ValueError(f'binance: {d}')
-            put('funding.binance', _yearly((r['fundingTime'], float(r['fundingRate'])) for r in d))
+            put('funding.binance', yearly((r['fundingTime'], float(r['fundingRate'])) for r in d))
         source(['funding.binance'], binance_funding)
 
         def okx_funding():
@@ -206,7 +196,7 @@ def fetch_coin(fetch, coin, have, now, pause=time.sleep):
             d = fetch(f'https://www.okx.com/api/v5/public/funding-rate-history?instId={oc}-USDT-SWAP&limit={lim("funding.okx", 100)}')
             if str(d.get('code')) != '0':
                 raise ValueError(f"okx {d.get('code')}: {d.get('msg')}")
-            put('funding.okx', _yearly((r['fundingTime'], float(r['realizedRate'] or r['fundingRate'])) for r in d['data']))
+            put('funding.okx', yearly((r['fundingTime'], float(r['realizedRate'] or r['fundingRate'])) for r in d['data']))
         source(['funding.okx'], okx_funding)
     funding()
 

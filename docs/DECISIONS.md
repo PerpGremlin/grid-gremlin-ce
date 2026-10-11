@@ -849,6 +849,18 @@ stands unless the owner corrects it.
   found pausing a grid in wild hours cost more than it saved — the look
   must show otherwise before a row opts in.
 
+- **D91 — One system, three surfaces, one data layer (2026-10-11).** After
+  a repository map and a bug hunt by two agents, the step back proposed a
+  shape: a shared **Data** layer (`ggdata/`, every public fetcher, the
+  collectors, the streams, the hidden model) under a private **Desk** (the
+  engine, `gridgremlin/`, and the panel, growing into the webapp) and a
+  public **Showcase** (`showcase/`: show mode, then the data site), with
+  pure helpers in `common/`. Imports point one way — the showcase never
+  reaches the engine or a key. Six steps in order: the bugs, one of each
+  duplicate, the panel split, the data layer lifted out, the repo tidied,
+  the showcase. The owner: *"yes to the shape, order and names, go ahead."*
+  `docs/ARCHITECTURE.md` is the reference.
+
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
 inline above.*
