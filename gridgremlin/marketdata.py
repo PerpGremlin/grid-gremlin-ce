@@ -35,6 +35,10 @@ SERIES = {
     'depth.binance': ('book depth within 1% of the mid', 'USD'),
     'imbalance.bybit': ('book imbalance, bids − asks over both', 'share'),
     'imbalance.binance': ('book imbalance, bids − asks over both', 'share'),
+    'funding.bybit': ('funding, a year, paid by longs', 'apr'),
+    'funding.bybit_inverse': ('funding, a year, paid by longs', 'apr'),
+    'funding.binance': ('funding, a year, paid by longs', 'apr'),
+    'funding.okx': ('funding, a year, paid by longs', 'apr'),
 }
 
 BYBIT = 'https://api.bybit.com/v5/market'
@@ -47,6 +51,18 @@ OKX_NAME = {'XAUT': 'XAU'}        # OKX trades gold itself, not Tether's token; 
 def _share(ratio):
     """A long/short ratio as the share long."""
     return ratio / (1.0 + ratio) if ratio is not None and ratio >= 0 else None
+
+
+def _yearly(points):
+    """Funding settlements [(ms, rate)] as yearly rates: each rate times the
+    settlements a year at that market's own interval (8 h, 4 h, 1 h). The
+    times land on the hour (Binance stamps a few milliseconds past)."""
+    pts = sorted((int(t) // 60_000 * 60_000, r) for t, r in points)
+    out = []
+    for i, (t, r) in enumerate(pts):
+        step = (pts[i + 1][0] - t) if i + 1 < len(pts) else (t - pts[i - 1][0]) if i else 8 * H
+        out.append((t, r * (365 * 86_400_000 / step) if step > 0 else None))
+    return out
 
 
 def _okx(fetch, url, pause):
@@ -168,6 +184,31 @@ def fetch_coin(fetch, coin, have, now, pause=time.sleep):
         def one(name=name, url=url, value=value):
             put(name, [(int(r[0]), value(r)) for r in _okx(fetch, url, pause)])
         source([name], one)
+
+    def funding():
+        for cat, sym_, name in (('linear', sym, 'funding.bybit'), ('inverse', f'{coin}USD', 'funding.bybit_inverse')):
+            def one(cat=cat, sym_=sym_, name=name):
+                d = fetch(f'{BYBIT}/funding/history?category={cat}&symbol={sym_}&limit={lim(name, 200)}')
+                if d.get('retCode', 0) != 0:
+                    raise ValueError(f"bybit {d.get('retCode')}: {d.get('retMsg')}")
+                put(name, _yearly((r['fundingRateTimestamp'], float(r['fundingRate'])) for r in d['result']['list']))
+            source([name], one)
+
+        def binance_funding():
+            d = fetch(f'{BINANCE_F}/fapi/v1/fundingRate?symbol={sym}&limit={lim("funding.binance", 200)}')
+            if not isinstance(d, list):
+                raise ValueError(f'binance: {d}')
+            put('funding.binance', _yearly((r['fundingTime'], float(r['fundingRate'])) for r in d))
+        source(['funding.binance'], binance_funding)
+
+        def okx_funding():
+            pause(0.3)
+            d = fetch(f'https://www.okx.com/api/v5/public/funding-rate-history?instId={oc}-USDT-SWAP&limit={lim("funding.okx", 100)}')
+            if str(d.get('code')) != '0':
+                raise ValueError(f"okx {d.get('code')}: {d.get('msg')}")
+            put('funding.okx', _yearly((r['fundingTime'], float(r['realizedRate'] or r['fundingRate'])) for r in d['data']))
+        source(['funding.okx'], okx_funding)
+    funding()
 
     for venue in ('bybit', 'binance'):            # the book has no history: a point an hour from now on
         def book(venue=venue):

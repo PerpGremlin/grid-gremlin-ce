@@ -15,7 +15,7 @@ SPANS = (('24h', '24 hours', 1), ('7d', '7 days', 7), ('30d', '30 days', 30))
 VENUE_COLOUR = {'bybit': 'var(--wild)', 'binance': 'var(--calm)', 'okx': 'var(--s3)'}
 VENUE_WORD = {'bybit': 'Bybit', 'binance': 'Binance', 'okx': 'OKX',
               'binance_accounts': 'Binance, by accounts', 'binance_positions': 'Binance, by position size',
-              'okx_positions': 'OKX, by position size'}
+              'okx_positions': 'OKX, by position size', 'bybit_inverse': 'Bybit inverse'}
 
 # (heading, the series on it, how it is drawn, what it says)
 CHARTS = (
@@ -31,6 +31,9 @@ CHARTS = (
      'Market orders that crossed the spread each hour on the perpetuals: aggressive buying above the line, selling below.'),
     ('spot net flow, taker buys − sells', ('spot.binance', 'spot.okx'), 'bars',
      'The same on spot: real coins bought or sold aggressively. Spot leading the perpetuals is demand; the perpetuals alone is leverage.'),
+    ('funding, a year, paid by longs', ('funding.bybit', 'funding.bybit_inverse', 'funding.binance', 'funding.okx'), 'lines',
+     'What longs paid shorts at each settlement, as a yearly rate (negative: shorts paid longs). The carry trade earns it on '
+     'the short; a grid long pays it. Bybit\'s inverse dashed.'),
     ('bid–ask spread', ('spread.bybit', 'spread.binance'), 'lines',
      'The gap between the best bid and ask, in hundredths of a percent. Recorded hourly from the first reading.'),
     ('book depth within 1% of the mid', ('depth.bybit', 'depth.binance'), 'lines',
@@ -55,6 +58,8 @@ def _fmt(v, unit):
         return f'{v:.1%}'
     if unit == '%':
         return f'{v:+.3f}%'
+    if unit == 'apr':
+        return f'{v * 100:+.1f}%/yr'
     if unit == 'bps':
         return f'{v:.2f}'
     return f'{v:,.4g}'
@@ -76,7 +81,7 @@ def chart(lines, price, t0, t1, kind, unit):
     lo, hi = min(pts), max(pts)
     if kind == 'share':
         lo, hi = min(lo, 0.5), max(hi, 0.5)
-    if kind in ('bars', 'share0') or unit == '%':
+    if kind in ('bars', 'share0') or unit in ('%', 'apr'):
         lo, hi = min(lo, 0.0), max(hi, 0.0)
     if hi == lo:
         hi, lo = hi + (abs(hi) or 1) * 0.01, lo - (abs(lo) or 1) * 0.01
@@ -90,7 +95,7 @@ def chart(lines, price, t0, t1, kind, unit):
         return PAD_Y + (hi - v) / (hi - lo) * ph
 
     out = []
-    mid = 0.5 if kind == 'share' else 0.0 if (kind in ('bars', 'share0') or unit == '%') else None
+    mid = 0.5 if kind == 'share' else 0.0 if (kind in ('bars', 'share0') or unit in ('%', 'apr')) else None
     if mid is not None and lo <= mid <= hi:
         out.append(f'<line x1="{PAD_L}" x2="{W - PAD_R}" y1="{y(mid):.1f}" y2="{y(mid):.1f}" '
                    'stroke="var(--line)" stroke-dasharray="4 3"/>')
@@ -116,7 +121,7 @@ def chart(lines, price, t0, t1, kind, unit):
             elif s:
                 out.append(f'<polyline fill="none" stroke="{VENUE_COLOUR.get(_venue(name).split("_")[0], "var(--fg)")}" '
                            f'stroke-width="1.6" vector-effect="non-scaling-stroke"'
-                           + (' stroke-dasharray="5 3"' if name.endswith('accounts') else '')
+                           + (' stroke-dasharray="5 3"' if name.endswith(('accounts', 'inverse')) else '')
                            + ' points="' + ' '.join(f'{x(t):.1f},{y(v):.1f}' for t, v in s) + '"/>')
     out.append(f'<text x="{PAD_L - 6}" y="{PAD_Y + 4}" text-anchor="end" class="ax">{_fmt(hi, unit)}</text>'
                f'<text x="{PAD_L - 6}" y="{H - PAD_Y + 4}" text-anchor="end" class="ax">{_fmt(lo, unit)}</text>')
