@@ -33,6 +33,7 @@ does) and `docs/SPEC.md` (why it is pinned that way).
 | `grid-gremlin3-demo`, `grid-gremlin3-hl` | the fleets (one per fleet file) | `Restart=always`; an `OnFailure` page after repeated failure |
 | `grid-gremlin3-<fleet>-watchdog.timer` | every 5 min: staleness, margin, equity, drawdown, disk; pings the dead-man | its own `-failed` page; the dead-man alarms outside |
 | `gg-panel` | the panel | restart it; nothing trades through it |
+| `grid-gremlin3-show.timer`, `-showcase` | every 15 min the show file (an allowlist, D86); the public page on 127.0.0.1:41950, read-only, started only by the owner | the page goes stale and says its age |
 | `grid-gremlin3-phone` | the Telegram reading commands | restart it; nothing else depends on it |
 | `grid-gremlin3-fills.timer` | hourly: the kept ledger | the panel's kept history goes stale |
 | `grid-gremlin3-logrotate.timer` | hourly: rotation, then archive compression | the disk alarm catches it |

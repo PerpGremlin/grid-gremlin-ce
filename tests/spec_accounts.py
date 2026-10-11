@@ -135,7 +135,7 @@ def spec_U55_a_fleet_names_itself_for_the_dash():
     one the venue and the file's environment word, as before."""
     import tempfile
     from pathlib import Path
-    from panel.server import fleet_label
+    from gridgremlin.config import fleet_label
     assert validate_fleet({'bots': [ROW], 'label': 'Bybit demo subaccount 1'})['label'] == 'Bybit demo subaccount 1'
     assert validate_fleet({'bots': [ROW]})['label'] is None
     for bad in ('', '   ', 'x' * 41, 7):

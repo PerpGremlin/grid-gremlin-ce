@@ -16,7 +16,7 @@ from panel.chart import _f
 
 from .css import CSS
 from .reference import KEY, TRADING
-from .strip_view import contract_tiers
+from gridgremlin.report import contract_tiers
 from .html_bits import named, refusal_box, tidy
 from .render import render
 from .forms import BACK, FORM, next_step_html, other_half_html, other_side_html, rehearse_bot_form, unit_for_fleet, unit_refusal, verdict, waiting_for_restart

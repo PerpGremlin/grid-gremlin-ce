@@ -25,31 +25,15 @@ from .reference import (KEEP_JS, KEY, STATE_WORDS, TRADING)  # noqa: F401
 from .table import COLS, section
 from .html_bits import REFRESH_S, WATCHDOG_OFF_S, _day, _num_cls, coin_of, money, named, refusal_box, tidy, units_of
 from .nav import SIZE_VIEWS, VIEWS, grouped, nav_panel
-from .strip_view import TIER_NAMES, contract_tiers, exchange_leverage, exchange_since_first, hero_strip, tier_badge, venue_money
+from gridgremlin.report import contract_tiers
+from .strip_view import TIER_NAMES, exchange_leverage, exchange_since_first, hero_strip, tier_badge, venue_money
 from .card import _plain_name, _side_tag, card, holding_html, kind_line, ladder_box, orders_line, pnl_parts, settle, since_first_line, since_first_total, state_tag
 from .fleet_bits import _row_note, setup_button, sweep_html, sweep_note, windows_html
 from .render import cards_section, render
 from .drawings import strip  # noqa: F401
 from .forms import (BACK, FORM, curve_svg, next_step_html, other_half_html, other_side_html, rehearse_bot_form, rehearse_form, unit_for_fleet, unit_refusal, verdict, waiting_for_restart)  # noqa: F401
 from .routes import (CACHE_TTL_S, Handler)  # noqa: F401
-
-def fleet_label(f):
-    """U55: the dash's name for a fleet — the file's own `label` when it
-    carries one (the owner: "bybit demo subaccount 1"), else the venue and
-    the file stem's environment word."""
-    stem = Path(f).stem.replace('fleet.', '')
-    try:
-        raw = json.loads(Path(f).read_text())
-        if raw.get('label'):
-            return str(raw['label']).strip()
-        bots = raw.get('bots') or []
-        venue = bots[0].get('venue', 'bybit') if bots else None
-    except (OSError, ValueError, AttributeError):
-        venue = None
-    if not venue:
-        return stem
-    return f"{venue} {stem.split('.')[-1]}"
-
+from gridgremlin.config import fleet_label
 
 def main(argv):
     if '--hours' in argv:
