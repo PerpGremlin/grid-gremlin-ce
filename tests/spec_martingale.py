@@ -306,3 +306,48 @@ def spec_D41_the_round_limit_is_counted_from_a_stated_moment():
     _refused(dict(row, repeat=False, max_rounds=5,
                   max_rounds_since='2026-10-02T14:30:00Z'),
              "without 'repeat'")
+
+
+def spec_D89_a_dca_may_size_its_orders_in_coins():
+    """The last 3Commas mechanic, granted 2026-10-11: a DCA's orders sized in
+    the coin (`size_in: coin`) — the base and safety sizes are coins, the
+    multiplier grows the coins. Quote stays the default. The capital check
+    moves to the round's open (coins have no price at validation); an
+    inverse market counts $1 contracts, so coins × price. The panel's form
+    carries the key, so an edit never reads coins as money."""
+    from gridgremlin.adapters import InverseAdapter
+    from gridgremlin.ladder import ladder_fits, ladder_summary, order_qty
+    q = _cfg()
+    assert q['size_in'] == 'quote' and q['ladder_total_notional'] == 1000.0 + 1000.0 * (1 + 2 + 4)
+    _refused(dict(strategy='martingale', market_type='linear', symbol='BTCUSDT', side='long', capital=1000.0,
+                  base_order_size=0.01, safety_order_size=0.01, deviation_pct=0.01, max_averaging_orders=2,
+                  take_profit_avg_pct=0.01, size_in='coins'), "'size_in' is quote or coin")
+    c = _cfg(base_order_size=0.01, safety_order_size=0.02, size_in='coin')       # 0.01 + 0.02·(1+2+4) = 0.15 BTC
+    assert c['size_in'] == 'coin' and abs(c['ladder_total_coins'] - 0.15) < 1e-12 and c['ladder_total_notional'] is None
+    assert order_qty(c, ADAPTER, 0.0234, 80000.0) == 0.023                          # coins, floored to the step
+    assert order_qty(q, ADAPTER, 1000.0, 80000.0) == 0.012                          # quote: 1000 / 80000, floored
+    orders = plan_martingale(c, ADAPTER, 80000.0, 80000.0)
+    assert [o['qty'] for o in orders] == [0.02, 0.04, 0.08]                         # the multiplier grows the coins
+    # the capital at the round's open: 10,000 notional (1,000 at 10x) carries 0.15 BTC up to ~66,667
+    assert ladder_fits(c, 60000.0) and not ladder_fits(c, 70000.0) and ladder_fits(q, 1e9)
+    inv = InverseAdapter({'symbol': 'BTCUSD', 'qty_step': 1.0, 'price_tick': 0.5, 'min_qty': 1.0,
+                          'settle_coin': 'BTC'})
+    assert order_qty({'size_in': 'coin'}, inv, 0.01, 80000.0) == 800.0             # $1 contracts = coins × price
+    # (a DCA row is linear or spot today; the inverse case is ready if that widens)
+    # the summary: equal coins at each step average at the coin-weighted price
+    eq = _cfg(base_order_size=0.01, safety_order_size=0.01, order_size_multiplier=1.0, deviation_step_multiplier=1.0,
+              size_in='coin')
+    rows = ladder_summary(eq)
+    prices = [1.0 - 0.01 * i for i in range(4)]
+    assert abs(rows[-1]['avg_pct'] - (sum(prices) / 4 - 1.0)) < 1e-12
+    # the panel's form carries it: an edit through the form keeps the coins coins
+    from panel.setup import bot_from_form, form_from_bot
+    row = {k: v for k, v in dict(strategy='martingale', market_type='linear', symbol='BTCUSDT', side='long',
+                                 capital=1000.0, leverage=10, base_order_size=0.01, safety_order_size=0.02,
+                                 order_size_multiplier=2.0, deviation_pct=0.01, max_averaging_orders=3,
+                                 take_profit_avg_pct=0.01, size_in='coin').items()}
+    back = bot_from_form(form_from_bot(row), 'bybit')
+    assert back.get('size_in') == 'coin' and back['base_order_size'] == 0.01
+    import inspect
+    from gridgremlin import bot_round
+    assert 'ladder_fits(cfg, truth' in inspect.getsource(bot_round)                # the round asks before it opens

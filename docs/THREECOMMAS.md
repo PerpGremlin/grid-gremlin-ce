@@ -235,7 +235,7 @@ available, V2 continues to receive updates."*
 |---|---|---|
 | base order + independent first safety order | one "amount per trade"; **DCA Mode** position-averaging (SO1 = base, scaling from SO2) or order-averaging (scaling from SO1) | M2 keeps both sizes independent — the classic degree of freedom, keep it |
 | max safety orders excludes the base; max **active** SOs on the book | "Max DCA Orders" **includes** the base order; active cap gone | keep M2's counting and the window |
-| quote-sized orders | **fixed coin amount or fixed order value** | a sizing mode, cheap; add to item 12 |
+| quote-sized orders | **fixed coin amount or fixed order value** | **built, D89** (`size_in: coin`, 2026-10-11) |
 | TP % from average, or fixed $ profit from base; up to 4 targets; trailing TP | single TP; entry-based TP is now a **fixed price**; multi-TP and trailing TP removed from DCA (the Signal Bot keeps 10) | keep M10/M11 |
 | SL from base; timeout; native on-exchange SL for futures | SL market on ask touch; **timeout removed; on-exchange SL custody removed** | do not copy |
 | move-to-breakeven after TP1 | **activation % and execution %** ("SL to $1,020 after a 3 % gain, accounting for fees") | copy into item 2: the breakeven ladder gets an activation and an execution offset |
@@ -259,7 +259,7 @@ position without a stop. Our X3 doctrine is the opposite and stays.
 "no activation, no stop" and "SL wins a tie" rules; (b) breakeven with
 activation % and execution %; (c) a global max-open-positions cap with refusal;
 (d) a bot-level $ TP/SL kill criterion on realized + unrealized; (e) fixed-coin
-vs fixed-value averaging; (f) the Mid price as the reversal grid's knob; (g) the
+vs fixed-value averaging (built 2026-10-11, D89); (f) the Mid price as the reversal grid's knob; (g) the
 summary box in the readout. **What not to copy:** server-side market exits, the
 30 % hard-coded trail, the base-inclusive order count, the removal of the
 active-SO cap and of the first safety order's own size.

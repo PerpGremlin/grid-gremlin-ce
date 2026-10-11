@@ -181,8 +181,12 @@ MARTINGALE = {
          'restate from now'),
     ],
     'The orders': [
+        ('size_in', 'size_in', 'choice:quote|coin', 'Order sizes in',
+         'quote = the money each order spends (the default); coin = the coins '
+         'each order buys (D89)'),
         ('base_order_size', 'base_order_size', 'num', 'First order size',
-         'in the quote currency, leverage included'),
+         'in the quote currency, leverage included — or in coins when sizes '
+         'are in coin'),
         ('start_order_type', 'start_order_type', 'choice:market|maker',
          'How the first order goes in',
          'market = at once; maker = waits at the best price to pay the '
@@ -786,12 +790,15 @@ def sentence(cfg, mark=None):
                  else 'waiting at the best price to pay the lower fee')
         parts = [
             f"This bot {'buys' if long else 'sells'} {cfg['symbol']} in "
-            f"steps. It opens with {_m(cfg['base_order_size'])}, {entry}.",
+            f"steps. It opens with "
+            + (f"{cfg['base_order_size']:g} coins" if cfg.get('size_in') == 'coin'
+               else _m(cfg['base_order_size'])) + f", {entry}.",
             f"Each time the price {'falls' if long else 'rises'} further "
             f"it adds to the position: up to {n} more orders, the first "
             f"after a {cfg['deviation_pct']:.2%} move, covering a move of "
-            f"about {depth:.1%} in all, {_m(cfg['ladder_total_notional'])} "
-            'in total.',
+            f"about {depth:.1%} in all, "
+            + (f"{cfg['ladder_total_coins']:g} coins" if cfg.get('size_in') == 'coin'
+               else _m(cfg['ladder_total_notional'])) + ' in total.',
             money]
         tr = cfg.get('take_profit_tranches')
         if tr:
@@ -897,7 +904,7 @@ _MINIMAL_BLOCKS = {'slide': {'trigger_rungs': 1, 'max_rungs': 1,
                              'confirm_seconds': 0},
                    'stop': {'watch': 'mark_price', 'level': 50}}
 _DERIVED = {'spacing_pct', 'venue', 'strategy', 'ladder_notional',
-            'ladder_total_notional', 'max_rounds_since_ms', 'max_loss_since_ms',
+            'ladder_total_notional', 'ladder_total_coins', 'max_rounds_since_ms', 'max_loss_since_ms',
             'holding_since_ms'}
 
 

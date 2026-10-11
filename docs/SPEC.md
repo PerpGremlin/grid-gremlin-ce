@@ -304,7 +304,10 @@ eventually pin (T1).
   order-size multiplier (of the previous order), `deviation`,
   `deviation_step_multiplier`, `max_averaging_orders` — and the validator expands the
   full series, refusing any ladder whose total exceeds `capital`, stating the number in
-  the error. *(D11)*
+  the error. *(D11)* With `size_in: coin` (D89) the sizes are coins and the
+  multiplier grows the coins; the capital check moves to the round's open, at
+  the mark — a ladder the capital cannot carry there waits, said once. The
+  panel's form carries the key.
 - **M3** A round is never without an exit: the whole-position TP is set before the
   round rests, and a target the market has run through closes at the target or better
   via reduce-only marketable limit. *(the stale-target incident)*
