@@ -575,6 +575,32 @@ def spec_H2_an_inverse_legs_funding_lands_in_the_book_as_coins_a_linear_legs_as_
     assert any(o[1] == 'BTCUSD' and o[2] == 'Sell' for o in venue.orders[4:]) or bot.row['last_tick_ms']
 
 
+def spec_H2_funding_is_re_read_across_the_overlap_and_counted_once():
+    """The watermark read funding from the last cycle on: a settlement the
+    venue wrote a few minutes late was never counted, and a venue that
+    returns the boundary on both reads counted it twice (review 2026-10-11)."""
+    venue, lines, clock = _venue(), [], Clock()
+    venue.t_ms = int(clock.t * 1000)
+    venue.funding_history = lambda mt, sym, since, now: [      # both ends, as Bybit's are
+        f for f in venue.funding if f['symbol'] == sym and since <= f['time_ms'] <= now]
+    bot, _ = _bot(venue, lines, clock=clock)
+    bot.cycle()
+    clock.t += 8 * 3600; venue.t_ms = int(clock.t * 1000)
+    venue.pay_funding('BTCUSD', 0.01)                            # at the cycle's own instant
+    venue.coins['BTC'] += 0.01
+    bot.cycle()
+    once = bot.row['coins']['BTC']
+    clock.t += 60; venue.t_ms = int(clock.t * 1000)
+    venue.funding.append({'time_ms': venue.t_ms - 120_000, 'symbol': 'BTCUSD',
+                          'side': 'sell', 'amount': 0.002})     # written late, before the watermark
+    venue.coins['BTC'] += 0.002
+    bot.cycle()
+    assert abs(bot.row['coins']['BTC'] - (once + 0.002)) < 1e-12, 'late settlement missed or boundary twice'
+    clock.t += 60; venue.t_ms = int(clock.t * 1000)
+    bot.cycle()
+    assert abs(bot.row['coins']['BTC'] - (once + 0.002)) < 1e-12, 'counted again on the re-read'
+
+
 def spec_H2_the_spot_quote_names_the_legs_and_a_buys_fee_is_shaved_from_the_coins():
     from gridgremlin.portfolio import leg_markets
     cfg = validate_config(dict(ROW, spot_quote='USDC'))
@@ -719,6 +745,57 @@ def spec_H1_a_levered_row_buys_on_the_venues_loan_and_carries_it_as_negative_cas
     assert any("leverage 1.5× → 1×" in ln for ln in lines) and len(venue.orders) > n
     sells = [o for o in venue.orders[n:] if o[0] == 'spot' and o[2] == 'Sell']
     assert sells and abs(sum(o[3] * venue.marks[o[1]] for o in sells) - 50000.0) < 100.0   # the loan repaid
+
+
+def spec_H2_a_borrowing_rows_cash_leaves_out_its_siblings_and_its_linear_trades():
+    """The owner (2026-10-11, demo): a borrowing row's cash is the account's
+    quote balance — carry counted its two BTC grids' realised as its own.
+    The venue's cash log, by market, keeps the siblings' apart, and the
+    row's linear trades (in their books already) apart too; the card says
+    it shares margin."""
+    venue, lines, clock = _venue(), [], Clock()
+    venue.t_ms = int(clock.t * 1000)
+    venue.coins['USDT'] = 100000.0                    # the row's capital is the account's
+    venue.log = []
+    venue.cash_log = lambda coin, since, now: [r for r in venue.log if since <= r['time_ms'] <= now]
+
+    def moved(symbol, category, change, kind='TRADE'):
+        venue.log.append({'id': f'x{len(venue.log)}', 'time_ms': venue.t_ms, 'symbol': symbol,
+                          'category': category, 'type': kind, 'change': change})
+        venue.coins['USDT'] += change
+    legs = _legs()
+    legs['hedge']['ETH'] = {'market_type': 'linear', 'symbol': 'ETHUSDT', 'adapter': LIN['ETH']}
+    bot, _ = _bot(venue, lines, clock=clock, legs=legs,
+                  row={'capital': 100000, 'spot_borrow': True, 'margin': {'spot_leverage': 1.5},
+                       'assets': [{'coin': 'BTC', 'weight': 0.75}, {'coin': 'ETH', 'weight': 0.75}],
+                       'hedge': {'BTC': {'product': 'inverse'}, 'ETH': {'product': 'usdt'}},
+                       'risk': {'max_weight': 0.75}})
+    bot.siblings = 2
+    bot.cycle()
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    bot.cycle()
+    cash0, value0 = bot.row['cash'], bot.portfolio_view['value']
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    moved('BTCUSDT', 'linear', 500.0)                 # a sibling grid's trip
+    moved('SOLUSDT', 'linear', -40.0, 'SETTLEMENT')   # another sibling's funding
+    moved('ETHUSDT', 'linear', 300.0)                 # the row's own linear trade
+    moved('', '', -10.0, 'INTEREST')                  # the loan's: the row's
+    bot.cycle()
+    assert abs(bot.row['others_cash'] - 460.0) < 1e-9 and abs(bot.row['linear_cash'] - 300.0) < 1e-9
+    assert abs(bot.row['cash'] - (cash0 - 10.0)) < 1e-6, bot.row['cash'] - cash0
+    assert abs(bot.portfolio_view['value'] - (value0 - 10.0)) < 1.0
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    bot.cycle()                                       # the overlap re-reads them: counted once
+    assert abs(bot.row['others_cash'] - 460.0) < 1e-9 and abs(bot.row['cash'] - (cash0 - 10.0)) < 1e-6
+    v = bot.portfolio_view
+    assert v['siblings'] == 2 and v['others_cash'] == 460.0
+    import copy
+    from spec_portfolio_view import CONTRACT
+    from panel.render import cards_section
+    c = copy.deepcopy(CONTRACT)
+    assert 'shares margin' not in cards_section(0, 'demo', c)
+    c['watchdog']['belief']['bots']['pfocarry']['portfolio'].update(siblings=2, others_cash=460.0)
+    assert 'shares margin with 2 bots (their cash +460.00 USDT, not this row' in cards_section(0, 'demo', c)
 
 
 def spec_H4_contributions_move_the_anchor_so_the_total_counts_only_what_the_book_made():

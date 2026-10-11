@@ -8,7 +8,7 @@ from .reference import KEEP_JS
 from .card import card, pnl_parts
 from .drawings import equity_boxes
 from .fleet_bits import sweep_note
-from .html_bits import REFRESH_S, _num_cls
+from .html_bits import REFRESH_S, _num_cls, esc
 from .nav import VIEWS, grouped, nav_panel
 from .results import agent_box
 from .strip_view import exchange_leverage, exchange_mmr, exchange_since_first, hero_strip, portfolio_total, tier_badge, venue_money
@@ -28,14 +28,14 @@ def cards_section(idx, label, contract, view='all', scripted=True):
               if b['unreal_at_mark'] is not None]
     total = sum(card_total(b) for b in live) + portfolio_total(contract)    # H6
     cards = '</div><div class="cards">'.join(
-        (f'<div class="grp">{title}</div>' if title else '')
+        (f'<div class="grp">{esc(title)}</div>' if title else '')
         + ''.join(card(idx, botid, b, contract, belief)
                   for botid, b in rows)
         for title, rows in grouped(contract, view))
     # U45: the exchange's money in a box of its own, under its name
     # U59: one link beside the count folds or opens this account's cards
     # alone; its word says which it will do next
-    return (f"<h1 id=\"fleet{idx}\">{label} {tier_badge(contract)} — {len(contract['bots'])} bots "
+    return (f"<h1 id=\"fleet{idx}\">{esc(label)} {tier_badge(contract)} — {len(contract['bots'])} bots "
             + (f'<a href="javascript:ggFoldIn({idx})" data-foldin="{idx}" class="tier">fold cards</a> '
                if scripted else '')               # an export has no script to run it
             +             f'{sweep_note(contract)} <span class="dim">(read {age}s ago; '

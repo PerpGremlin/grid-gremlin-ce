@@ -107,7 +107,10 @@ def spec_W2_the_window_shares_the_held_anchor():
 # --- B1: the naming rule, mechanically ---------------------------------------
 
 def spec_B1_deadband_appears_nowhere_in_the_engine():
-    for name in ('bot.py', 'ladder.py', 'window.py', 'apply.py', 'events.py'):
+    names = ['ladder.py', 'window.py', 'apply.py', 'events.py'] + sorted(
+        p.name for p in Path('gridgremlin').glob('bot*.py'))      # every bot file (D91)
+    assert 'bot_round.py' in names
+    for name in names:
         src = Path(f'gridgremlin/{name}').read_text()
         assert 'deadband' not in src, f'unqualified band word in {name}'
         assert 'hysteresis' not in src.replace('split_hysteresis_rungs', ''), (

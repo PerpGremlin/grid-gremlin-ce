@@ -4,7 +4,7 @@ import time
 from .card import _side_tag, settle
 from .drawings import strip
 from .fleet_bits import sweep_note
-from .html_bits import REFRESH_S, money
+from .html_bits import REFRESH_S, esc, money, qarg
 from .nav import grouped
 from .strip_view import tier_badge
 
@@ -30,7 +30,7 @@ def section(idx, label, contract, view='all'):
         ordered += members
     for botid, b in ordered:
         if botid is None:                      # U12: a group's heading row
-            rows.append(f'<tr><th colspan="15" class="grp">{b}</th></tr>')
+            rows.append(f'<tr><th colspan="15" class="grp">{esc(b)}</th></tr>')
             continue
         if b is None:
             # no fills in the window — the engine's own belief fills in,
@@ -48,7 +48,7 @@ def section(idx, label, contract, view='all'):
                       f'{ceil0:,.4g}</td>' if ceil0
                       else '<td class="dim">no limit</td>')
             rows.append(
-                f'<tr><td>{_side_tag(botid)}{botid}</td>'
+                f'<tr><td>{_side_tag(botid)}{esc(botid)}</td>'
                 f'<td class="{cls}">{state}</td>'
                 f'<td class="dim">0</td><td class="dim">no fills</td>'
                 f'<td class="dim">—</td><td class="dim">—</td>'   # D63
@@ -59,10 +59,10 @@ def section(idx, label, contract, view='all'):
                   '<td class="dim">—</td><td class="dim">—</td>'
                   '<td class="dim">—</td>'
                 + watch0
-                + f"<td class='dim'><a href='/edit?fleet={idx}&amp;bot={botid}'>"
-                  f"edit</a> <a href='/edit?fleet={idx}&amp;bot={botid}"
+                + f"<td class='dim'><a href='/edit?fleet={idx}&amp;bot={qarg(botid)}'>"
+                  f"edit</a> <a href='/edit?fleet={idx}&amp;bot={qarg(botid)}"
                   f"&amp;mode=remove'>remove</a> "
-                  f"<a href='/setup?fleet={idx}&amp;copy={botid}'>copy</a>"
+                  f"<a href='/setup?fleet={idx}&amp;copy={qarg(botid)}'>copy</a>"
                   "</td></tr>")
             continue
         state = ('HOLDING' if abs(b['position']) > 1e-12 else 'FLAT')
@@ -88,7 +88,7 @@ def section(idx, label, contract, view='all'):
         else:
             edge = '<td class="dim">—</td><td class="dim">—</td>'
         rows.append(
-            f'<tr><td>{_side_tag(botid)}{botid}{note}</td>'
+            f'<tr><td>{_side_tag(botid)}{esc(botid)}{note}</td>'
             f'<td class="dim">{state}</td>'
             f"<td>{b['fills']}</td>{money(b['realized'])}"
             f"{money(b['fees'], cls=False)}{money(b.get('funding'))}"
@@ -96,12 +96,12 @@ def section(idx, label, contract, view='all'):
             f"{money(b['unreal_at_mark'])}{money(total)}"
             f"<td>{b['bought']:,.4g}</td><td>{b['sold']:,.4g}</td>"
             f"{edge}<td>{settle(b, floor)}</td>{watch}"
-            f"<td class='dim'><a href='/edit?fleet={idx}&amp;bot={botid}'>edit"
-            f"</a> <a href='/edit?fleet={idx}&amp;bot={botid}&amp;mode=remove'>"
-            f"remove</a> <a href='/setup?fleet={idx}&amp;copy={botid}'>copy</a>"
+            f"<td class='dim'><a href='/edit?fleet={idx}&amp;bot={qarg(botid)}'>edit"
+            f"</a> <a href='/edit?fleet={idx}&amp;bot={qarg(botid)}&amp;mode=remove'>"
+            f"remove</a> <a href='/setup?fleet={idx}&amp;copy={qarg(botid)}'>copy</a>"
             "</td></tr>")
     return f"""
-<h1 id="fleet{idx}">{label} {tier_badge(contract)} — last {contract['window_hours']:g}h {sweep_note(contract)}
+<h1 id="fleet{idx}">{esc(label)} {tier_badge(contract)} — last {contract['window_hours']:g}h {sweep_note(contract)}
 <span class="dim">(read {age}s ago; refreshes every {REFRESH_S}s)</span></h1>
 <div class="scroll"><table class="fleet">{COLS}
 <tr><th>bot</th><th>state</th><th>fills</th><th>realized</th>

@@ -85,8 +85,12 @@ What runs, from the inside out:
     nowhere else:
 
     ```
-    command="cd <repo> && python3 -m gridgremlin.agent_door configs/fleet.agent.json",no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding ssh-ed25519 <the agent's public key> agent
+    command="cd <repo> && python3 -m gridgremlin.agent_door configs/fleet.agent.json",restrict ssh-ed25519 <the agent's public key> agent
     ```
+
+    `restrict` turns off every forwarding, the pty and `~/.ssh/rc`, and
+    whatever OpenSSH adds later — a list of `no-*` options misses `rc` and
+    the future (the 2026-10-11 review).
 
     On the workstation, a host alias using that key; the supervised session
     then runs `ssh <alias> read` and `ssh <alias> 'intent {...}'`. The fleet

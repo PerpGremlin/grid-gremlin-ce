@@ -109,6 +109,7 @@ class PortfolioBot:
         self.margin_view = None
         self.orders_view = None
         self.portfolio_view = None
+        self.siblings = 0              # the fleet's other rows on this account (main sets it)
         self._next_read = 0.0
         self._warned = {}
         self._seq = 0
@@ -119,7 +120,7 @@ class PortfolioBot:
     def _fresh_row(self, now_ms):
         return {'since_ms': now_ms, 'anchor_value': None, 'last_tick_ms': None,
                 'cash': float(self.cfg['capital']), 'coins': {}, 'books': {},
-                'fills_to_ms': now_ms, 'seen': [], 'funding_to_ms': now_ms,
+                'fills_to_ms': now_ms, 'seen': [], 'funding_to_ms': now_ms, 'funding_seen': [],
                 'funding': [], 'funding_total': 0.0, 'parked': {}, 'unwound': {},
                 'delevered': 0, 'spent': 0.0, 'tilt_pnl': 0.0, 'last_px': {},
                 'regime_seen': {}, 'terms_seen': self._terms(),
@@ -308,11 +309,23 @@ class PortfolioBot:
         feeds the funding rule; the carry line counts quote."""
         row = self.row
         got = 0.0
+        # re-read across the overlap like the fills, deduped by settlement:
+        # a late-written settlement was missed and a boundary one counted
+        # twice (the 2026-10-11 review). A row from before the list re-reads
+        # nothing it may already have counted, once.
+        since = row['funding_to_ms'] - (OVERLAP_MS if 'funding_seen' in row else 0)
+        seen = set(row.setdefault('funding_seen', []))
+        fresh = []
         for kind in ('hedge', 'short'):
             for coin, leg in self.legs[kind].items():
                 inverse = leg['market_type'] == 'inverse'
                 for f in self._funding_rows(leg['market_type'], leg['symbol'],
-                                            row['funding_to_ms'], now_ms):
+                                            since, now_ms):
+                    key = f.get('exec_id') or f"{f.get('symbol')}:{f['time_ms']}"
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    fresh.append(key)
                     amt = float(f['amount'])
                     if inverse:
                         if kind == 'hedge':
@@ -329,6 +342,7 @@ class PortfolioBot:
         row['funding_total'] += got
         row['cash'] += got
         row['funding_to_ms'] = now_ms
+        row['funding_seen'] = (row['funding_seen'] + fresh)[-400:]
 
     def _settle_interest(self, now_ms):
         """H4: what the loan cost since the watermark, from the venue's own
@@ -351,6 +365,54 @@ class PortfolioBot:
                 row['borrow_apr'] = r['hourly_rate'] * 8760.0
         if rows:
             row['interest_to_ms'] = max(row['interest_to_ms'], max(r['time_ms'] for r in rows))
+
+    def _settle_others(self, now_ms):
+        """The owner's answer (2026-10-11, demo): a borrowing row's cash IS
+        the account's quote balance, so it carried every sibling bot's
+        realised, fees and funding, and its own linear legs' realised a
+        second time beside their books. Both are read from the venue's cash
+        log by market and kept apart: `others_cash` (siblings), `linear_cash`
+        (the row's linear trades). A row from before the log counts from its
+        own start, said once. A venue without the log leaves both as they
+        are."""
+        log = getattr(self.client, 'cash_log', None)
+        row = self.row
+        if log is None or not self.cfg.get('margin'):
+            return
+        first = 'cash_log_to_ms' not in row
+        row.setdefault('others_cash', 0.0)
+        row.setdefault('linear_cash', 0.0)
+        row.setdefault('cash_log_seen', [])
+        since = row['since_ms'] if first else row['cash_log_to_ms'] - OVERLAP_MS
+        try:
+            rows = log(self.cfg.get('spot_quote', 'USDT'), since, now_ms)
+        except (VenueError, OSError):
+            return
+        own = {('spot', leg['symbol']) for leg in self.legs['spot'].values()}
+        linear = set()
+        for kind in ('hedge', 'short'):
+            for leg in self.legs[kind].values():
+                own.add((leg['market_type'], leg['symbol']))
+                if leg['market_type'] == 'linear':
+                    linear.add(leg['symbol'])
+        seen, fresh = set(row['cash_log_seen']), []
+        for r in rows:
+            if r['id'] in seen:
+                continue
+            seen.add(r['id'])
+            fresh.append(r['id'])
+            if not r['symbol']:
+                continue                     # the loan's interest, a transfer: the account's
+            if (r['category'], r['symbol']) not in own:
+                row['others_cash'] += r['change']
+            elif r['category'] == 'linear' and r['symbol'] in linear and r['type'] == 'TRADE':
+                row['linear_cash'] += r['change']        # in its book already
+        row['cash_log_seen'] = (row['cash_log_seen'] + fresh)[-400:]
+        row['cash_log_to_ms'] = now_ms
+        if first and (row['others_cash'] or row['linear_cash']):
+            self.notify.event('info', self.botid,
+                              f"cash apart from the row since it began: siblings {row['others_cash']:+,.2f}, "
+                              f"its linear trades {row['linear_cash']:+,.2f} — no longer counted as its own")
 
     def _funding_yield(self, held, prices, now_ms):
         """H4: the trailing funding to the shorts as a yearly yield on what
@@ -604,6 +666,7 @@ class PortfolioBot:
         self._settle_fills(now_ms)
         self._settle_funding(now_ms, prices)
         self._settle_interest(now_ms)
+        self._settle_others(now_ms)
         # the book, bounded by the wallet (D76): coins above the row's own are
         # not its; coins missing are gone whoever took them
         wcoins = {c: float((wallet.get('coins') or {}).get(c, {}).get('wallet_balance', 0.0))
@@ -614,6 +677,10 @@ class PortfolioBot:
         # paying from a sale instead — the carry fleet's second restart)
         quote = cfg.get('spot_quote', 'USDT')
         wq = float((wallet.get('coins') or {}).get(quote, {}).get('wallet_balance', 0.0))
+        if cfg.get('margin'):
+            # the balance, less what the siblings and the row's linear books
+            # put there (the owner, 2026-10-11)
+            wq -= row.get('others_cash', 0.0) + row.get('linear_cash', 0.0)
         if row['cash'] > wq + 1e-9:
             if wq >= 0 or not cfg.get('margin'):
                 self._say_once('cash', 'info', f"cash {row['cash']:,.2f} beyond the wallet's {wq:,.2f} {quote} "
@@ -824,6 +891,7 @@ class PortfolioBot:
             'anchor': basis_value, 'contributed': row['contributed'], 'last_tick_ms': row['last_tick_ms'],
             'next_tick_ms': ((row['last_tick_ms'] or now_ms)
                              + int(cfg['rebalance']['every_hours'] * 3_600_000)),
-            'delevered': row['delevered']}
+            'delevered': row['delevered'],
+            'siblings': self.siblings if cfg.get('margin') else 0, 'others_cash': row.get('others_cash', 0.0)}
         self.state.set(self.botid, row)
         return {'placed': placed, 'tick': plan['tick']} if (placed or plan['tick']) else None

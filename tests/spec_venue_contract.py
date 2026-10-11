@@ -18,8 +18,12 @@ HL_SPEC = hl.parse_instrument({'name': 'SOL', 'szDecimals': 2,
 def spec_A6_no_strategy_file_knows_the_second_venue_exists():
     # config.py is exempt: the VENUES enum is the declaration surface — the
     # one place a venue NAME belongs. Strategy and maths must never know.
-    for name in ('ladder.py', 'bot.py', 'apply.py', 'window.py',
-                 'adapters.py', 'backtest.py', 'events.py'):
+    # the bot is six files since D91: every one of them, by glob (the
+    # 2026-10-11 review: the list still named bot.py alone)
+    names = ['ladder.py', 'apply.py', 'window.py', 'adapters.py', 'backtest.py',
+             'events.py'] + sorted(p.name for p in Path('gridgremlin').glob('bot*.py'))
+    assert 'bot_round.py' in names and 'bot_stops.py' in names
+    for name in names:
         src = Path(f'gridgremlin/{name}').read_text()
         assert 'hyperliquid' not in src.lower(), f'{name} leaked the venue'
 
@@ -482,6 +486,30 @@ def spec_D63_bybit_funding_is_minus_the_fee_on_the_leg_it_charged():
     assert asked == ['Funding']
     assert [(f['side'], round(f['amount'], 8)) for f in got] == \
         [('buy', -0.01987096), ('sell', 0.00849528)]
+
+
+def spec_H2_bybit_cash_log_names_each_movements_market_and_pages_once():
+    """The transaction log as measured on the carry sub 2026-10-11: an id,
+    a market, a type and the change; a repeated id is one movement; the
+    cursor is followed and the window is the venue's seven days."""
+    from gridgremlin.exchange.bybit.truth import read_cash_log
+    pages = [{'list': [{'id': 'a', 'symbol': 'BTCUSDT', 'category': 'linear', 'type': 'TRADE',
+                        'change': '-1.5', 'transactionTime': '20'},
+                       {'id': 'b', 'symbol': '', 'category': '', 'type': 'INTEREST',
+                        'change': '-0.2', 'transactionTime': '10'}], 'nextPageCursor': 'n'},
+             {'list': [{'id': 'a', 'symbol': 'BTCUSDT', 'category': 'linear', 'type': 'TRADE',
+                        'change': '-1.5', 'transactionTime': '20'}], 'nextPageCursor': ''}]
+    asked = []
+
+    class C:
+        def get(self, path, params, signed=False):
+            asked.append((path, params.get('cursor'), params['currency'], signed))
+            return pages[len(asked) - 1]
+    got = read_cash_log(C(), 'USDT', 0, 1000)
+    assert asked == [('/v5/account/transaction-log', None, 'USDT', True),
+                     ('/v5/account/transaction-log', 'n', 'USDT', True)]
+    assert [(r['id'], r['symbol'], r['category'], r['type'], r['change']) for r in got] == \
+        [('b', '', '', 'INTEREST', -0.2), ('a', 'BTCUSDT', 'linear', 'TRADE', -1.5)]
 
 
 def spec_D63_bybit_funding_keeps_both_legs_of_one_settlement():

@@ -2,7 +2,7 @@
 from gridgremlin.report import contract_tiers, card_total
 from .card import since_first_total
 from .drawings import equity_svg
-from .html_bits import _num_cls, units_of
+from .html_bits import _num_cls, esc, units_of
 
 
 def exchange_leverage(contract):
@@ -107,7 +107,7 @@ def hero_strip(labelled):
         # the words' lengths (the owner: "so it looks squared")
         spark = equity_svg(((c.get('equity') or {}).get('24h')), 120, 18)       # U63
         lines.append(
-            f'<div class="fleet"><a href="#fleet{idx}">{label}</a>{tier_badge(c)}'
+            f'<div class="fleet"><a href="#fleet{idx}">{esc(label)}</a>{tier_badge(c)}'
             f'<span class="big num {_num_cls(total)}">{total:+,.2f} '
             f'<span class="dim">{venue_money(c)}</span></span>'
             f'<span class="dim num">{len(c["bots"])} bots</span>'

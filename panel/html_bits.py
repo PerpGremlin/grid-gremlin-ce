@@ -1,7 +1,21 @@
 """Small HTML pieces every page uses: a money cell, a number's colour, the tidy pass, a name, a refusal box, a bot's coin and units, the refresh constants. Out of render.py (D91 step 3)."""
 from gridgremlin.report import money_units
+import html
 import re
 import time
+import urllib.parse
+
+
+def esc(v):
+    """A name into a page as text or an attribute: a bot id, a symbol, a
+    fleet's label never becomes markup (the 2026-10-11 review)."""
+    return html.escape(str(v))
+
+
+def qarg(v):
+    """A name into a link's query: every reserved character encoded, which
+    also leaves nothing an attribute could break on."""
+    return urllib.parse.quote(str(v), safe='')
 
 
 REFRESH_S = 15          # the readout hits venue APIs: poll gently

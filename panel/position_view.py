@@ -1,7 +1,7 @@
 """One position's page (U56): the exchange's view first, then the price, then the full card. Out of render.py (D91 step 3)."""
 from .card import _plain_name, card
 from .drawings import price_boxes
-from .html_bits import REFRESH_S, coin_of, units_of
+from .html_bits import REFRESH_S, coin_of, esc, units_of
 
 
 def exchange_table(botid, b, belief, terms):
@@ -24,8 +24,8 @@ def exchange_table(botid, b, belief, terms):
     qty = None if pos is None else abs(pos)
     value = None if qty is None or not mark else (qty if inverse else qty * mark)
     fmt = ',.2f' if margin_coin in ('USDT', 'USDC', 'USD') else ',.6g'
-    rows = [('symbol', symbol), ('side', side.upper()),
-            ('size', f"{n(qty)} {'USD' if inverse else coin_of(botid)}"),
+    rows = [('symbol', esc(symbol)), ('side', side.upper()),
+            ('size', f"{n(qty)} {'USD' if inverse else esc(coin_of(botid))}"),
             ('value', f'{n(value, ",.2f")} {money_coin}'),
             ('entry price', n((b or {}).get('avg_cost') or None)),
             ('mark price', n(mark)),
@@ -58,6 +58,6 @@ def position_page(idx, label, botid, contract, belief, prices=None, fills=()):
         liq = ((belief.get(botid) or {}).get('margin') or {}).get('liq')
         xch += price_boxes(prices, rng, liq, fills)
     return (f'<meta name="gg-refresh" content="{REFRESH_S}">'      # U68: live, in place
-            f'<h1>{label} · {_plain_name(botid, contract, b) if (terms or {}).get("strategy") != "portfolio" else botid[3:] + " portfolio"}</h1>'
+            f'<h1>{esc(label)} · {esc(_plain_name(botid, contract, b) if (terms or {}).get("strategy") != "portfolio" else botid[3:] + " portfolio")}</h1>'
             f'{xch}<div class="cards one">{card(idx, botid, b, contract, belief, full=True)}</div>'
             '<p><a href="/">&larr; fleet</a></p>')

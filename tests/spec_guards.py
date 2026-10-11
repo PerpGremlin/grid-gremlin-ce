@@ -64,10 +64,14 @@ def spec_B3_sabotage_without_the_guard_the_cross_submits():
 
 
 def spec_B3_one_band_definition():
-    import inspect
-    import gridgremlin.bot as botmod
-    src = inspect.getsource(botmod)
-    assert 'guard_band' in src and 'CROSS_GUARD_BPS' not in src   # imported, not re-derived
+    from pathlib import Path
+    files = sorted(Path('gridgremlin').glob('bot*.py'))            # every bot file (D91)
+    assert any(f.name == 'bot_round.py' for f in files)
+    for f in files:
+        src = f.read_text()
+        assert 'CROSS_GUARD_BPS' not in src, f.name
+    placers = [f.name for f in files if 'guard_band(' in f.read_text().replace('guard_band,', '')]
+    assert {'bot.py', 'bot_round.py'} <= set(placers)             # imported, not re-derived
 
 
 # --- B4: the resting-exit exemption ------------------------------------------

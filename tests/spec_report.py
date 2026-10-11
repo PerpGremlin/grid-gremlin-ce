@@ -179,6 +179,22 @@ def spec_R2_an_inverse_book_realises_in_base_coin():
     assert abs(b['realized'] - 0.004) < 1e-9
 
 
+def spec_R2_an_inverse_basis_is_the_harmonic_mean():
+    """$1000 at 50,000 and $1000 at 100,000 buy 0.02 + 0.01 BTC: the entry
+    is 2000 / 0.03 = 66,666.67, not the arithmetic 75,000 — and closing at
+    the entry realises nothing (review 2026-10-11)."""
+    b = new_book()
+    apply_fill(b, 'buy', 50000.0, 1000, 0.0, inverse=True)
+    apply_fill(b, 'buy', 100000.0, 1000, 0.0, inverse=True)
+    assert abs(b['avg_cost'] - 2000 / 0.03) < 1e-6
+    apply_fill(b, 'sell', 2000 / 0.03, 2000, 0.0, inverse=True)
+    assert abs(b['realized']) < 1e-15
+    lin = new_book()                                  # linear stays arithmetic
+    apply_fill(lin, 'buy', 50000.0, 1.0, 0.0)
+    apply_fill(lin, 'buy', 100000.0, 1.0, 0.0)
+    assert lin['avg_cost'] == 75000.0
+
+
 def spec_R5_inverse_total_converts_to_quote_at_mark():
     b = new_book()
     apply_fill(b, 'buy', 50000.0, 1000, 0.0, inverse=True)

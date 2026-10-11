@@ -1041,7 +1041,9 @@ eventually pin (T1).
 - **R2** Per-bot profit is average-cost accounting over time-ordered fills: a reduce
   realises against the basis, a flip re-anchors at the flip price — in the
   contract's own PnL coin (A4): base for inverse, quote elsewhere. *(the
-  −121,570 phantom, 2026-08-05)*
+  −121,570 phantom, 2026-08-05)* An inverse basis is the contracts-weighted
+  harmonic mean, as the venue keeps it — arithmetic overstated a long's
+  entry and understated its realised. *(review 2026-10-11)*
 - **R3** Fills owned by no bot are reported in their own bucket, never dropped —
   external activity on the account must be visible. *(F6's other half; since
   R16 that bucket holds fills on no bot's exit side — hand entries, markets
@@ -1717,7 +1719,14 @@ that pins it (T1).
   in quote ("spend this much"), since the venue checks a coin-sized market
   buy at a buffered price and refuses one that spends nearly all the cash; (link-attributed, deduped
   by execution id across a re-read overlap) and the funding its shorts
-  received; coins are bounded by the wallet (D76). The book, the clock's
+  received (re-read across the same overlap, deduped by settlement — a
+  settlement the venue writes late is counted once, never missed;
+  *review 2026-10-11*); a borrowing row's cash is the account's quote
+  balance less what the venue's cash log shows its sibling bots moved and
+  less its own linear trades (in their books already), counted from the
+  row's start, deduped by entry; the card says it shares margin with N bots
+  and what their cash came to (the owner, 2026-10-11: demo; real money is
+  undecided); coins are bounded by the wallet (D76). The book, the clock's
   last tick, the unspent cash and the value the row is judged against
   live in `logs/portfolio_state.json` — the third durable local fact
   beside X7 and G22, written atomically under its lock after every cycle,
@@ -2181,6 +2190,16 @@ that pins it (T1).
 - **P3** A Telegram token never leaves a sender in an error. The token travels
   in the request URL; every sender — the fleet's notifier, the watchdog, the
   phone — raises a redacted error, so no journal or log line can carry it.
+- **P4** A name is never markup. A bot id, a symbol, a fleet's label and a
+  portfolio's name are escaped wherever a page draws them — the card, the
+  table, the strip, the numbers page, the edit, remove and confirm pages —
+  and encoded wherever a link carries them. *(review 2026-10-11)*
+- **P5** The door reads exactly what it is given. The cookie is read by
+  name and compared in constant time — `xgg=` or a longer token is not the
+  token; a `fleet` parameter that is not one of the panel's fleets (a word,
+  a negative, past the end) is refused with 400 before any page runs,
+  never read as another fleet. *(review 2026-10-11)*
+
 ## T — testing meta-invariants
 
 - **T1** Every invariant in this file has a spec named after its ID — or after the

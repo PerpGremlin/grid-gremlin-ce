@@ -193,6 +193,11 @@ class Client:
             end = min(int(r['fundingRateTimestamp']) for r in rows) - 1
         return sorted(set(out))
 
+    def cash_log(self, coin, since_ms, now_ms):
+        """A coin's balance movements, each with its market (read_cash_log)."""
+        from . import truth as _t
+        return _t.read_cash_log(self, coin, since_ms, now_ms)
+
     def borrow_history(self, coin, since_ms, now_ms):
         """H4: the venue's own ledger of what a loan in `coin` cost — one row
         per hour charged: {'time_ms', 'cost', 'hourly_rate', 'size'}, oldest

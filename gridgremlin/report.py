@@ -76,7 +76,12 @@ def apply_fill(book, side, price, qty, fee, inverse=False, rung=None,
         book['max_depth'] = max(book['max_depth'], book['_round_depth'])
     if abs(pos) < EPS or (pos > 0) == (signed > 0):
         total = abs(pos) + qty
-        book['avg_cost'] = (book['avg_cost'] * abs(pos) + price * qty) / total
+        if inverse and abs(pos) >= EPS:
+            # $1 contracts buy coin at 1/price: the basis is the contracts-
+            # weighted harmonic mean, as the venue and the bot keep it (R2)
+            book['avg_cost'] = total / (abs(pos) / book['avg_cost'] + qty / price)
+        else:
+            book['avg_cost'] = (book['avg_cost'] * abs(pos) + price * qty) / total
         book['position'] = pos + signed
     else:
         closed = min(abs(pos), qty)
