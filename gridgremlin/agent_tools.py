@@ -125,12 +125,10 @@ def tf_reading(candles):
 # --- reading the venue (public) ----------------------------------------------
 
 def candles(symbol, tf, category='linear', fetch=fetch_json, bars=BARS):
-    """Bybit's public candles, oldest first, with volume."""
-    d = fetch(f'{BASE}/market/kline?category={category}&symbol={symbol}'
-              f'&interval={INTERVALS[tf]}&limit={bars}')
-    rows = d['result']['list']
-    return [{'t': int(r[0]), 'o': float(r[1]), 'h': float(r[2]), 'l': float(r[3]),
-             'c': float(r[4]), 'v': float(r[5])} for r in reversed(rows)]
+    """Bybit's public candles, oldest first, with volume (ggdata, D91)."""
+    from ggdata.candles import last_candles
+    minutes = {'1m': 1, '5m': 5, '15m': 15, '1h': 60, '4h': 240, '1d': 1440}[tf]
+    return last_candles(category, symbol, minutes, bars, None, fetch)
 
 
 # --- the block -----------------------------------------------------------------

@@ -219,11 +219,13 @@ def bars_and_adapter(cfg, bar_minutes, days):
     since = now - int(days * 86_400_000)
     if cfg.get('venue') == 'hyperliquid':
         from .exchange.hyperliquid.adapters import HLPerpAdapter
-        from .exchange.hyperliquid.klines import fetch_bars, fetch_instrument
+        from ggdata.candles import candles                       # D91: one candle fetcher
+        from .exchange.hyperliquid.klines import fetch_instrument
         from .exchange.hyperliquid.truth import parse_instrument
         adapter = HLPerpAdapter(parse_instrument(fetch_instrument(cfg['symbol'])))
-        return fetch_bars(cfg['symbol'], bar_minutes, since, now), adapter
-    from .exchange.bybit.klines import fetch_bars, fetch_instrument
+        return candles('hyperliquid', 'linear', cfg['symbol'], bar_minutes, since, now, network='testnet'), adapter
+    from ggdata.candles import candles
+    from .exchange.bybit.klines import fetch_instrument
     from .exchange.bybit.truth import parse_instrument
     try:
         spec = fetch_instrument(cfg['market_type'], cfg['symbol'])
@@ -234,8 +236,7 @@ def bars_and_adapter(cfg, bar_minutes, days):
                            '— its markets are named like BTCUSDT')) from None
     adapter = adapter_for(cfg['market_type'],
                           parse_instrument(cfg['market_type'], spec))
-    return fetch_bars(cfg['market_type'], cfg['symbol'], bar_minutes,
-                      since, now), adapter
+    return candles('bybit', cfg['market_type'], cfg['symbol'], bar_minutes, since, now), adapter
 
 
 def run_draft(raw, days, bar_minutes, fee, optimize=False, progress=None,
@@ -301,9 +302,9 @@ def window_funding(draft, bars, bar_minutes):
     if (draft.get('strategy') == 'martingale' or draft.get('venue') == 'hyperliquid'
             or draft['market_type'] == 'spot' or not bars):
         return None
-    from .exchange.bybit.klines import fetch_funding
+    from ggdata.funding import bybit_funding                     # D91: one funding fetcher
     try:
-        return fetch_funding(draft['market_type'], draft['symbol'], bars[0]['t'],
+        return bybit_funding(draft['market_type'], draft['symbol'], bars[0]['t'],
                              bars[-1]['t'] + bar_minutes * 60_000)
     except (OSError, ValueError, KeyError):
         return None

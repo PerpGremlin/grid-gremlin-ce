@@ -194,12 +194,12 @@ def spec_T4_the_lot_anchor_divergence_is_intended_and_cited():
 
 
 def spec_T3_kline_rows_reverse_to_oldest_first_bars():
-    from gridgremlin.exchange.bybit.klines import parse_kline_rows
+    from ggdata.candles import parse_bybit                       # D91: one candle fetcher
     rows = [['2000', '61', '62', '60', '61.5', '9', '9'],     # newest first
             ['1000', '60', '61', '59', '60.5', '9', '9']]
-    bars = parse_kline_rows(rows)
+    bars = parse_bybit(rows)
     assert [b['t'] for b in bars] == [1000, 2000]
-    assert bars[0] == {'t': 1000, 'o': 60.0, 'h': 61.0, 'l': 59.0, 'c': 60.5}
+    assert bars[0] == {'t': 1000, 'o': 60.0, 'h': 61.0, 'l': 59.0, 'c': 60.5, 'v': 9.0}
 
 
 def spec_T3_inventory_is_kept_in_integer_steps_not_floats():
@@ -305,14 +305,13 @@ def spec_T8_what_is_written_for_one_rung_count_is_set_aside_and_said():
 # --- T3: Hyperliquid candles, parsed like Bybit's ----------------------------
 
 def spec_T3_hl_candles_replay_oldest_first_one_per_open():
-    from gridgremlin.exchange.hyperliquid.klines import (interval_for,
-                                                        parse_candles)
+    from ggdata.candles import hl_interval as interval_for, parse_hl as parse_candles   # D91
     rows = [{'t': 2000, 'o': '2', 'h': '3', 'l': '1', 'c': '2.5'},
             {'t': 1000, 'o': '1', 'h': '2', 'l': '0.5', 'c': '1.5'},
             {'t': 2000, 'o': '2', 'h': '3', 'l': '1', 'c': '2.5'}]   # a page seam
     bars = parse_candles(rows)
     assert [b['t'] for b in bars] == [1000, 2000]
-    assert bars[0] == {'t': 1000, 'o': 1.0, 'h': 2.0, 'l': 0.5, 'c': 1.5}
+    assert bars[0] == {'t': 1000, 'o': 1.0, 'h': 2.0, 'l': 0.5, 'c': 1.5, 'v': 0.0}
     assert interval_for(5) == '5m' and interval_for(60) == '1h'
     try:
         interval_for(7)

@@ -233,12 +233,9 @@ def read_hyperliquid(fetch, coin, testnet=True, committed=0.0):
         errors['book'] = f'{type(e).__name__}: {str(e)[:80]}'
     try:
         now_ms = int(time.time() * 1000)
-        rows = post({'type': 'candleSnapshot', 'req': {
-            'coin': coin, 'interval': '4h',
-            'startTime': now_ms - 60 * 4 * 3600 * 1000, 'endTime': now_ms}})
-        _add_candle_maths(out, [{'t': int(r['t']), 'o': float(r['o']),
-                                 'h': float(r['h']), 'l': float(r['l']),
-                                 'c': float(r['c'])} for r in rows])
+        from ggdata.candles import candles                       # D91: one candle fetcher
+        _add_candle_maths(out, candles('hyperliquid', 'linear', coin, 240,
+                                       now_ms - 60 * 4 * 3600 * 1000, now_ms, info=post))
     except Exception as e:                                   # noqa: BLE001
         errors['candles'] = f'{type(e).__name__}: {str(e)[:80]}'
     return _finish(out, errors)
@@ -316,19 +313,8 @@ def read_announcements(fetch, bases):
 
 def _hourly(fetch, symbol, hours, now_ms):
     """Bybit's public hourly candles for the last `hours`, oldest first."""
-    base = 'https://api.bybit.com/v5/market/kline'
-    out, end = {}, int(now_ms)
-    while len(out) < hours:
-        need = min(1000, hours - len(out))
-        rows = fetch(f'{base}?category=linear&symbol={symbol}&interval=60&limit={need}&end={end}')['result']['list']
-        if not rows:
-            break
-        for c in _candles_bybit(rows):
-            out[c['t']] = c
-        end = min(int(r[0]) for r in rows) - 1
-        if len(rows) < need:
-            break
-    return [out[t] for t in sorted(out)]
+    from ggdata.candles import last_candles                      # D91: one candle fetcher
+    return last_candles('linear', symbol, 60, hours, int(now_ms), fetch)
 
 
 def _log_returns(candles):
@@ -407,19 +393,9 @@ def _funding_history(fetch, category, symbol, days, now_ms):
     """Bybit's public funding settlements for `symbol` over the last `days`,
     oldest first, as (ms, rate). Paged back by end time; [] if the market
     does not exist (a coin with no inverse perpetual)."""
-    base = 'https://api.bybit.com/v5/market/funding/history'
-    start, end, out = now_ms - days * 86_400_000, now_ms, {}
-    for _ in range(12):
-        d = fetch(f'{base}?category={category}&symbol={symbol}&limit=200&endTime={end}')
-        rows = (d.get('result') or {}).get('list') or [] if d.get('retCode', 0) == 0 else []
-        for r in rows:
-            t = int(r['fundingRateTimestamp'])
-            if t >= start:
-                out[t] = float(r['fundingRate'])
-        if len(rows) < 200 or not rows or min(int(r['fundingRateTimestamp']) for r in rows) < start:
-            break
-        end = min(int(r['fundingRateTimestamp']) for r in rows) - 1
-    return sorted(out.items())
+    from ggdata.funding import bybit_funding                     # D91: one funding fetcher
+    return [(x['t'], x['rate']) for x in
+            bybit_funding(category, symbol, now_ms - days * 86_400_000, now_ms, fetch, pages=12)]
 
 
 def funding_apr(history, days, now_ms):
