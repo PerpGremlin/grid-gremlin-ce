@@ -109,8 +109,13 @@ def check_fleet_unique(identities):
     return identities
 
 
-def matches(desired, order, qty_rtol=QTY_RTOL):
-    """Truncation-tolerant: a venue-shrunk exit is a match; oversized is not."""
+def matches(desired, order, qty_rtol=QTY_RTOL, qty_step=None):
+    """Truncation-tolerant: a venue-shrunk exit is a match; oversized is not.
+    D88: given the venue's step, an entry matches only within half a step —
+    a resting order a step off its plan is corrected (the diff makes it an
+    amend), not accepted inside a 5% band. Both venues report a resting
+    order's ORIGINAL size (Bybit's qty, HL's origSz), so a partial fill
+    never reads as a wrong size."""
     if order['side'] != desired['side']:
         return False
     if bool(order['reduce_only']) != bool(desired['reduce_only']):
@@ -125,10 +130,12 @@ def matches(desired, order, qty_rtol=QTY_RTOL):
         # it forever left the growth unexited (audit 2026-08-07 MED). Below
         # three quarters, replace (the diff makes it an amend).
         return dq * 0.75 <= oq <= dq * (1.0 + qty_rtol)
+    if qty_step:
+        return abs(dq - oq) < qty_step * 0.5
     return abs(dq - oq) <= qty_rtol * dq
 
 
-def diff(desired, resting, botid, qty_rtol=QTY_RTOL):
+def diff(desired, resting, botid, qty_rtol=QTY_RTOL, qty_step=None):
     """E2's decisions: keep matches, cancel our deviations, create the missing.
     Foreign orders are invisible (I1). Duplicates on one rung keep one match.
     Returns (to_cancel, to_create)."""
@@ -142,7 +149,7 @@ def diff(desired, resting, botid, qty_rtol=QTY_RTOL):
         candidates = ours.pop(d['rung'], [])
         kept = False
         for o in candidates:
-            if not kept and matches(d, o, qty_rtol):
+            if not kept and matches(d, o, qty_rtol, qty_step):
                 kept = True
             else:
                 to_cancel.append(o)
