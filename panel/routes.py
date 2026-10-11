@@ -1,5 +1,6 @@
 """The panel's HTTP side: auth, routing, the readout cache, the rehearsal job
 runner, the create/edit/close/control flows (P1, P2, §12)."""
+import http.cookies
 import http.server
 import os
 from pathlib import Path
@@ -140,7 +141,26 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
         return dict(contract, equity=eq)
 
     def _authed(self):
-        return f'gg={self.token}' in (self.headers.get('Cookie') or '')
+        # the cookie read by name and compared in constant time: a substring
+        # test matched any cookie ending in the token, and short-circuited
+        # (the 2026-10-11 review)
+        jar = http.cookies.SimpleCookie()
+        try:
+            jar.load(self.headers.get('Cookie') or '')
+        except http.cookies.CookieError:
+            return False
+        got = jar.get('gg')
+        return bool(self.token) and got is not None and secrets.compare_digest(
+            got.value.encode(), self.token.encode())
+
+    def _fleet_ok(self, raw):
+        """A `fleet` parameter names one of this panel's fleets: absent is the
+        first; anything else — a word, a negative, past the end — is refused
+        at the door, never read as some other fleet or a crash (the
+        2026-10-11 review)."""
+        if raw is None or raw == '':
+            return True
+        return raw.isdigit() and int(raw) < len(self.fleets)
 
     def _deny(self, code, why):
         self.send_response(code)
@@ -162,6 +182,9 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             return self._deny(403, 'bad token')
         if not self._authed():
             return self._deny(401, 'open the tokened URL from the terminal')
+        if not self._fleet_ok(dict(urllib.parse.parse_qsl(
+                self.path.split('?', 1)[1] if '?' in self.path else '')).get('fleet')):
+            return self._deny(400, 'no such fleet')
         missing = [f for f in self.fleets if not Path(f).exists()]
         if missing and self.path.split('?')[0] == '/':
             f0 = missing[0]
@@ -319,6 +342,8 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
         form = dict(urllib.parse.parse_qsl(raw))
         if form.pop('gg', None) != '1':
             return self._deny(403, 'missing form token')
+        if not self._fleet_ok(form.get('fleet')):
+            return self._deny(400, 'no such fleet')
         if self.path in ('/create', '/apply'):
             return self._create_flow(form, apply=self.path == '/apply')
         if self.path == '/setup':

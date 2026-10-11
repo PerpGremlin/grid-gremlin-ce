@@ -203,7 +203,10 @@ def spec_K7_the_readings_module_is_read_only_and_keyless():
     for word in ('api_key', 'api_secret', 'X-BAPI-SIGN', 'private_key', 'WriteClient',
                  'ExchangeClient', '/exchange', 'order/create', 'sign_l1'):
         assert word not in src, word
-    assert 'from .bot' not in src and 'from .main' not in src
+    # ggdata is its own package: a relative import could never name the
+    # engine, so the old half of this check could not fail (the review)
+    for word in ('gridgremlin.bot', 'gridgremlin.main', 'gridgremlin.exchange'):
+        assert word not in src, word
 
 
 def spec_K8_the_phone_answers_market_from_the_kept_readings():

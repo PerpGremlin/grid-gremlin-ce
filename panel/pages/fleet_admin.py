@@ -1,6 +1,7 @@
 """A bot's edit page and the tombstones (X7b). Moved out of routes.py whole (D91 step 3): a mixin
 the Handler inherits."""
 from gridgremlin.apply import row_botid
+from ..html_bits import qarg
 from pathlib import Path
 import html
 import json
@@ -38,17 +39,17 @@ class FleetAdminPages:
         bot = next((b for b in fleet_raw.get('bots', [])
                     if row_botid(b) == botid), None)
         if bot is None:
-            return self._deny(404, f'{botid}: not in this fleet')
+            return self._deny(404, f'{html.escape(botid)}: not in this fleet')
         if bot.get('strategy') == 'portfolio' and q.get('mode') != 'remove':
             return self._page(
-                f'<h1>{botid}</h1><p class="dim">a portfolio row (D78) is edited in '
+                f'<h1>{html.escape(botid)}</h1><p class="dim">a portfolio row (D78) is edited in '
                 'the fleet file by hand — its assets, hedges, clock and risk are the '
                 'row\'s own terms; the setup form knows one market at a time. '
-                f'<a href="/edit?fleet={fi}&amp;bot={botid}&amp;mode=remove">remove</a> is '
+                f'<a href="/edit?fleet={fi}&amp;bot={qarg(botid)}&amp;mode=remove">remove</a> is '
                 'here.</p><p><a href="/">&larr; fleet</a></p>')
         if q.get('mode') == 'remove':
             return self._page(
-                f'<h1>remove {botid}</h1><p class="dim">the bot and its '
+                f'<h1>remove {html.escape(botid)}</h1><p class="dim">the bot and its '
                 'watchdog line leave together; the remaining fleet must '
                 'still validate (F1). The running fleet is untouched until '
                 'restarted (§11).</p>'
@@ -56,7 +57,7 @@ class FleetAdminPages:
                 f'<input type="hidden" name="gg" value="1">'
                 f'<input type="hidden" name="mode" value="remove">'
                 f'<input type="hidden" name="fleet" value="{fi}">'
-                f'<input type="hidden" name="orig" value="{botid}">'
+                f'<input type="hidden" name="orig" value="{html.escape(botid)}">'
                 f'<button>run the gates</button></form>'
                 f'<p><a href="/">&larr; fleet</a></p>')
         from panel.setup import advanced_page, form_from_bot

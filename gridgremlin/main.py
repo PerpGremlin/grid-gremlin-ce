@@ -600,6 +600,7 @@ def build_fleet(fleet_path, notifier, allow_mainnet=False):
                 except PortfolioStateError as e:            # fails CLOSED like X7
                     raise ConfigError(str(e)) from e
             bot, idents = build_portfolio(cfg, client, notifier, pstate, tombs)
+            bot.siblings = sum(1 for c in fleet['bots'] if c is not cfg) + len(trade_rows)
             identities.extend(idents)
             if tombs.has(bot.botid):
                 bot.alive = False

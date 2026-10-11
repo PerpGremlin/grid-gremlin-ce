@@ -272,6 +272,40 @@ def read_borrow(client, coin, start_ms, end_ms):
     return out
 
 
+def read_cash_log(client, coin, start_ms, end_ms):
+    """Every movement of `coin`'s balance as the venue logs it — a trade's
+    realised and fee, a settlement's funding, a spot trade's whole cost, the
+    loan's interest — each with its market, so a row on a shared account
+    can tell its own from its siblings' (the 2026-10-11 review; measured on
+    the carry sub the same day). Oldest first; 7-day windows, cursor pages."""
+    out, seen = [], set()
+    win_start, end_ms = int(start_ms), int(end_ms)
+    while win_start < end_ms:
+        win_end = min(win_start + SEVEN_DAYS_MS, end_ms)
+        cursor = None
+        for _ in range(MAX_ORDER_PAGES):
+            params = {'accountType': 'UNIFIED', 'currency': coin, 'startTime': win_start,
+                      'endTime': win_end, 'limit': 50}
+            if cursor:
+                params['cursor'] = cursor
+            page = client.get('/v5/account/transaction-log', params, signed=True)
+            for e in page.get('list', []):
+                if not e.get('id') or e['id'] in seen:
+                    continue
+                seen.add(e['id'])
+                out.append({'id': e['id'], 'time_ms': int(e.get('transactionTime') or 0),
+                            'symbol': e.get('symbol') or '', 'category': e.get('category') or '',
+                            'type': e.get('type') or '', 'change': _f(e.get('change'), 0.0)})
+            cursor = page.get('nextPageCursor')
+            if not cursor:
+                break
+        else:
+            raise VenueError(f'{coin}: cash log beyond {MAX_ORDER_PAGES} pages', kind='partial_read')
+        win_start = win_end
+    out.sort(key=lambda r: r['time_ms'])
+    return out
+
+
 def read_funding(client, category, symbol, start_ms, end_ms):
     """D63: funding paid or received, per position side. Bybit writes each
     settlement as an execution of type Funding on the leg it charged:
@@ -297,6 +331,7 @@ def read_funding(client, category, symbol, start_ms, end_ms):
                     continue
                 seen.add(key)
                 out.append({'time_ms': int(e.get('execTime') or 0),
+                            'exec_id': key[0],
                             'symbol': e.get('symbol') or symbol,
                             'market_type': category,
                             'side': 'buy' if e.get('side') == 'Buy'

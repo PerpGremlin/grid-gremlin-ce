@@ -1,7 +1,7 @@
 """Setting up and editing a bot (U19): the setup page, the review with its chart, what-if and fit, the create and apply flow. Moved out of routes.py whole (D91 step 3): a mixin
 the Handler inherits."""
 from ..forms import next_step_html, other_half_html, other_side_html, rehearse_bot_form, unit_for_fleet
-from ..html_bits import named, refusal_box, tidy
+from ..html_bits import named, qarg, refusal_box, tidy
 from gridgremlin.apply import row_botid
 from panel.chart import _f
 from pathlib import Path
@@ -101,7 +101,7 @@ class CreateFlowPages:
             atomic_write(fleet_p, new_fleet)
             atomic_write(wd_p, new_wd)
             return self._page(
-                f'<h1>{botid}: written</h1><p>bot and watcher landed '
+                f'<h1>{html.escape(botid)}: written</h1><p>bot and watcher landed '
                 'together in the fleet file; a backup is kept beside each '
                 'file.</p>'
                 + other_half_html(proposal.get('pair'))
@@ -201,13 +201,13 @@ class CreateFlowPages:
         # U17: the apply box sits right under the summary; the file diff
         # and the dry-run orders fold away for whoever wants them
         return self._page(
-            f'<h1>{botid} — {mode}: gates passed</h1>' + say +
+            f'<h1>{html.escape(botid)} — {html.escape(mode)}: gates passed</h1>' + say +
             f'<form method="post" action="/apply" class="apply">'
             f'<input type="hidden" name="gg" value="1">'
             f'<input type="hidden" name="fleet" value="{fi}">'
             f'<input type="hidden" name="proposal" value="{pj}">'
-            f'<b>To {verb}</b>, type its name <code>{botid}</code> here: '
-            f'<input name="confirm" size="16" placeholder="{botid}"> '
+            f'<b>To {verb}</b>, type its name <code>{html.escape(botid)}</code> here: '
+            f'<input name="confirm" size="16" placeholder="{html.escape(botid)}"> '
             + ''.join(f'<br><b class="neg">Mainnet:</b> type the new {k} '
                       f'(<code>{n:g}</code>) again: <input name="retype_{k}" '
                       'size="12">' for k, _, n in jumps)
@@ -264,7 +264,7 @@ class CreateFlowPages:
             botid = str(why).split(':', 1)[0]
             extra = ('<br>You already have a bot for this coin and '
                      'direction in this account, and there can be only '
-                     f'one. <a href="/edit?fleet={fi}&amp;bot={botid}">Open '
+                     f'one. <a href="/edit?fleet={fi}&amp;bot={qarg(botid)}">Open '
                      'that bot to change it</a>, or pick another coin or '
                      'the other direction below.')
         note = refusal_box(title, why, extra)

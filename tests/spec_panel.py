@@ -1500,7 +1500,10 @@ def spec_D63_every_renderer_sums_through_one_total():
     import gridgremlin.digest as dg
     import gridgremlin.phone as ph
     import panel.render as sv                    # the renderer, since the split
-    for mod in (dg, ph, sv):
+    import panel.card as cd                      # and the pieces it was split into
+    import panel.table as tb                     # (the 2026-10-11 review)
+    import panel.strip_view as st
+    for mod in (dg, ph, sv, cd, tb, st):
         src = inspect.getsource(mod)
         assert "['realized'] - v['fees'] +" not in src, mod.__name__
         assert 'card_total(' in src, mod.__name__
@@ -1973,3 +1976,47 @@ def spec_U76_the_bug_hunts_nits_stay_fixed():
     pages = render([('demo', copy.deepcopy(CONTRACT))]) + render([('demo', copy.deepcopy(CONTRACT))], table=True)
     bare = re.findall(r"href=[\"']/[a-z-]+\?[^\"']*&(?!amp;)", pages)
     assert not bare, bare[:3]
+
+
+def spec_P4_a_name_is_never_markup():
+    """A bot id, a symbol or a fleet's label with markup in it is drawn as
+    text on every page and encoded in every link (review 2026-10-11)."""
+    import copy
+    from panel.server import render
+    bad = 'lin<i>X</i>USDTl'
+    c = copy.deepcopy(CONTRACT)
+    c['bots'][bad] = dict(c['bots'].pop('spoADAUSDTl'), side='long')
+    c['ranges'] = {bad: c['ranges'].pop('spoADAUSDTl')}
+    c['watchdog']['ceilings'][bad] = 9700.0
+    for page in (_everything(c), render([('<s>demo', c)]),
+                 render([('<s>demo', c)], table=True),
+                 render([('<s>demo', c)], view='market'),
+                 render([('<s>demo', c)], table=True, view='market')):
+        assert '<i>X</i>' not in page and '<s>demo' not in page
+        assert '&lt;i&gt;X&lt;/i&gt;' in page
+    assert 'bot=lin%3Ci%3EX%3C%2Fi%3EUSDTl' in _everything(c)
+
+
+def spec_P5_the_door_reads_exactly_the_cookie_and_the_fleet_it_is_given():
+    """The cookie by name, in constant time; a fleet parameter that names no
+    fleet is refused at the door (review 2026-10-11)."""
+    srv, base = _serve(CONTRACT)
+
+    def code(path, cookie='gg=tok123', data=None):
+        req = urllib.request.Request(base + path, data=data,
+                                     headers={'Cookie': cookie})
+        try:
+            return urllib.request.urlopen(req).status
+        except urllib.error.HTTPError as e:
+            return e.code
+    try:
+        assert code('/') == 200
+        for cookie in ('gg=tok1234', 'xgg=tok123', 'gg=tok12', ''):
+            assert code('/', cookie) == 401, cookie
+        assert code('/', 'a=1; gg=tok123') == 200
+        assert code('/position?fleet=0&bot=spoADAUSDTl') == 200
+        for f in ('abc', '-1', '1', '0x0', '1e0'):
+            assert code(f'/position?fleet={f}&bot=spoADAUSDTl') == 400, f
+            assert code('/close', data=f'gg=1&fleet={f}'.encode()) == 400, f
+    finally:
+        srv.shutdown()

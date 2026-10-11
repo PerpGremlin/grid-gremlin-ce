@@ -11,8 +11,7 @@ Anything else is refused by name. No shell, no file, no config, no unit, no
 key: the model holds none of them.
 
   authorized_keys, on the box (the owner's install, ops/README):
-  command="cd <repo> && python3 -m gridgremlin.agent_door configs/fleet.agent.json",
-  no-pty,no-port-forwarding,no-agent-forwarding,no-X11-forwarding ssh-ed25519 AAAA… agent
+  command="cd <repo> && python3 -m gridgremlin.agent_door configs/fleet.agent.json",restrict ssh-ed25519 AAAA… agent
 """
 import json
 import os
