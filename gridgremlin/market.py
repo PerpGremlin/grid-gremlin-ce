@@ -754,6 +754,8 @@ def main(argv):
     if not dry:
         save_hmm(hmm_cache)
         save_carry(carry_cache)
+        from .marketdata import update                     # K13: each coin's series, kept a month
+        row['series'] = update(fetch_json, list(row.get('hmm') or {}), time.time())
     texts = report(row)
     if dry:
         print(json.dumps(row)[:400] + '…')

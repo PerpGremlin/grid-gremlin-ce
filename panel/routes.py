@@ -201,6 +201,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(tidy(body).encode())
             return
+        if self.path.split('?')[0] == '/asset':                      # U71
+            from gridgremlin.market import latest
+            from panel.reference import KEEP_JS
+            from .asset import asset_page
+            from .markets import coins_of
+            from .render import PAGE_END, side_nav
+            row = latest() or {}
+            q = dict(urllib.parse.parse_qsl(self.path.partition('?')[2]))
+            coins = coins_of(row) or ['BTC']
+            coin = q.get('coin') if q.get('coin') in coins else coins[0]
+            unread = (((row.get('series') or {}).get(coin) or {}).get('unread'))
+            body = (f'<!doctype html><meta charset="utf-8"><title>{coin} market data</title><style>{CSS}</style>'
+                    f'{side_nav()}<main>{asset_page(coin, coins, q.get("span", "7d"), unread=unread)}</main>{PAGE_END}{KEEP_JS}')
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(tidy(body).encode())
+            return
         if self.path.split('?')[0] == '/carry':                      # U69
             from gridgremlin.market import latest
             from panel.reference import KEEP_JS
@@ -251,7 +269,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             market = None
         body = (json.dumps({lb: c for lb, c in self._labelled()})
                 if self.path == '/data' else
-                render(self._labelled(), table=base == '/table', view=view, market=market))
+                render(self._labelled(), table=base == '/table', view=view, market=market,
+                       mtab=dict(urllib.parse.parse_qsl(query)).get('mtab', 'coins')))
         self.send_response(200)
         self.send_header('Content-Type',
                          'application/json' if self.path == '/data'

@@ -1264,6 +1264,18 @@ eventually pin (T1).
   a window the history does not cover is none. The history is kept in
   `logs/market-carry.json` and refetched as funding settles (8 h).
   Display only.
+- **K13** Each coin's market data, kept a month. The hourly market job
+  reads Bybit's, Binance's and OKX's public data per coin — open interest
+  (in USD), the perpetual's basis to the spot index, the long share of all
+  accounts and of the top traders (by accounts and by position size), the
+  taker flow on perpetuals and on spot, and a snapshot of the books
+  (spread, depth within 1% of the mid, imbalance) — and merges it into one
+  file per coin (`logs/series/`), trimmed to 30 days, so a venue's short
+  window still grows a month. A series kept fresh is refetched for its last
+  two days only; each source fails alone and is named; a venue's own name
+  for a coin is used (OKX's gold is XAU). The reading carries each coin's
+  newest values and the day's summary (OI summed and its 24-hour change,
+  the day's taker flow). Display only.
 - **U55** The dash reads as the owner reads it. A fleet file's `label` is
   what the panel calls the fleet (forty characters at most); without one,
   the venue and the file's environment word. Every card is a column with
@@ -1386,12 +1398,27 @@ eventually pin (T1).
   inverse, 90 days). Display only. *(the owner, 2026-10-11: "say i held
   100k of BTC with an 85K USDT debt … what would that look like over an
   entire year?")*
-- **U70** The phone's market report, live, on the markets half: the same
-  messages the session opens send (D67), built by the same function from
-  the newest reading, under the tiles, so the page and the phone cannot
-  disagree. An unreadable reading says so. *(the owner, 2026-10-11: "the
-  market data we send to TG as a live stream on the same half of the page
-  as the HMM results")*
+- **U70** *(retired the same day by U72)* The phone's market report, live on
+  the markets half. The owner: the phone's text is not needed on the page —
+  a heading for each kind of data instead. The phone is still sent it.
+- **U71** One coin's market data over time (`/asset?coin=BTC`, side panel
+  **market data**, a coin's name on its tile): a chart for each kind (K13) —
+  open interest per venue, the basis, top traders' and retail's long share,
+  perpetual and spot taker flow (the venues summed, as bars), the book's
+  spread, depth and imbalance — each with the price faint behind it on its
+  own scale and its latest values in the legend, over 24 hours, 7 days or
+  30 days; what each chart says in a line under it; a source not read this
+  hour named. Display only. *(the owner, 2026-10-11: "an overview page for
+  each asset … a data tab like bybit … oi, basis, bid ask, top100 traders ls
+  ratio, retail ls ratio, spot outflows net flows")*
+- **U72** The markets half is tabs, each a heading for its kind of data:
+  coins (the tiles), positioning (retail against the top traders per venue,
+  and the gap), open interest and flow (summed over the venues, the day's
+  change, the day's taker flow on perpetuals and spot, the basis), and the
+  order book (spread, depth within 1%, imbalance). The tab rides the address
+  (`?mtab=`), so the refresh keeps it, with the view. Each coin leads to
+  its market data page. *(the owner, 2026-10-11: "a heading for each of the
+  data types … tabs on the RHS")*
 - **L1** A new trade joins a running fleet within a cycle. The trade watch
   stats the trades file once a cycle; a changed file's new rows are each
   built by the fleet's own builder (`main.build_market_bot`, the one every
