@@ -560,11 +560,15 @@ def card(idx, botid, b, contract, belief, full=False):
     rng = (contract.get('ranges') or {}).get(botid)
     ceil = ((contract.get('watchdog') or {}).get('ceilings') or {}).get(botid)
     money_coin, margin_coin = units_of(botid, (contract.get('terms') or {}).get(botid))   # U53
-    links = (('' if full else f"<a href='/position?fleet={idx}&bot={botid}'>numbers</a> · ")
-             + f"<a href='/edit?fleet={idx}&bot={botid}'>edit</a> · "
-             f"<a href='/setup?fleet={idx}&copy={botid}'>copy</a> · "
-             f"<a href='/edit?fleet={idx}&bot={botid}&mode=remove'>remove"
-             '</a>')
+    links = (('' if full else f"<a href='/position?fleet={idx}&bot={botid}'>numbers</a>")
+             + ('' if ((contract.get('terms') or {}).get(botid) or {}).get('trade') else
+                (' · ' if not full else '') + f"<a href='/edit?fleet={idx}&bot={botid}'>edit</a> · "
+                f"<a href='/setup?fleet={idx}&copy={botid}'>copy</a> · "
+                f"<a href='/edit?fleet={idx}&bot={botid}&mode=remove'>remove"
+                '</a>'))
+    # L8: a trade is not a fleet row — edit, copy and remove answered "not in
+    # this fleet" (the owner, 2026-10-11, on tilt's ended BTC trade); a trade
+    # ends by its own exit, close trade, or clear
     if b is None:
         # no fills in the window — the engine's own belief fills in, and
         # says so (the snapshot is the bot's belief, not the venue)
@@ -797,7 +801,10 @@ def card(idx, botid, b, contract, belief, full=False):
         links += (f" · <a href='/close?fleet={idx}&bot={botid}'>close trade</a>")
     elif is_trade and state == 'DEAD':
         links += " · <a href='/trade'>clear</a>"
-    if state == 'DEAD' and not botid.startswith('spo') and not flat:
+    if state == 'DEAD' and not botid.startswith('spo') and not flat and not (
+            is_trade and not abs((belief.get(botid) or {}).get('position') or 0.0) > 1e-12):
+        # L8: a stopped trade ended by its own exit or stop — offer the close
+        # only when its holding is known to be open, and clear otherwise
         # X15: what a stopped bot left open can be closed from here — and
         # only then: a bot known to have stood down flat has nothing to
         # close (HL AVAX after its last round, 2026-10-06: the door led to

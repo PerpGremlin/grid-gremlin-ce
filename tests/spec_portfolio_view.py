@@ -143,6 +143,26 @@ def spec_U66_a_cards_fold_aligns_its_headings_with_their_numbers():
     assert 'details td{text-align:left}' in CSS
 
 
+def spec_U70_the_phones_market_report_is_live_on_the_markets_half():
+    """The owner (2026-10-11): the market data sent to the phone, as a live
+    stream on the markets half. The same report, built the same way from the
+    newest reading, under the tiles; an unreadable reading says so."""
+    from gridgremlin.market import report
+    from panel.markets import market_column
+    row = {'t': 1000.0, 'fear_greed': {'score': 61, 'label': 'Greed', 'avg_7d': 64, 'avg_30d': 66},
+           'markets': {'bybit:linear:BTCUSDT': {'symbol': 'BTCUSDT', 'price': 82933.4, 'change_24h_pct': 0.46,
+                                                'volume_24h': 4.1e9, 'committed': 1.0}},
+           'cross': {}, 'announcements': []}
+    col = market_column(row, now=1060.0)
+    assert '<h2>as the phone gets it' in col
+    for text in report(row, 1060.0):                                    # every message, as sent
+        import html as _h
+        assert f'<div class="tgmsg">{_h.escape(text)}</div>' in col
+    assert 'fear &amp; greed 61' in col and col.index('class="mtiles"') < col.index('as the phone gets it')
+    broken = dict(row, markets={'bybit:linear:BTCUSDT': {'price': 1.0}})   # no symbol: the report cannot build
+    assert "the phone's report: unreadable (KeyError)" in market_column(broken, now=1060.0).replace('&#x27;', "'")
+
+
 def spec_U67_the_fleet_page_has_a_markets_half_from_the_readings():
     """The owner: half the screen for the bots, half for what helps a trader
     navigate. The tiles come from the newest market reading (D67) and the
