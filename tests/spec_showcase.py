@@ -48,7 +48,20 @@ def spec_U77_the_show_file_is_an_allowlist():
 def spec_U77_real_money_is_refused():
     from gridgremlin.show import build
     data = build(['configs/fleet.real.json'], read=lambda f: _contract('mainnet'), now=1.0)
-    assert data['accounts'] == [] and 'real money' in data['refused'][0]
+    assert data['accounts'] == [] and 'mainnet' in data['refused'][0] and 'paper only' in data['refused'][0]
+
+
+def spec_U77b_a_network_it_cannot_name_is_refused_too():
+    """Fail closed (the review, 2026-10-11): no snapshot and a failed account
+    read leave no tier — that fleet is not paper until it says so."""
+    from gridgremlin.show import build
+    c = _contract()
+    c['account'] = {}
+    c['watchdog'] = {'belief': {}}
+    data = build(['configs/fleet.x.json'], read=lambda f: c, now=1.0)
+    assert data['accounts'] == [] and 'unknown' in data['refused'][0]
+    odd = _contract('staging')
+    assert build(['configs/fleet.x.json'], read=lambda f: odd, now=1.0)['accounts'] == []
 
 
 def spec_U77_the_market_table_is_an_allowlist_too():
@@ -92,7 +105,9 @@ def spec_U77_the_showcase_serves_get_alone_and_links_nowhere():
         assert 'Paper money' in html and 'not' in html and 'financial advice' in html
         assert '+3.00%' in html and 'BTC' in html
         with urllib.request.urlopen(base + '/show.json') as r:
-            assert json.loads(r.read())['accounts'][0]['bots'][0]['coin'] == 'BTC'
+            served = json.loads(r.read())
+        assert served['accounts'][0]['bots'][0]['coin'] == 'BTC'
+        assert set(served) == {'generated_ms', 'amounts', 'accounts'}      # never the refused list
         for method, path, code in (('POST', '/', 405), ('PUT', '/', 405), ('DELETE', '/', 405),
                                    ('GET', '/edit?fleet=0', 404), ('GET', '/control', 404),
                                    ('GET', '/../logs/show/show.json', 404)):
@@ -129,3 +144,43 @@ def spec_U77_a_coin_shows_once_from_its_usdt_perpetual():
         'bybit:linear:BTCUSDT': {'symbol': 'BTCUSDT', 'price': 80000.0, 'long_pct': 61.0}}}
     html = page(None, reading, now=0)
     assert html.count('<tr><td>BTC</td>') == 1 and '80,000' in html and 'BTCPERP' not in html
+
+
+def spec_U77b_a_malformed_file_still_serves_a_page_and_idle_sockets_are_bounded():
+    import socket
+    import tempfile
+    import time
+    from pathlib import Path
+    import showcase.server as sv
+    tmp = Path(tempfile.mkdtemp())
+    srv, base = _serve(tmp)
+    try:
+        for bad in ('[1, 2]', '{"accounts": [{"name": 1}]}', '{"accounts": "x", "generated_ms": "y"}'):
+            (tmp / 'show.json').write_text(bad)
+            with urllib.request.urlopen(base + '/') as r:
+                assert r.status == 200 and 'grid-gremlin' in r.read().decode()
+    finally:
+        srv.shutdown()
+    assert sv.Showcase.timeout and sv.Showcase.timeout <= 30
+    # a crowd of half-sent requests: beyond the cap each is closed on arrival
+    saved = sv.MAX_CONNECTIONS
+    sv.MAX_CONNECTIONS = 3
+    try:
+        b = sv.BoundedServer(('127.0.0.1', 0), sv.Showcase)
+        import threading
+        threading.Thread(target=b.serve_forever, daemon=True).start()
+        idle = [socket.create_connection(('127.0.0.1', b.server_port)) for _ in range(3)]
+        for s_ in idle:
+            s_.sendall(b'GET / HTTP/1.1\r\n')                       # never finished
+        time.sleep(0.2)
+        extra = socket.create_connection(('127.0.0.1', b.server_port))
+        extra.settimeout(2)
+        extra.sendall(b'GET / HTTP/1.1\r\nHost: x\r\n\r\n')
+        assert extra.recv(100) == b''                                     # closed, not served
+        for s_ in idle + [extra]:
+            s_.close()
+        time.sleep(0.3)                                                   # the idle handlers see EOF and end
+        b.shutdown()
+        b.server_close()
+    finally:
+        sv.MAX_CONNECTIONS = saved

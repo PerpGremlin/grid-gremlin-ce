@@ -439,3 +439,38 @@ def spec_J5_the_panel_and_the_digest_read_a_paper_agent_fleet_with_no_bots_and_n
     empty = Path(tempfile.mkdtemp()) / 'fleet.json'
     empty.write_text(json.dumps({'bots': []}))
     assert H._read_contract(H, str(empty))['bots'] == {}         # a fresh world still skips the readout
+
+
+def spec_J7_two_sessions_at_once_cannot_pass_the_limits_between_them():
+    """The review (2026-10-11): each session read the state before either
+    acted, so parallel intents passed the gross limit and the hourly count
+    together. The check and the act are one step under the fleet's lock."""
+    import threading
+    import time as _t
+    import gridgremlin.agent as ag
+    d, f = _fleet(paper=False)
+    big = dict(GOOD, size_quote=200)                                    # 1,000 notional; gross 1,500
+    intents = [dict(big, market=m, side=s) for m in ('btcusdt', 'ethusdt') for s in ('long', 'short')]
+    real_read = ag.read_state
+
+    def slow_read(*a, **k):
+        st = real_read(*a, **k)
+        _t.sleep(0.2)                                                   # widen the window a race needs
+        return st
+    ag.read_state = slow_read
+    out, gate = [], threading.Barrier(len(intents))
+
+    def go(intent):
+        gate.wait()
+        out.append(submit(f, intent, NOON)[0])
+    try:
+        threads = [threading.Thread(target=go, args=(i,)) for i in intents]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+    finally:
+        ag.read_state = real_read
+    assert sorted(out) == ['queued', 'refused', 'refused', 'refused'], out
+    rows = json.loads((d / 'logs' / 'trades-agent.json').read_text())
+    assert len(rows) == 1 and sum(r.get('size_quote', 0) * r.get('leverage', 1) for r in rows) <= 1500
