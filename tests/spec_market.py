@@ -74,8 +74,12 @@ def spec_K3_depth_is_quote_within_the_band_and_inverse_sizes_are_dollars():
 
 
 def spec_K4_funding_is_said_per_8h_whatever_the_venue_charges_by():
+    from common.fmt import usd_compact
     from common.rates import per_8h_pct, yearly_from_8h_pct
     from common.symbols import coin_of
+    # D91: one compact dollar figure (the copies wrote "0k" for 500, "15650.0M" for 15.65B)
+    for v, s in ((15.65e9, '15.65B'), (47.8e6, '47.8M'), (845e3, '845k'), (500.0, '500'), (-2.1e8, '-210.0M'), (None, '—')):
+        assert usd_compact(v) == s, (v, usd_compact(v))
     assert abs(per_8h_pct(0.0001, 8.0) - 0.01) < 1e-12
     assert abs(per_8h_pct(0.0001, 4.0) - 0.02) < 1e-12     # Bybit 4 h coins
     assert abs(per_8h_pct(0.0000125, 1.0) - 0.01) < 1e-12  # HL, hourly
@@ -606,6 +610,11 @@ def spec_U71_a_coins_page_charts_its_market_data():
     day = asset_page('BTC', ['BTC'], '24h', now=now, root=root)
     assert '<b class="on">24 hours</b>' in day
     assert 'nothing kept for this coin yet' in asset_page('ETH', ['BTC', 'ETH'], '7d', now=now, root=root)
+    # a coin with a venue's series empty (gold has no OKX spot market): the legend says a dash,
+    # the page renders (2026-10-11: the XAUT page threw on the missing value)
+    md.update(fetch, ['XAUT'], now, root=root, pause=lambda s: None)
+    xaut = asset_page('XAUT', ['XAUT'], '7d', now=now, root=root)
+    assert 'OKX <b class="">—</b>' in xaut and '<h2>spot net flow, taker buys − sells</h2>' in xaut
 
 
 def _collector_feed(t_ms, liq_rows=250, mid=100.0):

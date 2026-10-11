@@ -216,11 +216,7 @@ def _share_cell(v):
     return '<td class="num dim">—</td>' if v is None else f'<td class="num">{v:.0%}</td>'
 
 
-def _usd(v):
-    if v is None:
-        return '—'
-    a = abs(v)
-    return f'{v / 1e9:,.2f}B' if a >= 1e9 else f'{v / 1e6:,.1f}M' if a >= 1e6 else f'{v / 1e3:,.0f}k'
+from common.fmt import usd_compact as _usd           # D91: one of each  # noqa: E402
 
 
 def tab_positioning(row):
