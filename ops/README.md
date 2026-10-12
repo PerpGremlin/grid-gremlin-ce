@@ -186,6 +186,11 @@ ends it. To undo, remove the file and restart `systemd-logind`.
 append `DEADMAN_URL=<its ping URL>` to `.env`. The next watchdog run pings
 it; silence it by removing the line.
 
+**The market data's freshness** (F32): with a separate data server whose
+site publishes `status.json`, append `DATA_STATUS_URL=<its address>` to
+`.env`. The watchdog that sets `data_stale_seconds` (demo's) pages when the
+data falls more than that far behind; without the line the check is off.
+
 **Deploying.** The repo is private. The box carries its own SSH key,
 registered on the repo as a **read-only deploy key** (a push from the box is
 refused), under an SSH host alias so it is used for this repo alone. A deploy

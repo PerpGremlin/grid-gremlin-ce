@@ -27,6 +27,36 @@ def run_readout(fleet_path, hours=24.0):
     return json.loads(out.stdout)
 
 
+SHARED_MAX_AGE_S = 150.0        # the phone's round: four readouts, then a minute's sleep — 91 s measured
+
+
+def shared_path(fleet_path):
+    """U47b: where the phone's kept-warm readout of a fleet is shared —
+    logs/readouts/<fleet>.json beside the fleet's other logs."""
+    from .durable import fleet_tag, logs_dir
+    return logs_dir(fleet_path) / 'readouts' / f'{fleet_tag(fleet_path)}.json'
+
+
+def share_readout(fleet_path, contract):
+    """U47b: one readout, read once, for every reader on the box: written
+    whole (a rename), so a reader never sees half of one."""
+    write_json(shared_path(fleet_path), contract, indent=None)
+
+
+def shared_readout(fleet_path, hours, now=None, max_age_s=SHARED_MAX_AGE_S):
+    """U47b: the shared readout when it is fresh and over the same window,
+    else None — the reader then runs its own, as before."""
+    now = time.time() if now is None else now
+    try:
+        c = json.loads(shared_path(fleet_path).read_text())
+    except (OSError, ValueError):
+        return None
+    if not isinstance(c, dict) or c.get('window_hours') != hours or c.get('unavailable'):
+        return None
+    age = now - (c.get('generated_ms') or 0) / 1000.0
+    return c if 0 <= age <= max_age_s else None
+
+
 def last_snapshot(fleet_path):
     """The newest row of the fleet's snapshot file, named by its watchdog
     config (the one place the path is stated); None when absent."""

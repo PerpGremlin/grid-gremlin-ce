@@ -89,9 +89,13 @@ class Box:
         return self.refresh(fp)
 
     def refresh(self, fp):
-        from .archive import run_readout
+        from .archive import run_readout, share_readout
         contract = run_readout(fp)
         self._readouts[fp] = (time.time(), contract)
+        try:
+            share_readout(fp, contract)                 # U47b: the panel reads this one
+        except OSError as e:
+            print(f'phone: sharing {fp}: {e}', file=sys.stderr, flush=True)
         return contract
 
     def keep_warm(self, every=WARM_EVERY, rounds=None):
