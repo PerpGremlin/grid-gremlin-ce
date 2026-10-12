@@ -177,3 +177,126 @@ def spec_G22_the_split_gives_each_fleet_its_own_state_from_the_old_file_and_its_
         assert 'logs/' in str(e)
     else:
         raise AssertionError('two logs directories were split as one')
+
+
+# --- F31: the panel's edits beside git (D94) ---------------------------------
+
+def _git_pair():
+    """An 'origin' with one config, a 'box' clone of it; git run quietly."""
+    import subprocess
+    d = Path(tempfile.mkdtemp())
+    env = {**os.environ, 'GIT_AUTHOR_NAME': 't', 'GIT_AUTHOR_EMAIL': 't@t',
+           'GIT_COMMITTER_NAME': 't', 'GIT_COMMITTER_EMAIL': 't@t'}
+
+    def g(where, *args):
+        r = subprocess.run(['git', '-C', str(where), *args], capture_output=True, text=True, env=env)
+        assert r.returncode == 0, r.stderr
+        return r.stdout
+    (d / 'origin' / 'configs').mkdir(parents=True)
+    g(d / 'origin', 'init', '-q', '-b', 'main')
+    (d / 'origin' / 'configs' / 'fleet.a.json').write_text('{"v": 1}\n')
+    (d / 'origin' / 'configs' / 'fleet.b.json').write_text('{"v": 1}\n')
+    (d / 'origin' / 'code.py').write_text('x = 1\n')
+    g(d / 'origin', 'add', '.')
+    g(d / 'origin', 'commit', '-q', '-m', 'one')
+    subprocess.run(['git', 'clone', '-q', str(d / 'origin'), str(d / 'box')], check=True, env=env)
+    return d, g
+
+
+def spec_F31_the_deploy_lets_through_what_git_already_has_and_refuses_the_rest():
+    """The panel's edit on the box, taken into the repository: the deploy
+    stages it (identical) and fast-forwards — the file never goes back to
+    the old terms on the way. An edit that differs from what arrives refuses
+    the whole deploy and changes nothing. An edit nothing arrives for stays,
+    named. --dry acts on nothing."""
+    import importlib.util
+    import subprocess
+    spec = importlib.util.spec_from_file_location('deploy', ROOT / 'ops' / 'deploy.py')
+    dep = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(dep)
+    d, g = _git_pair()
+    box, origin = d / 'box', d / 'origin'
+    (box / 'configs' / 'fleet.a.json').write_text('{"v": 2}\n')          # the panel's edit
+    (box / 'configs' / 'fleet.b.json').write_text('{"v": 9}\n')          # another, not taken
+    (origin / 'configs' / 'fleet.a.json').write_text('{"v": 2}\n')       # taken home, merged
+    (origin / 'code.py').write_text('x = 2\n')
+    g(origin, 'commit', '-qam', 'take the box and a code change')
+    out = []
+    head = g(box, 'rev-parse', 'HEAD')
+    assert dep.deploy(box, subprocess.run, dry=True, log=out.append) == 0
+    assert g(box, 'rev-parse', 'HEAD') == head and 'would stage' in out[-1]
+    assert dep.deploy(box, subprocess.run, log=out.append) == 0
+    assert (box / 'code.py').read_text() == 'x = 2\n'                       # deployed
+    assert (box / 'configs' / 'fleet.a.json').read_text() == '{"v": 2}\n'
+    assert 'fleet.a.json' in out[-1] and 'still edited here' in out[-1] and 'fleet.b.json' in out[-1]
+    assert g(box, 'status', '--porcelain', '--', 'configs/fleet.a.json') == ''   # git agrees now
+    # an edit that differs from what arrives: refused, nothing changed
+    (origin / 'configs' / 'fleet.b.json').write_text('{"v": 3}\n')
+    g(origin, 'commit', '-qam', 'a repo-side change')
+    head = g(box, 'rev-parse', 'HEAD')
+    assert dep.deploy(box, subprocess.run, log=out.append) == 1
+    assert 'REFUSED' in out[-1] and 'fleet.b.json' in out[-1]
+    assert g(box, 'rev-parse', 'HEAD') == head
+    assert (box / 'configs' / 'fleet.b.json').read_text() == '{"v": 9}\n'   # the box's edit untouched
+    # a new fleet file made on the box, the same one arriving: let through
+    (box / 'configs' / 'fleet.c.json').write_text('{"v": 1}\n')
+    (box / 'configs' / 'fleet.b.json').write_text('{"v": 3}\n')            # taken home meanwhile
+    (origin / 'configs' / 'fleet.c.json').write_text('{"v": 1}\n')
+    g(origin, 'add', '.')
+    g(origin, 'commit', '-qm', 'the new fleet')
+    assert dep.deploy(box, subprocess.run, log=out.append) == 0, out[-1]
+    assert g(box, 'status', '--porcelain') == ''
+
+
+def spec_F31_the_box_edits_come_home_and_the_panel_names_them():
+    """take_box_configs reads the box's own git view of configs/ (changed,
+    new, deleted), copies them into this tree, refuses a path outside
+    configs/ and a tree with config edits of its own. The panel names the
+    edited files in one escaped line, asking git at most once a minute."""
+    import importlib.util
+    import subprocess
+    from gridgremlin.drift import edited_here, notice
+    spec = importlib.util.spec_from_file_location('take', ROOT / 'ops' / 'take_box_configs.py')
+    take = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(take)
+    d, g = _git_pair()
+    box = d / 'box'
+    (box / 'configs' / 'fleet.a.json').write_text('{"v": 5}\n')
+    (box / 'configs' / 'fleet.new.json').write_text('{"v": 1}\n')
+    (box / 'configs' / 'fleet.b.json').unlink()
+    rows = edited_here(box)
+    assert sorted(rows) == [('??', 'configs/fleet.new.json'), ('D', 'configs/fleet.b.json'),
+                            ('M', 'configs/fleet.a.json')]
+
+    def ssh(host, command):                 # the box, read through a local shell
+        r = subprocess.run(command, shell=True, capture_output=True, text=True)
+        return r.returncode, r.stdout
+    home = d / 'home'
+    subprocess.run(['git', 'clone', '-q', str(d / 'origin'), str(home)], check=True)
+    took = take.take('box', str(box), home, ssh)
+    assert len(took) == 3
+    assert (home / 'configs' / 'fleet.a.json').read_text() == '{"v": 5}\n'
+    assert (home / 'configs' / 'fleet.new.json').exists() and not (home / 'configs' / 'fleet.b.json').exists()
+    try:
+        take.take('box', str(box), home, ssh)                                  # home has edits now
+        raise AssertionError('took over local edits')
+    except SystemExit as e:
+        assert 'of its own' in str(e)
+    fresh = d / 'fresh'
+    subprocess.run(['git', 'clone', '-q', str(d / 'origin'), str(fresh)], check=True)
+    try:
+        take.take('box', str(box), fresh, lambda h, c: (0, ' M ../etc/passwd\n') if 'status' in c else (0, ''))
+        raise AssertionError('took a path outside configs/')
+    except SystemExit as e:
+        assert 'outside configs/' in str(e)
+    line = notice([('M', 'configs/fleet.<b>.json')])
+    assert '1 config file edited here' in line and '&lt;b&gt;' in line and '<b>' not in line
+    assert notice([]) == ''
+    from panel.routes import Handler
+    calls = []
+    Handler._drift = (0.0, '')
+    reader = lambda root: (calls.append(root), [('M', 'configs/fleet.a.json')])[1]
+    assert 'fleet.a.json' in Handler._drift_notice(now=1000.0, read=reader)
+    Handler._drift_notice(now=1030.0, read=reader)
+    assert len(calls) == 1                                                     # once a minute
+    Handler._drift = (0.0, '')

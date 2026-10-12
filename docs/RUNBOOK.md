@@ -9,8 +9,8 @@ does) and `docs/SPEC.md` (why it is pinned that way).
 
 - **The box**: your ssh alias to it (this page says `ssh box`). The
   checkout is the one working directory there. Never edit files on the
-  box: it pulls a merged `main`. After every pull: `systemctl --user
-  restart gg-panel`.
+  box: deploy a merged `main` with `python3 ops/deploy.py`, then restart
+  `gg-panel`; panel edits git lacks come home by `ops/take_box_configs.py` (D94).
 - **The panel**: `http://127.0.0.1:41900/` through an ssh tunnel to the
   box; the token is the cookie your browser holds (the panel prints the
   link with it at start). Cards, table, control, set up a bot, key.

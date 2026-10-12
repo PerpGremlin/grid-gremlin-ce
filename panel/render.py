@@ -61,12 +61,14 @@ def cards_section(idx, label, contract, view='all', scripted=True):
             f'<div class="cards">{cards}</div></details>')
 
 
-def render(labelled, static=None, table=False, view='all', market=None, mtab='coins'):
+def render(labelled, static=None, table=False, view='all', market=None, mtab='coins', notice=''):
     """One renderer, two artefacts (§4): the live page, or — with
     static=timestamp-text — a self-contained export: no refresh, no
     actions, provenance stamped. The numbers can never diverge because
     there is only one code path to diverge from. Two faces of the same
-    contract: cards (the default) and the dense table (/table)."""
+    contract: cards (the default) and the dense table (/table). `notice`:
+    one line above the cards on the live page (F31: config files edited
+    here and not in git yet), never in an export."""
     face = section if table else cards_section
     if view not in dict(VIEWS):
         view = 'all'
@@ -90,7 +92,7 @@ def render(labelled, static=None, table=False, view='all', market=None, mtab='co
         chrome = KEEP_JS
     return f"""<!doctype html><meta charset="utf-8">
 <title>grid-gremlin</title><style>{CSS}</style>
-{head}{hero_strip(labelled)}{body}
+{head}{hero_strip(labelled)}{f'<p class="neg">{notice}</p>' if notice and not static else ''}{body}
 {chrome}
 <p class="dim">this page renders the engine's own readout contract — it
 cannot disagree with the terminal. It holds no keys; venue writes are the
