@@ -227,6 +227,14 @@ hotfix skips the day and writes its reason. Every move lands in the live
 copy's `logs/promotions.log`. Nothing restarts: the live fleet takes the new
 version when its owner restarts it.
 
+**The data server (D93)** runs the collector and the liquidation stream
+only: no fleet, no `.env`, no venue key. Its own user with linger, a
+read-only deploy key for the checkout, the two units rendered with
+`{{COINS_ARG}}` set to `--coins` and the coins, then
+`systemctl --user enable --now grid-gremlin3-collector.timer
+grid-gremlin3-liqstream.service`. The trading server's copies stop once it
+reads `logs/collect/` from there (BACKLOG §0j).
+
 | placeholder | meaning |
 |---|---|
 | `{{FLEET}}` | short fleet tag (`demo`, `hl`, …) — names units, logs, stamps. The live HL fleet is the one exception: unit tag `hl`, log and snapshot tag `hl-testnet` (its rendered unit was set by hand; `watchdog.hl.testnet.json` follows that) |
@@ -238,6 +246,7 @@ version when its owner restarts it.
 | `{{START_LIMIT_INTERVAL}}` | `600` normally; `0` for patient-retry fleets (venue outages) |
 | `{{RESTART_SEC}}` | `10` normally; longer (`30`) for patient-retry fleets |
 | `{{SLOT}}` | the fleet's own watchdog minute slot, e.g. `*:4/5` |
+| `{{COINS_ARG}}` | collector and liqstream only: empty on the trading server (the market reading names the coins); `--coins BTC,ETH,…` on the data server (K14b) |
 
 The fleet needs `{{REPO_DIR}}/.env` (chmod 600 — the engine refuses a
 group/other-readable one) with the venue keys, `TELEGRAM_BOT_TOKEN`,

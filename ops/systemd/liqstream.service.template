@@ -1,5 +1,5 @@
 [Unit]
-Description=Grid Gremlin v3 liquidation stream (D84) — Bybit's liquidations as they happen, public, kept in logs/collect/ seven days, nothing acts on them
+Description=Grid Gremlin v3 liquidation stream (D84) — Bybit's and Binance's liquidations as they happen, public, kept in logs/collect/ seven days, nothing acts on them
 
 [Service]
 Type=simple
@@ -7,7 +7,7 @@ WorkingDirectory={{REPO_DIR}}
 Nice=10
 Restart=always
 RestartSec=30
-ExecStart=/usr/bin/python3 -m ggdata.liqstream
+ExecStart=/usr/bin/python3 -m ggdata.liqstream {{COINS_ARG}}
 
 [Install]
 WantedBy=default.target

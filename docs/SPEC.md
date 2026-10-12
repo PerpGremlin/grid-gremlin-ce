@@ -1343,15 +1343,26 @@ eventually pin (T1).
   meet it so a burst is not lost. Kept under `logs/collect/` seven days; a
   coin a venue does not list is not asked; a venue that fails is named and
   the rest read. Keyless, public endpoints; display only.
+- **K14b** The coins the collector and the stream watch: `--coins BTC,ETH,…`
+  when named (the data server, D93, has no fleets and so no market
+  reading), else the market reading's, else BTC, ETH and SOL; an empty
+  list is refused.
 - **K15** Bybit's liquidations as they stream (D84). One long-running process
   subscribes to `allLiquidation.<coin>USDT` for every coin the market reading
   names over a stdlib websocket client (RFC 6455: the handshake proven, client
   frames masked, pings answered, fragments joined, a frame split by a timeout
   read whole), pings every 18 s, and reconnects after a drop — 1 s doubling to
   60. Each liquidation (Bybit's `S`: Buy is a long liquidated) is written
-  beside the collector's, marked `venue: bybit`. Binance is not recorded
-  yet: its futures streams answer on their current address (`/market/ws/`,
-  measured 2026-10-12); the old `/ws/` address is retired, not blocked.
+  beside the collector's, marked `venue: bybit`.
+- **K15b** Binance's liquidations, a second line in the same process (D93):
+  `!forceOrder@arr` on the current address (`fstream.binance.com/market/ws/`;
+  the old `/ws/` is retired and silent — not a block by country, as K15 first
+  said), every symbol, kept for the coins watched and their USDT perpetual
+  only; the forced order's SELL is a long liquidated, the filled coins at
+  the average price, marked `venue: binance`. Nothing sent to subscribe, no
+  app ping. Binance sends at most one per symbol a second, so its total is a
+  floor. A line failing other than by a drop stops the process (systemd
+  restarts it whole).
 - **U55** The dash reads as the owner reads it. A fleet file's `label` is
   what the panel calls the fleet (forty characters at most); without one,
   the venue and the file's environment word. Every card is a column with
