@@ -162,6 +162,19 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             return True
         return raw.isdigit() and int(raw) < len(self.fleets)
 
+    _drift = (0.0, '')
+
+    @classmethod
+    def _drift_notice(cls, now=None, read=None):
+        """F31 (D94): the config files edited here and not in git yet, as the
+        front page's one line — git asked at most once a minute."""
+        now = time.time() if now is None else now
+        if now - cls._drift[0] >= 60:
+            from gridgremlin.drift import edited_here, notice
+            rows = (read or edited_here)(Path(__file__).resolve().parents[1])
+            cls._drift = (now, notice(rows))
+        return cls._drift[1]
+
     def _deny(self, code, why):
         self.send_response(code)
         self.send_header('Content-Type', 'text/plain')
@@ -317,7 +330,8 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
         body = (json.dumps({lb: c for lb, c in self._labelled()})
                 if self.path == '/data' else
                 render(self._labelled(), table=base == '/table', view=view, market=market,
-                       mtab=dict(urllib.parse.parse_qsl(query)).get('mtab', 'coins')))
+                       mtab=dict(urllib.parse.parse_qsl(query)).get('mtab', 'coins'),
+                       notice=self._drift_notice()))
         self.send_response(200)
         self.send_header('Content-Type',
                          'application/json' if self.path == '/data'

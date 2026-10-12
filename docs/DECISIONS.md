@@ -888,6 +888,19 @@ stands unless the owner corrects it.
   owner's to shape and needs its own D-number. Charts in the webapp from an
   open-source charting library fed our own data; the paid charting products
   are not needed. The reference is `docs/ARCHITECTURE.md` § Two servers.
+- **D94 — The panel's edits come home; the deploy lets through what git
+  already has (2026-10-12).** The panel writes fleet files on the box by
+  design (D49's hot terms, the create and edit flows), and git never sees
+  them; measured, `git pull --ff-only` then refuses every deploy that
+  touches an edited file — even one edited to exactly what arrives. Laid
+  out with two options (take the box's configs home by PR; or keep configs
+  out of git), the owner left it to Claude: *"on your call."* Chosen: git
+  stays the record. `ops/take_box_configs.py` copies the box's changed,
+  new and deleted config files home (read-only there) for a PR; the deploy
+  becomes `ops/deploy.py`, which stages an edit identical to what arrives
+  (never resetting it first — a running fleet re-reads its config) and
+  refuses, changing nothing, when one differs; the panel's front page
+  names edits git lacks (F31).
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

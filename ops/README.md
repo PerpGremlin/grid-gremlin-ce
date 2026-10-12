@@ -191,7 +191,11 @@ it; silence it by removing the line.
 **Deploying.** The repo is private. The box carries its own SSH key,
 registered on the repo as a **read-only deploy key** (a push from the box is
 refused), under an SSH host alias so it is used for this repo alone. A deploy
-is then `git pull --ff-only origin main` in the checkout, followed by a
+is then `python3 ops/deploy.py` in the checkout (D94: git's fast-forward,
+made safe beside the panel's own edits — an edit git already has is let
+through, one that differs from what arrives refuses the deploy and is
+named; `ops/take_box_configs.py <host> <checkout>` on the workstation
+brings the box's edits home as a PR), followed by a
 restart of `gg-panel` after **every** deploy, not only a panel change: the
 panel holds some engine modules in memory and imports others on demand, so a
 half-new import breaks its pages (2026-10-06: the edit page raised an
@@ -199,7 +203,7 @@ ImportError after an engine-only deploy and a leverage edit could not be
 saved). A fleet picks up engine changes at its next restart, and hot config
 terms live (F12). Never edit
 files on the box: the panel's own writes are flowed back into the repo as
-the row they are (U19).
+the row they are (U19), and the panel's front page names any not yet taken.
 
 **The live copy (D65, F19).** Real money never runs from the checkout every
 deploy updates. It runs from a second copy beside it — a git worktree of the

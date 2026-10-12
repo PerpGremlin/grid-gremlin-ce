@@ -1035,6 +1035,18 @@ eventually pin (T1).
   leverage, said. *(D83, 2026-10-11: at 50x the build asked for the 3.8M
   tier — the ladders' sum — under 4.34M already held; Bybit refused it,
   110048, and the 50x tier's 8.5M never opened)*
+- **F31** The panel's edits beside git (D94). The front page names the
+  config files the checkout has changed, added or deleted that git has not
+  got (git asked at most once a minute, names escaped). The deploy
+  (`ops/deploy.py`, on the box) fetches, then for each file edited here:
+  arriving and already identical — staged, so the fast-forward passes
+  without the file ever showing the old terms; arriving and different — the
+  whole deploy refused, nothing changed, the files named; not arriving —
+  left and named. `ops/take_box_configs.py` (the workstation) reads the
+  box's own git view of `configs/` and copies the changes home for a PR;
+  it refuses a path outside `configs/` and a tree with config edits of its
+  own. *(Measured 2026-10-12: `git pull --ff-only` refuses even an edit
+  identical to what arrives, so drift blocked every deploy.)*
 - **F28** The runbook (`docs/RUNBOOK.md`, D75) names what exists: every unit
   the templates in `ops/systemd/` render (by its `grid-gremlin3-` or `gg-`
   name), every timer, every phone command the phone answers, the close tool,
