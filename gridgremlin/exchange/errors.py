@@ -13,6 +13,16 @@ class VenueError(Exception):
         self.ambiguous = ambiguous
 
 
+def may_have_landed(e):
+    """E6b: a write's error that leaves its fate unknown — no answer at all
+    (a timeout, a dropped line: a plain OSError) or an answer the venue
+    itself marks uncertain (`ambiguous`). A venue's plain refusal — it
+    answered, and the answer was no — is a definite no: nothing landed.
+    (2026-10-12: all 2,447 "ambiguous" base orders in the logs were Bybit's
+    110007, not enough balance — a clear no read as "assuming placed".)"""
+    return bool(getattr(e, 'ambiguous', False)) or not isinstance(e, VenueError)
+
+
 # E6/E7: the reaction map — data, not scattered ifs. No kind kills (E7);
 # a stop rule or the operator are the only paths to stand-down.
 KIND_REACTIONS = {

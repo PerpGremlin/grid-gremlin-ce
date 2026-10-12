@@ -7,7 +7,7 @@ import time
 
 from .apply import diff, make_botid, make_link, rung_of
 from .config import CANDLE_SECONDS, hosts_position_stop
-from .exchange.errors import VenueError
+from .exchange.errors import VenueError, may_have_landed
 from .ladder import (SEED_RUNG, anchor_from_rung, fee_floor_for, grid_rungs,
                      guard_band, lot, min_gap, plan_grid, plan_martingale,
                      sellable_base, slide_is_adverse, slide_offset, split,
@@ -144,6 +144,11 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
                                      link_id=self._make_link(SEED_RUNG),
                                      borrow=self._borrow)
         except (VenueError, OSError) as e:
+            if not may_have_landed(e):              # E6b: a clear no — nothing landed
+                self.notify.event('margin' if e.kind == 'margin' else 'warn', self.botid,
+                                  f'seed refused ({e}) — nothing placed; tried again '
+                                  'next cycle (E6b)')
+                return True                          # this cycle places nothing else
             # E6: the write may have landed. Treating it as done is the SAFE
             # direction here — a re-fired seed doubles the ladder, while a
             # lost seed is visible as an uncovered position next cycle.

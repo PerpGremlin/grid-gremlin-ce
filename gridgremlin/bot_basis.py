@@ -5,7 +5,7 @@ import time
 
 from .apply import diff, make_botid, make_link, pair_amends, rung_of
 from .config import CANDLE_SECONDS, hosts_position_stop
-from .exchange.errors import VenueError
+from .exchange.errors import VenueError, may_have_landed
 from .ladder import (SEED_RUNG, anchor_from_rung, fee_floor_for, grid_rungs,
                      guard_band, lot, min_gap, plan_grid, plan_martingale,
                      sellable_base, slide_is_adverse, slide_offset, split,
@@ -353,9 +353,7 @@ class BasisMixin:
                 reduce_only=True, link_id=self._make_link(0),
                 borrow=self._borrow)
         except (VenueError, OSError) as e:          # E6: may have landed
-            self.notify.event('warn', self.botid,
-                              f'stray close ambiguous ({e}) — the next read '
-                              'reconciles (E6)')
+            self._close_failed('stray close', e)
             return {'round': 'venue_stop'}
         self.notify.event('exit', self.botid,
                           f"the venue fired this round's stop at "

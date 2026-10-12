@@ -5,7 +5,7 @@ import time
 
 from .apply import diff, make_botid, make_link, pair_amends, rung_of
 from .config import CANDLE_SECONDS, hosts_position_stop
-from .exchange.errors import VenueError
+from .exchange.errors import VenueError, may_have_landed
 from .ladder import (SEED_RUNG, anchor_from_rung, fee_floor_for, grid_rungs,
                      guard_band, lot, min_gap, plan_grid, plan_martingale,
                      sellable_base, slide_is_adverse, slide_offset, split,
@@ -80,12 +80,26 @@ class RoundMixin:
                 reduce_only=True, link_id=self._make_link(rung),
                 borrow=self._borrow)
         except (VenueError, OSError) as e:          # E6: may have landed
-            self.notify.event('warn', self.botid,
-                              f'{what} ambiguous ({e}) — the next read '
-                              'reconciles (E6)')
+            self._close_failed(what, e)
             return {'round': result}
         self.notify.event('exit', self.botid, said, urgent=True)
         return {'round': result}
+
+    def _close_failed(self, what, e):
+        """E6b: a market close that raised. Unknown fate: the next read
+        reconciles, as ever. The venue already flat: the close we expected.
+        A clear refusal: the position is still held and its exits were just
+        cancelled — urgent, never 'ambiguous'."""
+        if may_have_landed(e):
+            self.notify.event('warn', self.botid,
+                              f'{what} ambiguous ({e}) — the next read reconciles (E6)')
+        elif e.kind == 'flat':
+            self.notify.event('warn', self.botid,
+                              f'{what}: the venue was already flat ({e}) — the next read confirms')
+        else:
+            self.notify.event('warn', self.botid,
+                              f'{what} REFUSED ({e}) — still held, its exits cancelled; '
+                              'the next read decides (E6b)', urgent=True)
 
     def _cooldown_after(self, fills):
         """M13/D33: the pause the last close asks for — the stop's own
@@ -361,9 +375,7 @@ class RoundMixin:
                 reduce_only=True, link_id=self._make_link(0),
                 borrow=self._borrow)
         except (VenueError, OSError) as e:          # E6: may have landed
-            self.notify.event('warn', self.botid,
-                              f'breakeven close ambiguous ({e}) — the next '
-                              'read reconciles (E6)')
+            self._close_failed('breakeven close', e)
             return {'round': 'breakeven'}
         self.notify.event('tp', self.botid,
                           f'breakeven stop {level:.10g} crossed — closed the '
@@ -781,6 +793,11 @@ class RoundMixin:
                                          link_id=self._make_link(0),
                                          borrow=self._borrow)
             except (VenueError, OSError) as e:      # E6: may have landed
+                if not may_have_landed(e):          # E6b: a clear no — nothing landed
+                    self.notify.event('margin' if e.kind == 'margin' else 'warn', self.botid,
+                                      f'base order refused ({e}) — nothing placed; '
+                                      'tried again next cycle (E6b)')
+                    return {'round': 'refused'}
                 self._anchor = truth['mark']
                 self._last_pos = 0.0
                 self.notify.event('warn', self.botid,
