@@ -151,10 +151,8 @@ systemctl --user enable --now grid-gremlin3-<fleet>.service           # each fle
 systemctl --user enable --now grid-gremlin3-<fleet>-watchdog.timer    # each fleet
 systemctl --user enable --now grid-gremlin3-logrotate.timer grid-gremlin3-fills.timer \
   grid-gremlin3-archive.timer grid-gremlin3-digest.timer \
-  grid-gremlin3-market.timer grid-gremlin3-market-report.timer \
-  grid-gremlin3-collector.timer
-systemctl --user enable --now grid-gremlin3-phone.service gg-panel.service \
-  grid-gremlin3-liqstream.service
+  grid-gremlin3-market.timer grid-gremlin3-market-report.timer
+systemctl --user enable --now grid-gremlin3-phone.service gg-panel.service
 loginctl enable-linger $USER        # units survive logout
 ```
 
@@ -231,13 +229,10 @@ hotfix skips the day and writes its reason. Every move lands in the live
 copy's `logs/promotions.log`. Nothing restarts: the live fleet takes the new
 version when its owner restarts it.
 
-**The data server (D93)** runs the collector and the liquidation stream
-only: no fleet, no `.env`, no venue key. Its own user with linger, a
-read-only deploy key for the checkout, the two units rendered with
-`{{COINS_ARG}}` set to `--coins` and the coins, then
-`systemctl --user enable --now grid-gremlin3-collector.timer
-grid-gremlin3-liqstream.service`. The trading server's copies stop once it
-reads `logs/collect/` from there (BACKLOG §0j).
+**The data server (D93)** runs the collectors only: no fleet, no `.env`, no
+venue key. They live in their own private repository, datagremlin (D95),
+with their units and the data folder's format; the data sits in a folder
+of its own outside any checkout.
 
 **The trading server pulls** what the data server collects:
 `collect-pull.{service,timer}` → `grid-gremlin3-collect-pull.*`, every five
@@ -261,7 +256,6 @@ collector timer and stream before starting the pull — the pull's
 | `{{RESTART_SEC}}` | `10` normally; longer (`30`) for patient-retry fleets |
 | `{{SLOT}}` | the fleet's own watchdog minute slot, e.g. `*:4/5` |
 | `{{DATA_HOST}}` | collect-pull only: the data server's `user@address` (kept out of the repository) |
-| `{{COINS_ARG}}` | collector and liqstream only: empty on the trading server (the market reading names the coins); `--coins BTC,ETH,…` on the data server (K14b) |
 
 The fleet needs `{{REPO_DIR}}/.env` (chmod 600 — the engine refuses a
 group/other-readable one) with the venue keys, `TELEGRAM_BOT_TOKEN`,

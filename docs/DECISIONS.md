@@ -901,6 +901,24 @@ stands unless the owner corrects it.
   (never resetting it first — a running fleet re-reads its config) and
   refuses, changing nothing, when one differs; the panel's front page
   names edits git lacks (F31).
+- **D95 — The collectors and the data get a repository and a folder of
+  their own; private (2026-10-12).** As the site's data grows (about 30
+  coins on OKX, Bybit and Binance; open interest, funding and trade flow),
+  the collectors leave this repository for their own, **datagremlin**, so
+  growing the dataset never touches trading code. Confirmed by the owner
+  in this session (*"Yes, as written"*), after the site's session put the
+  plan to them. **Private:** *"make all our data private. people can
+  access it through the site when we publish stuff"* — so the collectors
+  leave the public edition too. One repository, a folder per coin; the
+  data in a folder of its own on the data server, outside any checkout,
+  kept ninety days (seven before). In order: the move; 30 coins with
+  Bybit's subscriptions in batches; Binance's archive as the first
+  history; live open interest, funding and trade flow. Data flows from
+  the data server outward, never back and never through the website; the
+  engine keeps only a reader for its panel (`ggdata/collected.py`) and
+  the hourly market reading the tilt fleet trades on. Whether the
+  engine's own per-coin series later read from the collection instead is
+  a later decision.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

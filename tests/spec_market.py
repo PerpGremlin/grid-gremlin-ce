@@ -621,103 +621,29 @@ def spec_U71_a_coins_page_charts_its_market_data():
     assert 'OKX <b class="">—</b>' in xaut and '<h2>spot net flow, taker buys − sells</h2>' in xaut
 
 
-def _collector_feed(t_ms, liq_rows=250, mid=100.0):
-    """A fake Coinbase and OKX for the collector: books around `mid` with a
-    wall 2% below, OKX contracts of 0.1 coin, and `liq_rows` liquidations a
-    minute apart ending at t_ms, served newest first in pages of 100."""
-    from urllib.parse import parse_qs, urlparse
-    calls = []
-    def fetch(url):
-        calls.append(url)
-        u = urlparse(url)
-        q = {k: v[0] for k, v in parse_qs(u.query).items()}
-        if 'coinbase' in u.netloc:
-            if '/XAUT-USD/' in u.path:
-                raise OSError('404')
-            return {'bids': [[str(mid - 0.01), '5', 1], [str(mid * 0.98), '1000', 3], [str(mid * 0.5), '9999', 1]],
-                    'asks': [[str(mid + 0.01), '5', 1], [str(mid * 1.03), '200', 2]]}
-        if 'instruments' in u.path:
-            return {'code': '0', 'data': [{'instId': f'{c}-USDT-SWAP', 'ctVal': '0.1'} for c in ('BTC', 'XAU')]}
-        if 'books-full' in u.path:
-            return {'code': '0', 'data': [{'bids': [[str(mid - 0.02), '10', '0', '1']], 'asks': [[str(mid + 0.02), '10', '0', '1']]}]}
-        if 'liquidation-orders' in u.path:
-            after = int(q['after']) if 'after' in q else None
-            ts = [t_ms - i * 60_000 for i in range(liq_rows)]
-            ts = [t for t in ts if after is None or t < after][:100]
-            return {'code': '0', 'data': [{'details': [
-                {'ts': str(t), 'posSide': 'long' if (t // 60_000) % 2 else 'short', 'side': 'sell', 'bkPx': '99.5',
-                 'sz': '2'} for t in ts]}]}
-        raise AssertionError(url)
-    return fetch, calls
-
-
-def spec_K14_the_collector_records_the_books_and_every_liquidation():
-    """D84 (granted 2026-10-11): the books and the liquidations, recorded as
-    they happen. The books — Coinbase's whole spot book and OKX's deep
-    perpetual one — summed into 0.1% bands of a reference price held for the
-    day, within ±5% of the mid; OKX's liquidations in coins and USD (its
-    contracts × their value), paged back until they meet the last run so a
-    burst is not lost; seven days kept; a venue missing for a coin (gold on
-    Coinbase) not asked, the rest read."""
-    import tempfile
-    from ggdata import collector as c
-    c._CT.clear()
-    now = 1_800_000_000.0
-    fetch, calls = _collector_feed(int(now * 1000))
-    root = tempfile.mkdtemp()
-    said = c.run(fetch, ['BTC', 'XAUT'], now, root=root)
-    row = c.read_days('BTC', 'book', now - 60, root)[-1]
-    assert abs(row['mid'] - 100.0) < 1e-9 and row['ref'] == row['mid'] and row['band'] == 0.001
-    wall = row['bids'][str(math_floor((0.98 - 1) / 0.001))]
-    assert wall == round(98.0 * 1000)                                      # the wall 2% below, in its band
-    assert all(-51 <= int(k) <= 50 for k in list(row['bids']) + list(row['asks']))   # ±5%: the 50% bid is out
-    assert sum(1 for _ in row['asks']) == 2                                # near ask + the 3% one (OKX's in band 0)
-    liq = c.read_days('BTC', 'liq', now - 7200, root)
-    assert len(liq) == 60 and liq[-1]['coins'] == 0.2 and abs(liq[-1]['usd'] - 0.2 * 99.5) < 1e-9   # the first hour
-    assert {x['side'] for x in liq} == {'long', 'short'}
-    assert said['XAUT']['unread'] == {} and said['XAUT']['mid'] is not None   # gold: OKX alone, Coinbase not asked
-    assert not any('/XAUT-USD/' in u for u in calls)
-    # the next run, ten minutes on: ten new liquidations, none twice; the day's reference kept
-    fetch2, calls2 = _collector_feed(int((now + 600) * 1000), mid=101.0)
-    c.run(fetch2, ['BTC'], now + 600, root=root)
-    liq = c.read_days('BTC', 'liq', now - 7200, root)
-    assert len(liq) == 70 and len({x['ts'] for x in liq}) == 70
-    assert c.read_days('BTC', 'book', now - 60, root)[-1]['ref'] == row['ref']
-    # a burst: 250 since the last run — paged back to meet it
-    c._CT.clear()
-    burst, bcalls = _collector_feed(int((now + 1200) * 1000), liq_rows=400)
-    import json as _j
-    st = _j.loads((Path(root) / 'state.json').read_text())
-    st['BTC']['liq_ms'] = int((now + 1200) * 1000) - 250 * 60_000
-    (Path(root) / 'state.json').write_text(_j.dumps(st))
-    c.run(burst, ['BTC'], now + 1200, root=root)
-    assert sum(1 for u in bcalls if 'liquidation-orders' in u) == 3        # three pages of 100
-    # seven days kept
-    old = Path(root) / 'BTC' / 'book-2020-01-01.jsonl'
-    old.write_text('{}\n')
-    c.run(fetch, ['BTC'], now + 1800, root=root)
-    assert not old.exists()
-
-
-def math_floor(x):
-    import math
-    return math.floor(x)
-
-
 def spec_U74_a_coins_page_shows_the_book_heatmap_and_its_liquidations():
-    """D84's page half: the last day's book as a heatmap — time across, price
-    up the side, bids and asks shaded by size, the price over it — and the
-    liquidations as hourly bars, longs below the line and shorts above, with
-    the largest listed. Nothing collected: said."""
+    """D84's page half, read from the data folder (the format is
+    datagremlin's contract, D95): the last day's book as a heatmap — time
+    across, price up the side, bids and asks shaded by size, the price over
+    it — and the liquidations as hourly bars, longs below the line and
+    shorts above, with the largest listed. Nothing collected: said."""
+    import json as _j
     import tempfile
-    from ggdata import collector as c
+    from ggdata.collected import day_of
     from panel.asset import heatmap, liquidations
-    c._CT.clear()
     now = 1_800_000_000.0
-    root = tempfile.mkdtemp()
-    for i in range(6):
-        fetch, _ = _collector_feed(int((now + i * 300) * 1000), mid=100.0 + i * 0.1)
-        c.run(fetch, ['BTC'], now + i * 300, root=root)
+    root = Path(tempfile.mkdtemp())
+    (root / 'BTC').mkdir()
+    day = day_of(now)
+    with open(root / 'BTC' / f'book-{day}.jsonl', 'w') as f:
+        for i in range(6):
+            f.write(_j.dumps({'t': int(now + i * 300), 'mid': 100.0 + i * 0.1, 'ref': 100.0, 'band': 0.001,
+                              'bids': {'-20': 98000, '-1': 1000}, 'asks': {'0': 1000, '30': 500},
+                              'unread': {}}) + '\n')
+    with open(root / 'BTC' / f'liq-{day}.jsonl', 'w') as f:
+        for i in range(60):
+            f.write(_j.dumps({'ts': int((now - i * 60) * 1000), 'side': 'long' if i % 2 else 'short',
+                              'px': 99.5, 'coins': 0.2, 'usd': 19.9, 'venue': 'okx'}) + '\n')
     h = heatmap('BTC', now + 1800, root)
     assert '<svg class="achart"' in h and 'fill="var(--pos)"' in h and 'fill="var(--neg)"' in h and '<polyline' in h
     assert '6 snapshots' in h and 'The largest band now: bids' in h

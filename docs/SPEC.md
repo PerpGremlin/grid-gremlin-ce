@@ -1363,34 +1363,10 @@ eventually pin (T1).
   the day's taker flow). Each venue's funding is kept too — Bybit linear and
   inverse, Binance, OKX — as a yearly rate at that market's own settlement
   interval. Display only.
-- **K14** The collector (D84). Every five minutes, per coin the market
-  reading names: Coinbase's whole spot book and OKX's deep perpetual book
-  (its contracts × their value), summed into bands of 0.1% of a reference
-  price held for the UTC day, within ±5% of the mid; and OKX's liquidation
-  orders newer than the last run, in coins and USD, paged back until they
-  meet it so a burst is not lost. Kept under `logs/collect/` seven days; a
-  coin a venue does not list is not asked; a venue that fails is named and
-  the rest read. Keyless, public endpoints; display only.
-- **K14b** The coins the collector and the stream watch: `--coins BTC,ETH,…`
-  when named (the data server, D93, has no fleets and so no market
-  reading), else the market reading's, else BTC, ETH and SOL; an empty
-  list is refused.
-- **K15** Bybit's liquidations as they stream (D84). One long-running process
-  subscribes to `allLiquidation.<coin>USDT` for every coin the market reading
-  names over a stdlib websocket client (RFC 6455: the handshake proven, client
-  frames masked, pings answered, fragments joined, a frame split by a timeout
-  read whole), pings every 18 s, and reconnects after a drop — 1 s doubling to
-  60. Each liquidation (Bybit's `S`: Buy is a long liquidated) is written
-  beside the collector's, marked `venue: bybit`.
-- **K15b** Binance's liquidations, a second line in the same process (D93):
-  `!forceOrder@arr` on the current address (`fstream.binance.com/market/ws/`;
-  the old `/ws/` is retired and silent — not a block by country, as K15 first
-  said), every symbol, kept for the coins watched and their USDT perpetual
-  only; the forced order's SELL is a long liquidated, the filled coins at
-  the average price, marked `venue: binance`. Nothing sent to subscribe, no
-  app ping. Binance sends at most one per symbol a second, so its total is a
-  floor. A line failing other than by a drop stops the process (systemd
-  restarts it whole).
+- *The collector and the liquidation stream moved to their own private
+  repository, datagremlin, by D95 (2026-10-12), with their specs; its
+  `docs/SPEC.md` holds the data folder's format, the contract the panel's
+  coin pages read through `ggdata/collected.py`.*
 - **U55** The dash reads as the owner reads it. A fleet file's `label` is
   what the panel calls the fleet (forty characters at most); without one,
   the venue and the file's environment word. Every card is a column with
@@ -1546,7 +1522,7 @@ eventually pin (T1).
   price closed inside less than half the month, is said in red. An
   estimate, said so; checked against the rehearsal (round trips within 12%
   on four grids). *(the owner, 2026-10-11, the grid planner)*
-- **U74** A coin's page shows the collector's (K14) last day of the book as a
+- **U74** A coin's page shows the collector's (datagremlin, D95) last day of the book as a
   heatmap — time across, price up the side, bids below and asks above shaded
   by size on a log scale, the price line over it, the largest band named —
   and its liquidations as hourly bars (longs liquidated below the line,
