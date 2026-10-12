@@ -1076,3 +1076,40 @@ def spec_R24_a_bot_whose_market_left_the_fleet_is_booked_from_its_own_links():
     g = gone['linETHUSDTs']
     assert g['partial'] and g['last_ms'] == 9 and g['fills'] == 2
     assert abs(g['series'][-1][1] - (30.0 - 1.0)) < 1e-9     # sold 3000, bought back 2970, fees 1
+
+
+def spec_R9b_the_zero_spread_count_judges_only_the_bots_own_exits():
+    """Live 2026-10-12: the 7-day readout flagged 11 'zero-spread' exits on
+    two demo grids, and none was one. (1) An unlinked whole-position close
+    near the average — the venue's or a hand's — is a close, not the bot
+    churning. (2) A window opening after a long grid's exits shows a
+    phantom short, and its next buy was judged an 'exit'. (3) An exit 4%
+    BELOW its recorded entry (a slide had renumbered the rungs) passed
+    `margin < 0.05%`: a loss is not zero spread. A true same-rung exit is
+    still flagged."""
+    from gridgremlin.report import apply_fill, new_book
+    # (1) unlinked close at the average, on a bot whose entry side is known
+    b = new_book()
+    apply_fill(b, 'buy', 1.229, 142.3, 0.0, rung=3, entry_side='buy')
+    apply_fill(b, 'sell', 1.2294, 142.3, 0.0, rung=None, entry_side='buy')
+    assert b['same_rung'] == 0
+    # ...but a book with no known side keeps R9's plain reading
+    plain = new_book()
+    apply_fill(plain, 'buy', 1.229, 142.3, 0.0)
+    apply_fill(plain, 'sell', 1.2294, 142.3, 0.0)
+    assert plain['same_rung'] == 1
+    # (2) a phantom short on a long grid: the buy is an entry, never an exit
+    p = new_book()
+    apply_fill(p, 'sell', 120.91, 0.1, 0.0, rung=12, entry_side='buy', own_entry=120.0)
+    apply_fill(p, 'buy', 120.91, 13.0, 0.0, rung=11, entry_side='buy')
+    assert p['same_rung'] == 0
+    # (3) a loss of 4% against the recorded entry is not zero spread
+    loss = new_book()
+    apply_fill(loss, 'buy', 125.0, 8.0, 0.0, rung=16, entry_side='buy')
+    apply_fill(loss, 'sell', 120.25, 8.0, 0.0, rung=17, entry_side='buy', own_entry=125.0883)
+    assert loss['same_rung'] == 0
+    # a true same-rung exit: still flagged
+    same = new_book()
+    apply_fill(same, 'buy', 125.0, 8.0, 0.0, rung=16, entry_side='buy')
+    apply_fill(same, 'sell', 125.01, 8.0, 0.0, rung=17, entry_side='buy', own_entry=125.0)
+    assert same['same_rung'] == 1

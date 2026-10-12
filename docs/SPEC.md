@@ -1187,6 +1187,13 @@ eventually pin (T1).
   bot is churning at zero spread. *(spot ran ~100% before G15; linear runs low)*
   Under G23 the ratio should read ZERO: a lot's exit is one rung above its own by
   construction, so any same-rung exit is a defect to chase, not a ratio to watch.
+- **R9b** R9 judges only a bot's own exits, and only as zero spread: an
+  entry-side fill is never an exit (a window opened after the exits shows
+  a phantom opposite position); an unlinked close (the venue's, a hand's)
+  is a close, not churn, when the bot's side is known; and an exit far
+  BELOW its entry is a loss, not zero spread (|margin| < 0.05%).
+  *(2026-10-12: the 7-day readout's 11 on two demo grids were all three
+  kinds; none was a same-rung exit. Corrected, the same fills read zero.)*
 - **R8** A forced close is a fill: liquidation (`BustTrade`) and auto-deleveraging
   (`AdlTrade`) move the position and realise the loss, so they enter the ledger like
   any other — funding and settlement rows still do not. *(audit 2026-08-06: the

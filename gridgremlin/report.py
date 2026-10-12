@@ -109,6 +109,12 @@ def apply_fill(book, side, price, qty, fee, inverse=False, rung=None,
     # an earlier one entered (audit 2026-08-07 H1: two profitable bots
     # chased). The margin is per-exit, against this book's own average.
     entering = (abs(pos) < EPS or (pos > 0) == (signed > 0))
+    if entry_side is not None:
+        # R9b: a bot's entry-side fill is never its exit — even when a window
+        # that opened after its exits shows a phantom opposite position
+        # (the SOL long 2026-10-05/06: buys judged as "exits" of a short it
+        # never held)
+        entering = side == entry_side
     if own_entry is not None and not entering:
         # R11: a grid exit is judged against ITS OWN entry level (the lot
         # one rung below for a long, above for a short: G25/D36), never
@@ -116,9 +122,12 @@ def apply_fill(book, side, price, qty, fee, inverse=False, rung=None,
         # lot it adds, so a full-gap exit below the average read as churn
         # (6 of 80 flagged on 2026-10-03, every one a full gap by identity)
         margin = (price - own_entry) * (1.0 if entry_side == 'buy' else -1.0)
-        if margin / own_entry < 0.0005:
+        if abs(margin) / own_entry < 0.0005:      # R9b: zero spread, not a loss
             book['same_rung'] += 1
-    elif not entering and abs(pos) >= EPS and prev_avg > 0:
+    elif not entering and abs(pos) >= EPS and prev_avg > 0 and (
+            entry_side is None or rung is not None):
+        # R9b: an unlinked close (the venue's, or a hand's) is not the bot
+        # churning — a whole-position close near the average is a close
         margin = (price - prev_avg) * (1.0 if pos > 0 else -1.0)
         if abs(margin) / prev_avg < 0.0005:   # inside a spot fee
             book['same_rung'] += 1
