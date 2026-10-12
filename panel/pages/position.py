@@ -18,7 +18,12 @@ class PositionPages:
         belief = ((contract.get('watchdog') or {}).get('belief') or {}).get('bots', {})
         if botid not in (contract.get('bots') or {}) and botid not in belief:
             return self._deny(404, f'{botid}: not in this fleet')
-        # U65: the price from the fleet's own snapshots, the fills from the kept ledger
+        prices, fills = self._price_parts(fi, botid)
+        return self._page(position_page(fi, self.labels[fi], botid, contract, belief, prices, fills))
+
+    def _price_parts(self, fi, botid):
+        """U65: the price from the fleet's own snapshots and the week's
+        fills from the kept ledger, for a position's chart."""
         from gridgremlin.durable import fleet_tag, logs_dir
         from gridgremlin.equity_series import bot_fills, price_windows, snapshot_path
         snap = snapshot_path(self.fleets[fi])
@@ -29,7 +34,7 @@ class PositionPages:
             prices = None
         fills = bot_fills(logs_dir(self.fleets[fi]) / 'fills' / f'{fleet_tag(self.fleets[fi])}.json',
                           botid, int((now - 7 * 86400) * 1000))
-        return self._page(position_page(fi, self.labels[fi], botid, contract, belief, prices, fills))
+        return prices, fills
 
     def _pick_pane(self, labelled, q):
         """D96/U78: the front page's right half for `?fleet=N&bot=ID` — the
@@ -44,6 +49,13 @@ class PositionPages:
         label, contract = labelled[fi]
         if botid not in (contract.get('bots') or {}):
             return None
+        portfolio = (((contract.get('terms') or {}).get(botid) or {}).get('strategy') == 'portfolio')
+        if (q.get('show') or ('numbers' if portfolio else 'fills')) == 'numbers':   # U78b: the numbers, in the half
+            from panel.position_view import position_body
+            belief = ((contract.get('watchdog') or {}).get('belief') or {}).get('bots', {})
+            prices, fills = self._price_parts(fi, botid)
+            return detail_pane(fi, label, botid, contract, None, show='numbers',
+                               numbers=position_body(fi, botid, contract, belief, prices, fills))
         pos = ((((contract.get('watchdog') or {}).get('belief') or {}).get('bots') or {})
                .get(botid) or {}).get('position')
         try:

@@ -119,6 +119,7 @@ border:1px solid var(--line);font:inherit;padding:.15em .3em}
 padding-left:calc(var(--gap)*1.5);border-left:1px solid var(--line)}
 .pane h2{font-size:1.1em;margin:0 0 var(--gap-s)}
 .pane a.plain{font-size:.8em;font-weight:normal;margin-left:.6em}
+.ptabs{display:flex;flex-wrap:wrap;gap:.2em;margin:.4em 0 .8em}
 a.pick{color:inherit;text-decoration:none;border-bottom:1px dotted var(--accent)}a.pick:hover{color:var(--accent)}
 table.fills{border-collapse:collapse;font-size:.9em;width:100%}
 table.fills td,table.fills th{padding:.15em .5em;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}

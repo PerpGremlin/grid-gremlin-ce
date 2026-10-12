@@ -1443,7 +1443,8 @@ def spec_U56_a_cards_numbers_live_on_the_positions_own_page_and_the_show_all_swi
     from spec_panel import CONTRACT as C
     belief = ((C.get('watchdog') or {}).get('belief') or {}).get('bots', {})
     c = card(0, 'spoADAUSDTl', C['bots']['spoADAUSDTl'], C, belief)
-    assert '<div class="numbers">' not in c and "href='/position?fleet=0&amp;bot=spoADAUSDTl'>numbers</a>" in c
+    assert '<div class="numbers">' not in c                                    # U78b: the numbers open in the half
+    assert "<a data-pick href='/?fleet=0&amp;bot=spoADAUSDTl&amp;show=numbers'>numbers</a>" in c
     assert '<details' not in c                                  # U68: a slim card folds nothing
     page = position_page(0, 'demo', 'spoADAUSDTl', C, belief)
     assert page.startswith('<meta name="gg-refresh" content="15"><h1>demo · ADAUSDT long grid spot</h1><h3>as the exchange shows it</h3>'
