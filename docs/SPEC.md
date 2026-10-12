@@ -31,6 +31,15 @@ eventually pin (T1).
   truncate. *(the order-runaway incident, 2026-07-30)*
 - **E6** The engine reacts to error *kinds*, never venue codes; `ambiguous` means "the
   write may have landed" and defers to the next truth read.
+- **E6b** Only an unknown fate is ambiguous: no answer at all (a timeout, a
+  dropped line) or the venue's own uncertain answer (Bybit 10000/10016, HL's
+  5xx). A venue's plain refusal is a definite no — a refused base order or
+  seed is said as refused (a balance refusal as a margin event, D82's
+  cadence), assumes nothing and moves no anchor; a refused market close is
+  urgent: still held, its exits already cancelled. *(2026-10-12: all 2,447
+  "ambiguous" writes in the logs, 2026-10-04..10, were Bybit 110007 refusals
+  of one bot's base order, each logged "assuming placed"; none was a real
+  unknown.)*
 - **E7** No error kind kills: every kind maps to retry, backoff, skip, or warn;
   stand-down happens only by stop rule or operator. This holds at the fleet loop
   too: a failed read or venue error costs the cycle, never the process — no

@@ -232,6 +232,9 @@ RO_CAPACITY_CODES = {110017}
 # of the current risk tier" — the tier's cap, not a rung's fault. Classed
 # 'other' it flapped every buy rung of a 28-rung adverse slide for 13 hours,
 # a page a minute (2026-10-08); as 'margin' B7 halts growth and backs off.
+# 10000 "server timeout" and 10016 "server error": Bybit answered, but not
+# whether the order was taken — the fate is unknown (E6b), not a refusal.
+AMBIGUOUS_CODES = {10000, 10016}
 MARGIN_CODES = {110004, 110006, 110007, 110012, 110044, 110045, 110052, 110090,
                 170131}
 
@@ -283,7 +286,8 @@ class WriteClient(Client):
         if code in NOT_MODIFIED_CODES or code == 0:
             return data.get('result', {})
         raise VenueError(f"bybit {path}: retCode {code}: {data.get('retMsg')}",
-                         kind=_post_kind(code, data.get('retMsg')))
+                         kind=_post_kind(code, data.get('retMsg')),
+                         ambiguous=code in AMBIGUOUS_CODES)
 
     def place_order(self, category, symbol, side, qty, price, link_id,
                     position_idx=0, reduce_only=False, post_only=True,

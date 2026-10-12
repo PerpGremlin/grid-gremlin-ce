@@ -1935,3 +1935,56 @@ def spec_M24_a_tranche_fill_does_not_rearm_a_filled_safety():
     bot._round_rungs = {1, 2}
     bot._round_rungs_at = half
     assert bot._rungs_filled_this_round(half) == frozenset({1, 2})
+
+
+# --- E6b: a clear no is a no; an unknown fate stays careful -------------------
+
+def spec_E6b_a_refused_base_order_is_not_assumed_placed():
+    """2026-10-04..10: 2,447 base orders refused by Bybit (110007, not
+    enough balance) were each logged 'ambiguous — assuming placed', and the
+    round's anchor reset as if a round had begun. A venue's plain refusal is
+    a definite no: nothing is assumed, the anchor stays, a balance refusal
+    is a margin event (D82: said once, then hourly). No answer at all, or a
+    venue's own uncertain answer, keeps E6's careful reading."""
+    from gridgremlin.exchange.errors import VenueError, may_have_landed
+    from gridgremlin.exchange.bybit.client import AMBIGUOUS_CODES, MARGIN_CODES
+
+    class Refusing(FakeVenue):
+        def __init__(self, err):
+            super().__init__()
+            self.err = err
+
+        def place_market(self, *a, **k):
+            raise self.err
+    no = VenueError('bybit /v5/order/create: retCode 110007: ab not enough for new order', kind='margin')
+    venue, lines = Refusing(no), []
+    bot = _bot(venue, lines)
+    assert bot.cycle() == {'round': 'refused'}
+    assert bot._anchor is None and not venue.position   # the old path set the anchor to the mark
+    said = ' '.join(lines)
+    assert 'base order refused' in said and 'assuming placed' not in said
+    assert lines[0].startswith('[ship] margin ')            # D82's cadence, not a warn per cycle
+    for unknown in (OSError('timed out'), VenueError('bybit: retCode 10000: Server Timeout', ambiguous=True)):
+        venue, lines = Refusing(unknown), []
+        assert _bot(venue, lines).cycle() == {'round': 'ambiguous'}
+        assert 'assuming placed' in ' '.join(lines)
+    assert may_have_landed(OSError()) and not may_have_landed(no)
+    assert {10000, 10016} <= AMBIGUOUS_CODES and not (AMBIGUOUS_CODES & MARGIN_CODES)
+
+
+def spec_E6b_a_refused_close_is_urgent_and_never_called_ambiguous():
+    """A market close the venue refused leaves the position held with its
+    exits already cancelled — urgent, said as refused. The venue already
+    flat is the close we expected. An unknown fate is still 'ambiguous'."""
+    from gridgremlin.exchange.errors import VenueError
+    venue, lines = FakeVenue(), []
+    bot = _bot(venue, lines)
+    said = []
+    bot.notify.event = lambda kind, botid, text, urgent=False, **k: said.append((text, urgent))
+    bot._close_failed('stop', VenueError('bybit: retCode 110017: reduce-only rejected', kind='other'))
+    bot._close_failed('stop', VenueError('bybit: retCode 10001: zero position', kind='flat'))
+    bot._close_failed('stop', OSError('timed out'))
+    (refused, u1), (flat, u2), (unknown, u3) = said
+    assert 'stop REFUSED' in refused and 'still held, its exits cancelled' in refused and u1
+    assert 'already flat' in flat and not u2
+    assert 'stop ambiguous' in unknown and not u3
