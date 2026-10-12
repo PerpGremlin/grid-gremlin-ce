@@ -202,9 +202,9 @@ def heatmap(coin, now, collect_root=None):
 
 
 def liquidations(coin, now, days=1, collect_root=None):
-    """U74: OKX's liquidations of the coin (D84) — each hour's longs and
-    shorts wiped out, as bars (longs below the line, shorts above), and the
-    largest ones in a list."""
+    """U74: the coin's liquidations (D84) — OKX's, Bybit's and Binance's —
+    each hour's longs and shorts wiped out, as bars (longs below the line,
+    shorts above), and the largest ones in a list."""
     from ggdata.collector import read_days
     rows = read_days(coin, 'liq', now - days * 86400, collect_root)
     if not rows:
@@ -244,8 +244,8 @@ def liquidations(coin, now, days=1, collect_root=None):
             f'<line x1="0" x2="{W}" y1="80" y2="80" stroke="var(--line)"/>' + ''.join(bars) + '</svg>'
             '<div class="scroll"><table class="cwtab"><tr><th>when</th><th>venue</th><th>position</th><th>price</th><th>size</th></tr>'
             f'{items}</table></div><p class="dim">A long liquidated is a forced sell (the price fell to it); a short, a '
-            'forced buy. OKX read every five minutes; Bybit recorded live from its stream (when the stream unit runs). '
-            'Binance not recorded yet.</p>')
+            'forced buy. OKX read every five minutes; Bybit and Binance recorded live from their streams (when the '
+            'stream unit runs) — Binance sends at most one a second per coin, so its total is a floor.</p>')
 
 
 def asset_page(coin, coins, span='7d', now=None, root=None, unread=None, collect_root=None):

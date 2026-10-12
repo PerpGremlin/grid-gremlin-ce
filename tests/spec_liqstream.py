@@ -59,3 +59,76 @@ def spec_D84_bybits_liquidations_are_recorded_as_they_stream():
     lines_out = [json.loads(l) for f in files for l in f.read_text().splitlines()]
     assert len(lines_out) == 4 and {r['venue'] for r in lines_out} == {'bybit'}
     assert PING_S == 18
+
+
+def spec_K14b_coins_named_on_the_command_line_win():
+    """The data server (D93) has no fleets and so no market reading: the
+    collector and the stream take `--coins` when named, else the reading's
+    coins, else BTC, ETH and SOL. An empty list is refused, not read as
+    none."""
+    from ggdata.market import coins_to_watch
+    with tempfile.TemporaryDirectory() as d:
+        path = f'{d}/market.jsonl'
+        assert coins_to_watch([], path) == ['BTC', 'ETH', 'SOL']
+        with open(path, 'w') as f:
+            f.write(json.dumps({'hmm': {'XRP': {}, 'SUI': {}}}) + '\n')
+        assert coins_to_watch([], path) == ['XRP', 'SUI']
+        assert coins_to_watch(['--coins', 'btc, eth,xaut'], path) == ['BTC', 'ETH', 'XAUT']
+        for bad in (['--coins'], ['--coins', ' , ']):
+            try:
+                coins_to_watch(bad, path)
+                raise AssertionError(f'{bad} accepted')
+            except SystemExit as e:
+                assert '--coins' in str(e)
+
+
+def spec_K15b_binances_liquidations_stream_beside_bybits():
+    """Binance's futures liquidations (`!forceOrder@arr`, every symbol, on the
+    current `/market/ws/` address) are a second line in the same process:
+    kept for the coins watched and their USDT perpetual only, SELL a long
+    liquidated, the filled coins at the average price, marked `venue:
+    binance`. Nothing is sent to subscribe and no app ping (Binance pings;
+    the client answers)."""
+    from ggdata.liqstream import BINANCE_URL, parse_binance
+
+    def msg(sym, side, z='0.5', ap='80000', q='0.5', p='79000'):
+        return json.dumps({'e': 'forceOrder', 'E': 1800000000100,
+                           'o': {'s': sym, 'S': side, 'q': q, 'p': p, 'ap': ap, 'z': z, 'X': 'FILLED',
+                                 'T': 1800000000000}})
+    watched = {'BTC', 'ETH'}
+    assert parse_binance(msg('BTCUSDT', 'SELL'), watched) == [
+        ('BTC', {'ts': 1800000000000, 'side': 'long', 'px': 80000.0, 'coins': 0.5, 'usd': 40000.0,
+                 'venue': 'binance'})]
+    assert parse_binance(msg('ETHUSDT', 'BUY'), watched)[0][1]['side'] == 'short'
+    assert parse_binance(msg('BTCUSDT', 'SELL', z='0', ap='0'), watched)[0][1]['px'] == 79000.0   # unfilled: the order's own
+    for other in ('SOLUSDT', 'BTCUSDC', 'BTCUSDT_261225'):                   # not watched, not the USDT perp
+        assert parse_binance(msg(other, 'SELL'), watched) == []
+    assert parse_binance('{"result":null,"id":1}', watched) == [] and parse_binance('nope', watched) == []
+    assert BINANCE_URL == 'wss://fstream.binance.com/market/ws/!forceOrder@arr'
+
+    sent, made = [], []
+
+    class Line:
+        def __init__(self):
+            self.script = [msg('BTCUSDT', 'SELL'), None, msg('SOLUSDT', 'BUY'), msg('ETHUSDT', 'BUY')]
+        def send_text(self, t):
+            sent.append(t)
+        def recv_text(self, timeout=None):
+            if not self.script:
+                raise StopIteration
+            return self.script.pop(0)
+        def close(self):
+            pass
+
+    def connect(url):
+        made.append(url)
+        return Line()
+    root = tempfile.mkdtemp()
+    try:
+        listen(['BTC', 'ETH'], connect, root=root, log=lambda s: None, sleep=lambda s: None, venue='binance')
+    except StopIteration:
+        pass
+    from pathlib import Path
+    assert made == [BINANCE_URL] and sent == []                        # no subscribe, no app ping
+    got = {f.parent.name: [json.loads(l) for l in f.read_text().splitlines()] for f in Path(root).glob('*/liq-*.jsonl')}
+    assert set(got) == {'BTC', 'ETH'} and all(r['venue'] == 'binance' for rs in got.values() for r in rs)

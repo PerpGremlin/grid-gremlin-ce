@@ -528,6 +528,19 @@ def latest(path=None):
     return json.loads(lines[-1]) if lines else None
 
 
+def coins_to_watch(argv, path=None):
+    """The collector's and the stream's coins (K14b): `--coins BTC,ETH` when
+    named — the data server (D93) has no fleets and so no reading — else the
+    market reading's, else BTC, ETH and SOL."""
+    if '--coins' in argv:
+        i = argv.index('--coins')
+        named = [c.strip().upper() for c in (argv[i + 1] if i + 1 < len(argv) else '').split(',') if c.strip()]
+        if not named:
+            raise SystemExit('--coins needs a list, e.g. --coins BTC,ETH')
+        return named
+    return list((latest(path) or {}).get('hmm') or {}) or ['BTC', 'ETH', 'SOL']
+
+
 # --- words -------------------------------------------------------------------
 
 from common.fmt import pct as _pct  # noqa: E402  (C10)

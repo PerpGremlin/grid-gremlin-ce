@@ -11,7 +11,7 @@ happen (neither keeps a public history). Every five minutes, per coin:
 
 Kept per coin and day under logs/collect/, seven days. Keyless, public
 endpoints only; display only — no bot reads it. Run by a timer:
-  python3 -m ggdata.collector
+  python3 -m ggdata.collector [--coins BTC,ETH,…]
 """
 import json
 import math
@@ -196,9 +196,8 @@ def read_days(coin, kind, since, root=None):
 
 def main(argv):
     from common.http import get_json
-    from .market import latest
-    row = latest() or {}
-    coins = list(row.get('hmm') or {}) or ['BTC', 'ETH', 'SOL']
+    from .market import coins_to_watch
+    coins = coins_to_watch(argv)
     said = run(get_json, coins, time.time())
     bad = {c: s['unread'] for c, s in said.items() if s['unread']}
     print(f"collector: {len(said)} coins, {sum(s['liquidations'] or 0 for s in said.values())} new liquidations"
