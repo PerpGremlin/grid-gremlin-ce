@@ -31,6 +31,31 @@ class PositionPages:
                           botid, int((now - 7 * 86400) * 1000))
         return self._page(position_page(fi, self.labels[fi], botid, contract, belief, prices, fills))
 
+    def _pick_pane(self, labelled, q):
+        """D96/U78: the front page's right half for `?fleet=N&bot=ID` — the
+        bot's fills from the kept ledger, each with what it realised; a bot
+        not in that fleet, the empty half."""
+        from gridgremlin.durable import fleet_tag, logs_dir
+        from gridgremlin.fill_list import fill_list
+        from gridgremlin.kept_fills import load
+        from panel.detail import detail_pane
+        fi = min(max(int(_f(q.get('fleet')) or 0), 0), len(self.fleets) - 1)
+        botid = q.get('bot', '')
+        label, contract = labelled[fi]
+        if botid not in (contract.get('bots') or {}):
+            return None
+        pos = ((((contract.get('watchdog') or {}).get('belief') or {}).get('bots') or {})
+               .get(botid) or {}).get('position')
+        try:
+            from gridgremlin.config import validate_fleet
+            from gridgremlin.trades import with_trades
+            fleet = with_trades(self.fleets[fi], validate_fleet(json.loads(Path(self.fleets[fi]).read_text())))  # as the readout reads it (L5)
+            kept = load(logs_dir(self.fleets[fi]) / 'fills' / f'{fleet_tag(self.fleets[fi])}.json')
+            listing = fill_list(kept, fleet, botid, held=None if pos is None else abs(float(pos)))
+        except (OSError, ValueError, RuntimeError, KeyError):
+            listing = None
+        return detail_pane(fi, label, botid, contract, listing)
+
     def _live_trade(self, fi, botid):
         """L7: the trades file of fleet `fi` when `botid` is a trade there
         still running (not stood down), else None."""

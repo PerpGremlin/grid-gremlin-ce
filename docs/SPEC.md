@@ -1453,7 +1453,9 @@ eventually pin (T1).
   folded tables align each heading with its numbers (right), the first
   column left and as wide as it needs — the info pages' `details td` rule
   had reached into them. *(the owner, 2026-10-11)*
-- **U67** The fleet page is two halves on a wide screen — the bots, and the
+- **U67** *(the front page's right half is U78's since D96; the markets
+  half below is drawn nowhere until step 2 removes it)* The fleet page is
+  two halves on a wide screen — the bots, and the
   markets beside them (stacked on a phone, bots first; the table keeps its
   width). The markets half reads the newest market reading (D67, K10, from
   the end of its file) and draws a tile per coin the fleets trade, the most
@@ -1549,6 +1551,20 @@ eventually pin (T1).
   apart; a query link carries `&amp;`, never a bare `&`; the help column
   of the form keeps its width beside a long dropdown. The README lists the
   watchdog's and the agent's keys. *(the bug hunt, 2026-10-11)*
+- **U78** The front page's right half is what the owner picked (D96): a
+  bot's name on its card opens it there by an address
+  (`/?fleet=N&bot=ID`), so the page's own refresh keeps it live and the
+  link works without script; the script's one fetch stays this page (same
+  origin, same path). The half lists the bot's fills newest first (200
+  drawn, the rest counted): time, side, entry or exit or the venue's own
+  label (a liquidation, a stop), price, size, fee, what the fill realised
+  by average cost, and the running net after fees — from the kept ledger
+  counted exactly as the card's kept history (`gridgremlin/fill_list.py`:
+  the same attribution, start and walk; its total is the card's, measured
+  on every bot of both fleets 2026-10-12). A record with no whole start
+  lists its fills with realised unknown, never guessed; a portfolio row
+  points to its numbers page; the fleet file is read as the readout reads
+  it. Nothing picked: a line saying how; the table keeps its width.
 - **L1** A new trade joins a running fleet within a cycle. The trade watch
   stats the trades file once a cycle; a changed file's new rows are each
   built by the fleet's own builder (`main.build_market_bot`, the one every

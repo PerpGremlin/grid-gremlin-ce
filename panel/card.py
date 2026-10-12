@@ -2,7 +2,7 @@
 from gridgremlin.report import card_total
 from .reference import STATE_WORDS
 from .drawings import strip
-from .html_bits import _day, _num_cls, coin_of, esc, money, qarg, units_of
+from .html_bits import _day, _num_cls, coin_of, esc, money, pick_link, qarg, units_of
 
 
 def run_rate(b, contract, capital=None, trade=False):
@@ -440,7 +440,7 @@ def card(idx, botid, b, contract, belief, full=False):
         warn = ''.join(f'<div class="neg">{a}</div>' for a in alerts)
         return (f'<div class="card {side} slim"><div>'
                 f'<span class="side {side}">{side.upper()}</span> <b>'
-                f'{esc(_plain_name(botid, contract, b))}</b>{note} '
+                f'{pick_link(idx, botid, esc(_plain_name(botid, contract, b)))}</b>{note} '
                 f'{state_tag(state, cls)}</div>'
                 f'<div>{slim_head if b is not None else head}</div>'
                 + ('' if b is not None else f'<div class="dim">{_quiet_held}</div>')

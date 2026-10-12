@@ -318,19 +318,14 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             self.wfile.write(tidy(body).encode())
             return
         base, _, query = self.path.partition('?')
-        view = dict(urllib.parse.parse_qsl(query)).get('view', 'all')
-        if self.path != '/data' and base != '/table':
-            from ggdata.market import latest
-            try:
-                market = latest()                  # U67: the markets half, from the readings file
-            except (OSError, ValueError):
-                market = None
-        else:
-            market = None
-        body = (json.dumps({lb: c for lb, c in self._labelled()})
+        q = dict(urllib.parse.parse_qsl(query))
+        view = q.get('view', 'all')
+        labelled = self._labelled()
+        pane = (self._pick_pane(labelled, q) if self.path != '/data' and base != '/table'
+                and q.get('bot') else None)
+        body = (json.dumps({lb: c for lb, c in labelled})
                 if self.path == '/data' else
-                render(self._labelled(), table=base == '/table', view=view, market=market,
-                       mtab=dict(urllib.parse.parse_qsl(query)).get('mtab', 'coins'),
+                render(labelled, table=base == '/table', view=view, pane=pane,
                        notice=self._drift_notice()))
         self.send_response(200)
         self.send_header('Content-Type',
