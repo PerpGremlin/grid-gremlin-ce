@@ -5,9 +5,10 @@ with a growing pause when the line drops. Each liquidation is appended beside
 the collector's (K14) in `logs/collect/<coin>/liq-<day>.jsonl`, marked
 `venue: bybit`. Keyless; display only — no bot reads it.
 
-Binance's futures streams accept the connection and send nothing from the
-box's country or the workstation's (measured 2026-10-11; its spot streams
-and its futures web requests answer) — so Binance is not here.
+Binance is not here yet. Its futures streams answer on their current address
+(`fstream.binance.com/market/ws/…`, measured 2026-10-12); the old `/ws/…`
+address the first test used is silent everywhere — retired, not a block by
+country. Adding it is the data server's step (D93).
 
   python3 -m ggdata.liqstream
 """

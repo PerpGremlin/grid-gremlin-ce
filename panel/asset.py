@@ -245,7 +245,7 @@ def liquidations(coin, now, days=1, collect_root=None):
             '<div class="scroll"><table class="cwtab"><tr><th>when</th><th>venue</th><th>position</th><th>price</th><th>size</th></tr>'
             f'{items}</table></div><p class="dim">A long liquidated is a forced sell (the price fell to it); a short, a '
             'forced buy. OKX read every five minutes; Bybit recorded live from its stream (when the stream unit runs). '
-            'Binance\'s futures stream is closed to this server\'s country.</p>')
+            'Binance not recorded yet.</p>')
 
 
 def asset_page(coin, coins, span='7d', now=None, root=None, unread=None, collect_root=None):

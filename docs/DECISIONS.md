@@ -873,6 +873,21 @@ stands unless the owner corrects it.
   bot leaves a fleet for good by `gridgremlin.retire` (X15c): tombstone,
   its own orders cancelled, its position closed, then the row out of the
   file.
+- **D93 — Two products on one data engine, on its own server (2026-10-12).**
+  The owner: *"i want to build my own coinglass … but i want to also build
+  the grid gremlin webapp … id like the grid gremlin to have all the trading
+  data that the website like coinglass has"* — and a new server for it.
+  Two products read one data layer (`ggdata/`, D91): the owner's own market
+  data site and the Grid Gremlin webapp (the panel grown up). The data layer
+  moves to a **data server** of its own; the trading server keeps trading
+  only, so its speed and its keys are untouched by the data work. The rules:
+  the data server holds no venue key and no account; public traffic reaches
+  the data server only, never the trading server; the trading server reads
+  from the data server, never the other way. The showcase stays private
+  (D86 as amended 2026-10-12); a page of the bots on the public site is the
+  owner's to shape and needs its own D-number. Charts in the webapp from an
+  open-source charting library fed our own data; the paid charting products
+  are not needed. The reference is `docs/ARCHITECTURE.md` § Two servers.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
