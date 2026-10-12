@@ -1579,6 +1579,16 @@ eventually pin (T1).
   fixed column widths give way. Checked in a real browser (headless
   Chrome, 2026-10-12): a pick opens without a reload, the helper fills the
   gap after the swap, a typed value survives the refresh, back returns.
+- **U78d** The front page's side panel opens the panel's pages in the
+  half (`/?show=NAME`): new bot, new trade, rehearse a grid, results,
+  carry and control — each the page's own body, drawn by the page's own
+  code (a page method run with its reply caught), its forms posting where
+  they always did; carry's form returns to the half. A name the half does
+  not draw is the empty half. The pages keep their own addresses, and
+  every other page's menu still links them. The rehearsal's form is
+  labelled fields that wrap, on its page and in the half. Checked in a
+  real browser: all six open without a reload, nothing passes the half's
+  edge, no script error.
 - **L1** A new trade joins a running fleet within a cycle. The trade watch
   stats the trades file once a cycle; a changed file's new rows are each
   built by the fleet's own builder (`main.build_market_bot`, the one every

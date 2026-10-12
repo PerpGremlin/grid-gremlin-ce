@@ -11,6 +11,16 @@ from .html_bits import _num_cls, esc, qarg, units_of
 SHOWN = 200                 # rows drawn; older ones counted, not drawn
 
 
+PAGES = {'setup': 'new bot', 'trade': 'new trade', 'rehearse': 'rehearse a grid',
+         'results': 'results', 'carry': 'carry', 'control': 'control'}
+
+
+def page_pane(name, body):
+    """U78d: one of the panel's pages in the right half, under its name."""
+    return (f'<aside class="pane"><h2>{esc(PAGES[name])} <a class="plain" data-pick href="/">close</a></h2>'
+            f'{body}</aside>')
+
+
 def empty_pane():
     return ('<aside class="pane"><p class="dim">Pick a bot by its name: its fills '
             'and what each one made open here.</p></aside>')

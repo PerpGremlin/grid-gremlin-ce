@@ -2,6 +2,7 @@
 the Handler inherits."""
 from panel.chart import _f
 from pathlib import Path
+import html
 import json
 import time
 import urllib.parse
@@ -35,6 +36,45 @@ class PositionPages:
         fills = bot_fills(logs_dir(self.fleets[fi]) / 'fills' / f'{fleet_tag(self.fleets[fi])}.json',
                           botid, int((now - 7 * 86400) * 1000))
         return prices, fills
+
+    def _capture(self, fn, path):
+        """A page method's body, not sent: `fn` runs with this request's
+        path set to `path` and `_page`/`_deny` caught, so the half draws
+        exactly what the page draws (one code path, U78d)."""
+        saved, got = self.path, {}
+        self.path = path
+        self._page = lambda body: got.setdefault('body', body)
+        self._deny = lambda code, why: got.setdefault('body', f'<p class="neg">{html.escape(why)}</p>')
+        try:
+            fn()
+        finally:
+            self.path = saved
+            del self._page, self._deny
+        return got.get('body', '')
+
+    def _page_pane(self, labelled, q):
+        """U78d: a page the side panel opens in the front page's right half
+        (`/?show=NAME`) — the page's own body, its forms posting where they
+        always did. None: not a page the half draws."""
+        from panel.detail import page_pane
+        show = q.get('show')
+        if show == 'results':
+            from panel.results import results_page
+            return page_pane(show, results_page(labelled))
+        if show == 'carry':
+            from ggdata.market import latest
+            from panel.carry import carry_page
+            return page_pane(show, carry_page(latest(), q, action='/'))
+        if show == 'rehearse':
+            from panel.forms import FORM
+            return page_pane(show, FORM)
+        if show == 'trade':
+            return page_pane(show, self._trade_html())
+        if show == 'setup':
+            return page_pane(show, self._capture(self._setup_page, '/setup'))
+        if show == 'control':
+            return page_pane(show, self._capture(self._control_page, '/control'))
+        return None
 
     def _pick_pane(self, labelled, q):
         """D96/U78: the front page's right half for `?fleet=N&bot=ID` — the

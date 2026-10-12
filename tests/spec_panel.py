@@ -415,7 +415,7 @@ def spec_V8_the_export_is_the_same_renderer_frozen():
     assert 'spoADAUSDTl' in frozen and 'HOLDING' in frozen
     assert 'http-equiv="refresh"' in live
     assert 'http-equiv="refresh"' not in frozen
-    assert '/control' in live and '/control' not in frozen
+    assert '/?show=control' in live and 'show=control' not in frozen and '/control' not in frozen
     assert 'exported Fri, 08 Aug 2026' in frozen
     assert 'snapshot, not a live view' in frozen
 
@@ -654,7 +654,7 @@ def spec_U51_every_link_and_switch_sits_in_one_side_panel():
     nav = cards.split('<nav class="side">', 1)[1].split('</nav>', 1)[0]
     for h in ('pages', 'arrange', 'size in', 'leverage'):
         assert f'<h3>{h}</h3>' in nav, h
-    for href in ('/table', '/control', '/setup', '/rehearse', '/export', '/key'):
+    for href in ('/table', '/?show=control', '/?show=setup', '/?show=rehearse', '/export', '/key'):   # U78d: the half
         assert f'href="{href}"' in nav, href
     assert '<b class="on">as listed</b>' in nav and 'ggAll(true)' not in nav   # U56: nothing folds
     assert 'data-size="coin"' in nav and 'data-lev="filled"' in nav
@@ -1004,7 +1004,7 @@ def spec_U13_the_rehearsal_keeps_what_was_typed():
         assert '<option selected>short</option>' in page
     blank = rehearse_form()
     assert 'value="ADAUSDT"' in blank and '<option selected>long' in blank
-    assert '<th>investment</th>' in blank and '<th>grids</th>' in blank
+    assert '<label>investment <input' in blank and '<label>grids <input' in blank      # U78d: labelled fields
     hostile = rehearse_form({'symbol': '"><script>x</script>'})
     assert '<script>x' not in hostile                  # typed text is text
 
