@@ -50,6 +50,13 @@ class PositionPages:
         if botid not in (contract.get('bots') or {}):
             return None
         portfolio = (((contract.get('terms') or {}).get(botid) or {}).get('strategy') == 'portfolio')
+        if q.get('show') == 'edit':                          # U78c: the edit door, in the half
+            try:
+                door = self._edit_body(fi, botid)
+            except (OSError, ValueError, KeyError) as e:
+                door = f'<p class="neg">the edit form cannot be drawn: {type(e).__name__}</p>'
+            return detail_pane(fi, label, botid, contract, None, show='edit',
+                               numbers=door or '<p class="dim">not in the fleet file</p>')
         if (q.get('show') or ('numbers' if portfolio else 'fills')) == 'numbers':   # U78b: the numbers, in the half
             from panel.position_view import position_body
             belief = ((contract.get('watchdog') or {}).get('belief') or {}).get('bots', {})

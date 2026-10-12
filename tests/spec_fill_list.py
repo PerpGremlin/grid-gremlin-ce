@@ -70,7 +70,7 @@ def spec_U78_the_front_pages_right_half_is_what_was_picked():
     from panel.detail import detail_pane
     from panel.html_bits import pick_link
     from panel.render import render
-    assert pick_link(1, 'lin/BTC', 'x') == '<a class="pick" data-pick href="/?fleet=1&amp;bot=lin%2FBTC">x</a>'
+    assert pick_link(1, 'lin/BTC', 'x') == '<a class="bname" data-pick href="/?fleet=1&amp;bot=lin%2FBTC">x</a>'
     page = render([])
     assert '<div class="split">' in page and 'Pick a bot by its name' in page
     assert '<aside class="pane">' not in render([], table=True)
@@ -94,7 +94,9 @@ def spec_U78_a_pick_on_the_live_server_reads_the_fleet_as_the_readout_does():
         (Path(d) / 'configs').mkdir()
         (Path(d) / 'logs' / 'fills').mkdir(parents=True)
         fleet = Path(d) / 'configs' / 'fleet.demo.json'
-        fleet.write_text(json.dumps({'bots': [{'market_type': 'linear', 'symbol': 'BTCUSDT', 'side': 'long',
+        (Path(d) / 'configs' / 'watchdog.demo.json').write_text(json.dumps({'positions': {B: {'max': 0.5}}}))
+        fleet.write_text(json.dumps({'watchdog': str(Path(d) / 'configs' / 'watchdog.demo.json'),
+                                     'bots': [{'market_type': 'linear', 'symbol': 'BTCUSDT', 'side': 'long',
                                                'capital': 1000, 'leverage': 5, 'lower': 80000,
                                                'upper': 90000, 'rungs': 11}]}))
         (Path(d) / 'logs' / 'fills' / 'demo.json').write_text(json.dumps({'version': 1, 'collected': {},
@@ -121,6 +123,12 @@ def spec_U78_a_pick_on_the_live_server_reads_the_fleet_as_the_readout_does():
             assert 'class="cards one"' in num and '4 fills since' not in num
             assert '&larr; fleet' not in num                                     # the half, not the page
             assert 'as the exchange shows it' in get(f'/position?fleet=0&bot={B}')   # the page still stands
+            # U78c: the edit door in the half — the same form, posting where it always did
+            door = get(f'/?fleet=0&bot={B}&show=edit')
+            assert '<b class="on">edit</b>' in door and '<form method="post" action="/setup">' in door
+            assert 'value="80000"' in door and '<script>' in door.split('<aside class="pane">')[1]
+            assert door.count('<form method="post" action="/setup">') == 1            # the half's only
+            assert '<form method="post" action="/setup">' in get(f'/edit?fleet=0&bot={B}')
         finally:
             srv.shutdown()
 
