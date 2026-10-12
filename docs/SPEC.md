@@ -1349,9 +1349,9 @@ eventually pin (T1).
   frames masked, pings answered, fragments joined, a frame split by a timeout
   read whole), pings every 18 s, and reconnects after a drop — 1 s doubling to
   60. Each liquidation (Bybit's `S`: Buy is a long liquidated) is written
-  beside the collector's, marked `venue: bybit`. Binance's futures streams
-  send nothing from the box's or the workstation's country (measured), so
-  Binance is not recorded.
+  beside the collector's, marked `venue: bybit`. Binance is not recorded
+  yet: its futures streams answer on their current address (`/market/ws/`,
+  measured 2026-10-12); the old `/ws/` address is retired, not blocked.
 - **U55** The dash reads as the owner reads it. A fleet file's `label` is
   what the panel calls the fleet (forty characters at most); without one,
   the venue and the file's environment word. Every card is a column with
