@@ -72,14 +72,18 @@ SIZE_VIEWS = (('all', 'all'), ('coin', 'coins'), ('value', 'value'),
               ('cost', 'cost'))
 
 
+HALF = (('control', 'control'), ('setup', 'new bot'), ('trade', 'new trade'),
+        ('rehearse', 'rehearse a grid'), ('results', 'results'), ('carry', 'carry'))
+
+
 def page_links(table=False, view='all'):
     """U60: every page of the panel, as links — the side panel's first
     block on the fleet page, a bar across the top of every other page."""
     q = '' if view == 'all' else f'?view={view}'
     return ((f'<a href="/{q}">cards</a>' if table else f'<a href="/table{q}">table</a>')
-            + '<a href="/control">control</a><a href="/setup">new bot</a><a href="/trade">new trade</a>'
-              '<a href="/rehearse">rehearse a grid</a><a href="/results">results</a><a href="/carry">carry</a>'
-              '<a href="/export">export snapshot</a><a href="/key">key</a>')
+            + (''.join(f'<a href="/{k}">{w}</a>' for k, w in HALF) if table else    # U78d: the half
+               ''.join(f'<a data-pick href="/?show={k}">{w}</a>' for k, w in HALF))
+            + '<a href="/export">export snapshot</a><a href="/key">key</a>')
 
 
 def side_nav():

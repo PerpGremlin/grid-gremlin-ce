@@ -44,7 +44,7 @@ def _money(v):
     return f'<span class="{_num_cls(v)}">{v:+,.0f}</span>'
 
 
-def carry_page(row, q=None, now=None):
+def carry_page(row, q=None, now=None, action='/carry'):
     """The calculator (the owner's example by default: a 100,000 stack, 85,000
     of it borrowed, BTC hedged on the inverse perpetual, the 90-day funding),
     what the year looks like at other funding rates, then every coin read."""
@@ -71,7 +71,8 @@ def carry_page(row, q=None, now=None):
     def sel(name, pairs, cur):
         return (f'<select name="{name}">' + ''.join(
             f'<option value="{k}"{" selected" if k == cur else ""}>{w}</option>' for k, w in pairs) + '</select>')
-    form = ('<form method="get" action="/carry" class="carryform">'
+    form = (f'<form method="get" action="{action}" class="carryform">'
+            + ('<input type="hidden" name="show" value="carry">' if action == '/' else '') +
             f'<label>coin <select name="coin">{opts}</select></label>'
             f'<label>stack <input name="stack" value="{stack:.0f}" inputmode="decimal" size="9"></label>'
             f'<label>borrowed <input name="loan" value="{loan:.0f}" inputmode="decimal" size="9"></label>'

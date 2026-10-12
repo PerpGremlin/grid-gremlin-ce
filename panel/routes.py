@@ -288,8 +288,10 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
         q = dict(urllib.parse.parse_qsl(query))
         view = q.get('view', 'all')
         labelled = self._labelled()
-        pane = (self._pick_pane(labelled, q) if self.path != '/data' and base != '/table'
-                and q.get('bot') else None)
+        pane = None
+        if self.path != '/data' and base != '/table':
+            pane = (self._pick_pane(labelled, q) if q.get('bot')
+                    else self._page_pane(labelled, q) if q.get('show') else None)
         body = (json.dumps({lb: c for lb, c in labelled})
                 if self.path == '/data' else
                 render(labelled, table=base == '/table', view=view, pane=pane,

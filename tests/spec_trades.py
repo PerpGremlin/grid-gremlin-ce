@@ -401,7 +401,7 @@ def spec_R24_the_results_page_draws_each_bots_curve_and_the_markets_that_left():
     assert 'markets that left the fleet' in page and 'linSOLUSDTs' in page and '-2.00' in page
     assert 'market left the fleet; last fill' in page and 'nothing kept yet' in page
     assert 'linETHUSDTl' not in page                       # nothing kept for it: no row
-    assert 'href="/results"' in page_links() and 'href="/results"' in side_nav()
+    assert 'href="/?show=results"' in page_links() and 'href="/results"' in side_nav()   # U78d: the half, and the page
 
 
 def spec_R24_the_panel_serves_the_results_page():

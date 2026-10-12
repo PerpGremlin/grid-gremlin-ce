@@ -129,6 +129,15 @@ def spec_U78_a_pick_on_the_live_server_reads_the_fleet_as_the_readout_does():
             assert 'value="80000"' in door and '<script>' in door.split('<aside class="pane">')[1]
             assert door.count('<form method="post" action="/setup">') == 1            # the half's only
             assert '<form method="post" action="/setup">' in get(f'/edit?fleet=0&bot={B}')
+            # U78d: the side panel's pages in the half — each the page's own body
+            for name, mark in (('results', 'results since the first kept fill'),
+                               ('setup', 'action="/setup"'), ('trade', '<form'),
+                               ('rehearse', 'action="/rehearse"'), ('control', 'control')):
+                half = get(f'/?show={name}').split('<aside class="pane">', 1)[1]
+                assert mark in half and 'data-pick href="/">close</a>' in half, name
+            assert 'Pick a bot by its name' in get('/?show=nonsense')                 # not a page: the empty half
+            assert f'data-pick href="/?show=results">results</a>' in get('/')         # the menu opens the half
+            assert 'results since the first kept fill' in get('/results')            # the page still stands
         finally:
             srv.shutdown()
 
@@ -150,7 +159,7 @@ def spec_D96_the_market_pages_stay_gone():
     root = Path(__file__).resolve().parents[1]
     assert not list((root / 'ops' / 'systemd').glob('collect-pull*'))
     for nav in (side_nav(), page_links(), page_links(table=True)):            # both menus
-        assert '/asset' not in nav and '/calm-wild' not in nav and '/carry' in nav
+        assert '/asset' not in nav and '/calm-wild' not in nav and ('/carry' in nav or 'show=carry' in nav)
     assert importlib.util.find_spec('ggdata.market') is not None                # the bots' reading stays
     srv, base = _serve(CONTRACT)
     try:
