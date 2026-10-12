@@ -15,7 +15,7 @@ from common.telegram import send_telegram
 WATCHDOG_KEYS = ('tag', 'snapshot', 'state', 'staleness_seconds', 'mm_rate_max',
                  'equity_min', 'equity_drawdown_max', 're_alert_seconds',
                  'positions', 'assumes_sole_actor', 'disk_used_max',
-                 'expiry', 'expiry_warn_days')
+                 'expiry', 'expiry_warn_days', 'data_stale_seconds')
 
 
 def validate_watchdog(cfg, where='watchdog'):
@@ -44,6 +44,9 @@ def validate_watchdog(cfg, where='watchdog'):
                                           or not out['expiry']):
         raise ConfigError(f"{where}: 'expiry' is the calendar's path (configs/expiry.json)")
     out['expiry_warn_days'] = _num(out, 'expiry_warn_days', where, least=0.0) or 7.0
+    # F32: like the calendar, one watchdog's to read — the data server's
+    # freshness, at the address the box's .env names (DATA_STATUS_URL)
+    out['data_stale_seconds'] = _num(out, 'data_stale_seconds', where, least=60.0)
     if 'assumes_sole_actor' not in cfg:
         raise ConfigError(f"{where}: 'assumes_sole_actor' is required — every "
                           'threshold assumes something about who else trades '
@@ -218,6 +221,13 @@ def main(argv):
         breaches.update(expiry_breaches(
             cfg['expiry'], _dt.datetime.fromtimestamp(now, _dt.timezone.utc).date(),
             int(cfg['expiry_warn_days'])))
+    if cfg.get('data_stale_seconds'):                # F32: the market data arriving
+        url = os.environ.get('DATA_STATUS_URL')
+        if url:
+            from .freshness import fetch_status, freshness_breaches
+            breaches.update(freshness_breaches(fetch_status(url), now, cfg['data_stale_seconds']))
+        else:
+            print(f"[{cfg['tag']}] data freshness: off — DATA_STATUS_URL is not set", flush=True)
     if healed:
         print(f"[{cfg['tag']}] {healed}", flush=True)
         send_telegram(f"[{cfg['tag']}] {healed}")

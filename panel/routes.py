@@ -100,6 +100,11 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             return {'window_hours': self.hours,
                     'generated_ms': int(time.time() * 1000),
                     'bots': {}, 'unowned': {}}
+        from gridgremlin.archive import shared_readout
+        shared = shared_readout(fleet, self.hours)        # U47b: the phone's, when fresh
+        if shared is not None:
+            Handler._cache[fleet] = (time.time(), shared)
+            return shared
         out = subprocess.run(
             [sys.executable, '-m', 'gridgremlin.report', fleet,
              '--hours', str(self.hours), '--json'],

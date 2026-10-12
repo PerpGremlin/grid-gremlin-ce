@@ -1056,6 +1056,19 @@ eventually pin (T1).
   it refuses a path outside `configs/` and a tree with config edits of its
   own. *(Measured 2026-10-12: `git pull --ff-only` refuses even an edit
   identical to what arrives, so drift blocked every deploy.)*
+- **F32** The market data still arriving. The data server's site publishes
+  a public status file — when it last wrote its pages, the newest row of
+  each kind — and one fleet's watchdog (the calendar's: `data_stale_seconds`,
+  900) reads it over HTTPS at the address the box's `.env` names
+  (`DATA_STATUS_URL`; unset, the check is off and the run says so). One key,
+  `data_stale`, through the watchdog's own transitions: paged once, reminded
+  on its interval, "recovered" when fresh. It names why — the status
+  unreadable (fetched twice first, so one dropped request is no page), the
+  site's writer stopped, or which of books, open interest, funding, flow
+  and ratios fell behind. Liquidations are shown, never paged: a quiet
+  market is a real answer. No key passes between the servers; trading
+  needs none of it. *(2026-10-12: the step back found no one told when
+  collecting stops)*
 - **F28** The runbook (`docs/RUNBOOK.md`, D75) names what exists: every unit
   the templates in `ops/systemd/` render (by its `grid-gremlin3-` or `gg-`
   name), every timer, every phone command the phone answers, the close tool,
@@ -2174,6 +2187,15 @@ that pins it (T1).
   request whose cache had expired started its own readout; on a slow venue
   they piled up — 18 demo readouts at once, 350 timeouts in an hour, the page
   and the owner's HYPE rehearsal hung; the trading fleet itself was untouched)*
+- **U47b** One readout, read once, for every reader on the box. The phone
+  service keeps every fleet's readout warm (each minute) and writes it whole
+  to `logs/readouts/<fleet>.json`; the panel serves that one while it is at
+  most 150 s old (the phone's round measured 91 s: four readouts, then a
+  minute's sleep) and over the panel's own window, and runs its own only when
+  it is stale, of another window, marked unavailable, or absent (the phone
+  down). *(2026-10-12: the trading server's one processor never idle — load
+  1.0, CPU pressure 23–30%; sampled over two minutes, eleven readouts, eight
+  of them the panel's re-reading what the phone had just read)*
 - **U48** Every fleet heading names its network in the exchange's own words —
   Bybit Demo Trading / Testnet / Mainnet, Hyperliquid Testnet / Mainnet —
   Mainnet in red, linking to `/trading`, which explains the networks and what
