@@ -1330,7 +1330,7 @@ eventually pin (T1).
   says "one regime" and names no wild state. An unreadable feed is said,
   never guessed. Display only: no bot reads it. *(the owner, 2026-10-11:
   the research made live, for the panel's market half)*
-- **K11** How it decided, live. The hourly reading carries its fitted model
+- **K11** *(retired by D96, 2026-10-12: the market is the site's)* How it decided, live. The hourly reading carries its fitted model
   (the transition table, each state's drift and spread), and `/calm-wild`
   (linked from each coin's tile and the side panel) shows it for one coin:
   the model's table; the last hour worked through in the filter's three
@@ -1453,8 +1453,8 @@ eventually pin (T1).
   folded tables align each heading with its numbers (right), the first
   column left and as wide as it needs — the info pages' `details td` rule
   had reached into them. *(the owner, 2026-10-11)*
-- **U67** *(the front page's right half is U78's since D96; the markets
-  half below is drawn nowhere until step 2 removes it)* The fleet page is
+- **U67** *(retired by D96, 2026-10-12: the front page's right half is
+  U78's)* The fleet page is
   two halves on a wide screen — the bots, and the
   markets beside them (stacked on a phone, bots first; the table keeps its
   width). The markets half reads the newest market reading (D67, K10, from
@@ -1494,7 +1494,7 @@ eventually pin (T1).
 - **U70** *(retired the same day by U72)* The phone's market report, live on
   the markets half. The owner: the phone's text is not needed on the page —
   a heading for each kind of data instead. The phone is still sent it.
-- **U71** One coin's market data over time (`/asset?coin=BTC`, side panel
+- **U71** *(retired by D96, 2026-10-12: the market is the site's)* One coin's market data over time (`/asset?coin=BTC`, side panel
   **market data**, a coin's name on its tile): a chart for each kind (K13) —
   open interest per venue, the basis, top traders' and retail's long share,
   funding a year per venue (inverse dashed),
@@ -1505,7 +1505,7 @@ eventually pin (T1).
   hour named. Display only. *(the owner, 2026-10-11: "an overview page for
   each asset … a data tab like bybit … oi, basis, bid ask, top100 traders ls
   ratio, retail ls ratio, spot outflows net flows")*
-- **U72** The markets half is tabs, each a heading for its kind of data:
+- **U72** *(retired by D96, 2026-10-12: the market is the site's)* The markets half is tabs, each a heading for its kind of data:
   coins (the tiles), positioning (retail against the top traders per venue,
   and the gap), open interest and flow (summed over the venues, the day's
   change, the day's taker flow on perpetuals and spot, the basis), and the
@@ -1524,7 +1524,7 @@ eventually pin (T1).
   price closed inside less than half the month, is said in red. An
   estimate, said so; checked against the rehearsal (round trips within 12%
   on four grids). *(the owner, 2026-10-11, the grid planner)*
-- **U74** A coin's page shows the collector's (datagremlin, D95) last day of the book as a
+- **U74** *(retired by D96, 2026-10-12: the market is the site's)* A coin's page shows the collector's (datagremlin, D95) last day of the book as a
   heatmap — time across, price up the side, bids below and asks above shaded
   by size on a log scale, the price line over it, the largest band named —
   and its liquidations as hourly bars (longs liquidated below the line,

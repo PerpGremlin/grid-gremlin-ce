@@ -116,3 +116,31 @@ def spec_U78_a_pick_on_the_live_server_reads_the_fleet_as_the_readout_does():
             assert 'Pick a bot by its name' in get('/?fleet=0&bot=nobody')
         finally:
             srv.shutdown()
+
+
+def spec_D96_the_market_pages_stay_gone():
+    """D96 step 2: the market is the site's. The markets half and its tabs
+    (U67, U72, and U70 before them), a coin's page (U71) with its heatmap
+    and liquidations (U74), and the hidden model's working (K11) are gone
+    from the panel — no module, no link, and their old addresses land on
+    the front page. The trading server no longer pulls the collected data
+    (no unit template, no reader). The hourly reading the bots trade on,
+    and the carry page, stay."""
+    import importlib.util
+    import urllib.request
+    from spec_panel import CONTRACT, _serve
+    from panel.nav import page_links, side_nav
+    for gone in ('panel.markets', 'panel.asset', 'ggdata.collected'):
+        assert importlib.util.find_spec(gone) is None, gone
+    root = Path(__file__).resolve().parents[1]
+    assert not list((root / 'ops' / 'systemd').glob('collect-pull*'))
+    for nav in (side_nav(), page_links(), page_links(table=True)):            # both menus
+        assert '/asset' not in nav and '/calm-wild' not in nav and '/carry' in nav
+    assert importlib.util.find_spec('ggdata.market') is not None                # the bots' reading stays
+    srv, base = _serve(CONTRACT)
+    try:
+        for path in ('/asset?coin=BTC', '/calm-wild?coin=BTC'):
+            page = urllib.request.urlopen(urllib.request.Request(base + path, headers={'Cookie': 'gg=tok123'})).read().decode()
+            assert '<title>grid-gremlin</title>' in page and 'Pick a bot by its name' in page, path
+    finally:
+        srv.shutdown()

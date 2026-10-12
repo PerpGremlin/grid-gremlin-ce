@@ -123,16 +123,10 @@ a.pick{color:inherit;text-decoration:none;border-bottom:1px dotted var(--accent)
 table.fills{border-collapse:collapse;font-size:.9em;width:100%}
 table.fills td,table.fills th{padding:.15em .5em;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
 table.fills td:nth-child(-n+3),table.fills th:nth-child(-n+3){text-align:left}
-.markets{position:sticky;top:3.2em;align-self:start;max-height:calc(100vh - 4em);overflow:auto;min-width:0;
-padding-left:calc(var(--gap)*1.5);border-left:1px solid var(--line)}
-.markets h2{font-size:1.1em;margin:0 0 var(--gap-s)}
-.mtiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(19em,1fr));gap:var(--gap);margin-top:var(--gap)}
-.mtile{border:1px solid var(--line);border-radius:6px;padding:.6em .8em;display:grid;gap:.25em;font-size:.92em;min-width:0}
-.mtile .mhead{font-size:1.1em}.markets a.plain{display:inline;padding:0;margin:0;background:none;border:0;border-bottom:1px dotted var(--accent);border-radius:0;color:var(--fg)}.markets a.plain:hover{background:none;color:var(--accent)}.cwtab td,.cwtab th{padding:.2em .7em;text-align:right;white-space:nowrap}.cwtab td:first-child,.cwtab th:first-child{text-align:left}.cwsteps{display:grid;gap:.8em;max-width:62em}.mtabs{display:flex;flex-wrap:wrap;gap:.2em;margin:.6em 0}.achart-box{margin:1.4em 0}.achart{display:block;height:170px;max-width:100%}.achart .ax{fill:var(--dim);font-size:11px}.legend{display:flex;flex-wrap:wrap;gap:.3em 1.1em;font-size:.9em;margin:.3em 0}.legend .lg i{display:inline-block;width:.9em;height:.25em;margin-right:.35em;vertical-align:middle}.tgmsg{white-space:pre-wrap;border:1px solid var(--line);border-radius:6px;padding:.6em .8em;margin-top:var(--gap);font-size:.88em;overflow-wrap:anywhere}.carryform{display:flex;flex-wrap:wrap;gap:.6em 1.2em;align-items:end;margin:.8em 0}.carryform label{display:grid;gap:.2em}.cwsteps code{font-size:.95em}
-.mtile svg.mini{display:block;margin:.15em 0}
+.cwtab td,.cwtab th{padding:.2em .7em;text-align:right;white-space:nowrap}.cwtab td:first-child,.cwtab th:first-child{text-align:left}.carryform{display:flex;flex-wrap:wrap;gap:.6em 1.2em;align-items:end;margin:.8em 0}.carryform label{display:grid;gap:.2em}
 .calm{color:var(--calm)}.wild{color:var(--wild)}
 .gauge{display:inline-block;width:5em;height:.5em;background:var(--line);border-radius:3px;vertical-align:middle;overflow:hidden}
 .gauge i{display:block;height:100%;background:var(--wild)}
-@media (max-width:860px){.split{display:block}.markets,.pane{position:static;max-height:none;overflow:visible;
+@media (max-width:860px){.split{display:block}.pane{position:static;max-height:none;overflow:visible;
 padding-left:0;border-left:0;border-top:1px solid var(--line);margin-top:calc(var(--gap)*1.5);padding-top:var(--gap)}}
 """

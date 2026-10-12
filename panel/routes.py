@@ -260,24 +260,6 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             self.end_headers()
             self.wfile.write(tidy(body).encode())
             return
-        if self.path.split('?')[0] == '/asset':                      # U71
-            from ggdata.market import latest
-            from panel.reference import KEEP_JS
-            from .asset import asset_page
-            from .markets import coins_of
-            from .nav import PAGE_END, side_nav
-            row = latest() or {}
-            q = dict(urllib.parse.parse_qsl(self.path.partition('?')[2]))
-            coins = coins_of(row) or ['BTC']
-            coin = q.get('coin') if q.get('coin') in coins else coins[0]
-            unread = (((row.get('series') or {}).get(coin) or {}).get('unread'))
-            body = (f'<!doctype html><meta charset="utf-8"><title>{coin} market data</title><style>{CSS}</style>'
-                    f'{side_nav()}<main>{asset_page(coin, coins, q.get("span", "7d"), unread=unread)}</main>{PAGE_END}{KEEP_JS}')
-            self.send_response(200)
-            self.send_header('Content-Type', 'text/html; charset=utf-8')
-            self.end_headers()
-            self.wfile.write(tidy(body).encode())
-            return
         if self.path.split('?')[0] == '/carry':                      # U69
             from ggdata.market import latest
             from panel.reference import KEEP_JS
@@ -286,21 +268,6 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             q = dict(urllib.parse.parse_qsl(self.path.partition('?')[2]))
             body = (f'<!doctype html><meta charset="utf-8"><title>carry</title><style>{CSS}</style>'
                     f'{side_nav()}<main>{carry_page(latest(), q)}</main>{PAGE_END}{KEEP_JS}')
-            self.send_response(200)
-            self.send_header('Content-Type', 'text/html; charset=utf-8')
-            self.end_headers()
-            self.wfile.write(tidy(body).encode())
-            return
-        if self.path.split('?')[0] == '/calm-wild':                  # K11
-            from ggdata.market import latest
-            from panel.reference import KEEP_JS
-            from .markets import coins_of, decided_page
-            from .nav import PAGE_END, side_nav
-            row = latest()
-            q = dict(urllib.parse.parse_qsl(self.path.partition('?')[2]))
-            coin = q.get('coin') or (coins_of(row or {}) or ['BTC'])[0]
-            body = (f'<!doctype html><meta charset="utf-8"><title>how it decided</title><style>{CSS}</style>'
-                    f'{side_nav()}<main>{decided_page(row, coin[:12])}</main>{PAGE_END}{KEEP_JS}')
             self.send_response(200)
             self.send_header('Content-Type', 'text/html; charset=utf-8')
             self.end_headers()

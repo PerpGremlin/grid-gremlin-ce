@@ -1894,7 +1894,6 @@ def spec_U75_the_bug_hunts_findings_stay_fixed():
     from pathlib import Path as _P
     from gridgremlin import expiry as ex
     from ggdata.market import depth_reach_pct
-    from panel.markets import tile
     from panel.card import run_rate
     from panel.strip_view import tier_badge
     from panel.server import render
@@ -1907,8 +1906,6 @@ def spec_U75_the_bug_hunts_findings_stay_fixed():
     bids = [(99.9, 1), (99.8, 1)]
     asks = [(100.1, 1), (100.25, 1)]
     assert abs(depth_reach_pct(bids, asks, 100.0) - 0.2) < 1e-9               # the nearer edge of the book served
-    t = tile('ETH', {'price': 100.0, 'depth_1pct': 16.8e6, 'depth_reach_pct': 0.09}, None)
-    assert 'depth to ±0.09% 16.8M' in t and '±1%' not in t
     b = {'realized': -0.001, 'fees': 0.0, 'fills': 3, 'counted_from': 'cap', 'first_ms': 8.64e7}
     line = run_rate(b, {'generated_ms': 5 * 8.64e7}, 1000.0, trade=True)
     assert '-0.00' not in line and '+0.00' in line and 'grid' not in line
@@ -1935,7 +1932,6 @@ def spec_U76_the_bug_hunts_nits_stay_fixed():
     from panel.server import Handler, render
     from panel.setup import SPOT_ONLY, advanced_page
     from panel.card import ladder_box
-    from panel.asset import legend
     # a readout that printed nothing: the last good one stays; with none, the section says so
     fleet = _P(tempfile.mkdtemp()) / 'fleet.x.json'
     fleet.write_text('{"bots": [{"symbol": "BTCUSDT"}]}')
@@ -1972,9 +1968,6 @@ def spec_U76_the_bug_hunts_nits_stay_fixed():
     box = ladder_box(0, 'b', {'ladder': rows, 'quote': 'USDT'})
     assert '<td>45.00</td>' in box and '<td>67.50</td>' in box and 'class="ladder"' in box
     assert ladder_box(0, 'b', {'ladder': [dict(rows[0], notional=0.0015, committed=0.0015)]}).count('0.0015') >= 2
-    # a dashed line's swatch is dashed; the solid one is solid
-    lg = legend({'top.binance_accounts': [(0, 0.6)], 'top.binance_positions': [(0, 0.6)]}, 'line', '%')
-    assert lg.count('repeating-linear-gradient') == 1
     # no query link carries a bare '&'
     pages = render([('demo', copy.deepcopy(CONTRACT))]) + render([('demo', copy.deepcopy(CONTRACT))], table=True)
     bare = re.findall(r"href=[\"']/[a-z-]+\?[^\"']*&(?!amp;)", pages)
