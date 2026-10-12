@@ -234,15 +234,10 @@ venue key. They live in their own private repository, datagremlin (D95),
 with their units and the data folder's format; the data sits in a folder
 of its own outside any checkout.
 
-**The trading server pulls** what the data server collects:
-`collect-pull.{service,timer}` → `grid-gremlin3-collect-pull.*`, every five
-minutes, `rsync` over ssh into its own `logs/collect/`. The trading server
-opens the connection. Its key (`~/.ssh/gg-data-pull`, no passphrase) is
-listed on the data server as
-`restrict,command="/usr/bin/rrsync -ro <data REPO_DIR>/logs/collect" <key>`:
-that folder, read only, nothing else. Stop the trading server's own
-collector timer and stream before starting the pull — the pull's
-`--delete` mirrors the data server's folder.
+**Nothing is pulled from it** since D96 (2026-10-12): the market is the
+site's, and the panel draws none of the collected data. The pull
+(`collect-pull`, D93) and its key are retired; on the data server the
+key's line in `authorized_keys` goes with them.
 
 | placeholder | meaning |
 |---|---|
@@ -255,7 +250,6 @@ collector timer and stream before starting the pull — the pull's
 | `{{START_LIMIT_INTERVAL}}` | `600` normally; `0` for patient-retry fleets (venue outages) |
 | `{{RESTART_SEC}}` | `10` normally; longer (`30`) for patient-retry fleets |
 | `{{SLOT}}` | the fleet's own watchdog minute slot, e.g. `*:4/5` |
-| `{{DATA_HOST}}` | collect-pull only: the data server's `user@address` (kept out of the repository) |
 
 The fleet needs `{{REPO_DIR}}/.env` (chmod 600 — the engine refuses a
 group/other-readable one) with the venue keys, `TELEGRAM_BOT_TOKEN`,

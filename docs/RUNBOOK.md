@@ -37,7 +37,6 @@ does) and `docs/SPEC.md` (why it is pinned that way).
 | `grid-gremlin3-fills.timer` | hourly: the kept ledger | the panel's kept history goes stale |
 | `grid-gremlin3-logrotate.timer` | hourly: rotation, then archive compression | the disk alarm catches it |
 | `grid-gremlin3-market.timer`, `-market-report.timer` | hourly readings; reports at 00/08/16 UTC | cards lose the market line |
-| `grid-gremlin3-collect-pull.timer` | optional, with a separate data server (D93): pulls its `logs/collect/` every 5 min, read-only | the heatmap and liquidations go stale |
 | `grid-gremlin3-archive.timer`, `-digest.timer` | 23:56 the day's results; 23:58 the digest | no digest |
 
 `systemctl --user status <unit>` · `journalctl --user -u <unit> -n 50` ·
