@@ -27,19 +27,31 @@ def _signed(v):
         f'<td class="{_num_cls(v)}">{v:+,.2f}</td>'
 
 
-def detail_pane(idx, label, botid, contract, listing):
-    """U78: the picked bot — its name and fleet, what its kept record
-    realised and paid in fees, then its fills newest first. `listing` is
-    gridgremlin.fill_list's answer (None: no kept record to read)."""
+TABS = (('fills', 'fills'), ('numbers', 'numbers'))
+
+
+def detail_pane(idx, label, botid, contract, listing, show='fills', numbers=''):
+    """U78: the picked bot — its name and fleet, a tab per view (U78b), and
+    the view: its fills newest first with what its kept record realised and
+    paid in fees (`listing`, gridgremlin.fill_list's answer; None: no kept
+    record), or its numbers page's body (`numbers`)."""
     b = (contract.get('bots') or {}).get(botid)
-    quote, _ = units_of(botid, (contract.get('terms') or {}).get(botid))
-    head = (f'<h2>{esc(_plain_name(botid, contract, b))} <span class="dim">{esc(label)}</span> '
+    terms = (contract.get('terms') or {}).get(botid) or {}
+    quote, _ = units_of(botid, terms)
+    name = (botid[3:] + ' portfolio' if terms.get('strategy') == 'portfolio'
+            else _plain_name(botid, contract, b))
+    show = show if show in dict(TABS) else 'fills'
+    tabs = ' '.join(f'<b class="on">{word}</b>' if key == show else
+                    f'<a data-pick href="/?fleet={idx}&amp;bot={qarg(botid)}&amp;show={key}">{word}</a>'
+                    for key, word in TABS)
+    head = (f'<h2>{esc(name)} <span class="dim">{esc(label)}</span> '
             f'<a class="plain" data-pick href="/">close</a></h2>'
-            f'<p><a href="/position?fleet={idx}&amp;bot={qarg(botid)}">numbers</a> '
-            f'<a href="/edit?fleet={idx}&amp;bot={qarg(botid)}">edit</a></p>')
-    if ((contract.get('terms') or {}).get(botid) or {}).get('strategy') == 'portfolio':
+            f'<p class="ptabs">{tabs} <a href="/edit?fleet={idx}&amp;bot={qarg(botid)}">edit</a></p>')
+    if show == 'numbers':
+        return f'<aside class="pane">{head}{numbers}</aside>'
+    if terms.get('strategy') == 'portfolio':
         return (f'<aside class="pane">{head}<p class="dim">A portfolio row: its legs and their '
-                'books are on its numbers page.</p></aside>')
+                'books are under numbers.</p></aside>')
     if not listing or not listing['rows']:
         return f'<aside class="pane">{head}<p class="dim">No fills kept for this bot yet.</p></aside>'
     rows = listing['rows']

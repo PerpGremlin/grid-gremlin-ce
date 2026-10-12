@@ -77,7 +77,8 @@ def spec_U78_the_front_pages_right_half_is_what_was_picked():
     contract = {'bots': {B: None}, 'terms': {B: {'quote': 'USDT'}}}
     pane = detail_pane(0, 'demo', B, contract, fill_list({'fills': FILLS}, FLEET, B, held=0.0))
     assert pane.index('liquidation') < pane.index('<td>entry</td>')            # newest first
-    assert '4 fills since its record began' in pane and 'href="/position?fleet=0&amp;bot=linBTCUSDTl"' in pane
+    assert '4 fills since its record began' in pane and '<b class="on">fills</b>' in pane
+    assert 'data-pick href="/?fleet=0&amp;bot=linBTCUSDTl&amp;show=numbers">numbers</a>' in pane
     assert 'X<script>' not in detail_pane(0, 'X<script>', B, contract, None)   # names escaped
     assert '<aside class="pane">' in render([], pane=pane) and pane in render([], pane=pane)
 
@@ -114,6 +115,12 @@ def spec_U78_a_pick_on_the_live_server_reads_the_fleet_as_the_readout_does():
             assert '4 fills since its record began' in page and 'liquidation' in page
             assert 'data-pick href="/?fleet=0&amp;bot=linBTCUSDTl"' in page        # the card's name picks
             assert 'Pick a bot by its name' in get('/?fleet=0&bot=nobody')
+            # U78b: the numbers tab draws the numbers page's body in the half
+            num = get(f'/?fleet=0&bot={B}&show=numbers')
+            assert '<b class="on">numbers</b>' in num and 'as the exchange shows it' in num
+            assert 'class="cards one"' in num and '4 fills since' not in num
+            assert '&larr; fleet' not in num                                     # the half, not the page
+            assert 'as the exchange shows it' in get(f'/position?fleet=0&bot={B}')   # the page still stands
         finally:
             srv.shutdown()
 

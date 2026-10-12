@@ -181,7 +181,7 @@ def card(idx, botid, b, contract, belief, full=False):
     rng = (contract.get('ranges') or {}).get(botid)
     ceil = ((contract.get('watchdog') or {}).get('ceilings') or {}).get(botid)
     money_coin, margin_coin = units_of(botid, (contract.get('terms') or {}).get(botid))   # U53
-    links = (('' if full else f"<a href='/position?fleet={idx}&amp;bot={qarg(botid)}'>numbers</a>")
+    links = (('' if full else f"<a data-pick href='/?fleet={idx}&amp;bot={qarg(botid)}&amp;show=numbers'>numbers</a>")
              + ('' if ((contract.get('terms') or {}).get(botid) or {}).get('trade') else
                 (' · ' if not full else '') + f"<a href='/edit?fleet={idx}&amp;bot={qarg(botid)}'>edit</a> · "
                 f"<a href='/setup?fleet={idx}&amp;copy={qarg(botid)}'>copy</a> · "
@@ -529,7 +529,7 @@ def portfolio_card(idx, botid, contract, belief, full=False):
     bl = belief.get(botid) or {}
     v = bl.get('portfolio') or {}
     q = terms.get('quote') or 'USDT'
-    links = (('' if full else f"<a href='/position?fleet={idx}&amp;bot={qarg(botid)}'>numbers</a> ")
+    links = (('' if full else f"<a data-pick href='/?fleet={idx}&amp;bot={qarg(botid)}&amp;show=numbers'>numbers</a> ")
              + f"<a href='/edit?fleet={idx}&amp;bot={qarg(botid)}'>edit</a> "
              f"<a href='/edit?fleet={idx}&amp;bot={qarg(botid)}&amp;mode=remove'>remove</a>")
     state = ('DEAD' if bl.get('alive') is False else 'NOT STARTED' if botid not in belief

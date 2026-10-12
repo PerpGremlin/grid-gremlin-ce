@@ -47,6 +47,17 @@ def position_page(idx, label, botid, contract, belief, prices=None, fills=()):
     laid open."""
     terms = (contract.get('terms') or {}).get(botid)
     b = (contract.get('bots') or {}).get(botid)
+    return (f'<meta name="gg-refresh" content="{REFRESH_S}">'      # U68: live, in place
+            f'<h1>{esc(label)} · {esc(_plain_name(botid, contract, b) if (terms or {}).get("strategy") != "portfolio" else botid[3:] + " portfolio")}</h1>'
+            f'{position_body(idx, botid, contract, belief, prices, fills)}'
+            '<p><a href="/">&larr; fleet</a></p>')
+
+
+def position_body(idx, botid, contract, belief, prices=None, fills=()):
+    """U56's body — the exchange's view, the price, the open card — for its
+    own page and for the front page's right half (D96, U78b)."""
+    terms = (contract.get('terms') or {}).get(botid)
+    b = (contract.get('bots') or {}).get(botid)
     xch = ('' if (terms or {}).get('strategy') == 'portfolio'
            else f'<h3>as the exchange shows it</h3>{exchange_table(botid, b, belief, terms)}')
     if (terms or {}).get('strategy') != 'portfolio':
@@ -57,7 +68,4 @@ def position_page(idx, label, botid, contract, belief, prices=None, fills=()):
             rng = dict(rng, lower=rng['lower'] + off * gap, upper=rng['upper'] + off * gap)
         liq = ((belief.get(botid) or {}).get('margin') or {}).get('liq')
         xch += price_boxes(prices, rng, liq, fills)
-    return (f'<meta name="gg-refresh" content="{REFRESH_S}">'      # U68: live, in place
-            f'<h1>{esc(label)} · {esc(_plain_name(botid, contract, b) if (terms or {}).get("strategy") != "portfolio" else botid[3:] + " portfolio")}</h1>'
-            f'{xch}<div class="cards one">{card(idx, botid, b, contract, belief, full=True)}</div>'
-            '<p><a href="/">&larr; fleet</a></p>')
+    return f'{xch}<div class="cards one">{card(idx, botid, b, contract, belief, full=True)}</div>'

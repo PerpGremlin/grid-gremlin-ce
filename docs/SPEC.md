@@ -1565,6 +1565,11 @@ eventually pin (T1).
   lists its fills with realised unknown, never guessed; a portfolio row
   points to its numbers page; the fleet file is read as the readout reads
   it. Nothing picked: a line saying how; the table keeps its width.
+- **U78b** The half has a tab per view of the picked bot (D96 step 3):
+  **fills** (U78) and **numbers** — the position's own page's body (U56:
+  the exchange's view, the price with its levels and fills, the open card)
+  at `/?fleet=N&bot=ID&show=numbers`; a card's "numbers" link opens it
+  there. A portfolio row opens on numbers. `/position` still stands.
 - **L1** A new trade joins a running fleet within a cycle. The trade watch
   stats the trades file once a cycle; a changed file's new rows are each
   built by the fleet's own builder (`main.build_market_bot`, the one every
