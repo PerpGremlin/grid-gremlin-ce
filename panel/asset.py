@@ -159,7 +159,7 @@ def heatmap(coin, now, collect_root=None):
     side, each cell shaded by the resting size there (bids below the price
     in one colour, asks above in the other, on a log scale), the price line
     over it. Empty until the collector has run."""
-    from ggdata.collector import read_days
+    from ggdata.collected import read_days
     rows = read_days(coin, 'book', now - 86400, collect_root)
     if not rows:
         return ('<p class="dim">nothing collected for this coin yet — the collector (D84) records '
@@ -205,7 +205,7 @@ def liquidations(coin, now, days=1, collect_root=None):
     """U74: the coin's liquidations (D84) — OKX's, Bybit's and Binance's —
     each hour's longs and shorts wiped out, as bars (longs below the line,
     shorts above), and the largest ones in a list."""
-    from ggdata.collector import read_days
+    from ggdata.collected import read_days
     rows = read_days(coin, 'liq', now - days * 86400, collect_root)
     if not rows:
         return ('<p class="dim">no liquidations recorded for this coin yet — the collector (D84) reads '
