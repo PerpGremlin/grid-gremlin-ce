@@ -115,6 +115,14 @@ border:1px solid var(--line);font:inherit;padding:.15em .3em}
 /* U67: the fleet page in two halves — the bots, and the markets beside them */
 .split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 calc(var(--gap)*1.5);align-items:start}
 .split>.bots{min-width:0}
+.pane{position:sticky;top:3.2em;align-self:start;max-height:calc(100vh - 4em);overflow:auto;min-width:0;
+padding-left:calc(var(--gap)*1.5);border-left:1px solid var(--line)}
+.pane h2{font-size:1.1em;margin:0 0 var(--gap-s)}
+.pane a.plain{font-size:.8em;font-weight:normal;margin-left:.6em}
+a.pick{color:inherit;text-decoration:none;border-bottom:1px dotted var(--accent)}a.pick:hover{color:var(--accent)}
+table.fills{border-collapse:collapse;font-size:.9em;width:100%}
+table.fills td,table.fills th{padding:.15em .5em;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
+table.fills td:nth-child(-n+3),table.fills th:nth-child(-n+3){text-align:left}
 .markets{position:sticky;top:3.2em;align-self:start;max-height:calc(100vh - 4em);overflow:auto;min-width:0;
 padding-left:calc(var(--gap)*1.5);border-left:1px solid var(--line)}
 .markets h2{font-size:1.1em;margin:0 0 var(--gap-s)}
@@ -125,6 +133,6 @@ padding-left:calc(var(--gap)*1.5);border-left:1px solid var(--line)}
 .calm{color:var(--calm)}.wild{color:var(--wild)}
 .gauge{display:inline-block;width:5em;height:.5em;background:var(--line);border-radius:3px;vertical-align:middle;overflow:hidden}
 .gauge i{display:block;height:100%;background:var(--wild)}
-@media (max-width:860px){.split{display:block}.markets{position:static;max-height:none;overflow:visible;
+@media (max-width:860px){.split{display:block}.markets,.pane{position:static;max-height:none;overflow:visible;
 padding-left:0;border-left:0;border-top:1px solid var(--line);margin-top:calc(var(--gap)*1.5);padding-top:var(--gap)}}
 """

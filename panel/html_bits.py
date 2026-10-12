@@ -18,6 +18,13 @@ def qarg(v):
     return urllib.parse.quote(str(v), safe='')
 
 
+def pick_link(idx, botid, text):
+    """D96/U78: a bot's name on its card, opening the bot in the front
+    page's right half; the pick lives in the address."""
+    return (f'<a class="pick" data-pick href="/?fleet={idx}&amp;bot={qarg(botid)}">'
+            f'{text}</a>')
+
+
 REFRESH_S = 15          # the readout hits venue APIs: poll gently
 
 

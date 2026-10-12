@@ -919,6 +919,28 @@ stands unless the owner corrects it.
   the hourly market reading the tilt fleet trades on. Whether the
   engine's own per-coin series later read from the collection instead is
   a later decision.
+- **D96 — The panel is for the bots; the market belongs to the site
+  (2026-10-12).** The owner: *"instead of us putting all that market data
+  in, why dont we just have the 2nd half of the screen … as the webpage"*,
+  then, thinking further: *"we can stop building random indicators for the
+  webapp … remove the excess and work on filling in the blank space with
+  new data … when clicked, the data appears on the rhs of the screen …
+  lists of fills, display the exchange profit per trade … maybe all the
+  indicators and stuff should be kept for the webpage for now. if we want
+  them for particular strategies we can plug them in and test like we
+  have been."* Laid out with what leaves and what stays, confirmed:
+  *"im with you on that. lets start building."* The front page's right
+  half shows what is picked on the left — a bot's fills and what each
+  made first (U78) — instead of the markets half (U67). In steps, each its
+  own PR: the half and the bot's detail; the markets tabs, the coin pages
+  (`/asset`, `/calm-wild`) and the trading server's pull of the collected
+  data removed (the site, TerminalGremlin, shows the market); the panel's
+  other pages opening in the half one by one. Unchanged: the hourly market
+  reading the bots trade on (H3) and a card's word of it; indicators stay
+  research, wired into a strategy only by a D-number after a test. Framing
+  the public site in the half is possible later — the frame locked down,
+  the panel's own pages refusing to be framed — and is the owner's to ask
+  for.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

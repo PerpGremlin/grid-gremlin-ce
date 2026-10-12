@@ -184,7 +184,6 @@ def spec_U67_the_fleet_page_has_a_markets_half_from_the_readings():
     navigate. The tiles come from the newest market reading (D67) and the
     hidden model's (K10); display only."""
     from panel.markets import calm_wild, coins_of, market_column, mini_chart
-    from panel.render import render
     row = {'t': 1000.0, 'fear_greed': {'score': 64, 'label': 'Greed', 'avg_7d': 67, 'avg_30d': 66},
            'markets': {
                'bybit:linear:BTCUSDT': {'symbol': 'BTCUSDT', 'price': 82908.1, 'change_24h_pct': -0.35,
@@ -210,9 +209,6 @@ def spec_U67_the_fleet_page_has_a_markets_half_from_the_readings():
     assert mini_chart([1, 2, 3], [0.0, 0.9, 0.0]).count('<rect') == 1 and mini_chart([5], []) == ''
     assert 'unread' in calm_wild({'unread': 'no route'}) and 'not read yet' in calm_wild(None)
     assert 'no market reading yet' in market_column(None)
-    page = render([], market=row)
-    assert '<div class="split">' in page and '<aside class="markets">' in page
-    assert '<aside class="markets">' not in render([], table=True, market=row)      # the table keeps its width
 
 
 def spec_H8b_a_portfolio_rows_hedge_books_rebuild_from_the_venues_fills():

@@ -850,8 +850,10 @@ def spec_U10_a_refresh_does_not_shut_what_the_reader_opened():
         assert word in KEEP_JS, word
     for word in ('http://', 'https://', 'eval(', 'Math.', 'localStorage', 'cookie'):
         assert word not in KEEP_JS, word
-    # U61: the one fetch the script makes is of this same page, nothing else
-    assert KEEP_JS.count('fetch(') == 1 and 'fetch(location.href' in KEEP_JS
+    # U61: the one fetch the script makes is of this same page, nothing
+    # else — the refresh, or a pick on it (U78: same origin, same path)
+    assert KEEP_JS.count('fetch(') == 1 and 'swap(location.href)' in KEEP_JS
+    assert 'if(u.origin!==location.origin||u.pathname!==location.pathname)return;' in KEEP_JS
 
 
 def spec_D70_a_capped_bot_says_so_on_its_card():
@@ -1793,7 +1795,8 @@ def spec_U61_the_live_page_refreshes_in_place_and_never_reloads_whole():
     assert f'<meta name="gg-refresh" content="{REFRESH_S}">' in live
     assert live.count('http-equiv="refresh"') == 1
     assert f'<noscript><meta http-equiv="refresh" content="{REFRESH_S}"></noscript>' in live
-    assert "fetch(location.href,{credentials:'same-origin',cache:'no-store'})" in KEEP_JS
+    assert "fetch(url,{credentials:'same-origin',cache:'no-store'})" in KEEP_JS
+    assert "setInterval(function(){swap(location.href)" in KEEP_JS
     assert "['.hero','main']" in KEEP_JS and 'innerHTML=b.innerHTML' in KEEP_JS
     assert "wire(document.querySelector('main')" in KEEP_JS          # the swapped cards fold as before
     table = render([('demo', CONTRACT)], table=True)
