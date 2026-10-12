@@ -939,6 +939,8 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
                                    f'venue readable again after {failing} '
                                    'lost cycle(s)')
                 failing = 0
+            if hasattr(notifier, 'flush'):
+                notifier.flush()                     # E12: a held page never waits for the next event
             if not any(b.alive for b in bots):
                 print('all bots dead — fleet exits', flush=True)
                 return 0

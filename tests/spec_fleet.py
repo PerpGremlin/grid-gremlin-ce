@@ -286,14 +286,22 @@ def spec_F24_the_watchdog_pings_the_deadman_after_every_completed_run():
     try:
         wd.send_telegram, wd.load_env = (lambda t: None), (lambda: None)
         wd.time.time, wd.ping_deadman = (lambda: 10**10), (lambda url, get=None: pinged.append(url))
+        creds = {k: os.environ.pop(k, None) for k in ('TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID')}
         os.environ['DEADMAN_URL'] = 'https://hc.example/p/2'
+        assert wd.main([str(d / 'wd.json')]) == 0
+        assert pinged == []                                  # F24b: pages reach nobody — no ping
+        os.environ['TELEGRAM_BOT_TOKEN'], os.environ['TELEGRAM_CHAT_ID'] = 't', 'c'
         assert wd.main([str(d / 'wd.json')]) == 0
         os.environ.pop('DEADMAN_URL')
         wd.main([str(d / 'wd.json')])
     finally:
         wd.send_telegram, wd.load_env, wd.time.time, wd.ping_deadman = saved
         os.environ.pop('DEADMAN_URL', None)
-    assert pinged == ['https://hc.example/p/2', None]        # pinged after the run; none without the URL
+        for k, v in creds.items():
+            os.environ.pop(k, None)
+            if v is not None:
+                os.environ[k] = v
+    assert pinged == ['https://hc.example/p/2']              # pinged after the run; none without the URL
 
 
 def spec_F25_a_filling_disk_is_a_breach_on_by_default():

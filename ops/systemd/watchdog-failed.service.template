@@ -8,4 +8,6 @@ EnvironmentFile={{REPO_DIR}}/.env
 # raises so state never persists over a lost page) — the fleet may be fine,
 # but nobody is watching it. Rate-limited like the fleet alert: the timer
 # re-fires every 5 min and would otherwise page every tick.
-ExecStart=/bin/sh -c 'stamp={{REPO_DIR}}/logs/{{FLEET}}-watchdog-failed.stamp; now=$$(date +%%s); last=$$(cat "$$stamp" 2>/dev/null || echo 0); [ $$((now - last)) -lt 1800 ] && exit 0; echo "$$now" > "$$stamp"; printf "url = https://api.telegram.org/bot%%s/sendMessage" "$${TELEGRAM_BOT_TOKEN}" | curl -s -m 20 -K - --data-urlencode chat_id="$${TELEGRAM_CHAT_ID}" --data-urlencode parse_mode=HTML --data-urlencode text="<b>{{LABEL}} v3 {{FLEET}}: the WATCHDOG is failing</b> — the fleet is unwatched. See: journalctl --user -u grid-gremlin3-{{FLEET}}-watchdog -n 50"'
+# E13: the stamp is written only after Telegram accepted the page (curl -f):
+# a failed send fails the unit and leaves the next tick free to page again.
+ExecStart=/bin/sh -c 'stamp={{REPO_DIR}}/logs/{{FLEET}}-watchdog-failed.stamp; now=$$(date +%%s); last=$$(cat "$$stamp" 2>/dev/null || echo 0); [ $$((now - last)) -lt 1800 ] && exit 0; printf "url = https://api.telegram.org/bot%%s/sendMessage" "$${TELEGRAM_BOT_TOKEN}" | curl -sf -m 20 -K - --data-urlencode chat_id="$${TELEGRAM_CHAT_ID}" --data-urlencode parse_mode=HTML --data-urlencode text="<b>{{LABEL}} v3 {{FLEET}}: the WATCHDOG is failing</b> — the fleet is unwatched. See: journalctl --user -u grid-gremlin3-{{FLEET}}-watchdog -n 50" >/dev/null && echo "$$now" > "$$stamp"'

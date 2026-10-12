@@ -65,6 +65,11 @@ def validate_watchdog(cfg, where='watchdog'):
         if extra:
             raise ConfigError(f'{where}: positions.{botid} has unknown '
                               f'keys {sorted(extra)}')
+        lo, hi = lim['min'], lim['max']          # F2b: numbers, 0 <= min <= max, else a crash later
+        if any(isinstance(v, bool) or not isinstance(v, (int, float)) for v in (lo, hi)) \
+                or lo < 0 or lo > hi:
+            raise ConfigError(f'{where}: positions.{botid} needs numbers with '
+                              f'0 <= min <= max (got min {lo!r}, max {hi!r})')
     return out
 
 
@@ -241,7 +246,15 @@ def main(argv):
     write_json(statep, {'_peak': peak, '_alerts': new_alerts}, indent=None)
     print(f"[{cfg['tag']}] {'BREACHED' if breaches else 'ok'} "
           f'({len(breaches)} breach(es))', flush=True)
-    ping_deadman(os.environ.get('DEADMAN_URL'))     # F24: the run completed
+    if not (os.environ.get('TELEGRAM_BOT_TOKEN') and os.environ.get('TELEGRAM_CHAT_ID')):
+        # F24b: a watch that can page nobody must not tell the outside check
+        # it is fine — no ping, so the dead-man's own alert says so
+        print(f"[{cfg['tag']}] no Telegram credentials — pages reach nobody; "
+              'the dead-man is NOT pinged', flush=True)
+    elif not os.environ.get('DEADMAN_URL'):
+        print(f"[{cfg['tag']}] dead-man: off — DEADMAN_URL is not set", flush=True)
+    else:
+        ping_deadman(os.environ.get('DEADMAN_URL'))  # F24: the run completed
     return 1 if breaches else 0
 
 

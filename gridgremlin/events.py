@@ -183,6 +183,12 @@ class TelegramNotifier(Notifier):
                                 if 'kill' in ln][-10:]
             self._last_send = now   # and respect the interval before retrying
 
+    def flush(self):
+        """E12: what the interval held back goes out — the fleet calls this
+        every cycle, so the last page of a burst (or one whose send failed)
+        never waits for an event that may not come."""
+        self._maybe_flush()
+
     def close(self):
         self._maybe_flush(force=True)
 
