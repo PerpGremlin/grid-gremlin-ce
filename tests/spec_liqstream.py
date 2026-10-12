@@ -132,3 +132,24 @@ def spec_K15b_binances_liquidations_stream_beside_bybits():
     assert made == [BINANCE_URL] and sent == []                        # no subscribe, no app ping
     got = {f.parent.name: [json.loads(l) for l in f.read_text().splitlines()] for f in Path(root).glob('*/liq-*.jsonl')}
     assert set(got) == {'BTC', 'ETH'} and all(r['venue'] == 'binance' for rs in got.values() for r in rs)
+
+
+def spec_D93_the_trading_server_pulls_the_collected_data_read_only():
+    """The trading server reads what the data server collects by pulling it:
+    the source is the data server, the destination its own logs/collect;
+    the collector's own watermark stays behind; no agent forwarded; the key
+    named, batch mode (never a prompt); every five minutes after the
+    collector's run."""
+    from pathlib import Path
+    ops = Path(__file__).resolve().parents[1] / 'ops'
+    svc = (ops / 'systemd' / 'collect-pull.service.template').read_text()
+    line = next(ln for ln in svc.splitlines() if ln.startswith('ExecStart='))
+    assert line.startswith('ExecStart=/usr/bin/rsync -a --delete ')
+    assert line.endswith(' {{DATA_HOST}}:./ {{REPO_DIR}}/logs/collect/')     # from there, to here
+    assert '--exclude state.json' in line
+    assert '-i %h/.ssh/gg-data-pull' in line and 'BatchMode=yes' in line and 'IdentitiesOnly=yes' in line
+    assert 'ForwardAgent' not in svc and ' -A' not in line
+    timer = (ops / 'systemd' / 'collect-pull.timer.template').read_text()
+    assert 'OnCalendar=*:0/5:50' in timer
+    readme = (ops / 'README.md').read_text()
+    assert 'restrict,command="/usr/bin/rrsync -ro' in readme

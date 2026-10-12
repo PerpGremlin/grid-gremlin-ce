@@ -1,0 +1,9 @@
+[Unit]
+Description=Grid Gremlin v3 collected data pulled from the data server — every five minutes
+
+[Timer]
+# 50 s after the data server's collector (*:0/5) starts, the snapshot written.
+OnCalendar=*:0/5:50
+
+[Install]
+WantedBy=timers.target
