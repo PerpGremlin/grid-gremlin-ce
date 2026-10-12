@@ -341,7 +341,7 @@ def cmd_risk(box, args):
                 line += f" (max {wd['equity_drawdown_max']:.0%})"
         for x in lev or ():
             line += f'\n  {x}'
-        breached = [k for k in state if not k.startswith('_')]
+        breached = sorted((state.get('_alerts') or {}).keys())      # the watchdog's state: {_peak, _alerts}
         if breached:
             line += '\n  ⚠️ watchdog breached: ' + ', '.join(breached)
         out.append(line)

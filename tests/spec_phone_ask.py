@@ -46,7 +46,7 @@ class FakeBox(phone.Box):
 
     def watchdog(self, fp):
         return ({'equity_min': 4000.0, 'mm_rate_max': 0.5,
-                 'equity_drawdown_max': 0.3}, {'_peak': 6000.0, 'mmr': 1})
+                 'equity_drawdown_max': 0.3}, {'_peak': 6000.0, '_alerts': {'mmr': 1}})   # the watchdog's real shape
 
     def log_lines(self, fp):
         return ['[ship] fill linBTCUSDTl: position 1 -> 2',

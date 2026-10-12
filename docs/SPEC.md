@@ -78,6 +78,14 @@ eventually pin (T1).
 
 ## A — contract maths (the adapter seam)
 
+- **E12** A page the interval held goes out on the fleet's next cycle,
+  never waiting for the next event; a page whose send failed is tried the
+  same way. *(the pre-real-money audit, 2026-10-13: an urgent stop warning
+  one second after a refusal sat unsent for hours on a quiet fleet)*
+- **E13** The fleet-down and watchdog-failing pages write their 30-minute
+  stamp only after Telegram took the page (`curl -f`): a failed send fails
+  the unit and leaves the next tick free to page. *(the audit: the stamp was
+  written first, so one failed send silenced half an hour)*
 - **A1** Everything instrument-shaped is asked from the exchange at startup, never
   declared in config.
 - **A2** Quantity rounding always floors — never place more than intended; price rounds
@@ -838,6 +846,9 @@ eventually pin (T1).
   failed), never derived from "held plus budget". Beyond 1.5x the cap only with
   `ceiling_loose: true` beside the max — a disaster-only watcher is chosen, never
   defaulted (D28).
+- **F2b** A position bound is numbers, 0 <= min <= max, refused by name
+  otherwise. *(the audit: text passed the validator and crashed the
+  evaluation; min above max could never be met)*
 - **F3** One fleet process per account, ever.
 - **F4** Snapshots include dead bots — liveness must be detectable from the file.
 - **F5** The demo fleet can never carry the mainnet flag; the gate is per-venue and
@@ -1011,6 +1022,11 @@ eventually pin (T1).
   run — breached or not, paged or not — one GET to `DEADMAN_URL` when `.env`
   names it; the outside check alarms when the pings stop. A failed ping is
   one printed line and never a failed run; no URL, no ping.
+- **F24b** A watchdog without Telegram credentials pings no dead-man (its
+  pages reach nobody, so the outside check must not hear "fine") and says
+  so in its run; with no `DEADMAN_URL` it says the switch is off. *(the
+  audit: a fresh live copy's `.env` without them would have looked healthy
+  from outside)*
 - **F25** A filling disk is a breach (D74). The watchdog judges the used
   fraction of the volume its snapshot lives on against `disk_used_max`, 85%
   unless the config says otherwise, before it reads the snapshot at all; an
