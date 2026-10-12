@@ -1,0 +1,12 @@
+[Unit]
+Description=Grid Gremlin v3 collected data pulled from the data server (D93) — the books and the liquidations, read-only, for the panel's market pages; nothing acts on them
+
+[Service]
+Type=oneshot
+WorkingDirectory={{REPO_DIR}}
+Nice=10
+TimeoutStartSec=120
+# The trading server opens the connection; the data server never reaches in.
+# Its key there may only read logs/collect (rrsync -ro). The data server prunes
+# past seven days, so --delete keeps this copy the same.
+ExecStart=/usr/bin/rsync -a --delete --exclude state.json -e "ssh -i %h/.ssh/gg-data-pull -o BatchMode=yes -o IdentitiesOnly=yes" {{DATA_HOST}}:./ {{REPO_DIR}}/logs/collect/

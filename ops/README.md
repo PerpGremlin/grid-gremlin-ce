@@ -235,6 +235,16 @@ read-only deploy key for the checkout, the two units rendered with
 grid-gremlin3-liqstream.service`. The trading server's copies stop once it
 reads `logs/collect/` from there (BACKLOG §0j).
 
+**The trading server pulls** what the data server collects:
+`collect-pull.{service,timer}` → `grid-gremlin3-collect-pull.*`, every five
+minutes, `rsync` over ssh into its own `logs/collect/`. The trading server
+opens the connection. Its key (`~/.ssh/gg-data-pull`, no passphrase) is
+listed on the data server as
+`restrict,command="/usr/bin/rrsync -ro <data REPO_DIR>/logs/collect" <key>`:
+that folder, read only, nothing else. Stop the trading server's own
+collector timer and stream before starting the pull — the pull's
+`--delete` mirrors the data server's folder.
+
 | placeholder | meaning |
 |---|---|
 | `{{FLEET}}` | short fleet tag (`demo`, `hl`, …) — names units, logs, stamps. The live HL fleet is the one exception: unit tag `hl`, log and snapshot tag `hl-testnet` (its rendered unit was set by hand; `watchdog.hl.testnet.json` follows that) |
@@ -246,6 +256,7 @@ reads `logs/collect/` from there (BACKLOG §0j).
 | `{{START_LIMIT_INTERVAL}}` | `600` normally; `0` for patient-retry fleets (venue outages) |
 | `{{RESTART_SEC}}` | `10` normally; longer (`30`) for patient-retry fleets |
 | `{{SLOT}}` | the fleet's own watchdog minute slot, e.g. `*:4/5` |
+| `{{DATA_HOST}}` | collect-pull only: the data server's `user@address` (kept out of the repository) |
 | `{{COINS_ARG}}` | collector and liqstream only: empty on the trading server (the market reading names the coins); `--coins BTC,ETH,…` on the data server (K14b) |
 
 The fleet needs `{{REPO_DIR}}/.env` (chmod 600 — the engine refuses a
