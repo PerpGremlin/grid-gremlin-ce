@@ -21,7 +21,7 @@ def qarg(v):
 def pick_link(idx, botid, text):
     """D96/U78: a bot's name on its card, opening the bot in the front
     page's right half; the pick lives in the address."""
-    return (f'<a class="pick" data-pick href="/?fleet={idx}&amp;bot={qarg(botid)}">'
+    return (f'<a class="bname" data-pick href="/?fleet={idx}&amp;bot={qarg(botid)}">'
             f'{text}</a>')
 
 

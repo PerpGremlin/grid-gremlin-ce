@@ -581,7 +581,7 @@ def spec_V10_a_card_says_the_bot_in_a_glance_and_keeps_every_number():
     for word in ('fills', 'realized', 'fees', 'unreal', 'bought', 'sold',
                  'stop-now est.', 'watcher'):
         assert f'<td>{word}</td>' in html, word      # nothing was dropped
-    for link in ("/edit?fleet=0&amp;bot=spoADAUSDTl'>edit",
+    for link in ("/?fleet=0&amp;bot=spoADAUSDTl&amp;show=edit'>edit",     # U78c: in the half
                  '/setup?fleet=0&amp;copy=spoADAUSDTl', 'mode=remove'):
         assert link in html
     assert '1 bots' in html and 'href="/table"' in html
@@ -1796,7 +1796,11 @@ def spec_U61_the_live_page_refreshes_in_place_and_never_reloads_whole():
     assert live.count('http-equiv="refresh"') == 1
     assert f'<noscript><meta http-equiv="refresh" content="{REFRESH_S}"></noscript>' in live
     assert "fetch(url,{credentials:'same-origin',cache:'no-store'})" in KEEP_JS
-    assert "setInterval(function(){swap(location.href)" in KEEP_JS
+    assert "swap(location.href).catch(function(){});},every*1000);" in KEEP_JS
+    # U78c: a form open in the right half is never swapped out from under the typing
+    assert "setInterval(function(){if(document.querySelector('.pane form'))return;" in KEEP_JS
+    # …and a form's own script arriving in the half runs (a swapped-in script never would)
+    assert "document.querySelectorAll('main .pane script').forEach(" in KEEP_JS and "s.text=old.text;old.replaceWith(s)" in KEEP_JS
     assert "['.hero','main']" in KEEP_JS and 'innerHTML=b.innerHTML' in KEEP_JS
     assert "wire(document.querySelector('main')" in KEEP_JS          # the swapped cards fold as before
     table = render([('demo', CONTRACT)], table=True)

@@ -1570,6 +1570,15 @@ eventually pin (T1).
   the exchange's view, the price with its levels and fills, the open card)
   at `/?fleet=N&bot=ID&show=numbers`; a card's "numbers" link opens it
   there. A portfolio row opens on numbers. `/position` still stands.
+- **U78c** The **edit** tab draws the bot's edit door in the half
+  (`show=edit`): the same form as `/edit`, posting where it always did (the
+  review and the gates unchanged); a card's "edit" link opens it there. A
+  form open in the half pauses the page's refresh (a half-typed value is
+  never swapped away), and a script arriving in the half runs (the form's
+  grid-count/gap helper). Within the half, tables wrap and the form's
+  fixed column widths give way. Checked in a real browser (headless
+  Chrome, 2026-10-12): a pick opens without a reload, the helper fills the
+  gap after the swap, a typed value survives the refresh, back returns.
 - **L1** A new trade joins a running fleet within a cycle. The trade watch
   stats the trades file once a cycle; a changed file's new rows are each
   built by the fleet's own builder (`main.build_market_bot`, the one every

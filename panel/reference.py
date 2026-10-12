@@ -244,6 +244,8 @@ function swap(url){return fetch(url,{credentials:'same-origin',cache:'no-store'}
   var doc=new DOMParser().parseFromString(t,'text/html');
   ['.hero','main'].forEach(function(q){var a=document.querySelector(q),b=doc.querySelector(q);
    if(a&&b)a.innerHTML=b.innerHTML;});
+  document.querySelectorAll('main .pane script').forEach(function(old){
+   var s=document.createElement('script');s.text=old.text;old.replaceWith(s);});
   wire(document.querySelector('main')||document);picks();top();return true;});}
 document.addEventListener('click',function(e){
  var a=e.target.closest&&e.target.closest('a[data-pick]');
@@ -256,5 +258,6 @@ document.addEventListener('click',function(e){
  .catch(function(){location.href=u.href;});});
 window.addEventListener('popstate',function(){swap(location.href).catch(function(){});});
 var m=document.querySelector('meta[name="gg-refresh"]'),every=m?Number(m.content):0;
-if(every>0)setInterval(function(){swap(location.href).catch(function(){});},every*1000);
+if(every>0)setInterval(function(){if(document.querySelector('.pane form'))return;
+ swap(location.href).catch(function(){});},every*1000);
 })();</script>"""

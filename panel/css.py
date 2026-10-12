@@ -120,10 +120,12 @@ padding-left:calc(var(--gap)*1.5);border-left:1px solid var(--line)}
 .pane h2{font-size:1.1em;margin:0 0 var(--gap-s)}
 .pane a.plain{font-size:.8em;font-weight:normal;margin-left:.6em}
 .ptabs{display:flex;flex-wrap:wrap;gap:.2em;margin:.4em 0 .8em}
-a.pick{color:inherit;text-decoration:none;border-bottom:1px dotted var(--accent)}a.pick:hover{color:var(--accent)}
+a.bname{display:inline;padding:0;margin:0;background:none;border:0;border-bottom:1px dotted var(--accent);border-radius:0;color:inherit;line-height:inherit}a.bname:hover{background:none;color:var(--accent)}
 table.fills{border-collapse:collapse;font-size:.9em;width:100%}
 table.fills td,table.fills th{padding:.15em .5em;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
 table.fills td:nth-child(-n+3),table.fills th:nth-child(-n+3){text-align:left}
+table.fills td:nth-child(3){white-space:normal}
+.pane table:not(.fills) td,.pane table:not(.fills) th{white-space:normal;overflow-wrap:break-word}.pane table:not(.fills) td:first-child{min-width:7em}.pane form input,.pane form select{max-width:16em;box-sizing:border-box}.pane details td:first-child{width:auto}.pane details td.dim{min-width:0}
 .cwtab td,.cwtab th{padding:.2em .7em;text-align:right;white-space:nowrap}.cwtab td:first-child,.cwtab th:first-child{text-align:left}.carryform{display:flex;flex-wrap:wrap;gap:.6em 1.2em;align-items:end;margin:.8em 0}.carryform label{display:grid;gap:.2em}
 .calm{color:var(--calm)}.wild{color:var(--wild)}
 .gauge{display:inline-block;width:5em;height:.5em;background:var(--line);border-radius:3px;vertical-align:middle;overflow:hidden}

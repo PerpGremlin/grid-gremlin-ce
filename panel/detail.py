@@ -27,14 +27,15 @@ def _signed(v):
         f'<td class="{_num_cls(v)}">{v:+,.2f}</td>'
 
 
-TABS = (('fills', 'fills'), ('numbers', 'numbers'))
+TABS = (('fills', 'fills'), ('numbers', 'numbers'), ('edit', 'edit'))
 
 
 def detail_pane(idx, label, botid, contract, listing, show='fills', numbers=''):
     """U78: the picked bot — its name and fleet, a tab per view (U78b), and
     the view: its fills newest first with what its kept record realised and
     paid in fees (`listing`, gridgremlin.fill_list's answer; None: no kept
-    record), or its numbers page's body (`numbers`)."""
+    record), or the body given (`numbers`: the numbers page's, or the edit
+    door's)."""
     b = (contract.get('bots') or {}).get(botid)
     terms = (contract.get('terms') or {}).get(botid) or {}
     quote, _ = units_of(botid, terms)
@@ -46,8 +47,8 @@ def detail_pane(idx, label, botid, contract, listing, show='fills', numbers=''):
                     for key, word in TABS)
     head = (f'<h2>{esc(name)} <span class="dim">{esc(label)}</span> '
             f'<a class="plain" data-pick href="/">close</a></h2>'
-            f'<p class="ptabs">{tabs} <a href="/edit?fleet={idx}&amp;bot={qarg(botid)}">edit</a></p>')
-    if show == 'numbers':
+            f'<p class="ptabs">{tabs}</p>')
+    if show in ('numbers', 'edit'):
         return f'<aside class="pane">{head}{numbers}</aside>'
     if terms.get('strategy') == 'portfolio':
         return (f'<aside class="pane">{head}<p class="dim">A portfolio row: its legs and their '
@@ -61,7 +62,7 @@ def detail_pane(idx, label, botid, contract, listing, show='fills', numbers=''):
                    f'<b class="{_num_cls(listing["realized"])}">{listing["realized"]:+,.2f}</b> · fees '
                    f'{listing["fees"]:,.2f} · after fees <b class="{_num_cls(net)}">{net:+,.2f}</b> '
                    f'<span class="dim">{esc(quote)}, by average cost as the exchange counts it; '
-                   'funding is on the numbers page</span></p>')
+                   '"total" is after fees, so far; funding is under numbers</span></p>')
     else:
         summary = (f'<p>{len(rows)} fills · fees {listing["fees"]:,.2f} {esc(quote)}</p>'
                    '<p class="dim">Its record has no whole start yet (it began mid-position), '
@@ -77,5 +78,5 @@ def detail_pane(idx, label, botid, contract, listing, show='fills', numbers=''):
     older = (f'<p class="dim">{len(rows) - SHOWN} older fills not drawn.</p>'
              if len(rows) > SHOWN else '')
     return (f'<aside class="pane">{head}{summary}<table class="fills"><tr><th>UTC</th><th>side</th>'
-            '<th></th><th>price</th><th>qty</th><th>fee</th><th>made</th><th>after fees, so far</th></tr>'
+            '<th></th><th>price</th><th>qty</th><th>fee</th><th>made</th><th>total</th></tr>'
             f'{"".join(body)}</table>{older}</aside>')
