@@ -138,8 +138,11 @@ class CreateFlowPages:
             lrows = ''.join(
                 f"<tr><td>{o['side']}</td><td>{o['price']:,.6g}</td>"
                 f"<td>{o['qty']:,.6g}</td></tr>" for o in ladder)
+            from gridgremlin.ladder import rounding_note
+            note = rounding_note(vbot, adapter)                       # G27
             ladder_html = (f'<p class="dim">the ladder at mark '
                            f'{mark:,.6g} (dry-run — nothing placed)</p>'
+                           + (f'<p class="neg">{html.escape(note)}</p>' if note else '') +
                            f'<table><tr><th>side</th><th>price</th>'
                            f'<th>qty</th></tr>{lrows}</table>')
         diffs = (unified_diff(fleet_p.read_text(), new_fleet, fleet_p.name)

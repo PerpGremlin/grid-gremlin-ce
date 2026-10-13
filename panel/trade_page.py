@@ -25,6 +25,8 @@ def trade_form(labels, msg='', typed=None):
             '<span class="dim">a perp like BTCUSDT</span></td></tr>'
             f'<tr><td>investment</td><td><input name="capital" value="{v("capital")}" size="10"> '
             '<span class="dim">the margin, in the quote coin</span></td></tr>'
+            f'<tr><td>investment, again</td><td><input name="retype_capital" value="{v("retype_capital")}" size="10"> '
+            '<span class="dim">on Mainnet only: type it a second time (D64)</span></td></tr>'
             f'<tr><td>leverage</td><td><input name="leverage" value="{v("leverage", "1")}" size="6">x</td></tr>'
             f'<tr><td>take profit</td><td><input name="tp" value="{v("tp")}" size="6">% '
             '<span class="dim">beyond the entry — required: a trade is never without its exit</span></td></tr>'

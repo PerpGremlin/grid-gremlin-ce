@@ -65,7 +65,8 @@ GRID = {
          'one number per grid, comma separated; only with "weighted"'),
         ('place_within_pct', 'place_within_pct', 'pct',
          'Only place orders within (%) of the price',
-         'grids further away wait until the price comes near. Default 5'),
+         'grids further away wait until the price comes near. Default 5, or two grid '
+         'gaps on a wider grid, so a bought grid\'s sell always rests on the exchange'),
         ('seed', 'seed', 'switch', 'Start with inventory',
          'on a first start, buy one piece for each grid above the price '
          'so there is something to sell straight away'),
@@ -894,7 +895,7 @@ BLANK_NAMES = {'stop_candle': 'none', 'stop_action': 'stop_bot'}
 
 _MINIMAL = {
     'grid': {'market_type': 'linear', 'symbol': 'BTCUSDT', 'side': 'long',
-             'capital': 1000, 'lower': 100, 'upper': 200, 'rungs': 11},
+             'capital': 1000, 'lower': 100, 'upper': 200, 'rungs': 41},   # a typical gap (W1b)
     'martingale': {'strategy': 'martingale', 'market_type': 'linear',
                    'symbol': 'BTCUSDT', 'side': 'long', 'capital': 1000,
                    'base_order_size': 50, 'safety_order_size': 50,

@@ -457,6 +457,10 @@ def build_market_bot(cfg, client, notifier, tombs, slide):
                         'warn', cfg['symbol'],
                         f'thin margin: rung gap {gap:.4%} barely clears '
                         f'the {trip:.4%} round trip (net {net:.4%}/trip)')
+                from .ladder import rounding_note                 # G27: said at the start
+                note = rounding_note(cfg, adapter)
+                if note:
+                    _vn(notifier, venue).event('warn', cfg['symbol'], note)
             except (VenueError, OSError, KeyError, TypeError):
                 pass
         # B8 was pinned as a pure function and never wired to a call site
@@ -787,6 +791,24 @@ def make_notifier():
     return Notifier(sink=stamped_print)
 
 
+def check_snapshot_watched(fleet_path, snapshot):
+    """F1b: the file this fleet writes its snapshots to is the one its
+    watchdog reads. A copied config watching another file is caught as
+    stale or missing only when that file is quiet; a live one would vouch
+    for a fleet it is not (the audit, 2026-10-13). Refused before the
+    fleet's first write; a run without snapshots has nothing to compare."""
+    if not snapshot:
+        return
+    raw = json.loads(Path(fleet_path).read_text())
+    if not raw.get('watchdog'):
+        return                                       # F1 refuses it in the build
+    wd = json.loads(Path(raw['watchdog']).read_text())
+    watched = wd.get('snapshot')
+    if watched and Path(watched).resolve() != Path(snapshot).resolve():
+        raise ConfigError(f'this fleet writes its snapshots to {snapshot}, but its watchdog '
+                          f'reads {watched} — it would be watching another file (F1b)')
+
+
 def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
         snapshot=None, snapshot_every=60, lock_path=None, allow_mainnet=False):
     load_env()
@@ -804,6 +826,7 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
     lockdir.mkdir(parents=True, exist_ok=True)
     prelock = acquire_fleet_lock(
         str(lockdir / f'{Path(fleet_path).resolve().name}.prelock'))
+    check_snapshot_watched(fleet_path, snapshot)                 # F1b: before any write
     fleet, clients, bots = build_fleet(fleet_path, notifier,
                                        allow_mainnet=allow_mainnet)
     notifier.startup = False         # D60: the start is said; now only what

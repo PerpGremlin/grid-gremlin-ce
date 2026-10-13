@@ -19,9 +19,11 @@ from common.files import write_json
 
 def run_readout(fleet_path, hours=24.0):
     """The readout as the panel runs it: its own process, its JSON."""
-    out = subprocess.run([sys.executable, '-m', 'gridgremlin.report',
-                          str(fleet_path), '--hours', f'{hours:g}', '--json'],
-                         capture_output=True, text=True, timeout=300)
+    from .durable import fleet_home
+    out = subprocess.run([sys.executable, '-m', 'gridgremlin.report',      # U80: from
+                          str(Path(fleet_path).resolve()), '--hours', f'{hours:g}', '--json'],
+                         capture_output=True, text=True, timeout=300,     # the fleet's own copy
+                         cwd=str(fleet_home(fleet_path)))
     if out.returncode != 0 or not out.stdout.strip():
         raise RuntimeError(f'readout failed: {out.stderr.strip()[-300:]}')
     return json.loads(out.stdout)

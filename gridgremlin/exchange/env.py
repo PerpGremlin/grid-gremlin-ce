@@ -30,6 +30,11 @@ def select_account(name):
             else:
                 os.environ[k] = v
         return {}
+    for k, v in _defaults.items():           # E15: every account starts from the
+        if v is None:                        # defaults, never from the account
+            os.environ.pop(k, None)          # selected before it
+        else:
+            os.environ[k] = v
     tag = name.upper()
     picked = {}
     for k in ACCOUNT_KEYS:
@@ -46,6 +51,10 @@ def select_account(name):
     if not picked:
         raise PermissionError(f"account '{name}': no keys — .env carries no BYBIT_{tag}_API_KEY "
                               f"and no HL_{tag}_SUBACCOUNT (H5)")
+    if 'BYBIT_API_KEY' not in picked:        # E15: an account without Bybit keys
+        for k in ('BYBIT_API_KEY', 'BYBIT_API_SECRET', 'BYBIT_DEMO', 'BYBIT_TESTNET'):
+            os.environ.pop(k, None)          # has none — never the default's
+
     for k, v in picked.items():
         os.environ[k] = v                    # the account wins over the defaults
     return picked

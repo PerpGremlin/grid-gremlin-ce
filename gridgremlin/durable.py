@@ -41,6 +41,19 @@ def logs_dir(fleet_path):
     return root / 'logs'
 
 
+def fleet_home(fleet_path):
+    """U80: the checkout a fleet file lives in — configs/x.json's parent's
+    parent. A tool run FOR a fleet runs FROM here, so the pinned live copy's
+    fleet is read by the live copy's own code and its own .env, never the
+    main checkout's; for a fleet in the main checkout it is that checkout.
+    A fleet file outside any checkout (a spec's, a hand-made one) runs from
+    this process's own code, as before."""
+    home = logs_dir(fleet_path).parent
+    if (home / 'gridgremlin' / '__init__.py').exists():
+        return home
+    return Path(__file__).resolve().parents[1]
+
+
 def fleet_tag(fleet_path):
     """The fleet's name from its file: fleet.demo.json -> demo,
     fleet.hl.testnet.json -> hl.testnet; any other name keeps its stem."""

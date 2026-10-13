@@ -51,7 +51,14 @@ class TradePages:
                 opts['trail-from'] = form['trail_from']
             if form.get('maker'):
                 opts['maker'] = True
-            botid = add_trade(path, rows, build_row(form.get('side', ''), form.get('symbol', ''), opts))
+            row = build_row(form.get('side', ''), form.get('symbol', ''), opts)
+            if self._mainnet(f, row.get('venue', 'bybit')):              # D64: a trade is a bot (L5)
+                from panel.create import retype_refusal
+                cap = float(row.get('capital') or 0)
+                again = retype_refusal([('capital', None, cap)], form)
+                if again:
+                    raise TradeError(again)
+            botid = add_trade(path, rows, row)
         except (ConfigError, TradeError, ValueError, OSError) as e:
             return self._page(self._trade_html(refusal_box('trade refused', html.escape(str(e))), form))
         type(self)._cache.pop(self.fleets[min(fi, len(self.fleets) - 1)], None)   # the next readout shows it

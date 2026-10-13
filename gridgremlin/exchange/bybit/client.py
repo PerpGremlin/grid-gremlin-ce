@@ -21,10 +21,25 @@ ORDER_GONE_CODES = {110001, 170213}
 CLOCK_CODE = 10002
 
 
+FLAG_TRUE, FLAG_FALSE = ('true', '1', 'yes'), ('', 'false', '0', 'no')
+
+
+def _flag(name):
+    """E14: a network flag is true, false or unset — anything else (a typo,
+    a stray word) is refused by name, never read as real money."""
+    v = os.environ.get(name, '').strip().lower()
+    if v in FLAG_TRUE:
+        return True
+    if v in FLAG_FALSE:
+        return False
+    raise ValueError(f'{name}={os.environ.get(name)!r} is not true or false — '
+                     'refusing to guess the network (E14)')
+
+
 def detect_env():
-    if os.environ.get('BYBIT_DEMO', '').lower() == 'true':
+    if _flag('BYBIT_DEMO'):
         return 'demo'
-    if os.environ.get('BYBIT_TESTNET', '').lower() == 'true':
+    if _flag('BYBIT_TESTNET'):
         return 'testnet'
     return 'mainnet'
 
