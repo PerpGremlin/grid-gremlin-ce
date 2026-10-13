@@ -18,24 +18,27 @@ class CreateFlowPages:
                                   public_mark, unified_diff, validate_whole)
         fi = int(_f(form.get('fleet')) or 0)
         fleet_p = Path(self.fleets[min(fi, len(self.fleets) - 1)])
-        fleet_raw = json.loads(fleet_p.read_text())
+        fleet_text = fleet_p.read_text()
+        fleet_raw = json.loads(fleet_text)
         wd_p = Path(fleet_raw['watchdog'])
-        wd_raw = json.loads(wd_p.read_text())
+        wd_text = wd_p.read_text()
+        wd_raw = json.loads(wd_text)
+        seen = self._seen(fleet_text, wd_text)
         mode = form.get('mode', 'create')
-        if apply:
-            proposal = json.loads(form.get('proposal', '{}'))
-            mode = proposal.get('mode', 'create')
-        elif mode == 'remove':
-            proposal = {'mode': 'remove', 'orig': form.get('orig', '')}
-        elif form.get('bot_json'):                # §11: the setup form's row
-            proposal = {'mode': mode, 'orig': form.get('orig', ''),
-                        'bot': json.loads(form['bot_json']),
-                        'watchdog': {'max': _f(form.get('ceiling'))}}
-            if form.get('pair'):                         # D54: the other half
-                proposal['pair'] = json.loads(form['pair'])
-        else:
+        if not (apply or mode == 'remove' or form.get('bot_json')):
             return self._refused(form, 'refused', 'nothing to create — '
                                  'start from "set up a bot"')
+        try:                     # U84: a malformed post is refused in words
+            proposal = self._proposal(form, apply)
+        except ValueError as e:
+            return self._refused(form, 'refused', e)
+        mode = proposal['mode']
+        if apply and proposal.get('seen') != seen:
+            # U84: the reviewed change is written onto the files it was
+            # reviewed against, or not at all
+            return self._page(refusal_box(
+                'not applied', 'the file changed since you reviewed it — '
+                'review again'))
         try:
             from panel.create import edit_proposal, remove_proposal
             if mode == 'remove':
@@ -145,9 +148,9 @@ class CreateFlowPages:
                            + (f'<p class="neg">{html.escape(note)}</p>' if note else '') +
                            f'<table><tr><th>side</th><th>price</th>'
                            f'<th>qty</th></tr>{lrows}</table>')
-        diffs = (unified_diff(fleet_p.read_text(), new_fleet, fleet_p.name)
-                 + unified_diff(wd_p.read_text(), new_wd, wd_p.name))
-        pj = html.escape(json.dumps(proposal), quote=True)
+        diffs = (unified_diff(fleet_text, new_fleet, fleet_p.name)
+                 + unified_diff(wd_text, new_wd, wd_p.name))
+        pj = html.escape(json.dumps(dict(proposal, seen=seen)), quote=True)
         say = ''
         if proposal.get('pair'):                           # D54
             say = ('<p class="dim">the long half of a reversal grid, below '
@@ -223,6 +226,53 @@ class CreateFlowPages:
             '<details><summary>the orders it would place</summary>'
             + ladder_html + '</details>')
 
+    @staticmethod
+    def _proposal(form, apply):
+        """The change a post asks for, read whole before anything else
+        runs; ValueError, in words, when it is not one (U84)."""
+        def obj(text, what):
+            try:
+                v = json.loads(text)
+            except ValueError:
+                raise ValueError(f'{what} is not readable — start again from '
+                                 '"set up a bot"') from None
+            if not isinstance(v, dict):
+                raise ValueError(f'{what} is not a bot — start again from '
+                                 '"set up a bot"')
+            return v
+        mode = form.get('mode', 'create')
+        if apply:
+            proposal = obj(form.get('proposal', '{}'), 'the reviewed change')
+            mode = proposal.setdefault('mode', 'create')
+        elif mode == 'remove':
+            proposal = {'mode': 'remove', 'orig': form.get('orig', '')}
+        else:                                     # §11: the setup form's row
+            proposal = {'mode': mode, 'orig': form.get('orig', ''),
+                        'bot': obj(form['bot_json'], 'the bot'),
+                        'watchdog': {'max': _f(form.get('ceiling'))}}
+            if form.get('pair'):                         # D54: the other half
+                proposal['pair'] = obj(form['pair'], 'the other half')
+        if mode not in ('create', 'edit', 'remove'):
+            raise ValueError(f'{mode}: not a change the panel makes')
+        if not isinstance(proposal.get('orig', ''), str):
+            raise ValueError('the bot changed is named by its id')
+        if mode != 'remove':
+            if not isinstance(proposal.get('bot'), dict):
+                raise ValueError('the reviewed change carries no bot — start '
+                                 'again from "set up a bot"')
+            if not isinstance(proposal.get('watchdog'), dict):
+                proposal['watchdog'] = {'max': None}
+            if not isinstance(proposal.get('pair', {}), dict):
+                raise ValueError('the other half is not a bot')
+        return proposal
+
+    @staticmethod
+    def _seen(*texts):
+        """U84: what the review read — the fleet file's and the watchdog
+        file's sha256 — so the apply writes onto those files or refuses."""
+        import hashlib
+        return [hashlib.sha256(t.encode()).hexdigest() for t in texts]
+
     def _fleet_labels(self):
         # U76: the account's name, as the dash says it (U55), not its file;
         # the form's values are the fleet's index, so only the words change
@@ -271,13 +321,19 @@ class CreateFlowPages:
                      'that bot to change it</a>, or pick another coin or '
                      'the other direction below.')
         note = refusal_box(title, why, extra)
-        if form.get('bot_json'):
+        try:                                     # U84: only a bot redraws
+            bot = json.loads(form.get('bot_json') or 'null')
+        except ValueError:
+            bot = None
+        if isinstance(bot, dict):
             from panel.setup import advanced_page, form_from_bot
-            bot = json.loads(form['bot_json'])
-            vals = dict(form_from_bot(bot), ceiling=form.get('ceiling', ''))
-            return self._page(advanced_page(
-                bot.get('strategy', 'grid'), vals, self._fleet_labels(),
-                fi, alert=note, edit=form.get('orig') or None))
+            try:
+                vals = dict(form_from_bot(bot), ceiling=form.get('ceiling', ''))
+                return self._page(advanced_page(
+                    bot.get('strategy', 'grid'), vals, self._fleet_labels(),
+                    fi, alert=note, edit=form.get('orig') or None))
+            except Exception:                               # noqa: BLE001
+                pass                       # a bot the form cannot draw (U84)
         return self._page(note + '<p><a href="/setup">set up a bot</a> · '
                           '<a href="/">fleet</a></p>')
 
@@ -387,6 +443,12 @@ class CreateFlowPages:
         venue = self._fleet_venue(fi)
         labels = self._fleet_labels()
         how = form.get('how')
+        from panel.setup import SCHEMAS
+        if how not in ('quick', 'reopen', 'mirror') and \
+                form.get('strategy', 'grid') not in SCHEMAS:       # U84
+            return self._page(refusal_box('not yet', f"{form['strategy']}: not a kind of bot "
+                                          'the panel sets up — a grid or a DCA') +
+                              '<p><a href="/setup">set up a bot</a></p>')
         try:
             if how == 'reopen':
                 vals = json.loads(form.get('values', '{}'))

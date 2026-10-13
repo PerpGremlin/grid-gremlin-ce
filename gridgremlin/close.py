@@ -89,10 +89,8 @@ def main(argv):
     expect = None
     if '--expect' in argv:
         i = argv.index('--expect')
-        try:
-            expect = float(argv[i + 1])
-        except (IndexError, ValueError):
-            expect = -1.0                                   # never matches: refused
+        from common.fmt import float_or
+        expect = float_or(argv[i + 1] if i + 1 < len(argv) else None, -1.0)   # never matches: refused
         del argv[i:i + 2]
     if len(argv) != 2:
         print('usage: python3 -m gridgremlin.close <fleet.json> <botid> '

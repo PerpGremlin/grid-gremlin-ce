@@ -79,9 +79,9 @@ def portfolio_total(contract):
     """H6: what the fleet's portfolio rows have made since their anchors,
     from their own snapshots — counted into the exchange's total like any
     card (D63). A row the engine has not valued counts nothing."""
+    from gridgremlin.report import portfolio_rows_total
     belief = ((contract.get('watchdog') or {}).get('belief') or {}).get('bots', {})
-    return sum((bl.get('portfolio') or {}).get('total') or 0.0
-               for bl in belief.values() if bl.get('alive') is not False)
+    return portfolio_rows_total(belief) or 0.0
 
 
 def hero_strip(labelled):
@@ -93,7 +93,8 @@ def hero_strip(labelled):
     from gridgremlin.report import account_leverage
     lines = []
     for idx, (label, c) in enumerate(labelled):
-        live = [b for b in c['bots'].values() if b is not None]
+        live = [b for b in c['bots'].values()                         # an unpriced inverse
+                if b is not None and b.get('realized') is not None]    # book: no dollars yet
         total = sum(card_total(b) for b in live) + portfolio_total(c)       # H6
         belief = ((c.get('watchdog') or {}).get('belief') or {}).get('bots', {})
         dead = sum(1 for bl in belief.values() if bl.get('alive') is False)
@@ -126,4 +127,4 @@ def venue_money(contract):
     coins = sorted({t['quote'] for t in terms if t and t.get('quote')})
     if not coins:
         coins = sorted({units_of(b, None)[0] for b in contract.get('bots') or {}})
-    return '/'.join(coins) if coins else 'quote'
+    return esc('/'.join(coins)) if coins else 'quote'

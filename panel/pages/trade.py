@@ -5,6 +5,7 @@ from panel.chart import _f
 from pathlib import Path
 import html
 import json
+import re
 
 
 class TradePages:
@@ -29,6 +30,20 @@ class TradePages:
             listed.append((fi, lb, [(_botid(t), t) for t in trades]))
         return trade_form(self.labels, msg, typed) + open_trades_html(listed)
 
+    def _listed(self, fi, symbol):
+        """U83: a trade names a market the venue lists — letters and digits,
+        and on the venue's own public list (U25) when it can be read; a
+        market that does not exist was queued for the fleet to fail on."""
+        from gridgremlin.apply import not_listed
+        from gridgremlin.trades import TradeError
+        if not re.fullmatch(r'[A-Z0-9]+', symbol):
+            raise TradeError(f'{symbol or "nothing"}: a market is named in letters and '
+                             'digits, like BTCUSDT')
+        listed = self._symbols(fi)
+        if listed and symbol not in listed:
+            raise TradeError(not_listed(symbol, 'the exchange lists no such market '
+                                                'for this account — pick one from the list'))
+
     def _trade_post(self, form):
         """L6: open a trade through the bot validator, or clear an ended one."""
         from gridgremlin.config import ConfigError
@@ -52,6 +67,7 @@ class TradePages:
             if form.get('maker'):
                 opts['maker'] = True
             row = build_row(form.get('side', ''), form.get('symbol', ''), opts)
+            self._listed(fi, row['symbol'])                     # U83
             if self._mainnet(f, row.get('venue', 'bybit')):              # D64: a trade is a bot (L5)
                 from panel.create import retype_refusal
                 cap = float(row.get('capital') or 0)
@@ -60,7 +76,7 @@ class TradePages:
                     raise TradeError(again)
             botid = add_trade(path, rows, row)
         except (ConfigError, TradeError, ValueError, OSError) as e:
-            return self._page(self._trade_html(refusal_box('trade refused', html.escape(str(e))), form))
+            return self._page(self._trade_html(refusal_box('trade refused', e), form))
         type(self)._cache.pop(self.fleets[min(fi, len(self.fleets) - 1)], None)   # the next readout shows it
         return self._page(f'<h1>{html.escape(botid)}: queued</h1><p class="say">The fleet '
                           f'{html.escape(self.labels[min(fi, len(self.labels) - 1)])} opens it within a '

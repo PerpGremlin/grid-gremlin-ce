@@ -164,18 +164,18 @@ def spec_R18_since_first_trade_is_the_kept_history_plus_the_fresh():
     """Two round trips kept from weeks ago, one fresh in the window: the
     card's window says one, since first trade says all three — and a fill
     in both is counted once."""
-    link = 'linBTCUSDTl-1-a'
-    old = [_kf(DAY, 'o1', link=link), _kf(DAY + 1, 'o2', side='sell',
-                                           price=110.0, link=link),
-           _kf(2 * DAY, 'o3', link=link), _kf(2 * DAY + 1, 'o4', side='sell',
-                                              price=110.0, link=link)]
+    link = 'linBTCUSDTl-1-'                  # each order its own link, as the engine makes them
+    old = [_kf(DAY, 'o1', link=link + '1'), _kf(DAY + 1, 'o2', side='sell',
+                                                 price=110.0, link=link + '2'),
+           _kf(2 * DAY, 'o3', link=link + '3'), _kf(2 * DAY + 1, 'o4', side='sell',
+                                                    price=110.0, link=link + '4')]
     fresh = [dict(f, venue=None) for f in
-             (_kf(NOW - 10, 'n1', link=link),
-              _kf(NOW - 5, 'n2', side='sell', price=110.0, link=link))]
+             (_kf(NOW - 10, 'n1', link=link + '5'),
+              _kf(NOW - 5, 'n2', side='sell', price=110.0, link=link + '6'))]
     with tempfile.TemporaryDirectory() as d:
         Path(d, 'demo.json').write_text(json.dumps({
             'version': 1, 'collected': {'bybit:linear:BTCUSDT': NOW - 7},
-            'fills': old + [_kf(NOW - 10, 'n1', link=link)]}))
+            'fills': old + [_kf(NOW - 10, 'n1', link=link + '5')]}))
         books, behind = kept_books('fleet.demo.json', fresh,
                                    **_sf_args(d, NOW - DAY))
         b = books['linBTCUSDTl']

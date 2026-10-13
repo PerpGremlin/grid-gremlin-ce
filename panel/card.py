@@ -1,4 +1,5 @@
 """A bot's card (U68 slim, U56 full) and a portfolio's (H6), with the lines a card is made of. Out of render.py (D91 step 3)."""
+from common.fmt import signed
 from gridgremlin.report import card_total
 from .reference import STATE_WORDS
 from .drawings import strip
@@ -7,9 +8,14 @@ from .html_bits import _day, _num_cls, coin_of, esc, money, pick_link, qarg, uni
 
 def run_rate(b, contract, capital=None, trade=False):
     """U64: what every grid product states — how long the bot has run in
-    the figure's own span, its grid profit (realised after fees) per day,
-    and that as a yearly rate on its investment. Bybit's way: grid profit /
-    investment / days x 365, a run under a day counted as one day. Returns
+    the figure's own span, its grid profit per day, and that as a yearly
+    rate on its investment. Bybit's way: grid profit / investment / days x
+    365, a run under a day counted as one day. Grid profit is the matched
+    trips' (R12's gap figure: each exit against its own lot) after fees —
+    the second audit, 2026-10-13: average-cost realised read -2,031/day on
+    a long grid whose trips made +3,817/day; a bot with no matched trip (a
+    DCA, a trade) keeps realised. The run starts at the later of the span's
+    start and the first fill (a bot 38 minutes old read "1.0 d"). Returns
     the line, or '' without fills or a span."""
     gen = contract.get('generated_ms')
     how = b.get('counted_from')
@@ -18,9 +24,12 @@ def run_rate(b, contract, capital=None, trade=False):
              gen - contract.get('window_hours', 24) * 3.6e6 if gen else None)
     if not gen or not start or not b.get('fills'):
         return ''
+    if b.get('first_ms'):
+        start = max(start, b['first_ms'])
     days = max(1.0, (gen - start) / 8.64e7)
     shown = (gen - start) / 8.64e7
-    net = b['realized'] - b['fees']
+    gross = b['gap_realized'] if b.get('gap_trips') and b.get('gap_realized') is not None else b['realized']
+    net = gross - b['fees']
     per_day = net / days
     if abs(per_day) < 0.005:                 # never "−0.00" (the bug hunt, 2026-10-11)
         per_day = 0.0
@@ -75,7 +84,7 @@ def ladder_box(idx, botid, terms, open_=False):
             '<th>fills at</th><th>size</th><th>committed</th><th>average</th>'
             f'<th>to take-profit</th></tr>{body}</table>'
             '<div class="dim">from the base price; size and committed in '
-            f'{(terms or {}).get("quote") or "quote"}</div></details>')
+            f'{esc((terms or {}).get("quote") or "quote")}</div></details>')
 
 
 def kind_line(terms):
@@ -180,7 +189,8 @@ def card(idx, botid, b, contract, belief, full=False):
         return portfolio_card(idx, botid, contract, belief, full=full)       # D78/H6
     rng = (contract.get('ranges') or {}).get(botid)
     ceil = ((contract.get('watchdog') or {}).get('ceilings') or {}).get(botid)
-    money_coin, margin_coin = units_of(botid, (contract.get('terms') or {}).get(botid))   # U53
+    quote_raw, margin_raw = units_of(botid, (contract.get('terms') or {}).get(botid))   # U53
+    money_coin, margin_coin = esc(quote_raw), esc(margin_raw)     # P7: names from the file are text
     links = (('' if full else f"<a data-pick href='/?fleet={idx}&amp;bot={qarg(botid)}&amp;show=numbers'>numbers</a>")
              + ('' if ((contract.get('terms') or {}).get(botid) or {}).get('trade') else
                 (' · ' if not full else '') + f"<a data-pick href='/?fleet={idx}&amp;bot={qarg(botid)}&amp;show=edit'>edit</a> · "
@@ -190,6 +200,9 @@ def card(idx, botid, b, contract, belief, full=False):
     # L8: a trade is not a fleet row — edit, copy and remove answered "not in
     # this fleet" (the owner, 2026-10-11, on tilt's ended BTC trade); a trade
     # ends by its own exit, close trade, or clear
+    if b is not None and b.get('realized') is None:
+        b = None             # an inverse book with no mark has no dollars (the second
+                             # audit, 2026-10-13): shown as the engine's belief, never a crash
     if b is None:
         # no fills in the window — the engine's own belief fills in, and
         # says so (the snapshot is the bot's belief, not the venue)
@@ -226,7 +239,7 @@ def card(idx, botid, b, contract, belief, full=False):
                           + (st.get('funding') or 0.0)
                           + (st['unreal'] or 0.0))
             coin = (f' <span class="{_num_cls(coin_total)}">'
-                    f"{coin_total:+.6f} {st['coin']}</span>")
+                    f"{coin_total:+.6f} {esc(st['coin'])}</span>")
         if b.get('counted_from') == 'flat':                   # R14
             days = (contract['generated_ms'] - b['counted_since_ms']) / 8.64e7
             span = (f'since it was last flat, {days:.1f} d'
@@ -252,20 +265,20 @@ def card(idx, botid, b, contract, belief, full=False):
         # U68: the card's money at a glance, as the bot pages of the big
         # venues show it; every other line is the numbers page's
         slim_head = (f'<div class="pnl {_num_cls(total)}">'
-                     f'<span class="big {_num_cls(total)}">{total:+,.2f}</span> {money_coin}{coin}{roi}'
+                     f'<span class="big {_num_cls(total)}">{signed(total)}</span> {money_coin}{coin}{roi}'
                      f' <span class="dim">· {span}</span>'                 # D63: what the figure covers
                      f'<div class="parts">{pnl_parts(net, b["unreal_at_mark"], b.get("funding"))}</div>'
                      f'{run_rate(b, contract, cap, bool(((contract.get("terms") or {}).get(botid) or {}).get("trade")) or ((contract.get("terms") or {}).get(botid) or {}).get("strategy") == "martingale")}'
                      '</div>')
         head = (f'<div class="pnl {_num_cls(total)}">'
-                f'<span class="big {_num_cls(total)}">{total:+,.2f}</span> '
+                f'<span class="big {_num_cls(total)}">{signed(total)}</span> '
                 f'{money_coin}{coin} <span class="dim">after fees, {span}</span>'
                 f'<div class="parts">'
                 f'{pnl_parts(net, b["unreal_at_mark"], b.get("funding"))}'
                 f'</div>{run_rate(b, contract, ((contract.get("terms") or {}).get(botid) or {}).get("capital"), bool(((contract.get("terms") or {}).get(botid) or {}).get("trade")) or ((contract.get("terms") or {}).get(botid) or {}).get("strategy") == "martingale")}'
                 f'{since_first_line(contract, botid)}</div>')
         held = holding_html(pos, b['avg_cost'], mark, botid,
-                            bool(b.get('inverse')), quote=money_coin)   # U44/U53
+                            bool(b.get('inverse')), quote=quote_raw)    # U44/U53
         floor = (contract.get('fee_floors') or {}).get(botid)
         unreal = b['unreal_at_mark']
         limit = (f'{abs(pos) / ceil * 100:.0f}% of {ceil:,.4g}' if ceil
@@ -480,12 +493,8 @@ def pnl_parts(net, unreal, funding=0.0):
 def since_first_total(sf):
     """R18: a kept book's whole result, or None when it cannot be whole
     (the ledger behind the window, or an unknown mark on an open book)."""
-    if (not sf or sf.get('behind') is not None or not sf.get('whole', True)
-            or sf.get('realized') is None):
-        return None
-    if sf['unreal_at_mark'] is None and abs(sf.get('position') or 0) > 1e-12:
-        return None
-    return card_total(sf)                                       # D63
+    from gridgremlin.report import kept_total
+    return kept_total(sf)                                       # D63, one rule
 
 
 def since_first_line(contract, botid):
@@ -510,7 +519,7 @@ def since_first_line(contract, botid):
               else f"{sf['trips']} trips")
     star = ' *' if sf.get('truncated') else ''
     shown = ('—' if total is None else
-             f'<b class="{_num_cls(total)}">{total:+,.2f}</b>')
+             f'<b class="{_num_cls(total)}">{signed(total)}</b>')
     op = sf.get('opened')
     since = (f'fresh from {_day(op["time_ms"])} (opened holding '
              f'{op["qty"]:,.10g} at {op["price"]:,.6g})' if op
@@ -528,7 +537,7 @@ def portfolio_card(idx, botid, contract, belief, full=False):
     terms = (contract.get('terms') or {}).get(botid) or {}
     bl = belief.get(botid) or {}
     v = bl.get('portfolio') or {}
-    q = terms.get('quote') or 'USDT'
+    q = esc(terms.get('quote') or 'USDT')
     links = (('' if full else f"<a data-pick href='/?fleet={idx}&amp;bot={qarg(botid)}&amp;show=numbers'>numbers</a> ")
              + f"<a data-pick href='/?fleet={idx}&amp;bot={qarg(botid)}&amp;show=edit'>edit</a> "
              f"<a href='/edit?fleet={idx}&amp;bot={qarg(botid)}&amp;mode=remove'>remove</a>")
@@ -552,7 +561,7 @@ def portfolio_card(idx, botid, contract, belief, full=False):
     else:
         total = v.get('total') or 0.0
         carry, tilt, basis = v.get('carry', {}).get('total') or 0.0, v.get('tilt') or 0.0, v.get('basis') or 0.0
-        head = (f'<div class="pnl {_num_cls(total)}"><span class="big {_num_cls(total)}">{total:+,.2f}</span> {q} '
+        head = (f'<div class="pnl {_num_cls(total)}"><span class="big {_num_cls(total)}">{signed(total)}</span> {q} '
                 f'<span class="dim">since its anchor, after fees</span><div class="parts">'
                 f'carry <b class="{_num_cls(carry)}">{carry:+,.2f}</b> · '
                 f'tilt <b class="{_num_cls(tilt)}">{tilt:+,.2f}</b> · '
@@ -641,7 +650,7 @@ def holding_html(pos, avg, mark, botid, inverse=False, quote=None):
     sign = '-' if pos < 0 else ''
     if quote is None:                       # U53: from the bot's own name
         quote = units_of(botid, None)[0]
-    q = f' {quote}' if quote else ''
+    q = f' {esc(quote)}' if quote else ''
     parts = [f'<span class="u-coin">{sign}{n(coins)} {coin}</span>',
              f'<span class="u-value">worth {n(value)}{q}</span>',
              f'<span class="u-cost">cost {n(cost)}{q}'

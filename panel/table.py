@@ -32,6 +32,8 @@ def section(idx, label, contract, view='all'):
         if botid is None:                      # U12: a group's heading row
             rows.append(f'<tr><th colspan="15" class="grp">{esc(b)}</th></tr>')
             continue
+        if b is not None and b.get('realized') is None:
+            b = None                     # an inverse book with no mark (the second audit)
         if b is None:
             # no fills in the window — the engine's own belief fills in,
             # and says so (the snapshot is the bot's belief, not the venue)

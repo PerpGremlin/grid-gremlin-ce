@@ -183,3 +183,20 @@ def spec_F18_a_warm_box_answers_at_once_and_says_how_old():
         def refresh(self, fp):
             raise RuntimeError('venue down')
     Failing().keep_warm(every=0, rounds=1)             # said, never raised
+
+
+def spec_H6b_the_portfolio_rows_reach_the_phone_and_the_digest():
+    """The second audit, 2026-10-13: /pnl read "now +0.00" on the carry
+    fleet (its portfolio row has no market book) and the digest never said
+    it; the panel counted it. All three read one figure now."""
+    from gridgremlin.report import portfolio_rows_total
+    belief = {'pfocarry': {'alive': True, 'portfolio': {'total': 2296.68}},
+              'linBTCUSDTl': {'alive': True}}
+    assert portfolio_rows_total(belief) == 2296.68 and portfolio_rows_total({'x': {'alive': True}}) is None
+
+    class Box(FakeBox):
+        def readout(self, fp):
+            return dict(CONTRACT, watchdog={'belief': {'bots': belief}})
+    assert 'portfolio since its anchor +2,296.68' in answer(Box(), '/pnl')
+    src = (Path(__file__).resolve().parents[1] / 'gridgremlin' / 'digest.py').read_text()
+    assert 'portfolio_rows_total(' in src

@@ -194,7 +194,9 @@ wants and the hedge it holds, as coins.</td></tr>
 # V12: the live page reloads whole, so what the reader opened would shut and
 # the page would jump on every refresh. This script only remembers, in the
 # browser tab: which boxes are open, how far down the page is, and the
-# theme. No number passes through it.
+# theme. No number passes through it. U82: the newest swap wins — an older
+# answer arriving late is dropped (seq) — and the timer waits while a swap is
+# in flight or a form in the right half is being typed in (dirty).
 KEEP_JS = """<script>(function(){
 var S=sessionStorage,open={},root=document.documentElement,KINDS=['fold','acct'];
 try{open=JSON.parse(S.getItem('gg-open')||'{}');}catch(e){}
@@ -239,14 +241,26 @@ var y=S.getItem('gg-y:'+location.pathname);
 if(y)window.scrollTo(0,Number(y));
 window.addEventListener('pagehide',function(){
  S.setItem('gg-y:'+location.pathname,String(window.scrollY));});
-function swap(url){return fetch(url,{credentials:'same-origin',cache:'no-store'})
- .then(function(r){return r.ok?r.text():'';}).then(function(t){if(!t)return false;
+var seq=0,busy=0;
+function swap(url){var my=++seq;busy++;
+ return fetch(url,{credentials:'same-origin',cache:'no-store'})
+ .then(function(r){return r.ok?r.text():'';}).then(function(t){
+  if(my!==seq)return null;
+  if(!t)return false;
   var doc=new DOMParser().parseFromString(t,'text/html');
   ['.hero','main'].forEach(function(q){var a=document.querySelector(q),b=doc.querySelector(q);
    if(a&&b)a.innerHTML=b.innerHTML;});
   document.querySelectorAll('main .pane script').forEach(function(old){
    var s=document.createElement('script');s.text=old.text;old.replaceWith(s);});
-  wire(document.querySelector('main')||document);picks();top();return true;});}
+  wire(document.querySelector('main')||document);picks();top();return true;})
+ .then(function(v){busy--;return v;},function(e){busy--;throw e;});}
+function dirty(){var a=document.activeElement;
+ if(a&&a.closest&&a.closest('.pane form'))return true;
+ return [].some.call(document.querySelectorAll('.pane form input,.pane form textarea,.pane form select'),function(e){
+  if(e.type==='checkbox'||e.type==='radio')return e.checked!==e.defaultChecked;
+  if(e.tagName==='SELECT'){var d=0;[].forEach.call(e.options,function(o,i){if(o.defaultSelected)d=i;});
+   return e.selectedIndex!==d;}
+  return e.value!==e.defaultValue;});}
 document.addEventListener('click',function(e){
  var a=e.target.closest&&e.target.closest('a[data-pick]');
  if(!a||e.ctrlKey||e.metaKey||e.shiftKey||e.button)return;
@@ -254,10 +268,10 @@ document.addEventListener('click',function(e){
  if(u.origin!==location.origin||u.pathname!==location.pathname)return;
  if(v)u.searchParams.set('view',v);
  e.preventDefault();swap(u.href).then(function(ok){
-  if(ok)history.pushState(null,'',u.pathname+u.search);else location.href=u.href;})
+  if(ok)history.pushState(null,'',u.pathname+u.search);else if(ok===false)location.href=u.href;})
  .catch(function(){location.href=u.href;});});
 window.addEventListener('popstate',function(){swap(location.href).catch(function(){});});
 var m=document.querySelector('meta[name="gg-refresh"]'),every=m?Number(m.content):0;
-if(every>0)setInterval(function(){if(document.querySelector('.pane form'))return;
+if(every>0)setInterval(function(){if(busy||dirty())return;
  swap(location.href).catch(function(){});},every*1000);
 })();</script>"""

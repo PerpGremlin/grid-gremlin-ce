@@ -171,6 +171,16 @@ def _flag(row, key):
     return bool(row.get(key, False))
 
 
+def _switch(row, key, where):
+    """The audit of 2026-10-13: D25's file half read as truthiness, so
+    `"allow_mainnet": "false"` armed it. A real-money switch is JSON's true
+    or false (or absent); anything else is refused by name, E14's shape."""
+    v = row.get(key, False)
+    if v is not True and v is not False:
+        _refuse(f"{where}: '{key}' must be true or false (JSON), not {v!r}")
+    return v
+
+
 # --- the validators -----------------------------------------------------------
 
 def _stop_extras(stop, where, watch, server, martingale):
@@ -1036,7 +1046,7 @@ def validate_fleet(data, where='fleet'):
         'poll_seconds': _num(data, 'poll_seconds', where, least=0.0,
                              least_open=True) or 5.0,
         'notify_orders': _flag(data, 'notify_orders'),
-        'allow_mainnet': _flag(data, 'allow_mainnet'),   # D25: half of the safety
+        'allow_mainnet': _switch(data, 'allow_mainnet', where),   # D25: half of the safety
         'preflight': _validate_preflight(data.get('preflight'), where),
         'account_caps': _validate_caps(data.get('account_caps'), where),
         'risk_profiles': validate_profiles(data.get('risk_profiles'), where),
@@ -1133,5 +1143,8 @@ def fleet_label(f):
 def may_reach_mainnet(raw):
     """U79: whether a fleet file carries its real-money switch — for a
     reader that must ask more of a real-money edit (the panel) without
-    naming the switch it may never set (D65). Reads, never sets."""
-    return bool((raw or {}).get('allow_mainnet'))
+    naming the switch it may never set (D65). Reads, never sets. Anything
+    but absent or false asks more: a malformed switch is refused by the
+    fleet's own validator, and the panel never asks less of it."""
+    v = (raw or {}).get('allow_mainnet', False)
+    return v is not False and v is not None

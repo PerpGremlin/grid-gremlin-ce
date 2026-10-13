@@ -34,6 +34,7 @@ WATCHDOG_OFF_S = 3600   # no sweep for an hour: it is off, not late (D39)
 def money(v, cls=True):
     if v is None:
         return '<td class="dim">—</td>'
+    v = 0.0 if abs(v) < 0.005 else v                     # never "-0.00" (the second audit)
     c = ' class="pos"' if (cls and v > 0) else (' class="neg"'
                                                if cls and v < 0 else '')
     return f'<td{c}>{v:,.2f}</td>'

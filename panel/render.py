@@ -19,7 +19,8 @@ def cards_section(idx, label, contract, view='all', scripted=True):
     age = max(0, int(time.time() - contract['generated_ms'] / 1000))
     belief = ((contract.get('watchdog') or {}).get('belief')
               or {}).get('bots', {})
-    live = [b for b in contract['bots'].values() if b is not None]
+    live = [b for b in contract['bots'].values()                 # an inverse book with no
+            if b is not None and b.get('realized') is not None]    # mark has no dollars yet
     net = sum(b['realized'] - b['fees'] for b in live)
     funded = [b.get('funding') for b in live]                     # D63
     funding = (None if any(f is None for f in funded)

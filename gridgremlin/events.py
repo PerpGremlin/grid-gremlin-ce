@@ -174,7 +174,7 @@ class TelegramNotifier(Notifier):
             self._transport(payload)
             self._buffer = []
             self._last_send = now
-        except OSError:
+        except Exception:      # noqa: BLE001 — the audit of 2026-10-13: IncompleteRead is not an OSError
             if len(payload) >= self.HARD_LIMIT - 200 or len(self._buffer) > 200:
                 # never wedge the channel on one bad payload — but a kill
                 # page is the one line this channel exists for: it survives

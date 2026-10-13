@@ -54,6 +54,22 @@ def fleet_home(fleet_path):
     return Path(__file__).resolve().parents[1]
 
 
+VENUE_KEY_PREFIXES = ('BYBIT_', 'HL_')
+
+
+def fleet_env(fleet_path, environ=None):
+    """The audit of 2026-10-13: a tool run FOR a fleet in another checkout
+    (the pinned live copy) inherited this process's venue keys — the phone's
+    unit loads the main .env, and `load_env` lets the process environment
+    win — so the live fleet's readout read the DEMO account. For a fleet
+    elsewhere every BYBIT_* and HL_* name is dropped, and the child reads
+    its own checkout's .env; for one here the environment passes as it is."""
+    env = dict(os.environ if environ is None else environ)
+    if fleet_home(fleet_path) == Path(__file__).resolve().parents[1]:
+        return env
+    return {k: v for k, v in env.items() if not k.startswith(VENUE_KEY_PREFIXES)}
+
+
 def fleet_tag(fleet_path):
     """The fleet's name from its file: fleet.demo.json -> demo,
     fleet.hl.testnet.json -> hl.testnet; any other name keeps its stem."""

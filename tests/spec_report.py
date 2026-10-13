@@ -652,6 +652,12 @@ def spec_R15b_a_seed_lots_exit_is_judged_against_the_seeds_price():
     later = seed + [f(3, 'buy', 82900.0, 1.0, 3), f(4, 'sell', 84000.0, 1.0, 4)]
     assert abs(ledger(later, [b], **kw)[b]['gap_realized'] - 1100.0) < 1e-9   # its own buy
     assert abs(ledger([f(3, 'sell', 86000.0, 1.0, 6)], [b], **kw)[b]['gap_realized'] - 1000.0) < 1e-9
+    # an earlier round bought rung 5 and sold it flat; a restart seeds at
+    # 85,500: the seed lot's exit is judged at the seed, not the old buy
+    # (the second audit, 2026-10-13). Sabotage: keeping entry_px -> +1,000.
+    old = [f(1, 'buy', 85000.0, 1.0, 5), f(2, 'sell', 86000.0, 1.0, 6),
+           f(3, 'buy', 85500.0, 1.0, SEED_RUNG), f(4, 'sell', 86000.0, 1.0, 6)]
+    assert abs(ledger(old, [b], **kw)[b]['gap_realized'] - 1500.0) < 1e-9
 
 
 def spec_R11_an_inverse_book_speaks_dollars_to_the_panel():
@@ -957,7 +963,7 @@ def spec_R12_identity_needs_no_book_so_a_truncated_window_still_states_it():
 
     def f(t, side, price, qty, rung):
         return {'time_ms': t, 'side': side, 'price': price, 'qty': qty,
-                'fee': 0.0, 'link_id': f'{s}-{rung}-x', 'symbol': 'XRPUSDT',
+                'fee': 0.0, 'link_id': f'{s}-{rung}-{t}', 'symbol': 'XRPUSDT',
                 'exec_id': f'e{t}'}
     fills = [f(1, 'buy', 1.5, 100.0, 5),      # the window opens on an EXIT:
              f(2, 'sell', 1.5, 100.0, 5),     # lot 6 (1.6) closed: +10
@@ -1143,3 +1149,44 @@ def spec_R9b_the_zero_spread_count_judges_only_the_bots_own_exits():
     apply_fill(same, 'buy', 125.0, 8.0, 0.0, rung=16, entry_side='buy')
     apply_fill(same, 'sell', 125.01, 8.0, 0.0, rung=17, entry_side='buy', own_entry=125.0)
     assert same['same_rung'] == 1
+
+
+def spec_R12b_a_trip_is_an_order_not_a_fill():
+    """The second audit, 2026-10-13: an exit that fills in parts counted a
+    trip per fill (HL's BTC long: 302 exit fills, 150 exit orders), and the
+    net per trip took fees off per fill. A trip is an exit order, by its
+    link; fees per trip are per order. Sabotage: counting every fill again
+    reads 3 trips below."""
+    from gridgremlin.config import validate_config
+    from gridgremlin.report import ledger, per_trip, per_trip_net
+    cfg = validate_config({'market_type': 'linear', 'symbol': 'BTCUSDT', 'side': 'long',
+                           'capital': 1000, 'leverage': 10, 'lower': 80000, 'upper': 90000,
+                           'rungs': 11, 'spacing_type': 'fixed'})
+    b = 'linBTCUSDTl'
+
+    def f(t, side, price, qty, rung, link, fee=1.0):
+        return {'time_ms': t, 'side': side, 'price': price, 'qty': qty, 'fee': fee,
+                'link_id': f'{b}-{rung}-{link}', 'symbol': 'BTCUSDT', 'exec_id': f'e{t}'}
+    fills = [f(1, 'buy', 83000.0, 1.0, 3, 'a'),
+             f(2, 'sell', 84000.0, 0.4, 4, 'b'), f(3, 'sell', 84000.0, 0.6, 4, 'b')]   # one exit, two fills
+    book = ledger(fills, [b], entry_sides={b: 'buy'}, grids={b: cfg})[b]
+    assert book['gap_trips'] == 1 and book['trips'] == 1 and book['orders'] == 2
+    assert abs(per_trip(book) - 1000.0) < 1e-9
+    assert abs(per_trip_net(book) - (1000.0 - 2 * 3.0 / 2)) < 1e-9          # two orders' fees
+
+
+def spec_R18b_an_unpriced_book_is_unread_everywhere_never_a_crash():
+    """The second audit, 2026-10-13: an inverse book whose mark was not read
+    has no dollars; card_total raised and took every fleet's page down. It
+    is None, the panel shows the bot's belief, the totals leave it out; the
+    kept rule is one, shared by the panel, the phone and the digest."""
+    from gridgremlin.report import card_total, kept_total
+    assert card_total({'realized': None, 'fees': None, 'unreal_at_mark': None}) is None
+    assert kept_total({'realized': 10.0, 'fees': 1.0, 'unreal_at_mark': None, 'position': 2.0}) is None
+    assert kept_total({'realized': 10.0, 'fees': 1.0, 'unreal_at_mark': None, 'position': 0.0}) == 9.0
+    from panel.render import cards_section
+    c = {'generated_ms': 1_000_000, 'window_hours': 24, 'terms': {}, 'marks': {},
+         'bots': {'invETHUSDl': {'realized': None, 'fees': None, 'unreal_at_mark': None,
+                                 'position': 100.0, 'fills': 3, 'mark': None, 'truncated': False}}}
+    html = cards_section(0, 'demo', c)                                      # no raise
+    assert 'invETHUSDl' in html

@@ -1,5 +1,5 @@
 [Unit]
-Description=Grid Gremlin v3 daily digest — 23:58 UTC (07:58 Perth), after the archive, before Tokyo
+Description=Grid Gremlin v3 daily digest — 23:58 UTC, after the archive, before Tokyo
 
 [Timer]
 # two minutes after the archive (23:56) wrote the day's readout, before
