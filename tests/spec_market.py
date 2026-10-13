@@ -153,6 +153,22 @@ def _fleets(d):
     return [str(f)]
 
 
+def spec_K5b_a_venues_refusal_is_said_in_its_own_words():
+    """Bybit answers a symbol it does not serve with a retCode and no list:
+    BTCPERP's ratio read "KeyError: 'list'" every hour. The venue's own
+    message is said instead; a good answer and a dropped connection read
+    as before. Sabotage: without the retCode check, the KeyError returns."""
+    from ggdata.market import _read
+    pick = lambda d: d['result']['list'][0]
+    refused = {'retCode': 10001, 'retMsg': 'params error: symbol not support', 'result': {}}
+    assert _read(lambda u: refused, 'u', pick) == (None, 'the venue: params error: symbol not support')
+    assert _read(lambda u: {'retCode': 0, 'result': {'list': [7]}}, 'u', pick) == (7, None)
+
+    def down(u):
+        raise OSError('venue down')
+    assert _read(down, 'u', pick) == (None, 'OSError: venue down')
+
+
 def spec_K5_collect_keeps_every_reading_and_says_the_unread_part():
     d = Path(tempfile.mkdtemp())
     row = mk.collect(markets_of(_fleets(d)), fetch=_bybit_canned(fail=('account-ratio',)), now=1_800_000_000)

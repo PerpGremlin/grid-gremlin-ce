@@ -1374,6 +1374,11 @@ eventually pin (T1).
   market the fleets trade once with what the fleets put there, each part that
   could not be read said by name in its place, never a zero. The row is read
   back newest-last; no readings yet is said as such.
+- **K5b** A venue's refusal is said in its own words. A Bybit answer with a
+  non-zero retCode is the venue's message, never the KeyError its missing
+  list would raise. *(2026-10-13: BTCPERP's long/short ratio read "KeyError:
+  'list'" every hour; Bybit's answer is "symbol not support" — it publishes
+  no ratio for its USDC perpetuals)*
 - **K6** The report says sentiment, each coin once with its regime, each of
   its markets with their own numbers, funding elsewhere, and Bybit's notices
   that name a fleet coin or a delisting, maintenance or suspension — in

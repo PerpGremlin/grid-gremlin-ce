@@ -40,9 +40,17 @@ SESSIONS = ((0, 'Asia'), (8, 'Europe'), (16, 'US'))
 # --- transport ---------------------------------------------------------------
 
 def _read(fetch, url, pick):
-    """One reading: its value, or the error said in its place."""
+    """One reading: its value, or the error said in its place — a refusal
+    in the venue's own words when it gave one (Bybit's retCode: BTCPERP's
+    ratio read "KeyError: 'list'" every hour for "symbol not support")."""
     try:
-        return pick(fetch(url)), None
+        got = fetch(url)
+    except Exception as e:                                   # noqa: BLE001
+        return None, f'{type(e).__name__}: {str(e)[:80]}'
+    if isinstance(got, dict) and got.get('retCode') not in (None, 0):
+        return None, f"the venue: {str(got.get('retMsg') or got['retCode'])[:80]}"
+    try:
+        return pick(got), None
     except Exception as e:                                   # noqa: BLE001
         return None, f'{type(e).__name__}: {str(e)[:80]}'
 
