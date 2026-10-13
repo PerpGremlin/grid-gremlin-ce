@@ -12,6 +12,7 @@ from gridgremlin.phone import accepted, answer, chunks, poll_once
 
 OWNER = 4242
 CONTRACT = {
+    'window_hours': 24.0,
     'bots': {'linBTCUSDTl': {'realized': 10.0, 'fees': 1.0,
                              'unreal_at_mark': -2.0, 'position': 0.5,
                              'avg_cost': 60000.0, 'mark': 59000.0},
@@ -78,6 +79,7 @@ def spec_F18_every_command_answers_from_the_box():
     assert '1/2 alive' in s and 'stood down: linADAUSDTl' in s
     p = answer(box, '/pnl')
     assert 'demo: now +7.50 · kept +93.00 (1 not whole)' in p
+    assert '(now = the last 24 h, or since the bot was last flat if it has held longer' in p   # the audit, 2026-10-13
     one = answer(box, '/pnl btc')                     # named in part
     assert 'linBTCUSDTl: now +7.00 · kept +93.00' in one
     assert 'linADAUSDTl' not in one

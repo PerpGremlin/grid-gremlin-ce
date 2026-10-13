@@ -688,8 +688,9 @@ def digest_block(row, now=None):
 
 
 def run(markets, send=False, dry=False):
-    """Read `markets`, keep the reading and each coin's series, and page the
-    report when asked (K1, K13). The engine's hourly unit calls this."""
+    """Read `markets`, keep the reading, and page the report when asked
+    (K1). The engine's hourly unit calls this. (K13's month of per-coin
+    series fed only the coin pages D96 retired; removed 2026-10-13.)"""
     from common.env import load_env
     load_env()
     import os
@@ -699,8 +700,6 @@ def run(markets, send=False, dry=False):
     if not dry:
         save_hmm(hmm_cache)
         save_carry(carry_cache)
-        from .marketdata import update                     # K13: each coin's series, kept a month
-        row['series'] = update(get_json, list(row.get('hmm') or {}), time.time())
     texts = report(row)
     if dry:
         print(json.dumps(row)[:400] + '…')

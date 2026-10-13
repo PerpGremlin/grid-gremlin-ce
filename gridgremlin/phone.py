@@ -215,11 +215,12 @@ def cmd_status(box, args):
 
 def cmd_pnl(box, args):
     picked = _pick(box, args[0]) if args else None
-    out = []
+    out, hours = [], None
     for fp in box.fleets:
         if picked is not None and not any(p[0] == fp for p in picked):
             continue
         c = box.readout(fp)
+        hours = c.get('window_hours') or hours
         bots, sf = c.get('bots') or {}, c.get('since_first') or {}
         names = [p[1] for p in picked if p[0] == fp] if picked else list(bots)
         now_t, kept_t, out_n, rows = 0.0, 0.0, 0, []
@@ -241,8 +242,11 @@ def cmd_pnl(box, args):
             out += rows
     if picked is not None and not picked:
         return f'no bot matches "{args[0]}" — /status lists them'
-    return '\n'.join(out) + '\n(now = since each bot was last flat; ' \
-                            'kept = its whole kept history)'
+    span = f'the last {hours:g} h' if hours else "the readout's window"
+    # the audit before real money: "now" is the readout's window, reaching
+    # back to the last flat only for a bot holding since before it (R14)
+    return '\n'.join(out) + (f'\n(now = {span}, or since the bot was last flat '
+                            'if it has held longer; kept = its whole kept history)')
 
 
 def cmd_positions(box, args):
