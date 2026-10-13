@@ -282,6 +282,18 @@ def _validate_stop(stop, where, slide=False, martingale=False):
                 **extras)
 
 
+def rung_gap(cfg):
+    """W1b: the widest gap between neighbouring rungs, as a fraction of the
+    price — a percent lattice's ratio, a fixed lattice's step over its
+    lowest rung (where a fixed step is widest relative to price)."""
+    lo, hi, n = cfg['lower'], cfg['upper'], cfg['rungs']
+    if n < 2:
+        return 0.0
+    if cfg.get('spacing_type') == 'percent':
+        return (hi / lo) ** (1.0 / (n - 1)) - 1.0
+    return (hi - lo) / (n - 1) / lo
+
+
 def _derive_rungs(cfg, where):
     """G2: exactly one of rungs/spacing_pct given; the other derives; the stored
     pair is reconciled — the config never carries a spacing the lattice lacks."""
@@ -366,7 +378,20 @@ def validate_grid(row, where='row'):
                 "'weighted'")
 
     w = _fraction(cfg, 'place_within_pct', where)
-    cfg['place_within_pct'] = 0.05 if w is None else w
+    # W1b: a lot's exit sits one gap from its buy. A window narrower than a
+    # gap never rests the exit on the venue (the audit, 2026-10-13: an 8-rung
+    # grid at 5.2% held its lots with no sell order while the box could be
+    # down) — so a wide grid's default window is two gaps, and a stated
+    # window narrower than one is refused
+    gap = rung_gap(cfg)
+    if w is None:
+        cfg['place_within_pct'] = max(0.05, round(2 * gap, 4))
+    elif w < gap:
+        _refuse(f"{where}: 'place_within_pct' {w:.2%} is narrower than one rung gap "
+                f"({gap:.2%}) — a bought lot's exit would never rest on the venue; "
+                f"set at least {2 * gap:.2%} or leave it out (W1b)")
+    else:
+        cfg['place_within_pct'] = w
     h = _fraction(cfg, 'split_hysteresis_rungs', where, zero_means_off=True, most=0.5)
     cfg['split_hysteresis_rungs'] = 0.0 if h is None else h
 
@@ -1103,3 +1128,10 @@ def fleet_label(f):
     if not venue:
         return stem
     return f"{venue} {stem.split('.')[-1]}"
+
+
+def may_reach_mainnet(raw):
+    """U79: whether a fleet file carries its real-money switch — for a
+    reader that must ask more of a real-money edit (the panel) without
+    naming the switch it may never set (D65). Reads, never sets."""
+    return bool((raw or {}).get('allow_mainnet'))

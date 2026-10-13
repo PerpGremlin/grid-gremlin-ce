@@ -86,6 +86,14 @@ eventually pin (T1).
   stamp only after Telegram took the page (`curl -f`): a failed send fails
   the unit and leaves the next tick free to page. *(the audit: the stamp was
   written first, so one failed send silenced half an hour)*
+- **E14** A Bybit network flag (`BYBIT_DEMO`, `BYBIT_TESTNET`, an
+  account's own) is true (true, 1, yes), false (empty, false, 0, no) or
+  refused by name — never read as real money. *(the audit, 2026-10-13:
+  `BYBIT_DEMO=1` and "true " meant Mainnet)*
+- **E15** Every account starts from the default keys, and an account with
+  no Bybit keys has none: a process reading several fleets never carries one
+  account's keys into the next. *(the audit: an account with only a
+  Hyperliquid subaccount read the account before it on Bybit)*
 - **A1** Everything instrument-shaped is asked from the exchange at startup, never
   declared in config.
 - **A2** Quantity rounding always floors — never place more than intended; price rounds
@@ -213,6 +221,13 @@ eventually pin (T1).
   say. `exit_floor: rung` is the default; `basis` keeps G6. *(D35: "thats how every
   exchange grid bot works, and how 3c worked"; the sparse-ladder and seed artefacts of
   the count proxy, JOURNAL 2026-09-28)*
+- **G27** What the venue's quantity step does to the ladder is said — at
+  the panel's review and at the fleet's start — when it bends it: rungs
+  uneven by more than a quarter (a lower rung holding twice an upper one is
+  a tilt nobody chose), rungs below the minimum, or the ladder under 90%
+  of capital x leverage. Said, never changed. *(the audit: BTC's 0.001 step
+  on a 1,000 USDT grid)* A seed buys the rungs' own floored lots summed —
+  exactly what their exits sell — so it is never rounded as a whole.
 - **G22** The window offset is the second narrow local durable fact E3 permits,
   beside X7's tombstone: written BEFORE the orders move (a crash mid-slide resumes
   at the new window, whose orders may already rest), read at build, clamped to G19
@@ -273,6 +288,12 @@ eventually pin (T1).
  When a lagging list catches up, the log says after how many cycles
   (log-only), so the lag is measured, not guessed.
 - **W1** The window limits placement, never cancellation.
+- **W1b** A grid's window reaches its exits: a lot's exit sits one rung
+  gap above its buy, so a grid that does not state `place_within_pct` gets
+  two gaps (5% stays the floor for a narrow grid), and a stated window
+  narrower than one gap is refused by name. *(the audit before real money,
+  2026-10-13: an 8-rung grid 5.2% apart held its lots with no sell order on
+  the venue — nothing to take profit while the box was down)*
 - **W2** One named window anchor, used by every consumer — no raw-vs-sticky split
   between the window and the planner. *(audit 3.4; CONCEPTS §12·N4)*
 - **W3** A resting, still-planned order outside the window is left alone.
@@ -821,6 +842,9 @@ eventually pin (T1).
 
 ## F — fleet and operations
 
+- **X15d** On a fleet that may reach real money, the panel's close page
+  says the position is closed on the exchange — the close command has no
+  way to Mainnet (X15, D48) — instead of running it into a refusal.
 - **X15b** On Hyperliquid the close command waits for the fleet (D77): nonces
   are per wallet, and a second signer beside the running fleet collides with
   it. The command asks this fleet's own locks — its prelock, and the venue
@@ -842,6 +866,9 @@ eventually pin (T1).
   bound naming a bot that is not in the fleet is refused. *(was: every bot listed,
   both directions — a second file kept in step by hand, and a fixed ceiling that a
   slide beyond capital breaches by design)*
+- **F1b** A fleet starts only if its watchdog reads the snapshot file it
+  writes; a mismatch is refused before the first write, naming both. *(the
+  audit: a copied config would have vouched for another fleet)*
 - **F2** Watchdog position ceilings, where given, are pinned near the cap (breach ⇒ the cap itself
   failed), never derived from "held plus budget". Beyond 1.5x the cap only with
   `ceiling_loose: true` beside the max — a disaster-only watcher is chosen, never
@@ -1618,6 +1645,18 @@ eventually pin (T1).
   labelled fields that wrap, on its page and in the half. Checked in a
   real browser: all six open without a reload, nothing passes the half's
   edge, no script error.
+- **U79** D64's second typing asks of every fleet that may reach real
+  money: the fleet file's own switch decides first (read by the engine's
+  `may_reach_mainnet`; the panel never names it, D65), an unreadable file
+  asks more, and only then the network the readout saw. A trade on such a
+  fleet types its investment twice (L5: a trade is a bot). *(the audit: the
+  check read only a held readout, so a restart or a failed readout let a
+  real-money jump through; the trade page had no second typing at all)*
+- **U80** A tool run for a fleet — the panel's and the phone's readout,
+  the panel's close — runs from the checkout the fleet file lives in, so
+  the pinned live copy's fleet is read by its own code and its own `.env`
+  (D65); a fleet file outside any checkout runs from this code. *(the
+  audit: they ran from the main checkout, whatever the fleet)*
 - **L1** A new trade joins a running fleet within a cycle. The trade watch
   stats the trades file once a cycle; a changed file's new rows are each
   built by the fleet's own builder (`main.build_market_bot`, the one every

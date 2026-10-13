@@ -87,10 +87,11 @@ written config (§11).</p>
         are its, never this process's (the readout's arrangement)."""
         fleet = self.fleets[min(fi, len(self.fleets) - 1)]
         try:
-            out = subprocess.run(
-                [sys.executable, '-m', 'gridgremlin.close', fleet, botid]
+            from gridgremlin.durable import fleet_home
+            out = subprocess.run(                          # U80: from the fleet's own copy
+                [sys.executable, '-m', 'gridgremlin.close', str(Path(fleet).resolve()), botid]
                 + (['--dry'] if dry else []),
-                capture_output=True, text=True, timeout=60)
+                capture_output=True, text=True, timeout=60, cwd=str(fleet_home(fleet)))
             last = (out.stderr.strip().splitlines() or ['no reason given'])[-1]
             return (json.loads(out.stdout) if out.stdout.strip()
                     else {'refused': f'the close command stopped: {last}'})
@@ -124,6 +125,14 @@ written config (§11).</p>
                 f'type the trade\'s name to close it: <input name="confirm" '
                 f'size="18" placeholder="{b}"> '
                 '<button class="danger">close at market</button></form>')
+        if self._mainnet(self.fleets[min(fi, len(self.fleets) - 1)], 'bybit'):
+            # X15b: the close command has no way to Mainnet (D48) — on real
+            # money this page says so plainly instead of a refusal box
+            return self._page(
+                f'<h1>{b}: real money</h1>'
+                '<p class="say">On Mainnet the panel and the close command do not close '
+                '(D48: the close command has no way to real money). Close this position '
+                'on the exchange itself; the bot is already stood down.</p>')
         got = self._run_close(fi, botid, dry=True)
         if 'refused' in got:
             return self._page(refusal_box('cannot close', got['refused']))

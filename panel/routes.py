@@ -50,11 +50,20 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
     _locks = {}               # U47: one readout per fleet at a time
 
     def _mainnet(self, fleet_p, venue):
-        """D64: is this fleet's venue on Mainnet — by the network its
-        running fleet (else the readout) connected to. Unknown is not
-        Mainnet: the check asks more of a real-money edit, it never blocks
-        a play-money one it cannot place. It reads the readout already held
-        (the page being edited from drew it) and never starts one."""
+        """D64: is this fleet's venue on Mainnet. The fleet file's own
+        real-money switch decides first (U79, read by the engine's helper —
+        the panel never names it, D65): a fleet that may reach real
+        money is treated as real money even before any readout is held — a
+        restart, a direct post or a failed readout no longer lets a jump
+        through unasked. Without it, the network its running fleet (else the
+        readout) connected to; a fleet without the switch cannot run on
+        Mainnet at all (D25). Never starts a readout."""
+        from gridgremlin.config import may_reach_mainnet
+        try:
+            if may_reach_mainnet(json.loads(Path(fleet_p).read_text())):
+                return True
+        except (OSError, ValueError):
+            return True                                     # unreadable: ask more, never less
         try:
             _, data = Handler._cache.get(str(fleet_p), (0.0, None))
             return bool(data) and contract_tiers(data).get(venue) == 'mainnet'
@@ -105,10 +114,11 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
         if shared is not None:
             Handler._cache[fleet] = (time.time(), shared)
             return shared
-        out = subprocess.run(
-            [sys.executable, '-m', 'gridgremlin.report', fleet,
+        from gridgremlin.durable import fleet_home
+        out = subprocess.run(                              # U80: from the fleet's own copy
+            [sys.executable, '-m', 'gridgremlin.report', str(Path(fleet).resolve()),
              '--hours', str(self.hours), '--json'],
-            capture_output=True, text=True, timeout=120)
+            capture_output=True, text=True, timeout=120, cwd=str(fleet_home(fleet)))
         try:
             data = json.loads(out.stdout)
         except ValueError:

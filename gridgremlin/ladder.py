@@ -109,6 +109,34 @@ def lot(cfg, adapter, split_ref):
     return adapter.round_qty(adapter.qty_from_notional(mean, split_ref))
 
 
+def rounding_note(cfg, adapter, offset=0):
+    """G27, pure: what the venue's quantity step does to the ladder — None
+    when it is faithful, else one sentence. Each rung's quantity is its
+    notional over its price, floored to the step; a coarse step (BTC's 0.001
+    on a small grid) makes rungs uneven (a lower rung holding twice an upper
+    one is a martingale tilt nobody chose) or the whole ladder a fraction of
+    capital x leverage (the audit, 2026-10-13). Said, never changed."""
+    rungs = grid_rungs(cfg, adapter, offset)
+    notionals = rung_notionals(cfg)
+    want, got = [], []
+    for price, n in zip(rungs, notionals):
+        raw = adapter.qty_from_notional(n, price)
+        q = adapter.round_qty(raw)
+        if q > 0 and adapter.meets_minimum(q, price):
+            want.append(raw)
+            got.append(q)
+    if not got:
+        return 'no rung reaches the venue\'s minimum order — more capital or fewer rungs'
+    ratios = [g / w for g, w in zip(got, want)]
+    total = sum(g * p for g, p in zip(got, rungs)) / sum(notionals)
+    if len(got) < len(rungs) or max(ratios) / min(ratios) > 1.25 or total < 0.9:
+        return (f'the venue\'s quantity step makes the rungs uneven ({min(got):g} to {max(got):g}'
+                f'{", " + str(len(rungs) - len(got)) + " rung(s) below the minimum" if len(got) < len(rungs) else ""}) '
+                f'and the ladder {total:.0%} of capital x leverage — fewer rungs, more capital, '
+                'or a coin with a finer step (G27)')
+    return None
+
+
 def trip_economics(rungs, maker_fee):
     """G16, pure: (net_fraction, gap_fraction, round_trip_fee). A grid's
     round trip earns one rung gap and pays the maker fee twice — if the
