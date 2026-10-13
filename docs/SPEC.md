@@ -833,8 +833,10 @@ eventually pin (T1).
   venue shows on that bot's side of that market, and re-reads to say what is left
   (X4). It refuses a bot that is not tombstoned (a running bot manages its own
   position, and an outside close is what S7 stands it down for), refuses spot (the
-  wallet's coins are the operator's too), and has no way to mainnet: D25's run half
-  is passed shut and the command takes no flag that opens it. The panel offers it
+  wallet's coins are the operator's too), and reaches Mainnet only with both of
+  D25's halves: the fleet file's switch and `--allow-mainnet` typed on this command
+  (D97; Bybit only — Hyperliquid stays testnet). `--expect QTY` sends nothing unless
+  the venue holds exactly the size typed. The panel offers it
   on a DEAD bot's card not known to be flat (a bot that stood down flat has
   nothing to close — HL AVAX, 2026-10-06), where control is armed (§12), behind a page that first
   shows what the venue holds and asks for the bot's name typed; the panel runs the
@@ -843,8 +845,11 @@ eventually pin (T1).
 ## F — fleet and operations
 
 - **X15d** On a fleet that may reach real money, the panel's close page
-  says the position is closed on the exchange — the close command has no
-  way to Mainnet (X15, D48) — instead of running it into a refusal.
+  asks for the bot's name and the size typed a second time (D97, D64's
+  shape); without the size nothing runs, and the engine is asked to close
+  exactly that size (`--expect`). The run half rides in the engine's own
+  argv (`close.command`); the panel never names it (D65). *(was, 2026-10-13
+  morning: the page said to close it on the exchange, under D48)*
 - **X15b** On Hyperliquid the close command waits for the fleet (D77): nonces
   are per wallet, and a second signer beside the running fleet collides with
   it. The command asks this fleet's own locks — its prelock, and the venue
@@ -1087,6 +1092,13 @@ eventually pin (T1).
   leverage, said. *(D83, 2026-10-11: at 50x the build asked for the 3.8M
   tier — the ladders' sum — under 4.34M already held; Bybit refused it,
   110048, and the 50x tier's 8.5M never opened)*
+- **F30b** On Mainnet the tier is the SMALLEST that holds the ladders and
+  what the venue holds — the cheapest maintenance rate (D99: ETHUSDT at 2x,
+  the largest tier the leverage allows charges 30% against the smallest's
+  0.33%). Play money keeps F30. *(measured 2026-10-13 on the demo account:
+  Bybit kept its own tiers — 3.2M for BTC where 8.5M was asked, SOL's
+  smallest where 30M was — and charged the small-position rate; the rule
+  guards the day it does not)*
 - **F31** The panel's edits beside git (D94). The front page names the
   config files the checkout has changed, added or deleted that git has not
   got (git asked at most once a minute, names escaped). The deploy

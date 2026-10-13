@@ -93,6 +93,8 @@ def spec_F28_the_runbook_names_every_unit_timer_and_command_that_exists():
             units.add('gg-panel')
         elif name.startswith('fleet.'):
             units.add('grid-gremlin3-demo'); units.add('grid-gremlin3-hl')
+        elif name.startswith('fleet-live'):
+            units.add('fleet-live.service')            # D98: named by its template
         elif name.startswith('watchdog.timer'):
             units.add('grid-gremlin3-<fleet>-watchdog.timer')
         elif name.endswith('.timer'):

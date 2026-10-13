@@ -1126,3 +1126,38 @@ def spec_F30_D83_the_build_sets_the_largest_tier_and_counts_what_the_venue_holds
     _ensure_symbol_capacity(bots, Notifier(sink=lines.append))
     assert v.risk == [(7, 1), (7, 2)] and v.lev == [65]
     assert any('leverage clamped 70 -> 65' in ln for ln in lines)
+
+
+def spec_F30b_D99_on_mainnet_the_tier_is_the_smallest_that_fits():
+    """D99: the largest tier the leverage allows is the play-money rule; at
+    low leverage it is the dearest maintenance rate (ETHUSDT at 2x: 30%
+    against 0.33%). On Mainnet the build asks for the smallest tier that
+    holds the ladders and what the venue holds; play money is unchanged.
+    Sabotage: dropping `smallest=` from the build asks Mainnet for tier 9."""
+    from types import SimpleNamespace
+    from gridgremlin.events import Notifier
+    from gridgremlin.main import _ensure_symbol_capacity, pick_tier
+    assert pick_tier(BTC_TIERS, 2, 2_000, smallest=True) == (BTC_TIERS[0], False)
+    assert pick_tier(BTC_TIERS, 70, 4_500_000, smallest=True) == (BTC_TIERS[6], True)   # held: still fits
+
+    class Venue:
+        def __init__(self, env):
+            self.env, self.risk, self.lev = env, [], []
+
+        def risk_limit_tiers(self, cat, sym):
+            return BTC_TIERS
+
+        def read_symbol_truth(self, cat, sym):
+            return {'mark': 80_000.0, 'positions': {}, 'orders': []}
+
+        def set_risk_limit(self, cat, sym, rid, idx):
+            self.risk.append(rid)
+
+        def set_leverage(self, cat, sym, lev):
+            self.lev.append(lev)
+    for env, want in (('mainnet', 1), ('demo', 10)):
+        v = Venue(env)
+        _ensure_symbol_capacity([SimpleNamespace(client=v, botid='linBTCUSDTl', cfg={
+            'venue': 'bybit', 'market_type': 'linear', 'symbol': 'BTCUSDT', 'leverage': 2,
+            'ladder_notional': 2_000.0})], Notifier(sink=lambda s: None))
+        assert v.risk == [want, want] and v.lev == [2], (env, v.risk)

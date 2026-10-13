@@ -942,6 +942,31 @@ stands unless the owner corrects it.
   the panel's own pages refusing to be framed — and is the owner's to ask
   for.
 
+- **D97 — The close command may reach real money with both halves
+  (2026-10-13).** Asked whether a stopped real-money bot's position stays
+  closed by hand on the exchange (D48: the close command had no way to
+  Mainnet), the owner chose: *allow it with both typings.* On Bybit Mainnet
+  the close command needs the fleet file's switch and `--allow-mainnet`
+  typed on that command, every time (D25's two halves); the panel's close
+  page on a real-money fleet asks for the bot's name and the size typed a
+  second time, and the engine sends nothing unless the venue holds exactly
+  that size. Still only a stood-down bot, one reduce-only market order, not
+  spot; Hyperliquid stays testnet. Supersedes D48's "never mainnet".
+- **D98 — A real-money fleet that crashes stays stopped (2026-10-13).**
+  The live unit carrying the run half would re-arm on every restart; the
+  owner chose: *stay stopped, page me.* Its unit never restarts itself and
+  is never enabled at boot; a crash pages (the fleet-down page) and the
+  watchdog's staleness page follows; the orders resting on the exchange
+  keep the grid working until the owner reads why and starts it. Play
+  money keeps restarting itself.
+- **D99 — On real money, the smallest risk tier that fits (2026-10-13).**
+  D83's largest tier the leverage allows is the dearest maintenance rate
+  at low leverage (ETHUSDT at 2x: 30% against 0.33%). Measured first on the
+  demo account: Bybit kept its own tiers and charged the small-position
+  rate whatever the build asked. The owner chose: *real money, smallest
+  tier.* On Mainnet the build asks for the smallest tier that holds the
+  ladders and what the venue holds; play money keeps D83.
+
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
 inline above.*
