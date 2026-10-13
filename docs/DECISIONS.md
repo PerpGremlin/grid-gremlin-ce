@@ -989,6 +989,23 @@ stands unless the owner corrects it.
   the play-money fleets. D93 stands: public traffic never reaches the
   trading server and the data server never reads from it, so the data
   leaves the trading server by a push; its path is the owner's to approve.
+- **D102 — 33 more coins collected, chosen once (2026-10-13).** The owner,
+  through the site's session: *"id like to add meme coins, just the major ones
+  by volume, and maybe some other assets. the current research doesnt have to
+  change"*, then *"id like to add some coins largest by market cap to fill
+  the gap … might be good for a second sample."* Put to them, *yes, all 33*:
+  eight meme coins by Bybit turnover, silver and two oils, and the next 22 by
+  market cap, each on Bybit, OKX and Binance, each group chosen once and never
+  re-ranked (datagremlin `docs/COINS.md`). Stocks and ETFs left out. The
+  Lab's studies keep the first 32 (pinned by the site before any folder was
+  added). Kept per one coin; history never before a coin's current listing.
+- **D103 — More exchanges for the data, after D102 (2026-10-13).** Asked
+  which exchanges matter, ranked by open interest (harder to inflate than
+  volume), the owner chose Hyperliquid (second by open interest), Gate
+  (third; it publishes its liquidations), Bitget and MEXC — public endpoints,
+  no key (D93), each its own step once the new coins run. Not chosen: Aster
+  (smaller), Jupiter (a pool, three markets, no book), and the exchanges whose
+  volume far outruns their open interest.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
