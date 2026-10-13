@@ -2,6 +2,7 @@
 the Handler inherits."""
 from ..forms import unit_for_fleet, unit_refusal, waiting_for_restart
 from ..html_bits import named, refusal_box
+from gridgremlin.apply import row_botid
 from panel.chart import _f
 from pathlib import Path
 import html
@@ -56,8 +57,8 @@ nothing to it. stop PARKS, never flattens (E3). no auto-restart, ever
                           if unit_for_fleet(f, self.units) == u), None)
             if fleet:                                     # U34
                 new, gone = waiting_for_restart(fleet)
-                parts = ([f'new: {", ".join(new)}'] if new else []) + \
-                        ([f'removed: {", ".join(gone)}'] if gone else [])
+                parts = ([f'new: {html.escape(", ".join(new))}'] if new else []) + \
+                        ([f'removed: {html.escape(", ".join(gone))}'] if gone else [])
                 if parts:
                     waits = (' <span class="dim">— waiting for a restart: '
                              + '; '.join(parts) + '</span>')
@@ -90,11 +91,12 @@ written config (§11).</p>
         fleet = self.fleets[min(fi, len(self.fleets) - 1)]
         try:
             from gridgremlin.close import command
-            from gridgremlin.durable import fleet_home
+            from gridgremlin.durable import fleet_env, fleet_home
             out = subprocess.run(                          # U80: from the fleet's own copy
                 command(Path(fleet).resolve(), botid, dry=dry, expect=expect,
                         real_money=self._mainnet(fleet, 'bybit')),
-                capture_output=True, text=True, timeout=60, cwd=str(fleet_home(fleet)))
+                capture_output=True, text=True, timeout=60, cwd=str(fleet_home(fleet)),
+                env=fleet_env(fleet))                      # and its own keys
             last = (out.stderr.strip().splitlines() or ['no reason given'])[-1]
             return (json.loads(out.stdout) if out.stdout.strip()
                     else {'refused': f'the close command stopped: {last}'})
@@ -105,6 +107,21 @@ written config (§11).</p>
             return {'refused': 'the close command answered something '
                                'unreadable — look at the exchange directly'}
 
+    def _closable(self, fi, botid):
+        """P6: is `botid` a bot of fleet `fi` — a row of its file or one of
+        its trades — so the close command's argv only ever carries a name the
+        engine knows, never a word starting '--'."""
+        from gridgremlin.trades import TradeError, _botid, load_trades, trades_path
+        f = self.fleets[min(fi, len(self.fleets) - 1)]
+        try:
+            raw = json.loads(Path(f).read_text())
+            names = {row_botid(b) for b in raw.get('bots') or []
+                     if isinstance(b, dict) and (b.get('symbol') or b.get('name'))}
+            names |= {_botid(t) for t in load_trades(trades_path(f, raw))[0]}
+        except (TradeError, OSError, ValueError, KeyError, TypeError, AttributeError):
+            return False
+        return botid in names
+
     def _close_page(self):
         import html as _html
         if not self.units and not self.supervise:
@@ -113,6 +130,9 @@ written config (§11).</p>
         q = dict(urllib.parse.parse_qsl(self.path.split('?', 1)[1]))
         fi, botid = int(_f(q.get('fleet')) or 0), q.get('bot', '')
         b = _html.escape(botid)
+        if not self._closable(fi, botid):
+            return self._page(refusal_box('cannot close', f'{botid or "nothing"}: not a bot '
+                                          'of this account'))
         if self._live_trade(fi, botid):
             # L7: a running trade is closed by its own bot, never from
             # outside — the panel writes the request, the fleet acts on it
@@ -167,13 +187,15 @@ written config (§11).</p>
                 'not closed', f'the typed name must be exactly {botid} — '
                               'a click is not a decision'))
         fi = int(_f(form.get('fleet')) or 0)
+        if not self._closable(fi, botid):
+            return self._page(refusal_box('not closed', f'{botid}: not a bot of this account'))
         path = self._live_trade(fi, botid)
         if path:                                                    # L7
             from gridgremlin.trades import TradeError, request_close
             try:
                 req = request_close(path, botid, 'owner', 'close trade on the panel')
             except (TradeError, OSError) as e:
-                return self._page(refusal_box('not closed', _html.escape(str(e))))
+                return self._page(refusal_box('not closed', e))
             type(self)._cache.pop(self.fleets[min(fi, len(self.fleets) - 1)], None)
             return self._page(
                 f'<h1>{_html.escape(botid)}: close requested</h1>'
@@ -190,7 +212,7 @@ written config (§11).</p>
                                   'exactly as the page shows it'))
         got = self._run_close(fi, botid, dry=False, expect=expect)
         if 'refused' in got:
-            return self._page(refusal_box('not closed', _html.escape(got['refused'])))
+            return self._page(refusal_box('not closed', got['refused']))
         left = got.get('left') or 0.0
         return self._page(
             f'<h1>{_html.escape(botid)}: closed {got["closed"]:.10g}</h1>'

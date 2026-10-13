@@ -16,7 +16,7 @@ LINK = 'linBTCUSDTl-1-a'
 def _kf(t, eid, side='buy', price=100.0, qty=1.0, fee=0.0):
     return {'venue': 'bybit', 'market_type': 'linear', 'symbol': 'BTCUSDT',
             'exec_id': eid, 'time_ms': t, 'side': side, 'price': price,
-            'qty': qty, 'fee': fee, 'link_id': LINK}
+            'qty': qty, 'fee': fee, 'link_id': f'{LINK}{eid}'}   # one link an order (R12b)
 
 
 FLEET = {'bots': [{'venue': 'bybit', 'market_type': 'linear',

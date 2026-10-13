@@ -118,17 +118,20 @@ def rounding_note(cfg, adapter, offset=0):
     capital x leverage (the audit, 2026-10-13). Said, never changed."""
     rungs = grid_rungs(cfg, adapter, offset)
     notionals = rung_notionals(cfg)
-    want, got = [], []
+    want, got, at = [], [], []
     for price, n in zip(rungs, notionals):
         raw = adapter.qty_from_notional(n, price)
         q = adapter.round_qty(raw)
         if q > 0 and adapter.meets_minimum(q, price):
             want.append(raw)
             got.append(q)
+            at.append(price)             # each kept quantity with its own rung's price
     if not got:
         return 'no rung reaches the venue\'s minimum order — more capital or fewer rungs'
     ratios = [g / w for g, w in zip(got, want)]
-    total = sum(g * p for g, p in zip(got, rungs)) / sum(notionals)
+    inverse = cfg.get('market_type') == 'inverse'      # an inverse quantity IS dollars
+    placed = [g if inverse else g * p for g, p in zip(got, at)]      # (the second audit)
+    total = sum(placed) / sum(notionals)
     if len(got) < len(rungs) or max(ratios) / min(ratios) > 1.25 or total < 0.9:
         return (f'the venue\'s quantity step makes the rungs uneven ({min(got):g} to {max(got):g}'
                 f'{", " + str(len(rungs) - len(got)) + " rung(s) below the minimum" if len(got) < len(rungs) else ""}) '

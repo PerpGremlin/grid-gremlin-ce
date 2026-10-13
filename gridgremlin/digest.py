@@ -14,7 +14,7 @@ from pathlib import Path
 from .config import market_rows, VENUE_ICONS, validate_fleet
 from common.files import write_json
 from common.env import load_env
-from .report import card_total
+from .report import kept_total as kept_total_of, portfolio_rows_total
 
 STATE = Path('logs/digest.state.json')
 STALE_S = 600            # a snapshot older than this: the fleet is not running
@@ -104,7 +104,8 @@ def log_events(path, offset):
 
 
 def _m(v):
-    return '—' if v is None else f'{v:+,.2f}'
+    from common.fmt import signed
+    return '—' if v is None else signed(v)
 
 
 def section(fleet_path, now, day_start, archive_root='logs/daily',
@@ -169,17 +170,22 @@ def section(fleet_path, now, day_start, archive_root='logs/daily',
     for v in sf.values():
         if not v or not v.get('fills'):
             continue
-        if (not v.get('whole', True) or v.get('behind') is not None
-                or v.get('realized') is None):
+        whole = kept_total_of(v)                                # R18: the panel's rule
+        if whole is None:
             kept_out += 1
             continue
-        kept_total += card_total(v)                             # D63
+        kept_total += whole                                     # D63
     if record is None:
         lines.append('no archive for today — open and kept figures unread')
     else:
         lines.append(f'open now {_m(sum(open_now) if open_now else None)} · '
                      f'kept history {_m(kept_total)}'
                      + (f' ({kept_out} left out)' if kept_out else ''))
+    from .archive import last_snapshot as _last
+    pf = portfolio_rows_total(((_last(fleet_path) or (record or {}).get('snapshot') or {})
+                               .get('bots')))                       # H6: the portfolio rows too
+    if pf is not None:
+        lines.append(f'portfolio since its anchor {_m(pf)}')
     if per_bot:
         per_bot.sort()
         best, worst = per_bot[-1], per_bot[0]
@@ -199,7 +205,14 @@ def section(fleet_path, now, day_start, archive_root='logs/daily',
             if levs[0]['fall'] is not None:
                 lev += (f" (all filled: {levs[0]['fall']:.2f}x on a fall, "
                         f"{levs[0]['rise']:.2f}x on a rise)")
-        lines.append(f"equity {snap['equity']:,.0f}" + lev
+        # the second audit, 2026-10-13: the leverage is over the margin
+        # balance (what the venue lends against), the equity is the whole
+        # account — coins not used as collateral make them differ, and
+        # "equity 186,348 · leverage 0.46x" then read wrong. Both are said.
+        mb = levs[0].get('equity') if levs else None
+        margin = (f' (margin balance {mb:,.0f}, the leverage is on it)'
+                  if mb and abs(mb - snap['equity']) > 0.01 * snap['equity'] else '')
+        lines.append(f"equity {snap['equity']:,.0f}" + margin + lev
                      + (f' · margin rate {mm:.1%}' if mm is not None else ''))
     state = state if state is not None else {}
     first = tag not in state

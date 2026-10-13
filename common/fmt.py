@@ -1,15 +1,19 @@
 """One vocabulary for the primitives (C10, audit 2026-10-08): the float
 parser, the UTC stamp, the number words. Each exists here once; a second
 definition anywhere fails the suite."""
+import math
 import time
 
 
 def float_or(x, default=None):
-    """A float, or `default` when the value is not one (None, '', text)."""
+    """A float, or `default` when the value is not one (None, '', text, and
+    since the audit of 2026-10-13 nan and inf: "nan" passed D64's and D97's
+    second typing — every comparison with it is false)."""
     try:
-        return float(x)
+        v = float(x)
     except (TypeError, ValueError):
         return default
+    return v if math.isfinite(v) else default
 
 
 def utc_stamp(now=None):
@@ -54,3 +58,12 @@ def pct(v, nd=2, sign=True):
     if v is None:
         return '—'
     return f'{v:+.{nd}f}%' if sign else f'{v:.{nd}f}%'
+
+
+def signed(v, places=2):
+    """A money figure with its sign, never "-0.00": a value that rounds to
+    zero is +0 (the second audit, 2026-10-13 — the card, the phone and the
+    digest each printed "-0.00" for -0.001)."""
+    if abs(v) < 0.5 * 10 ** -places:
+        v = 0.0
+    return f'{v:+,.{places}f}'

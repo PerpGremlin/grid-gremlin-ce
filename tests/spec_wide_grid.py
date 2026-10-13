@@ -66,3 +66,38 @@ def spec_F1b_a_fleet_refuses_to_start_unless_its_watchdog_reads_its_snapshots():
             raise AssertionError('a fleet watched through another file was started')
         except ConfigError as e:
             assert 'snap-b' in str(e) and 'snap-a' in str(e) and 'F1b' in str(e)
+
+
+def spec_G27b_the_step_is_said_on_inverse_and_on_every_venue():
+    """The second audit, 2026-10-13: on inverse the placed notional summed
+    quantity x price (already dollars), so "the ladder short of capital"
+    could never fire (BTCUSD, capital 20, 14 rungs: 70% placed, nothing
+    said); a rung below the minimum shifted every later price; and at the
+    fleet's start the note sat inside G16's Bybit-only fee check, so a
+    Hyperliquid grid never heard it. Sabotage: g * p on inverse silences
+    the first case."""
+    from pathlib import Path
+    from gridgremlin.adapters import InverseAdapter
+    from gridgremlin.ladder import rounding_note
+    inv = _row(market_type='inverse', symbol='BTCUSD', capital=20, leverage=2,
+               lower=90000, upper=130000, rungs=14)
+    adapter = InverseAdapter({'symbol': 'BTCUSD', 'qty_step': 1.0, 'min_qty': 1.0,
+                              'price_tick': 0.5, 'min_notional': 0.0, 'settle_coin': 'BTC'})
+    note = rounding_note(inv, adapter)
+    assert note and 'G27' in note
+    src = (Path(__file__).resolve().parents[1] / 'gridgremlin' / 'main.py').read_text()
+    g16 = src.index("rates = getattr(client, 'fee_rates', None)")
+    g27 = src.index('note = rounding_note(cfg, adapter)')
+    assert src[g16:g27].count('except (VenueError, OSError, KeyError, TypeError):') == 1   # after G16's block
+
+
+def spec_F1b_G27_are_called_where_they_guard():
+    """The second audit, 2026-10-13: F1b's check and G27's note were pinned
+    as functions, but nothing failed if their calls were removed — the
+    fleet's start and the panel's review. Both calls are held here."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    main = (root / 'gridgremlin' / 'main.py').read_text()
+    run = main[main.index('\ndef run('):]
+    assert 'check_snapshot_watched(' in run.split('\ndef ', 2)[1]
+    assert 'rounding_note(' in (root / 'panel' / 'pages' / 'create_flow.py').read_text()

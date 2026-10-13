@@ -12,7 +12,7 @@ def exchange_table(botid, b, belief, terms):
     book and the engine's snapshot of the venue's margin (V14/V17)."""
     bl = belief.get(botid) or {}
     mv = bl.get('margin') or {}
-    money_coin, margin_coin = units_of(botid, terms)
+    money_coin, margin_coin = (esc(u) for u in units_of(botid, terms))   # P7: text, never markup
     pos = (b or {}).get('position') if b else bl.get('position')
     mark = (b or {}).get('mark')
     side = 'short' if botid.endswith('s') else 'long'

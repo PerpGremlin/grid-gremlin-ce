@@ -1097,6 +1097,9 @@ def spec_X15_a_dead_bots_card_offers_the_close_and_says_DEAD():
 def spec_X15_the_close_is_armed_typed_and_run_by_the_engine():
     from panel.server import Handler
     srv, base = _serve(_dead())
+    from pathlib import Path                       # P6: the close names a bot of this fleet
+    Path(srv.RequestHandlerClass.fleets[0]).write_text(json.dumps(
+        {'bots': [{'market_type': 'linear', 'symbol': 'AVAXUSDT', 'side': 'short'}]}))
 
     def call(path, data=None):
         req = urllib.request.Request(
@@ -1171,10 +1174,10 @@ def spec_U16_a_card_states_its_investment_and_leverage():
     assert 'investment 2,000 USDT at <b>10x</b> · up to 20,000 USDT in the market' \
         in page
     assert 'investment' not in _everything(CONTRACT)   # no terms: none
-    c['terms']['spoADAUSDTl'] = {'capital': 46600.0, 'leverage': 75.0,
-                                 'notional': 3495000.0}
-    assert 'investment 46,600 USDT at <b>75x</b> · up to 3,495,000 USDT in the market' \
-        in _everything(c)                      # never 3.5e+06
+    c['terms']['spoADAUSDTl'] = {'capital': 40000.0, 'leverage': 50.0,
+                                 'notional': 2000000.0}
+    assert 'investment 40,000 USDT at <b>50x</b> · up to 2,000,000 USDT in the market' \
+        in _everything(c)                      # never 2e+06
 
 
 def spec_V14_a_card_shows_the_exchanges_margin_on_the_position():
@@ -1508,7 +1511,7 @@ def spec_D63_every_renderer_sums_through_one_total():
     for mod in (dg, ph, sv, cd, tb, st):
         src = inspect.getsource(mod)
         assert "['realized'] - v['fees'] +" not in src, mod.__name__
-        assert 'card_total(' in src, mod.__name__
+        assert 'card_total(' in src or 'kept_total' in src, mod.__name__   # kept_total sums through it
 
 
 def spec_D63_a_capped_card_says_where_its_fills_start():
@@ -1798,7 +1801,8 @@ def spec_U61_the_live_page_refreshes_in_place_and_never_reloads_whole():
     assert "fetch(url,{credentials:'same-origin',cache:'no-store'})" in KEEP_JS
     assert "swap(location.href).catch(function(){});},every*1000);" in KEEP_JS
     # U78c: a form open in the right half is never swapped out from under the typing
-    assert "setInterval(function(){if(document.querySelector('.pane form'))return;" in KEEP_JS
+    # (U82: …while it is being typed in — an untouched one refreshes)
+    assert "setInterval(function(){if(busy||dirty())return;" in KEEP_JS
     # …and a form's own script arriving in the half runs (a swapped-in script never would)
     assert "document.querySelectorAll('main .pane script').forEach(" in KEEP_JS and "s.text=old.text;old.replaceWith(s)" in KEEP_JS
     assert "['.hero','main']" in KEEP_JS and 'innerHTML=b.innerHTML' in KEEP_JS
@@ -1856,6 +1860,25 @@ def spec_U63_the_strip_carries_a_sparkline_and_the_box_the_days_and_the_weeks_li
     assert 'class="spark"' not in render([('demo', CONTRACT)])
     down = equity_svg([[0, 10.0], [60, 5.0]], 400, 60, labels=True)
     assert '<b class="neg">-5 (-50.0%)</b>' in down and 'fill="var(--neg)"' in down
+
+
+def spec_U64b_grid_profit_is_the_matched_trips_and_the_run_starts_at_the_first_fill():
+    """The second audit, 2026-10-13: a long grid holding lots bought on the
+    way down realises at an average above its exits, so average-cost
+    realised read -2,031/day where its trips made +3,817/day. Grid profit
+    is the matched trips' (R12) after fees; no matched trip, realised. A
+    bot 38 minutes old in a 24 h window read "running 1.0 d". Sabotage:
+    realised in place of the trips flips the sign below."""
+    from panel.card import run_rate
+    gen = 10 * 86_400_000
+    c = {'generated_ms': gen, 'window_hours': 24}
+    b = {'fills': 10, 'realized': -300.0, 'gap_realized': 500.0, 'gap_trips': 4, 'fees': 100.0,
+         'counted_from': 'flat', 'counted_since_ms': gen - 4 * 86_400_000}
+    assert '+100.00</b>/day' in run_rate(b, c, 1000.0)                  # (500 - 100) / 4 d
+    assert '-100.00</b>/day' in run_rate(dict(b, gap_trips=0), c, 1000.0)   # no trip: realised
+    young = {'fills': 2, 'realized': 0.0, 'fees': 1.0, 'counted_from': None,
+             'first_ms': gen - 38 * 60_000}
+    assert 'running 38 h' not in run_rate(young, c) and 'running 1 h' in run_rate(young, c)
 
 
 def spec_U64_a_card_says_how_long_it_has_run_and_its_grid_profit_per_day_and_a_year():
@@ -2020,3 +2043,144 @@ def spec_P5_the_door_reads_exactly_the_cookie_and_the_fleet_it_is_given():
             assert code('/close', data=f'gg=1&fleet={f}'.encode()) == 400, f
     finally:
         srv.shutdown()
+
+
+def spec_U75b_no_figure_prints_minus_zero():
+    """The second audit, 2026-10-13: the card's headline, the money cells,
+    the phone and the digest each printed "-0.00" for -0.001. One helper
+    rounds first. Sabotage: f'{v:+,.2f}' prints -0.00 again."""
+    from common.fmt import signed
+    from gridgremlin.digest import _m as dm
+    from gridgremlin.phone import _m as pm
+    from panel.html_bits import money
+    assert signed(-0.001) == '+0.00' and signed(-0.006) == '-0.01' and signed(2.5) == '+2.50'
+    assert dm(-0.001) == pm(-0.001) == '+0.00'
+    assert money(-0.001) == '<td>0.00</td>'
+
+
+def spec_P6_every_answer_carries_the_security_headers():
+    """The 2026-10-13 audit, part 4: no answer of the panel's — a page, a
+    refusal, a denial — may be framed by another site, sniffed into another
+    type or kept by a cache. One helper adds the four to every response."""
+    import urllib.parse
+    from spec_setup import _served_fleet
+    base, d, close = _served_fleet()
+    want = {'X-Frame-Options': 'DENY',
+            'Content-Security-Policy': "frame-ancestors 'none'",
+            'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store'}
+
+    def heads(path, data=None, cookie=True):
+        body = (None if data is None else
+                urllib.parse.urlencode(dict(data, gg='1')).encode())
+        req = urllib.request.Request(base + path, data=body,
+                                     headers={'Cookie': 'gg=tok'} if cookie else {})
+        try:
+            r = urllib.request.urlopen(req)
+            return r.status, r.headers
+        except urllib.error.HTTPError as e:
+            return e.code, e.headers
+    try:
+        answers = (heads('/setup'), heads('/setup?adv=grid'),                # pages
+                   heads('/setup', cookie=False),                            # a denial
+                   heads('/trade', {'action': 'clear', 'fleet': '0',         # a refusal
+                                    'confirm': 'nope'}))
+        assert answers[2][0] == 401
+        for code, h in answers:
+            for k, v in want.items():
+                assert h.get(k) == v, (code, k, h.get(k))
+    finally:
+        close()
+
+
+def spec_P6_the_close_runs_only_for_a_bot_of_the_fleet():
+    """The close spawns the engine's own command with the bot's id in its
+    argv: a posted id that is not a bot of this account (one starting '--'
+    above all) is refused before anything is spawned."""
+    from panel.server import Handler
+    from spec_setup import _call, _served_fleet
+    base, d, close = _served_fleet()
+    saved_units, saved_run = Handler.units, Handler._run_close
+    ran = []
+
+    def fake(self, fi, botid, dry, expect=None):
+        ran.append((botid, dry))
+        return {'botid': botid, 'side': 'long', 'symbol': 'ETHUSDT', 'held': 0.25,
+                'avg_entry': 2500.0, 'mark': 2600.0, 'closed': 0.25, 'left': 0.0}
+    Handler.units, Handler._run_close = ('some.service',), fake
+    try:
+        for bad in ('--allow-mainnet', '--dry', 'linXRPUSDTl'):
+            page = _call(base, '/close?fleet=0&bot=' + bad)
+            assert 'class="refusal"' in page and 'not a bot of this account' in page, bad
+            page = _call(base, '/close', {'fleet': '0', 'bot': bad, 'confirm': bad})
+            assert 'class="refusal"' in page and 'not a bot of this account' in page, bad
+        assert ran == []                                   # nothing was spawned
+        assert 'close at market' in _call(base, '/close?fleet=0&bot=linETHUSDTl')
+        assert 'closed 0.25' in _call(base, '/close', {'fleet': '0', 'bot': 'linETHUSDTl',
+                                                       'confirm': 'linETHUSDTl'})
+        assert ran == [('linETHUSDTl', True), ('linETHUSDTl', False)]
+    finally:
+        Handler.units, Handler._run_close = saved_units, saved_run
+        close()
+
+
+def spec_P7_names_from_the_files_are_drawn_as_text():
+    """A fleet name, a tombstone's id, a money or margin coin reach the page
+    as text, never markup; and a refusal is escaped once (refusal_box
+    escapes), not twice into a visible '&amp;#x27;'."""
+    import copy
+    from panel.card import holding_html
+    from panel.forms import unit_refusal
+    from panel.position_view import exchange_table
+    from panel.server import Handler
+    from panel.strip_view import venue_money
+    from spec_setup import _call, _served_fleet
+    q, h = '<b>Q</b>', 'linx<svg/onload=alert(3)>l'
+    live = unit_refusal('<b>q</b>', ('gg.service',), {}, {q: '<i>u</i>'})
+    tomb = unit_refusal(h, ('<s>gg</s>',), {h: {}}, {})
+    other = unit_refusal('nope', ('<s>gg</s>',), {}, {})
+    for out in (live, tomb, other):
+        assert '<svg/onload' not in out and '<b>Q' not in out and '<i>' not in out and '<s>' not in out, out
+    assert '&lt;b&gt;Q&lt;/b&gt;' in live and '&lt;svg/onload=alert(3)&gt;' in tomb
+    c = copy.deepcopy(CONTRACT)
+    coin = 'U<svg/onload=alert(3)>'
+    c['terms'] = {'spoADAUSDTl': {'quote': coin, 'margin_coin': coin, 'capital': 100.0}}
+    c['watchdog']['belief']['bots']['spoADAUSDTl'] = {
+        'alive': True, 'position': 910.57, 'margin': {'im': 1.0, 'mm': 0.5, 'leverage': 2}}
+    c['bots']['spoADAUSDTl']['settle'] = {'coin': coin, 'realized': 1.0, 'fees': 0.1,
+                                          'unreal': 0.0, 'funding': None}
+    page = _everything(c) + exchange_table('spoADAUSDTl', c['bots']['spoADAUSDTl'],
+                                           c['watchdog']['belief']['bots'], c['terms']['spoADAUSDTl'])
+    page += holding_html(1.0, 2.0, 2.0, 'linBTCUSDTl', quote=coin) + venue_money(c)
+    assert '<svg/onload' not in page and '&lt;svg/onload=alert(3)&gt;' in page
+    assert '&amp;lt;' not in page                          # and once, not twice
+    # a refusal's apostrophe reaches the page escaped once
+    base, d, close = _served_fleet()
+    saved_units, saved_run = Handler.units, Handler._run_close
+    Handler.units = ('some.service',)
+    Handler._run_close = lambda self, fi, botid, dry, expect=None: {'refused': "the bot's gone"}
+    try:
+        trade = _call(base, '/trade', {'action': 'clear', 'fleet': '0', 'confirm': 'linXRPUSDTl'})
+        assert 'account&#x27;s file' in trade and '&amp;#x27;' not in trade
+        shut = _call(base, '/close', {'fleet': '0', 'bot': 'linETHUSDTl', 'confirm': 'linETHUSDTl'})
+        assert 'the bot&#x27;s gone' in shut and '&amp;#x27;' not in shut
+    finally:
+        Handler.units, Handler._run_close = saved_units, saved_run
+        close()
+
+
+def spec_U82_a_late_refresh_never_replaces_what_was_just_opened():
+    """The live page's swap: an answer arriving after a newer swap began is
+    dropped (a counter, newest wins), the timer waits while a swap is in
+    flight, and it skips while a form in the right half is focused or
+    differs from its defaults — an untouched form refreshes. The suite has
+    no browser: the script's own words are pinned."""
+    from panel.reference import KEEP_JS as js
+    assert 'var seq=0,busy=0;' in js and 'var my=++seq;busy++;' in js
+    assert js.index('if(my!==seq)return null;') < js.index('innerHTML=b.innerHTML')
+    assert '.then(function(v){busy--;return v;},function(e){busy--;throw e;});' in js
+    assert 'setInterval(function(){if(busy||dirty())return;' in js
+    for word in ("a.closest('.pane form')", 'e.checked!==e.defaultChecked',
+                 'o.defaultSelected', 'e.value!==e.defaultValue'):
+        assert word in js, word
+    # a dropped answer is neither drawn nor a reason to load the page whole
+    assert 'else if(ok===false)location.href=u.href;' in js

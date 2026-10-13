@@ -65,3 +65,24 @@ def spec_F2b_a_position_bound_is_numbers_min_not_above_max():
             raise AssertionError(f'accepted {bad}')
         except ConfigError as e:
             assert 'positions.b' in str(e)
+
+
+def spec_E12b_a_broken_reply_never_ends_the_fleet_or_the_watchdog():
+    """The audit of 2026-10-13: http.client's IncompleteRead is not an
+    OSError — it escaped the page send (ending the fleet) and the status
+    fetch (ending the watchdog run before its own pages). Both now take any
+    failure as a failed send or an unread status."""
+    import http.client
+    from gridgremlin.events import TelegramNotifier
+    from gridgremlin.freshness import fetch_status
+
+    def broken(*a):
+        raise http.client.IncompleteRead(b'')
+    n = TelegramNotifier('t', 'c', transport=broken, clock=lambda: 1000.0)
+    n.startup = False
+    n.event('warn', 'linBTCUSDTl', 'margin refusal', urgent=True)
+    n.flush()                                                           # no raise
+    assert fetch_status('https://x', get=broken, sleep=lambda s: None) is None
+    src = (Path(__file__).resolve().parents[1] / 'gridgremlin' / 'main.py').read_text()
+    i = src.index('notifier.flush()')
+    assert 'except Exception' in src[i:i + 200]                          # the loop's own guard

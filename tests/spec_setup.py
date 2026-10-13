@@ -1300,7 +1300,7 @@ def spec_U14_the_summary_offers_a_rehearsal_of_the_bot_as_configured():
         assert row['strategy'] == 'martingale'
         assert row['max_hold_seconds'] == 7200.0       # every setting rides
         assert 'rehearse this bot over the last' in page
-        refused = _call(base, '/rehearse', {'bot_json': m.group(1),
+        refused = _call(base, '/rehearse', {'bot_json': _html.unescape(m.group(1)),
                                             'days': '400'})
         assert '90 at most' in refused and 'class="refusal"' in refused
         assert 'rehearse this bot over the last' in refused    # form kept
@@ -2168,3 +2168,111 @@ def spec_C5_the_shipped_examples_place_at_the_venues_real_minimums():
             check_placeable(cfg, Venue(r['symbol']), r['symbol'])
             checked += 1
     assert checked >= 3
+
+
+def spec_U81_the_gap_autofill_runs_after_the_fields_it_fills():
+    """HINT_JS stood before the form's fields: on a full page load it looked
+    for the grid count and the gap, found nothing and quit. It stands after
+    the form now, beside the chart's script — on the setup page and the edit
+    page alike."""
+    from panel.setup import HINT_JS
+    mark = "var lo=q('lower'),up=q('upper')"
+    assert mark in HINT_JS
+    base, d, close = _served_fleet()
+    try:
+        for path in ('/setup?adv=grid', '/edit?fleet=0&bot=linETHUSDTl'):
+            page = _call(base, path)
+            assert page.count(mark) == 1, path
+            assert page.index(mark) > page.index('name="lower"'), path
+            assert page.index(mark) > page.index('name="spacing_pct"'), path
+    finally:
+        close()
+
+
+def spec_U83_a_trade_names_a_market_the_venue_lists():
+    """/trade queued a trade for a market that does not exist ('<x>' was
+    written to the trades file). The symbol is letters and digits, and on
+    the venue's own public list when that list can be read — refused in a
+    box before anything is written. The list is faked here (T12)."""
+    import panel.create as pc
+    base, d, close = _served_fleet()
+    saved = pc.public_symbols
+    pc.public_symbols = lambda venue, max_age=3600.0: ('BTCUSDT', 'ETHUSDT')
+    trades = d / 'logs' / 'trades-f.json'
+    form = {'action': 'open', 'fleet': '0', 'side': 'long', 'capital': '200', 'tp': '1'}
+    try:
+        for bad, why in (('<x>', 'letters and digits'), ('BTC-USDT', 'letters and digits'),
+                         ('nopeusdt', 'lists no such market')):
+            page = _call(base, '/trade', dict(form, symbol=bad))
+            assert 'class="refusal"' in page and 'trade refused' in page and why in page, bad
+            assert '<x>' not in page
+            assert not trades.exists() or json.loads(trades.read_text()) == [], bad
+        ok = _call(base, '/trade', dict(form, symbol='btcusdt'))
+        assert 'linBTCUSDTl: queued' in ok
+        assert json.loads(trades.read_text())[0]['symbol'] == 'BTCUSDT'
+    finally:
+        pc.public_symbols = saved
+        close()
+
+
+def spec_U84_a_malformed_post_is_refused_in_a_box_and_writes_nothing():
+    """A post the panel did not draw — a bot that is not JSON, a proposal
+    that is a list, a strategy that does not exist, a rehearsal of a list —
+    dropped the connection on an exception. Each is read whole first and
+    answered with a refusal box; nothing is written."""
+    base, d, close = _served_fleet()
+    before = (d / 'f.json').read_text(), (d / 'wd.json').read_text()
+    try:
+        for path, form in (
+                ('/create', {'fleet': '0', 'bot_json': 'notjson'}),
+                ('/create', {'fleet': '0', 'bot_json': '[]'}),
+                ('/create', {'fleet': '0', 'bot_json': '{"strategy": "zzz"}'}),
+                ('/create', {'fleet': '0', 'bot_json': '{}', 'pair': '[2]'}),
+                ('/apply', {'fleet': '0', 'proposal': 'notjson', 'confirm': 'x'}),
+                ('/apply', {'fleet': '0', 'proposal': '[1]', 'confirm': 'x'}),
+                ('/apply', {'fleet': '0', 'proposal': '{"mode": "zap"}', 'confirm': 'x'}),
+                ('/apply', {'fleet': '0', 'proposal': '{"mode": "edit", "bot": 3}',
+                            'confirm': 'x'}),
+                ('/setup', {'fleet': '0', 'how': 'advanced', 'strategy': 'zzz'}),
+                ('/rehearse', {'fleet': '0', 'bot_json': '[]', 'days': '7'}),
+                ('/rehearse', {'fleet': '0', 'bot_json': 'notjson', 'days': '7'})):
+            page = _call(base, path, form)
+            assert 'class="refusal"' in page, (path, form)
+            assert ((d / 'f.json').read_text(), (d / 'wd.json').read_text()) == before
+    finally:
+        close()
+
+
+def spec_U84_the_apply_writes_onto_the_file_it_reviewed_or_not_at_all():
+    """The review carries the fleet and watchdog files' sha256 in its apply
+    form; a file changed between the review and the apply (another tab, a
+    hand edit) refuses the apply — the change was reviewed against what is
+    no longer there."""
+    import html
+    import re
+
+    def review():
+        page = _call(base, '/setup', {
+            'how': 'quick', 'then': 'gates', 'fleet': '0', 'preset': 'sideways',
+            'caution': 'balanced', 'symbol': 'btcusdt', 'capital': '1000'})
+        return html.unescape(re.search(r'name="proposal" value="([^"]*)"', page).group(1))
+    base, d, close = _served_fleet()
+    try:
+        for name in ('f.json', 'wd.json'):
+            proposal = review()
+            assert len(json.loads(proposal)['seen']) == 2
+            p = d / name
+            p.write_text(json.dumps(json.loads(p.read_text()), indent=1))   # same meaning, new text
+            changed = p.read_text()
+            page = _call(base, '/apply', {'fleet': '0', 'proposal': proposal,
+                                          'confirm': 'linBTCUSDTl'})
+            assert 'not applied' in page and 'changed since you reviewed it' in page, name
+            assert p.read_text() == changed and 'BTCUSDT' not in (d / 'f.json').read_text()
+        unseen = json.dumps({k: v for k, v in json.loads(review()).items() if k != 'seen'})
+        page = _call(base, '/apply', {'fleet': '0', 'proposal': unseen, 'confirm': 'linBTCUSDTl'})
+        assert 'changed since you reviewed it' in page          # no review read, no write
+        done = _call(base, '/apply', {'fleet': '0', 'proposal': review(),
+                                      'confirm': 'linBTCUSDTl'})
+        assert 'linBTCUSDTl: written' in done
+    finally:
+        close()

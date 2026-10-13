@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 
 from common.files import write_json
-from .report import card_total
+from .report import card_total, kept_total, portfolio_rows_total
 from common.env import load_env
 
 STATE = Path('logs/relay.state.json')   # the channel's offset, shared on
@@ -59,7 +59,8 @@ def chunks(text, limit=LIMIT):
 
 
 def _m(v):
-    return '—' if v is None else f'{v:+,.2f}'
+    from common.fmt import signed
+    return '—' if v is None else signed(v)
 
 
 def _n(v):
@@ -228,16 +229,17 @@ def cmd_pnl(box, args):
             v, k = bots.get(b), sf.get(b)
             t = (card_total(v)                                  # D63
                  if v and v.get('realized') is not None else None)
-            kt = (card_total(k)
-                  if k and k.get('whole', True) and k.get('behind') is None
-                  and k.get('realized') is not None else None)
+            kt = kept_total(k)                                  # R18: the panel's rule
             now_t += t or 0.0
             if kt is None and k:
                 out_n += 1
             kept_t += kt or 0.0
             rows.append(f'  {b}: now {_m(t)} · kept {_m(kt)}')
+        pf = portfolio_rows_total(((c.get('watchdog') or {}).get('belief') or {}).get('bots'))
         out.append(f'{box.tag(fp)}: now {_m(now_t)} · kept {_m(kept_t)}'
-                   + (f' ({out_n} not whole)' if out_n else '') + _age(c))
+                   + (f' ({out_n} not whole)' if out_n else '')
+                   + (f' · portfolio since its anchor {_m(pf)}' if pf is not None else '')   # H6
+                   + _age(c))
         if picked:
             out += rows
     if picked is not None and not picked:

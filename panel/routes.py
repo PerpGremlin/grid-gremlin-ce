@@ -31,6 +31,14 @@ from .pages.trade import TradePages
 
 CACHE_TTL_S = 30.0       # the readout reads the venues; 10 s fed the rate limit
 
+# P6: every answer the panel gives — page, fragment, refusal, redirect — is
+# never framed by another site, never sniffed into another type, never kept
+# by a cache (the 2026-10-13 audit, part 4)
+SECURITY_HEADERS = (('X-Frame-Options', 'DENY'),
+                    ('Content-Security-Policy', "frame-ancestors 'none'"),
+                    ('X-Content-Type-Options', 'nosniff'),
+                    ('Cache-Control', 'no-store'))
+
 
 class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, PositionPages, TradePages, http.server.BaseHTTPRequestHandler):
     server_version = 'gg-panel'
@@ -46,6 +54,11 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
 
     def log_message(self, *a):
         pass
+
+    def end_headers(self):
+        for k, v in SECURITY_HEADERS:                      # P6: once, for all
+            self.send_header(k, v)
+        super().end_headers()
 
     _locks = {}               # U47: one readout per fleet at a time
 
@@ -114,11 +127,12 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
         if shared is not None:
             Handler._cache[fleet] = (time.time(), shared)
             return shared
-        from gridgremlin.durable import fleet_home
+        from gridgremlin.durable import fleet_env, fleet_home
         out = subprocess.run(                              # U80: from the fleet's own copy
             [sys.executable, '-m', 'gridgremlin.report', str(Path(fleet).resolve()),
              '--hours', str(self.hours), '--json'],
-            capture_output=True, text=True, timeout=120, cwd=str(fleet_home(fleet)))
+            capture_output=True, text=True, timeout=120, cwd=str(fleet_home(fleet)),
+            env=fleet_env(fleet))                          # and its own keys
         try:
             data = json.loads(out.stdout)
         except ValueError:
@@ -377,7 +391,10 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             try:
                 draft = json.loads(bot_json)
             except ValueError:
-                draft = {}
+                draft = None
+            if not isinstance(draft, dict):                  # U84: refused in words
+                return self._page(refusal_box('not rehearsed', 'the bot to rehearse is not '
+                                              'readable — open it again from its card or the setup'))
             draft = {k: v for k, v in draft.items() if not k.startswith('_')}
         else:
             draft = {'market_type': 'linear', 'venue': 'bybit',

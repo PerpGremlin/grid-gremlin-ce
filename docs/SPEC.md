@@ -82,6 +82,10 @@ eventually pin (T1).
   never waiting for the next event; a page whose send failed is tried the
   same way. *(the pre-real-money audit, 2026-10-13: an urgent stop warning
   one second after a refusal sat unsent for hours on a quiet fleet)*
+- **E12b** A broken reply never ends the fleet or the watchdog run: the page
+  send and the data-status fetch take any failure (http.client's
+  IncompleteRead is not an OSError) as a failed send or an unread status,
+  and the fleet's per-cycle flush is guarded again. *(the audit, 2026-10-13)*
 - **E13** The fleet-down and watchdog-failing pages write their 30-minute
   stamp only after Telegram took the page (`curl -f`): a failed send fails
   the unit and leaves the next tick free to page. *(the audit: the stamp was
@@ -90,6 +94,13 @@ eventually pin (T1).
   account's own) is true (true, 1, yes), false (empty, false, 0, no) or
   refused by name — never read as real money. *(the audit, 2026-10-13:
   `BYBIT_DEMO=1` and "true " meant Mainnet)*
+- **D25b** The fleet file's real-money switch is JSON `true` or `false`, or
+  absent; anything else is refused by name (`"false"` as a string had armed
+  D25's file half). The panel asks more of anything but false or absent.
+  *(the audit, 2026-10-13)*
+- **D64b** A typed number is finite: the one parser (`float_or`) reads nan
+  and inf as no number, so D64's and D97's second typings ask again and the
+  close sends nothing. *(the audit, 2026-10-13: "nan" passed both)*
 - **E15** Every account starts from the default keys, and an account with
   no Bybit keys has none: a process reading several fleets never carries one
   account's keys into the next. *(the audit: an account with only a
@@ -228,6 +239,12 @@ eventually pin (T1).
   of capital x leverage. Said, never changed. *(the audit: BTC's 0.001 step
   on a 1,000 USDT grid)* A seed buys the rungs' own floored lots summed —
   exactly what their exits sell — so it is never rounded as a whole.
+- **G27b** The step's note is said at every fleet's start, every venue
+  (it sat inside G16's Bybit-only fee check, so Hyperliquid never heard it);
+  an inverse ladder's placed notional is its contracts (dollars already),
+  and each kept quantity is priced at its own rung when one below the
+  minimum is dropped. *(the second audit, 2026-10-13: BTCUSD at 20 USDT, 14
+  rungs, 70% placed and nothing said)*
 - **G22** The window offset is the second narrow local durable fact E3 permits,
   beside X7's tombstone: written BEFORE the orders move (a crash mid-slide resumes
   at the new window, whose orders may already rest), read at build, clamped to G19
@@ -985,7 +1002,7 @@ eventually pin (T1).
   log's and the ledger's. *(2026-10-05: 1,389 pings in a day, 86% trading
   churn, and the one that mattered — the SUI exit refused with nothing
   resting — was 286 of them; replayed under F16, 141, the SUI refusal once)*
-- **F17** The day is digested (D62). Once a day at 23:58 UTC (07:58 Perth),
+- **F17** The day is digested (D62). Once a day at 23:58 UTC,
   after the archive and before Tokyo opens, one message per box: for each
   exchange the UTC day's result after fees — each bot's kept book (R18) at
   the day's start and now, from its stored anchor, a bot with no whole start
@@ -1180,6 +1197,12 @@ eventually pin (T1).
   no number is shown; the exchange's sum names the bots it leaves out.
   *(owner, 2026-10-05: per-bot and per-exchange P&L that survives round
   ends and the venues forgetting)*
+- **R18b** A book with no dollars — an inverse book whose mark was not read —
+  is unread everywhere, never a crash: `card_total` is None, the card shows
+  the bot's belief, the totals leave it out; one kept rule (`kept_total`)
+  for the panel, the phone and the digest, an open book with no mark
+  unread in all three. *(the second audit, 2026-10-13: one unread ETHUSD
+  mark raised in the page and took every fleet's page down)*
 - **R19** The account's leverage is said as the exchange states it, and as if
   every order filled. *Now*: Hyperliquid's own total position value over its
   own account value (on a unified account the USDC held as perp margin —
@@ -1307,7 +1330,9 @@ eventually pin (T1).
   buys at market, off every lattice, and runs only from flat (S3): a lot whose
   buy the window did not see after a seed it holds is a seed lot, its level the
   seed's average fill; a lot bought after the seed keeps its own; no seed seen,
-  the lattice. *(the audit before real money, 2026-10-13)*
+  the lattice. A seed clears the earlier rounds' buys, so an old buy at a
+  rung never prices a seed lot. *(the audit before real money, 2026-10-13;
+  the clearing, the second audit the same day)*
 - **R12** Per trip is what the trip earned. The book's realized is average-cost
   (R2): a long grid that bought cheaper lots on the way down carries an average
   above its exits, so every full-gap trip "realises" a loss while the
@@ -1322,9 +1347,13 @@ eventually pin (T1).
   whatever a window that opened mid-round made of the position. The data
   contract carries `per_trip`; an inverse book's figure is in the base coin and
   converts at the mark like its realized, in the terminal table too. Measured
-  2026-10-03: the demo BTC long printed -156 per trip over 55 trips with every
+  2026-10-03: a demo long grid printed a loss on every trip with every
   exit a full gap by identity; three shorts whose windows opened on an exit
   kept a phantom figure until the sum was freed from the book.
+- **R12b** A trip is an exit ORDER, not a fill: an exit that fills in parts
+  counts once by its link, and the net per trip takes off fees per order.
+  *(the second audit, 2026-10-13: HL's BTC long read 302 trips for 150
+  exits)*
 - **R14** Money is counted from the last flat. A bot whose round is older
   than the readout's window is re-read from the last time its own fills show
   it flat — widening in doublings up to a month — and its book, realized,
@@ -1444,7 +1473,8 @@ eventually pin (T1).
 - *The collector and the liquidation stream moved to their own private
   repository, datagremlin, by D95 (2026-10-12), with their specs; its
   `docs/SPEC.md` holds the data folder's format, the contract the panel's
-  coin pages read through `ggdata/collected.py`.*
+  coin pages read through `ggdata/collected.py` — both removed by D96 on
+  2026-10-12: the market is the site's.*
 - **U55** The dash reads as the owner reads it. A fleet file's `label` is
   what the panel calls the fleet (forty characters at most); without one,
   the venue and the file's environment word. Every card is a column with
@@ -1511,6 +1541,11 @@ eventually pin (T1).
   fees per day, and — where the bot states its investment — Bybit's grid
   APR: grid profit / investment / days x 365, a run under a day counted as
   one day.
+- **U64b** Grid profit is the matched trips' (R12) after fees; a bot with
+  no matched trip keeps realised. The run starts at the later of its span's
+  start and its first fill. *(the second audit, 2026-10-13: a long grid read
+  -2,031/day where its trips made +3,817; a 38-minute-old bot read
+  "running 1.0 d")*
 - **U65** A position's page draws its price over a day and a week with the
   bot's own levels and fills: the engine's per-minute snapshot carries each
   live bot's last mark (F4, amended — the only price history at grid
@@ -1618,6 +1653,10 @@ eventually pin (T1).
   the control link leads to a page that says control is off, not a bare
   404; the public example of the expiry calendar names no private
   infrastructure. *(the bug hunt, 2026-10-11)*
+- **U75b** No figure prints "-0.00": the card's headline, the money cells,
+  the phone and the digest round first (`common.fmt.signed`). The digest
+  says the margin balance beside the equity when they differ, the leverage
+  being over the margin balance. *(the second audit, 2026-10-13)*
 - **U76** The rest of the bug hunt stays fixed: a readout that crashed or
   printed nothing never kills the page — the last good one stays (its age
   said), and with none the fleet's section says "readout unavailable" with
@@ -1679,6 +1718,28 @@ eventually pin (T1).
   the pinned live copy's fleet is read by its own code and its own `.env`
   (D65); a fleet file outside any checkout runs from this code. *(the
   audit: they ran from the main checkout, whatever the fleet)*
+- **U80b** A tool for a fleet in another checkout runs without this
+  process's venue keys (every `BYBIT_*`, `HL_*` dropped), so it reads its
+  own checkout's `.env`; a fleet here keeps the environment whole. *(the
+  audit, 2026-10-13: the phone's unit loads the main `.env` and the process
+  environment wins, so the live copy's readout read the demo account)*
+- **U81** The grid-count and gap autofill comes after the advanced form's
+  fields (beside CHART_JS) on the setup and edit pages, so it finds them on
+  a full page load. *(the second audit: dead on every full load since
+  2026-10-04)*
+- **U82** The live page's in-place swap draws only the newest answer; the
+  timer waits while a swap is in flight or while a right-half form is
+  focused or edited — an untouched form refreshes. *(the second audit: a
+  late refresh could wipe a half-filled edit form)*
+- **U83** A panel trade's symbol is letters and digits, and on the venue's
+  public list when that list can be read; otherwise refused before anything
+  is written. *(the second audit: `<x>` was queued)*
+- **U84** A create, apply, setup or rehearse post is read and type-checked
+  before anything runs; a malformed one gets a refusal box and nothing is
+  written. Apply refuses unless the fleet and watchdog files still match
+  the sha256 the review carried — "the file changed since you reviewed it".
+  *(the second audit: four posts dropped the connection; apply wrote the
+  reviewed change onto whatever the file had become)*
 - **L1** A new trade joins a running fleet within a cycle. The trade watch
   stats the trades file once a cycle; a changed file's new rows are each
   built by the fleet's own builder (`main.build_market_bot`, the one every
@@ -1981,6 +2042,10 @@ that pins it (T1).
   believed only after it has held `hold_hours` ('trending up' → up,
   'trending down' → down, a lean or a range → range). The row is edited in
   the fleet file, not the form.
+- **H6b** The portfolio rows' figure since their anchors reaches the phone's
+  /pnl and the digest as it does the panel (`portfolio_rows_total`, one
+  function). *(the second audit, 2026-10-13: /pnl read "now +0.00" on the
+  carry fleet)*
 - **H7** The rehearsal is the engine's own planner over history —
   `gridgremlin/portfolio_rehearse.py` runs `plan_portfolio` on hourly
   closes and 8h funding per coin with the research's fees (spot 0.1%,
@@ -2345,6 +2410,17 @@ that pins it (T1).
   token; a `fleet` parameter that is not one of the panel's fleets (a word,
   a negative, past the end) is refused with 400 before any page runs,
   never read as another fleet. *(review 2026-10-11)*
+- **P6** Every panel answer — page, fragment, refusal, redirect — carries
+  `X-Frame-Options: DENY`, `Content-Security-Policy: frame-ancestors 'none'`,
+  `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`, from one
+  `end_headers`. The close command is spawned only for a bot that is a row
+  of the fleet file or one of its trades, so no `--` word reaches its argv.
+  *(the second audit, 2026-10-13)*
+- **P7** Names that come from files — fleet and unit names, tombstone ids,
+  the money, margin and settle coins — are drawn as escaped text; a
+  refusal's reason goes raw into `refusal_box`, which escapes it once.
+  *(the second audit, 2026-10-13: a hostile coin name rendered as markup;
+  refusals read `&amp;#x27;`)*
 
 ## T — testing meta-invariants
 

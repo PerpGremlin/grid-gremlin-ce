@@ -595,16 +595,23 @@ def session_name(t):
     return name
 
 
+LOCAL_TIME = None          # (name, hours from UTC) for the report's heading; None: UTC alone
+
+
 def report(row, now=None):
     """The Telegram text, in messages under the cap: sentiment, every coin
     with its regime once and each of its markets, funding elsewhere, the
     notices that matter. Display only, and says so."""
     now = time.time() if now is None else now
     t = row['t']
-    perth = time.strftime('%H:%M', time.gmtime(t + 8 * 3600))
     utc = time.strftime('%H:%M', time.gmtime(t))
     age = now - t
-    head = f'📊 market — {session_name(t)} · {perth} Perth ({utc} UTC)'
+    if LOCAL_TIME:
+        name, hours = LOCAL_TIME
+        local = time.strftime('%H:%M', time.gmtime(t + hours * 3600))
+        head = f'📊 market — {session_name(t)} · {local} {name} ({utc} UTC)'
+    else:
+        head = f'📊 market — {session_name(t)} · {utc} UTC'
     if age > 900:
         head += f' · read {age / 3600:.1f} h ago'
     blocks = [[head]]

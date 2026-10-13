@@ -222,3 +222,81 @@ def spec_D97_on_mainnet_the_panels_close_asks_for_the_size_a_second_time():
         close()
     src = (Path(__file__).resolve().parents[1] / 'panel' / 'pages' / 'control.py').read_text()
     assert "real_money=self._mainnet(fleet, 'bybit')" in src
+
+
+def spec_U80b_a_fleet_in_another_copy_never_inherits_this_copys_venue_keys():
+    """The audit of 2026-10-13: the phone's unit loads the main .env, and
+    `load_env` lets the process environment win, so the live copy's readout
+    read the demo account. A tool for a fleet in another checkout runs with
+    every BYBIT_*/HL_* name dropped (its own .env supplies them); a fleet
+    here keeps the environment whole. Sabotage: returning the environment
+    unchanged leaves the demo key in the live child's environment."""
+    from gridgremlin.durable import fleet_env
+    here = Path(__file__).resolve().parents[1]
+    environ = {'BYBIT_API_KEY': 'demo-key', 'BYBIT_DEMO': 'true', 'HL_TESTNET': 'true',
+               'TELEGRAM_CHAT_ID': '1', 'PATH': '/usr/bin'}
+    with tempfile.TemporaryDirectory() as d:
+        live = Path(d) / 'live'
+        (live / 'gridgremlin').mkdir(parents=True)
+        (live / 'gridgremlin' / '__init__.py').write_text('')
+        (live / 'configs').mkdir()
+        got = fleet_env(live / 'configs' / 'fleet.live.json', environ)
+        assert got == {'TELEGRAM_CHAT_ID': '1', 'PATH': '/usr/bin'}
+    assert fleet_env(here / 'configs' / 'fleet.demo.json', environ) == environ
+    for f in ('panel/routes.py', 'panel/pages/control.py', 'gridgremlin/archive.py'):
+        assert 'env=fleet_env(' in (here / f).read_text(), f
+
+
+def spec_D64b_nan_and_infinity_are_never_a_typed_number():
+    """The audit of 2026-10-13: "nan" passed the second typing (D64) and the
+    close's size (D97) — every comparison with nan is false. The one parser
+    refuses nan and inf, so the retype asks again and the close sends
+    nothing. Sabotage: letting float_or return nan passes the retype."""
+    from common.fmt import float_or
+    from gridgremlin.close import close_position
+    from panel.create import retype_refusal
+    from spec_stops import ADAPTER, _CloseVenue, _short_row
+    for bad in ('nan', 'NaN', 'inf', '-inf', 'Infinity'):
+        assert float_or(bad) is None, bad
+        assert retype_refusal([('capital', None, 50000.0)], {'retype_capital': bad}), bad
+    assert float_or('2.5') == 2.5
+    venue = _CloseVenue({2: {'side': 'Sell', 'size': 0.021, 'avg_entry': 11.2}})
+    out = close_position(_short_row(), venue, ADAPTER, True, expect=float_or('nan', -1.0))
+    assert 'refused' in out and venue.orders == []
+
+
+def spec_D25b_the_real_money_switch_is_json_true_or_nothing():
+    """The audit of 2026-10-13: the file half of D25 read as truthiness, so
+    "false" (a string) armed it. Only JSON true arms; false or absent is
+    off; anything else is refused by name. The panel asks more of anything
+    but false or absent. Sabotage: bool() of the value arms "false"."""
+    from gridgremlin.config import ConfigError, may_reach_mainnet, validate_fleet
+    from spec_setup import _shipped_rows
+    wd = {'tag': 't', 'snapshot': 's', 'state': 'st', 'staleness_seconds': 9, 'mm_rate_max': 0.5,
+          'equity_min': 10, 're_alert_seconds': 9, 'assumes_sole_actor': True}
+    with tempfile.TemporaryDirectory() as d:
+        (Path(d) / 'wd.json').write_text(json.dumps(wd))
+        row = next(r for r in _shipped_rows() if r['symbol'] == 'ETHUSDT' and r['side'] == 'long')
+        base = {'watchdog': str(Path(d) / 'wd.json'), 'bots': [row]}
+        assert validate_fleet(dict(base, allow_mainnet=True))['allow_mainnet'] is True
+        assert validate_fleet(dict(base, allow_mainnet=False))['allow_mainnet'] is False
+        assert validate_fleet(dict(base))['allow_mainnet'] is False
+        for bad in ('false', 'true', 1, 0, None, 'yes'):
+            try:
+                validate_fleet(dict(base, allow_mainnet=bad))
+                raise AssertionError(f'accepted {bad!r}')
+            except ConfigError as e:
+                assert 'allow_mainnet' in str(e) and 'true or false' in str(e)
+    assert may_reach_mainnet({'allow_mainnet': 'false'}) is True       # malformed: ask more
+    assert may_reach_mainnet({'allow_mainnet': False}) is False and may_reach_mainnet({}) is False
+
+
+def spec_D98b_a_fleet_whose_every_bot_stood_down_exits_as_a_failure():
+    """The audit of 2026-10-13: "all bots dead" returned 0, so the real-money
+    unit (Restart=no, D98) went inactive, not failed, and OnFailure never
+    paged. It exits non-zero now; a play-money unit restarts either way."""
+    from gridgremlin import main as m
+    assert m.ALL_DEAD_EXIT != 0
+    src = (Path(__file__).resolve().parents[1] / 'gridgremlin' / 'main.py').read_text()
+    i = src.index("print('all bots dead — fleet exits'")
+    assert 'return ALL_DEAD_EXIT' in src[i:i + 120]

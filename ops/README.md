@@ -51,7 +51,8 @@ What runs, from the inside out:
     grid or DCA operator wants to know about each market the fleets are on,
     from public endpoints, kept in `logs/market.jsonl` beside the day's
     readout; a report paged at the session opens (00, 08, 16 UTC) by
-    `market-report.timer`. Read-only, keyless; nothing acts on it.
+    `market-report.timer`. Read-only, keyless; only the tilted portfolio
+    row acts on it (its regime word, H3).
 11. **The dead-man's switch** (F24/D74) — every completed watchdog run ends
     with one GET to `DEADMAN_URL` (an outside uptime check such as
     healthchecks.io, expecting a ping every 5 minutes with a 10-minute

@@ -21,8 +21,8 @@ def fetch_status(url, get=None, tries=2, pause=5.0, sleep=time.sleep):
             got = json.loads(get(url))
             if isinstance(got, dict):
                 return got
-        except (OSError, ValueError):
-            pass
+        except Exception:      # noqa: BLE001 — the audit of 2026-10-13: an IncompleteRead
+            pass               # (not an OSError) ended the whole watchdog run, its pages too
         if i + 1 < tries:
             sleep(pause)
     return None

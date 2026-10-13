@@ -13,7 +13,7 @@ import sys
 import time
 from panel.chart import _f
 
-from .html_bits import money, named, refusal_box
+from .html_bits import esc, money, named, refusal_box
 from .fleet_bits import setup_button, sweep_html, windows_html
 from gridgremlin.apply import row_botid
 
@@ -327,15 +327,15 @@ def unit_refusal(typed, units, tombs, fleet_bots=None):
                  if named(typed, b)), None)
     if live:
         b, u = live
-        return (f'<b>{b}</b> is a bot, not a unit. Bots start and stop with '
+        return (f'<b>{esc(b)}</b> is a bot, not a unit. Bots start and stop with '
                 'their fleet: to load a new or removed bot, choose '
-                f'<b>restart</b> and type <b>{u or "the unit that runs its fleet"}'
+                f'<b>restart</b> and type <b>{esc(u or "the unit that runs its fleet")}'
                 '</b>.')
     bot = next((t for t in tombs if named(typed, t)), None)
     if bot:
-        return (f'<b>{bot}</b> is a stopped bot, not a unit. To revive it, '
+        return (f'<b>{esc(bot)}</b> is a stopped bot, not a unit. To revive it, '
                 'type its name in the small box beside its tombstone '
                 '(further down this page) and press <b>revive</b>; the unit '
-                'box above is for ' + ', '.join(units) + '.')
-    return ('type one of the armed unit names exactly (' + ', '.join(units)
+                'box above is for ' + esc(', '.join(units)) + '.')
+    return ('type one of the armed unit names exactly (' + esc(', '.join(units))
             + ') — a click is not a decision (§12).')

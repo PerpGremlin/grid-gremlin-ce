@@ -1106,8 +1106,7 @@ def advanced_page(strategy, values, fleets, chosen=0, note='', edit=None,
                    '<td class="dim">which fleet the bot joins</td></tr>')
     return (
         alert + title + note +
-        '<form method="post" action="/setup">' + coin_list(symbols) + HINT_JS +
-        
+        '<form method="post" action="/setup">' + coin_list(symbols) +
         '<input type="hidden" name="gg" value="1">'
         '<input type="hidden" name="how" value="advanced">'
         f'<input type="hidden" name="strategy" value="{strategy}">'
@@ -1119,6 +1118,8 @@ def advanced_page(strategy, values, fleets, chosen=0, note='', edit=None,
         'position size. Blank = no limit</td></tr></table>'
         + CHART_BOX + ''.join(groups) +
         '<button>Next: review the bot &rarr;</button></form>' + CHART_JS
+        # U81: after the form, so the fields it fills exist when it runs
+        + HINT_JS
         + ('<p class="dim"><a href="/">back to the fleet</a></p>' if edit
            else '<p class="dim"><a href="/setup">back to the quick setup'
                 '</a></p>'))

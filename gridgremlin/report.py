@@ -50,6 +50,8 @@ def new_book():
             'same_rung': 0,        # R9: exits filled at a price we BOUGHT at
             'gap_realized': 0.0,   # R12: exits measured against their OWN
             'gap_trips': 0,        #      rung (R11's identity), summed
+            'orders': 0,           # R12b: distinct orders filled (a link once)
+            '_links': set(), '_trip_links': set(), '_gap_links': set(),
             '_entry_px': set(),    # prices this book has entered at
             'max_depth': 0,        # deepest safety rung ever reached
             'anchored': False,     # R13: re-anchored flat at a base order
@@ -57,14 +59,24 @@ def new_book():
 
 
 def apply_fill(book, side, price, qty, fee, inverse=False, rung=None,
-               entry_side=None, own_entry=None):
+               entry_side=None, own_entry=None, link=None):
     """R2: average-cost accounting — a reduce realises, a flip re-anchors.
     A4's unit law holds here too: an inverse book realises in the BASE coin
     (qty is $1 contracts), a linear/spot book in the quote coin.
     R6: the same stream carries the activity — a realisation is a TRIP, a
     flat crossing closes a ROUND, an entry fill at rung >= 1 is a SAFETY
-    order and its rung is the round's depth."""
+    order and its rung is the round's depth.
+    R12b (the second audit, 2026-10-13): a trip is an ORDER, not a fill —
+    an exit that fills in parts is one trip; `link` (the order's own link)
+    counts it once. A fill without a link counts by itself."""
     signed = qty if side == 'buy' else -qty
+    for k in ('_links', '_trip_links', '_gap_links'):
+        book.setdefault(k, set())
+    book.setdefault('orders', 0)
+    if link is None or link not in book['_links']:
+        book['orders'] += 1
+        if link is not None:
+            book['_links'].add(link)
     pos = book['position']
     prev_avg = book['avg_cost']   # R9 reads the pre-fill cost
     if book['first_side'] is None:
@@ -86,7 +98,10 @@ def apply_fill(book, side, price, qty, fee, inverse=False, rung=None,
     else:
         closed = min(abs(pos), qty)
         held = 1.0 if pos > 0 else -1.0
-        book['trips'] += 1
+        if link is None or link not in book['_trip_links']:      # R12b: once an order
+            book['trips'] += 1
+            if link is not None:
+                book['_trip_links'].add(link)
         if inverse:
             book['realized'] += closed * (1.0 / book['avg_cost']
                                           - 1.0 / price) * held
@@ -147,7 +162,10 @@ def apply_fill(book, side, price, qty, fee, inverse=False, rung=None,
             book['gap_realized'] += qty * (1.0 / own_entry - 1.0 / price) * sign
         else:
             book['gap_realized'] += (price - own_entry) * qty * sign
-        book['gap_trips'] += 1
+        if link is None or link not in book['_gap_links']:       # R12b: once an order
+            book['gap_trips'] += 1
+            if link is not None:
+                book['_gap_links'].add(link)
     book['fees'] += fee
     book['fills'] += 1
     book['bought' if side == 'buy' else 'sold'] += qty
@@ -243,6 +261,11 @@ def ledger(fills, botids, inverse_ids=(), entry_sides=None, closers=None,
             seen = seed_px.get(key)                   # R15b: one seed, its fills averaged
             if seen is None or seen[0] != f['link_id']:
                 seen = seed_px[key] = [f['link_id'], 0.0, 0.0]
+                # a seed runs from flat: no lot bought before it is held,
+                # so an earlier round's buy at a rung never prices a seed
+                # lot (the second audit, 2026-10-13)
+                for k in [k for k in entry_px if k[0] == key]:
+                    del entry_px[k]
             seen[1] += f['price'] * f['qty']
             seen[2] += f['qty']
         if rung is not None and key in grids and f['side'] != \
@@ -270,7 +293,7 @@ def ledger(fills, botids, inverse_ids=(), entry_sides=None, closers=None,
         apply_fill(book,
                    f['side'], f['price'], f['qty'], f['fee'],
                    inverse=key in inverse_ids, rung=rung, own_entry=own,
-                   entry_side=entry_sides.get(key))
+                   entry_side=entry_sides.get(key), link=f.get('link_id') or None)
         if series is not None and isinstance(key, str):              # R24
             series.setdefault(key, []).append((f['time_ms'], book['realized'] - book['fees']))
     return books
@@ -334,11 +357,13 @@ def per_trip(book, truncated=False):
 def per_trip_net(book, truncated=False):
     """D63's companion: what a trip earned AFTER fees, as every grid
     platform states its grid profit — both legs' fees off each trip, at
-    this book's average fee per fill. None where per_trip is None."""
+    this book's average fee per ORDER (R12b: a trip's two orders, however
+    many fills each took). None where per_trip is None."""
     gross = per_trip(book, truncated)
     if gross is None:
         return None
-    return gross - 2.0 * (book['fees'] / book['fills'] if book['fills'] else 0.0)
+    n = book.get('orders') or book['fills']
+    return gross - 2.0 * (book['fees'] / n if n else 0.0)
 
 
 def unreal_pnl(book, mark):
@@ -892,9 +917,40 @@ def card_total(b):
     """D63: a contract book's total, the one sum every renderer shows —
     realised after fees, plus the funding paid or received, plus the open
     remainder at the mark. Unread funding or mark counts as nothing here;
-    the renderer says which part it could not read."""
+    the renderer says which part it could not read. A book with no dollars
+    at all (an inverse book whose mark was not read) is None, never a
+    crash (the second audit, 2026-10-13)."""
+    if b.get('realized') is None:
+        return None
     return (b['realized'] - b['fees'] + (b.get('funding') or 0.0)
             + (b.get('unreal_at_mark') or 0.0))
+
+
+def portfolio_rows_total(belief_bots):
+    """H6: what the portfolio rows have made since their anchors, from the
+    bots' own snapshot (each alive row's `portfolio.total`); None when the
+    fleet has no portfolio row. One figure the panel, the phone and the
+    digest share (the second audit, 2026-10-13: the phone and the digest
+    left it out)."""
+    rows = [bl for bl in (belief_bots or {}).values()
+            if bl.get('portfolio') is not None and bl.get('alive') is not False]
+    if not rows:
+        return None
+    return sum((bl['portfolio'] or {}).get('total') or 0.0 for bl in rows)
+
+
+def kept_total(sf):
+    """R18: a kept book's whole result, or None when it cannot be whole —
+    the ledger behind the window, an unread book, or an open position whose
+    mark is unknown. The one rule the panel, the phone and the digest share
+    (the second audit, 2026-10-13: the phone and digest counted an unpriced
+    open book's remainder as nothing and summed it in)."""
+    if (not sf or sf.get('behind') is not None or not sf.get('whole', True)
+            or sf.get('realized') is None):
+        return None
+    if sf.get('unreal_at_mark') is None and abs(sf.get('position') or 0) > 1e-12:
+        return None
+    return card_total(sf)
 
 
 def funding_of(events, market_type, symbol, entry_side, start_ms, end_ms):

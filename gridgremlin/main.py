@@ -31,6 +31,9 @@ BYBIT_LINK_LIMIT = 36
 CEILING_MULTIPLE = 1.5      # F2: a watchdog ceiling beyond this is decorative
 
 
+ALL_DEAD_EXIT = 3          # every bot stood down: a failure to systemd, so OnFailure pages
+
+
 def refuse_mainnet(client, fleet_allows=False, run_allows=False):
     """F7 (D25): mainnet fires only with BOTH safeties off — the fleet file
     declares `"allow_mainnet": true` (reviewed, committed intent) AND the
@@ -457,12 +460,15 @@ def build_market_bot(cfg, client, notifier, tombs, slide):
                         'warn', cfg['symbol'],
                         f'thin margin: rung gap {gap:.4%} barely clears '
                         f'the {trip:.4%} round trip (net {net:.4%}/trip)')
-                from .ladder import rounding_note                 # G27: said at the start
-                note = rounding_note(cfg, adapter)
-                if note:
-                    _vn(notifier, venue).event('warn', cfg['symbol'], note)
             except (VenueError, OSError, KeyError, TypeError):
                 pass
+        try:                                     # G27: said at the start — on every venue
+            from .ladder import rounding_note    # (the second audit, 2026-10-13: it sat
+            note = rounding_note(cfg, adapter)   # inside G16's Bybit-only fee check)
+            if note:
+                _vn(notifier, venue).event('warn', cfg['symbol'], note)
+        except (KeyError, TypeError, ValueError):
+            pass
         # B8 was pinned as a pure function and never wired to a call site
         # (audit 2026-08-06): a grid whose gap sits inside the guard band
         # churns forever, silently. It needs LIVE quotes, so it lands
@@ -969,10 +975,17 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
                                    'lost cycle(s)')
                 failing = 0
             if hasattr(notifier, 'flush'):
-                notifier.flush()                     # E12: a held page never waits for the next event
+                try:
+                    notifier.flush()                 # E12: a held page never waits for the next event
+                except Exception as e:               # noqa: BLE001 — the audit of 2026-10-13: a
+                    print(f'[warn] page flush failed: {type(e).__name__}: {e}',   # broken reply
+                          flush=True)                # (IncompleteRead) must not end the fleet
             if not any(b.alive for b in bots):
+                # the audit of 2026-10-13: exit as a failure, so a unit that
+                # never restarts (D98, real money) pages through OnFailure;
+                # a play-money unit restarts either way
                 print('all bots dead — fleet exits', flush=True)
-                return 0
+                return ALL_DEAD_EXIT
             n += 1
             if cycles is None or n < cycles:
                 time.sleep(poll)
