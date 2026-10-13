@@ -967,6 +967,29 @@ stands unless the owner corrects it.
   tier.* On Mainnet the build asks for the smallest tier that holds the
   ladders and what the venue holds; play money keeps D83.
 
+- **D100 — Grid research published on the site's Lab (2026-10-13).** Asked
+  in the researcher's session: *"is this reseach we should publish. can we
+  publish research on running grids without stops, etc. compare the major
+  tickers, maybe the top 10, maybe some of the larger memecoins etc as well.
+  it would be interesting researrch to show how a griod works"* — then, put
+  to them, *yes, as a Lab study.* A grid study (with and without stops,
+  across the top ten perpetuals and some large memecoins) and a plain "how a
+  grid works" explainer, published on the owner's site as research: figures
+  in percentages and counts, labelled research and not a recommendation to
+  trade. Research stays in this repository (D91 step 5); what is published
+  is the study's public write-up and its data, carried to the site.
+- **D101 — The demo and testnet bots published as research data
+  (2026-10-13).** The owner: *"show the details of the trades and bot stuff.
+  that is useful for context. none of this is real it is data collection on
+  paper. we will of course say that and present it as research. not a
+  recommendation to trade."* The demo and testnet fleets' trades and bot
+  details are published on the site, labelled demo and paper, data
+  collection, not advice. Never the real-money fleet; never keys, hosts or
+  paths. This amends D86's 2026-10-12 note (bots never a served file) for
+  the play-money fleets. D93 stands: public traffic never reaches the
+  trading server and the data server never reads from it, so the data
+  leaves the trading server by a push; its path is the owner's to approve.
+
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
 inline above.*
