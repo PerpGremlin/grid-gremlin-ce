@@ -223,6 +223,7 @@ def ledger(fills, botids, inverse_ids=(), entry_sides=None, closers=None,
     closers, grids = closers or {}, grids or {}
     last_base = {}
     entry_px = {}        # R15: (bot, rung) -> the price that lot was bought at
+    seed_px = {}         # R15b: bot -> [seed link, notional, qty] of its seed's fills
     for key, f in attribute(fills, botids, closers, entry_sides):   # R16
         rung = rung_of(f['link_id'], key) if isinstance(key, str) else None
         if (key in rounders and rung == 0 and f['side'] == entry_sides.get(key)
@@ -238,6 +239,12 @@ def ledger(fills, botids, inverse_ids=(), entry_sides=None, closers=None,
         if rung is not None and key in grids and f['side'] == \
                 entry_sides.get(key) and rung != SEED_RUNG:
             entry_px[(key, rung)] = f['price']        # R15: the lot's own price
+        if rung == SEED_RUNG and key in grids and f['side'] == entry_sides.get(key):
+            seen = seed_px.get(key)                   # R15b: one seed, its fills averaged
+            if seen is None or seen[0] != f['link_id']:
+                seen = seed_px[key] = [f['link_id'], 0.0, 0.0]
+            seen[1] += f['price'] * f['qty']
+            seen[2] += f['qty']
         if rung is not None and key in grids and f['side'] != \
                 entry_sides.get(key) and rung != SEED_RUNG:
             # R15: the lot this exit closes was bought at a PRICE the
@@ -249,6 +256,11 @@ def ledger(fills, botids, inverse_ids=(), entry_sides=None, closers=None,
             # lattice its older fills were never on)
             step = -1 if entry_sides.get(key) == 'buy' else 1
             own = entry_px.get((key, rung + step))
+            if own is None and seed_px.get(key) and seed_px[key][2] > 0:
+                # R15b: a seed runs only from flat (S3), so a lot whose buy
+                # was not seen after a seed the window holds is a seed lot:
+                # it cost the seed's price, not its rung's
+                own = seed_px[key][1] / seed_px[key][2]
             if own is None:
                 from .ladder import lattice_price
                 own = lattice_price(grids[key], rung + step)

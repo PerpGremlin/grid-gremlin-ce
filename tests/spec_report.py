@@ -624,6 +624,36 @@ def spec_R15_an_exit_is_judged_against_the_price_its_lot_was_bought_at():
     assert abs(ledger(twice, [b], **kw)[b]['gap_realized'] - 1400.0) < 1e-9
 
 
+def spec_R15b_a_seed_lots_exit_is_judged_against_the_seeds_price():
+    """The audit before real money (2026-10-13): a seeded lot has no buy at
+    its rung — the seed bought it at market, off every lattice — so its exit
+    was judged against the rung's lattice level, not what it cost. A seed
+    runs only from flat (S3): a lot whose buy the window did not see after a
+    seed it holds is a seed lot, judged at the seed's average fill. A lot
+    bought after the seed keeps its own price; no seed seen, the lattice.
+    Sabotage: without the seed's price the first exit reads +1,000."""
+    from gridgremlin.config import validate_config
+    from gridgremlin.ladder import SEED_RUNG
+    from gridgremlin.report import ledger
+    cfg = validate_config({'market_type': 'linear', 'symbol': 'BTCUSDT',
+                           'side': 'long', 'capital': 1000, 'leverage': 10,
+                           'lower': 80000, 'upper': 90000, 'rungs': 11,
+                           'spacing_type': 'fixed'})
+    b = 'linBTCUSDTl'
+
+    def f(t, side, price, qty, rung):
+        return {'time_ms': t, 'side': side, 'price': price, 'qty': qty,
+                'fee': 0.0, 'link_id': f'{b}-{rung}-x', 'symbol': 'BTCUSDT',
+                'exec_id': f'e{t}'}
+    kw = dict(entry_sides={b: 'buy'}, grids={b: cfg})
+    seed = [f(1, 'buy', 84000.0, 1.0, SEED_RUNG), f(2, 'buy', 84300.0, 2.0, SEED_RUNG)]   # avg 84,200
+    book = ledger(seed + [f(3, 'sell', 86000.0, 1.0, 6)], [b], **kw)[b]
+    assert abs(book['gap_realized'] - 1800.0) < 1e-9                 # not the lattice's +1,000
+    later = seed + [f(3, 'buy', 82900.0, 1.0, 3), f(4, 'sell', 84000.0, 1.0, 4)]
+    assert abs(ledger(later, [b], **kw)[b]['gap_realized'] - 1100.0) < 1e-9   # its own buy
+    assert abs(ledger([f(3, 'sell', 86000.0, 1.0, 6)], [b], **kw)[b]['gap_realized'] - 1000.0) < 1e-9
+
+
 def spec_R11_an_inverse_book_speaks_dollars_to_the_panel():
     """The inverse book realises in BTC (A4). The panel printed it as if
     quote: -0.0003 BTC read "-0.00". The contract converts at the mark and

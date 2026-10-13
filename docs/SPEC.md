@@ -1303,6 +1303,11 @@ eventually pin (T1).
   judged right wherever the buy was seen. *(2026-10-05: the SOL long re-latticed
   31→19 at a restart; the window held fills from both, and 60 of 61 trips were
   flagged zero-spread at −41 per trip on a day the book realised +251.)*
+- **R15b** A seed lot's exit is judged against the seed's own price. The seed
+  buys at market, off every lattice, and runs only from flat (S3): a lot whose
+  buy the window did not see after a seed it holds is a seed lot, its level the
+  seed's average fill; a lot bought after the seed keeps its own; no seed seen,
+  the lattice. *(the audit before real money, 2026-10-13)*
 - **R12** Per trip is what the trip earned. The book's realized is average-cost
   (R2): a long grid that bought cheaper lots on the way down carries an average
   above its exits, so every full-gap trip "realises" a loss while the
@@ -1417,7 +1422,7 @@ eventually pin (T1).
   a window the history does not cover is none. The history is kept in
   `logs/market-carry.json` and refetched as funding settles (8 h).
   Display only.
-- **K13** Each coin's market data, kept a month. The hourly market job
+- **K13** *(retired 2026-10-13: it fed only the coin pages D96 retired; measured first — about 30 requests an hour and a quarter of each hourly reading, read by nothing)* Each coin's market data, kept a month. The hourly market job
   reads Bybit's, Binance's and OKX's public data per coin — open interest
   (in USD), the perpetual's basis to the spot index, the long share of all
   accounts and of the top traders (by accounts and by position size), the
