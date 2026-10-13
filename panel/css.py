@@ -127,6 +127,14 @@ table.fills td:nth-child(-n+3),table.fills th:nth-child(-n+3){text-align:left}
 table.fills td:nth-child(3){white-space:normal}
 .pane table:not(.fills) td,.pane table:not(.fills) th{white-space:normal;overflow-wrap:break-word}.pane table:not(.fills) td:first-child{min-width:7em}.pane form input,.pane form select{max-width:16em;box-sizing:border-box}.pane details td:first-child{width:auto}.pane details td.dim{min-width:0}
 .cwtab td,.cwtab th{padding:.2em .7em;text-align:right;white-space:nowrap}.cwtab td:first-child,.cwtab th:first-child{text-align:left}.carryform{display:flex;flex-wrap:wrap;gap:.6em 1.2em;align-items:end;margin:.8em 0}.carryform label{display:grid;gap:.2em}
+.pane h3{font-size:.95em;margin:1.2em 0 .4em;color:var(--accent)}
+/* U85: the overview — the book by coin as two half-bars from a middle line */
+table.ov{border-collapse:collapse;font-size:.9em;width:100%}table.ov td,table.ov th{padding:.15em .5em;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+table.ov td:first-child,table.ov th:first-child{text-align:left}.pane table.ov td:first-child{min-width:3em}
+table.ov td.xcell{width:40%}.xbar{display:flex;height:.7em}.xh{flex:1;display:flex}.xleft{justify-content:flex-end;border-right:2px solid var(--line)}
+.xbar i{display:block;height:100%}.xbar .xs{background:var(--neg);border-radius:3px 0 0 3px}.xbar .xl{background:var(--pos);border-radius:0 3px 3px 0}
+table.moods td{text-align:left;white-space:normal}
+ul.watch{margin:.3em 0;padding-left:1.2em}ul.watch li{margin:.2em 0;color:var(--neg)}
 .calm{color:var(--calm)}.wild{color:var(--wild)}
 .gauge{display:inline-block;width:5em;height:.5em;background:var(--line);border-radius:3px;vertical-align:middle;overflow:hidden}
 .gauge i{display:block;height:100%;background:var(--wild)}

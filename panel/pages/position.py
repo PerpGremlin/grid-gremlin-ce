@@ -115,6 +115,33 @@ class PositionPages:
             listing = None
         return detail_pane(fi, label, botid, contract, listing)
 
+    _tails = {}                        # U85: per kept ledger, (mtime, its last fills)
+
+    def _kept_tails(self, n=60):
+        """U85: each fleet's latest kept fills for the overview, read again
+        only when its ledger file changes (the box's CPU: the panel's
+        refresh is every few seconds, the ledger moves every few minutes)."""
+        from gridgremlin.durable import fleet_tag, logs_dir
+        from gridgremlin.kept_fills import load
+        out = {}
+        for fi, f in enumerate(self.fleets):
+            path = logs_dir(f) / 'fills' / f'{fleet_tag(f)}.json'
+            try:
+                mtime = path.stat().st_mtime
+            except OSError:
+                continue
+            got = type(self)._tails.get(str(path))
+            if got is None or got[0] != mtime:
+                try:
+                    fills = load(path).get('fills') or []
+                except (OSError, ValueError, RuntimeError):
+                    continue
+                got = (mtime, sorted((x for x in fills if x.get('time_ms') is not None),
+                                     key=lambda x: x['time_ms'])[-n:])
+                type(self)._tails[str(path)] = got
+            out[fi] = got[1]
+        return out
+
     def _live_trade(self, fi, botid):
         """L7: the trades file of fleet `fi` when `botid` is a trade there
         still running (not stood down), else None."""

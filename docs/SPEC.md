@@ -1740,6 +1740,14 @@ eventually pin (T1).
   the sha256 the review carried — "the file changed since you reviewed it".
   *(the second audit: four posts dropped the connection; apply wrote the
   reviewed change onto whatever the file had become)*
+- **U85** With nothing picked, the right half is the overview: every
+  account's warnings by the card's own thresholds (a price judged against
+  the slid window), long and short by coin at the mark (inverse in its $1
+  contracts; the hedged portfolio rows named, not counted), each market's
+  reading once, and the latest twenty fills that are the bots' own (link
+  prefix and dash). The kept ledgers are read again only when a file
+  changes. *(the owner, 2026-10-13: the panel "looks rather bare bones";
+  the half sat empty)*
 - **L1** A new trade joins a running fleet within a cycle. The trade watch
   stats the trades file once a cycle; a changed file's new rows are each
   built by the fleet's own builder (`main.build_market_bot`, the one every
