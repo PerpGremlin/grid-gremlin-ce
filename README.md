@@ -12,7 +12,7 @@ You are here as a tester: run it, poke it, and tell us what you find.
 ## Ten minutes to a running bot
 
 1. **Python 3.12 or newer.** `python3 --version`.
-2. **Clone, then run the suite** — 740-odd specs, half a minute, must be green:
+2. **Clone, then run the suite** — every spec, about half a minute, must end "0 failed":
    ```
    git clone <this repo> && cd grid-gremlin
    python3 tests/run.py
