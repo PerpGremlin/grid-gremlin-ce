@@ -1110,7 +1110,7 @@ def spec_X15_the_close_is_armed_typed_and_run_by_the_engine():
     try:
         assert call('/close?fleet=0&bot=linAVAXUSDTs')[0] == 404   # not armed
         Handler.units = ('some.service',)
-        Handler._run_close = lambda self, fi, botid, dry: (
+        Handler._run_close = lambda self, fi, botid, dry, expect=None: (
             ran.append((botid, dry)) or
             {'botid': botid, 'side': 'short', 'symbol': 'AVAXUSDT',
              'held': 53.8, 'avg_entry': 11.125, 'mark': 11.124,

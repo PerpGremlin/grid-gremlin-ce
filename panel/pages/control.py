@@ -82,15 +82,18 @@ unevaluated and nothing replenishes until start. restart enacts any
 written config (§11).</p>
 {self._tombs_html()}<p><a href="/">&larr; fleet</a></p>""")
 
-    def _run_close(self, fi, botid, dry):
+    def _run_close(self, fi, botid, dry, expect=None):
         """X15: the engine's own close command, as a subprocess — the keys
-        are its, never this process's (the readout's arrangement)."""
+        are its, never this process's (the readout's arrangement). On a
+        fleet that may reach real money the engine's own argv carries D25's
+        run half (D97; the panel never names it, D65)."""
         fleet = self.fleets[min(fi, len(self.fleets) - 1)]
         try:
+            from gridgremlin.close import command
             from gridgremlin.durable import fleet_home
             out = subprocess.run(                          # U80: from the fleet's own copy
-                [sys.executable, '-m', 'gridgremlin.close', str(Path(fleet).resolve()), botid]
-                + (['--dry'] if dry else []),
+                command(Path(fleet).resolve(), botid, dry=dry, expect=expect,
+                        real_money=self._mainnet(fleet, 'bybit')),
                 capture_output=True, text=True, timeout=60, cwd=str(fleet_home(fleet)))
             last = (out.stderr.strip().splitlines() or ['no reason given'])[-1]
             return (json.loads(out.stdout) if out.stdout.strip()
@@ -125,14 +128,7 @@ written config (§11).</p>
                 f'type the trade\'s name to close it: <input name="confirm" '
                 f'size="18" placeholder="{b}"> '
                 '<button class="danger">close at market</button></form>')
-        if self._mainnet(self.fleets[min(fi, len(self.fleets) - 1)], 'bybit'):
-            # X15b: the close command has no way to Mainnet (D48) — on real
-            # money this page says so plainly instead of a refusal box
-            return self._page(
-                f'<h1>{b}: real money</h1>'
-                '<p class="say">On Mainnet the panel and the close command do not close '
-                '(D48: the close command has no way to real money). Close this position '
-                'on the exchange itself; the bot is already stood down.</p>')
+        real = self._mainnet(self.fleets[min(fi, len(self.fleets) - 1)], 'bybit')
         got = self._run_close(fi, botid, dry=True)
         if 'refused' in got:
             return self._page(refusal_box('cannot close', got['refused']))
@@ -156,7 +152,10 @@ written config (§11).</p>
             f'<input type="hidden" name="bot" value="{b}">'
             f'type the bot\'s name to close it: <input name="confirm" '
             f'size="18" placeholder="{b}"> '
-            '<button class="danger">close at market</button></form>')
+            + ('<br><span class="neg">real money</span> — type the size a second time: '
+               '<input name="size" size="14" placeholder="the size above"> '
+               if real else '')
+            + '<button class="danger">close at market</button></form>')
 
     def _close_act(self, form):
         import html as _html
@@ -182,9 +181,16 @@ written config (§11).</p>
                 f'{_html.escape(req["t"])}. The fleet closes it at market within a '
                 'cycle and the trade stands down; its card then offers <b>clear</b>.</p>'
                 '<p><a href="/">back to your bots</a></p>')
-        got = self._run_close(fi, botid, dry=False)
+        expect = None
+        if self._mainnet(self.fleets[min(fi, len(self.fleets) - 1)], 'bybit'):
+            expect = _f(form.get('size'))                 # D97: the second typing, real money
+            if not expect:
+                return self._page(refusal_box(
+                    'not closed', 'on real money the size is typed a second time, '
+                                  'exactly as the page shows it'))
+        got = self._run_close(fi, botid, dry=False, expect=expect)
         if 'refused' in got:
-            return self._page(refusal_box('not closed', got['refused']))
+            return self._page(refusal_box('not closed', _html.escape(got['refused'])))
         left = got.get('left') or 0.0
         return self._page(
             f'<h1>{_html.escape(botid)}: closed {got["closed"]:.10g}</h1>'

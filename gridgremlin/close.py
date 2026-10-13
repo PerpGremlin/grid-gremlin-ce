@@ -1,5 +1,6 @@
-# Close what a STOPPED bot left open (SPEC X15, D48).
-#   python3 -m gridgremlin.close <fleet.json> <botid> [--dry]
+# Close what a STOPPED bot left open (SPEC X15, D48, D97).
+#   python3 -m gridgremlin.close <fleet.json> <botid> [--dry] [--expect QTY]
+#                                [--allow-mainnet]
 #
 # A bot that stood down holding a position — `leave_position` (X13), or a
 # flatten the venue only partly filled — leaves a chore: someone has to
@@ -12,8 +13,10 @@
 #   from outside is exactly the outside hand S7 stands a bot down for.
 # - one reduce-only market order for what the venue says is held on that
 #   bot's side of that market — it cannot open or flip anything.
-# - never mainnet: the double gate (D25) is asked with the run half shut,
-#   and this command has no flag that opens it.
+# - Mainnet only with both of D25's halves (D97): the fleet file's switch
+#   and `--allow-mainnet` typed on this command, every time; Bybit only
+#   (Hyperliquid is testnet-only by the owner's word). `--expect` refuses
+#   unless the venue holds exactly the size the operator read.
 # - not spot: a spot "position" is the wallet's coins, the operator's own
 #   stack included.
 # Prints one JSON object; a refusal is {"refused": "..."}.
@@ -28,9 +31,19 @@ from common.env import load_env
 from .exchange.errors import VenueError
 
 
-def close_position(cfg, client, adapter, tombstoned, dry=False):
+def command(fleet_path, botid, dry=False, expect=None, real_money=False):
+    """The argv for this command, for a caller that may not name D25's run
+    half itself (the panel, D65): `real_money` adds it."""
+    return ([sys.executable, '-m', 'gridgremlin.close', str(fleet_path), botid]
+            + (['--dry'] if dry else [])
+            + (['--expect', f'{expect:.10g}'] if expect is not None else [])
+            + (['--allow-mainnet'] if real_money else []))
+
+
+def close_position(cfg, client, adapter, tombstoned, dry=False, expect=None):
     """The whole act, venue-neutral and testable: returns the JSON-able
-    answer. `tombstoned` is whether X7 holds a tombstone for this bot."""
+    answer. `tombstoned` is whether X7 holds a tombstone for this bot;
+    `expect`, the size the operator read and typed (D97)."""
     botid = make_botid(cfg['market_type'], cfg['symbol'], cfg['side'])
     if cfg['market_type'] == 'spot':
         return {'refused': f'{botid}: a spot holding is the coins in the '
@@ -59,6 +72,9 @@ def close_position(cfg, client, adapter, tombstoned, dry=False):
         return dict(out, closed=0.0, left=0.0, note='nothing to close')
     if dry:
         return out
+    if expect is not None and abs(size - expect) > 1e-9 * max(size, expect, 1.0):
+        return dict(out, refused=f'{botid}: the exchange now holds {size:.10g}, not the '
+                                 f'{expect:.10g} typed — nothing was sent; read it again')
     client.place_market(cfg['market_type'], cfg['symbol'], exit_,
                         adapter.fmt_qty(size),
                         adapter.position_idx(exit_, True) or 0,
@@ -68,11 +84,19 @@ def close_position(cfg, client, adapter, tombstoned, dry=False):
 
 
 def main(argv):
-    dry = '--dry' in argv
-    argv = [a for a in argv if a != '--dry']
+    dry, armed = '--dry' in argv, '--allow-mainnet' in argv
+    argv = [a for a in argv if a not in ('--dry', '--allow-mainnet')]
+    expect = None
+    if '--expect' in argv:
+        i = argv.index('--expect')
+        try:
+            expect = float(argv[i + 1])
+        except (IndexError, ValueError):
+            expect = -1.0                                   # never matches: refused
+        del argv[i:i + 2]
     if len(argv) != 2:
         print('usage: python3 -m gridgremlin.close <fleet.json> <botid> '
-              '[--dry]')
+              '[--dry] [--expect QTY] [--allow-mainnet]')
         return 2
     fleet_path, botid = argv
     try:
@@ -109,11 +133,11 @@ def main(argv):
             from .exchange.bybit.client import WriteClient
             from .exchange.bybit.truth import parse_instrument
             client = WriteClient()
-            refuse_mainnet(client, False, False)
+            refuse_mainnet(client, bool(fleet.get('allow_mainnet')), armed)   # D97: both halves
             adapter = adapter_for(cfg['market_type'], parse_instrument(
                 cfg['market_type'], client.instruments_info(
                     cfg['market_type'], cfg['symbol'])))
-        out = close_position(cfg, client, adapter, tombs.has(botid), dry=dry)
+        out = close_position(cfg, client, adapter, tombs.has(botid), dry=dry, expect=expect)
     except Exception as e:                                   # noqa: BLE001
         out = {'refused': f'{type(e).__name__}: {e}'}
     print(json.dumps(out))

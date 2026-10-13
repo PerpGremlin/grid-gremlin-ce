@@ -792,14 +792,14 @@ def spec_X15c_retire_waits_for_its_fleet_and_has_no_way_to_mainnet():
     assert src.count('refuse_mainnet(client, False, False)') == 2 and 'allow_mainnet=True' not in src
 
 
-def spec_X15_the_close_command_has_no_way_to_mainnet():
-    """The run half of D25's double gate is passed shut, and the command
-    takes no flag that opens it."""
+def spec_X15_on_hyperliquid_the_close_command_has_no_way_to_mainnet():
+    """Hyperliquid is testnet-only by the owner's word: its client is built
+    shut and D25's halves are passed shut there. Bybit's Mainnet asks both
+    halves (D97, spec_gates)."""
     import inspect
     import gridgremlin.close as cl
     src = inspect.getsource(cl)
-    assert src.count('refuse_mainnet(client, False, False)') == 2
+    assert src.count('refuse_mainnet(client, False, False)') == 1
     assert 'HLVenueClient(allow_mainnet=False)' in src
-    code = '\n'.join(ln for ln in src.splitlines()
-                     if not ln.lstrip().startswith('#'))
-    assert 'allow-mainnet' not in code and 'argv' in code
+    hl = src[src.index("if cfg['venue'] == 'hyperliquid':"):src.index('from .exchange.bybit.client import WriteClient')]
+    assert 'refuse_mainnet(client, False, False)' in hl

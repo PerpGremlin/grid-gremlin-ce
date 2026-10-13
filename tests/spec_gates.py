@@ -1,5 +1,5 @@
 # Specs for the real-money gates found by the audit before real money
-# (2026-10-13): U79, E14, E15, U80, and the panel's close on Mainnet.
+# (2026-10-13): U79, E14, E15, U80, and closing on Mainnet (D97).
 
 import json
 import os
@@ -129,20 +129,96 @@ def spec_U80_a_fleet_is_read_by_the_copy_it_lives_in():
         assert 'cwd=str(fleet_home(' in src, f
 
 
-def spec_X15d_on_mainnet_the_panels_close_page_says_close_it_on_the_exchange():
-    """D48: the close command has no way to Mainnet. On a fleet that may
-    reach real money the panel's close page no longer runs it into a
-    refusal: it says plainly the position is closed on the exchange."""
+def spec_D97_the_close_command_reaches_mainnet_only_with_both_halves():
+    """D97 (was D48's "never mainnet"): on Mainnet the close command needs
+    the fleet file's switch AND `--allow-mainnet` on this command; either
+    alone refuses, naming what is missing, before any order. Sabotage: the
+    file half read as true always lets the flag alone through."""
+    import gridgremlin.exchange.bybit.client as bc
+    from gridgremlin import close
+    from gridgremlin.edition import real_money_refused
+
+    class Mainnet:
+        env = 'mainnet'
+
+        def instruments_info(self, cat, sym):
+            raise RuntimeError('past the gate')
+    saved = bc.WriteClient
+    bc.WriteClient = Mainnet
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            wd = Path(d) / 'wd.json'
+            wd.write_text(json.dumps({'tag': 't', 'snapshot': 's', 'state': 'st', 'staleness_seconds': 9,
+                                      'mm_rate_max': 0.5, 'equity_min': 10, 're_alert_seconds': 9,
+                                      'assumes_sole_actor': True}))
+            from spec_setup import _shipped_rows
+            row = next(r for r in _shipped_rows() if r['symbol'] == 'ETHUSDT' and r['side'] == 'long')
+
+            def run(fleet_switch, flag):
+                f = Path(d) / 'f.json'
+                f.write_text(json.dumps(dict({'watchdog': str(wd), 'bots': [row]},
+                                             **({'allow_mainnet': True} if fleet_switch else {}))))
+                import contextlib
+                import io
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    close.main([str(f), 'linETHUSDTl', '--dry'] + (['--allow-mainnet'] if flag else []))
+                return json.loads(buf.getvalue())['refused']
+            if real_money_refused():                                       # the public edition: flatly
+                assert real_money_refused() in run(True, True)
+                return
+            assert 'allow_mainnet' in run(False, True) and '--allow-mainnet' not in run(False, True)
+            assert '--allow-mainnet' in run(True, False)
+            assert 'past the gate' in run(True, True)
+    finally:
+        bc.WriteClient = saved
+
+
+def spec_D97_the_operator_types_the_size_they_read():
+    """`--expect`: the venue must hold exactly the size typed, or nothing
+    is sent; the panel's argv carries the run half only for real money."""
+    from gridgremlin.close import close_position, command
+    from spec_stops import ADAPTER, _CloseVenue, _short_row
+    venue = _CloseVenue({2: {'side': 'Sell', 'size': 0.021, 'avg_entry': 11.2}})
+    wrong = close_position(_short_row(), venue, ADAPTER, True, expect=0.012)
+    assert 'not the 0.012 typed' in wrong['refused'] and venue.orders == []
+    done = close_position(_short_row(), venue, ADAPTER, True, expect=0.021)
+    assert done['closed'] == 0.021 and len(venue.orders) == 1
+    assert command('f.json', 'b', real_money=True)[-1] == '--allow-mainnet'
+    assert '--allow-mainnet' not in command('f.json', 'b', dry=True, expect=0.5)
+    assert command('f.json', 'b', expect=0.5)[-2:] == ['--expect', '0.5']
+
+
+def spec_D97_on_mainnet_the_panels_close_asks_for_the_size_a_second_time():
+    """The panel's close page on a real-money fleet asks for the bot's name
+    and the size typed again; without the size nothing runs, with it the
+    engine is asked to close exactly that. Play money asks the name only."""
     from panel.server import Handler
     from spec_setup import _call, _served_fleet
     base, d, close = _served_fleet()
-    saved = Handler.units
-    Handler.units = ('some.service',)                                    # control armed (§12)
+    saved_units, saved_run = Handler.units, Handler._run_close
+    calls = []
+
+    def fake(self, fi, botid, dry, expect=None):
+        calls.append((dry, expect))
+        return {'botid': botid, 'side': 'long', 'symbol': 'ETHUSDT', 'held': 0.25,
+                'avg_entry': 2500.0, 'mark': 2600.0, 'closed': 0.25, 'left': 0.0}
+    Handler.units, Handler._run_close = ('some.service',), fake          # control armed (§12)
     try:
+        play = _call(base, '/close?fleet=0&bot=linETHUSDTl')
+        assert 'close at market' in play and 'a second time' not in play
         fleet = json.loads((d / 'f.json').read_text())
         (d / 'f.json').write_text(json.dumps(dict(fleet, allow_mainnet=True)))
         page = _call(base, '/close?fleet=0&bot=linETHUSDTl')
-        assert 'real money' in page and 'on the exchange' in page and 'close at market' not in page
+        assert 'real money' in page and 'type the size a second time' in page
+        calls.clear()
+        form = {'gg': '1', 'fleet': '0', 'bot': 'linETHUSDTl', 'confirm': 'linETHUSDTl'}
+        refused = _call(base, '/close', form)
+        assert 'not closed' in refused and calls == []
+        _call(base, '/close', dict(form, size='0.25'))
+        assert calls == [(False, 0.25)]
     finally:
-        Handler.units = saved
+        Handler.units, Handler._run_close = saved_units, saved_run
         close()
+    src = (Path(__file__).resolve().parents[1] / 'panel' / 'pages' / 'control.py').read_text()
+    assert "real_money=self._mainnet(fleet, 'bybit')" in src
