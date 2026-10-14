@@ -1083,6 +1083,14 @@ stands unless the owner corrects it.
   As D113, with its own marked section on the paper accounts.
 - **D116 — The grid follow-ups, for review (2026-10-14).** As D113.
 - **D117 — The fib confluence signal, for review (2026-10-14).** As D113.
+- **D118 — The CPI note's follow-up (2026-10-15).** The owner: "there will
+  need to be follow-up reports for the cpi stuff … i want to test how it
+  went over varying TFs and see what levels were hit, or if any more
+  entries couldve been found?" A dated note at +24 h, frozen, linked both
+  ways with D112: each level's touches against the odds D112 stated, the
+  method committed before its day closed; turns on 5 minutes to 4 hours,
+  known only from the candle that confirms them; later entries judged
+  without hindsight. One move is one sample. Preview first.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
