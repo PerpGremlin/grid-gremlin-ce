@@ -667,9 +667,34 @@ def spec_U51_every_link_and_switch_sits_in_one_side_panel():
     static = render([('demo', CONTRACT)], static='2026-10-07')
     assert '<nav' not in static and 'class="page"' not in static
     assert '.page{display:grid;grid-template-columns:14em' in CSS
-    assert 'nav.side{position:sticky;top:0' in CSS and '@media(max-width:60em){.page{display:block}' in CSS
-    assert "nav.style.top=hero.offsetHeight+'px'" in cards
+    assert 'nav.side{position:sticky;top:var(--hero)' in CSS and '@media(max-width:60em){.page{display:block}' in CSS
+    assert "root.style.setProperty('--hero',hero.offsetHeight+'px')" in cards   # U86: one measure, both columns
     assert '--gap:1em;--gap-s:.5em' in CSS and '.cards{display:grid;gap:var(--gap)' in CSS
+
+
+def spec_U86_the_sites_look_each_part_boxed_and_the_right_half_never_slides():
+    """The owner (2026-10-14): take the site's look — its colours, thicker
+    borders and boxes, "more bordering so things look a lot more defined" —
+    and the right column must not "scroll down with the rest of the page…
+    it moves down a little, then stops". Each exchange sits in its own box;
+    cards, money boxes, the strip, the side panel and the right half share
+    one thick edge; the right half's pin is the strip's measured height plus
+    the gap under it — exactly where it starts — so it never moves."""
+    from panel.server import CSS, render
+    page = render([('demo', CONTRACT), ('hl', CONTRACT)])
+    assert page.count('<section class="fbox"><h1 id="fleet') == 2
+    assert page.count('</details></section>') == 2
+    assert ':root{--bg:#0b0f0c;--fg:#d7e4da;--dim:#7c8c80;--line:#1c2620;--edge:#2c3d31;' in CSS
+    assert '--pos:#36d17a;--neg:#e5534b;--accent:#36d17a;' in CSS and '--bw:2px}' in CSS
+    for rule in ('section.fbox{border:var(--bw) solid var(--edge)', '.card{border:var(--bw) solid var(--edge)',
+                 '.pnl{border:var(--bw) solid var(--edge)', '.eqbox{border:var(--bw) solid var(--edge)',
+                 'border-bottom:var(--bw) solid var(--edge)}', 'border-right:var(--bw) solid var(--edge)}',
+                 'border:var(--bw) solid var(--edge);border-radius:8px}'):
+        assert rule in CSS, rule
+    assert '.pane{position:sticky;top:calc(var(--hero) + var(--gap));' in CSS
+    assert 'max-height:calc(100vh - var(--hero) - 2*var(--gap))' in CSS
+    assert "root.style.setProperty('--hero',hero.offsetHeight+'px')" in page
+    assert 'top:3.2em' not in CSS and '1px solid var(--line)}' not in CSS.split('.card{', 1)[1].split('}', 1)[0]
 
 
 def spec_U52_a_dca_card_folds_its_ladder_and_says_the_drop_it_covers():
@@ -1072,7 +1097,7 @@ def spec_U15_long_and_short_read_at_a_glance():
     table = render([('demo', _dead())], table=True)
     assert '<td><span class="side short">SHORT</span> linAVAXUSDTs' in table
     assert '.side.long{background:var(--pos)}' in CSS
-    assert '.card.short{border-left:4px solid var(--neg)}' in CSS
+    assert '.card.short{border-left:5px solid var(--neg)}' in CSS
     assert 'button{background:var(--accent)' in CSS    # buttons stand out;
     assert 'button.quiet{' in CSS and 'class="quiet theme"' in cards   # the
                                                        # theme toggle stays small
