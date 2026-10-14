@@ -1035,6 +1035,10 @@ stands unless the owner corrects it.
   owner permission; the author is not named. As D100: figures in percentages
   and counts, research and not a recommendation to trade; the site's preview
   first, public only on the owner's word.
+  **Held back the same day** (the owner, through the site): the people whose
+  work it rests on are not sure and may want it kept private. Never public;
+  out of the site and its preview; not handed over again unless the owner
+  says so.
 - **D107 — The regime look published (2026-10-14).** As D106: paper results
   only, no real-money plan, re-run fresh on the box's data before it goes out.
 - **D108 — The explainers published (2026-10-14).** As D106: Markov models,
@@ -1049,6 +1053,8 @@ stands unless the owner corrects it.
   patience, and widening gaps with a split take-profit. It names the public
   scripts it tested and describes the engine's own ladder (already public in
   the CE); mechanics only, no account figures.
+  **Held back the same day**, as D106: never public, not handed over again
+  unless the owner says so.
 - **D111 — First passage as its own page (2026-10-14).** As D106, confirmed
   here: the chance a price touches a level, the formula against the market's
   own curve; split out of D108, which keeps a pointer to it.
