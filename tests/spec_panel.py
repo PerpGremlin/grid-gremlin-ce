@@ -730,11 +730,11 @@ def spec_U88_every_form_on_one_grid_and_each_part_of_a_page_boxed():
     from panel.setup import advanced_page, quick_page
     from panel.trade_page import trade_form
     from panel.results import results_page
-    assert 'form td:first-child:nth-last-child(3),form td:first-child:nth-last-child(2){width:17em}' in CSS
-    assert 'form td:nth-child(2):nth-last-child(2){width:15em}' in CSS
-    assert 'select{width:100%;max-width:none;box-sizing:border-box}' in CSS
-    assert 'form td,form th{text-align:left}' in CSS
-    assert 'form>details,.fsec{border:var(--bw) solid var(--edge);border-radius:8px' in CSS
+    assert ':is(form,.fakeform) td:first-child:nth-last-child(3),:is(form,.fakeform) td:first-child:nth-last-child(2){width:17em}' in CSS
+    assert ':is(form,.fakeform) td:nth-child(2):nth-last-child(2){width:15em}' in CSS
+    assert '.fin{width:100%;max-width:none;box-sizing:border-box}' in CSS
+    assert ':is(form,.fakeform) td,:is(form,.fakeform) th{text-align:left}' in CSS
+    assert ':is(form,.fakeform)>details,.fsec{border:var(--bw) solid var(--edge);border-radius:8px' in CSS
     for strategy in ('grid', 'martingale'):
         page = advanced_page(strategy, {}, ['demo', 'hl'], 0)
         assert page.count('<div class="fsec">') == 1 and '<form' in page

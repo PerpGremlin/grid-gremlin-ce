@@ -1024,6 +1024,11 @@ stands unless the owner corrects it.
   push folder every 10 minutes; the site checks it and serves it. (A first cut
   used a new subaccount; Bybit's AI sub-account cannot trade on demo — it is
   API-only, with no in-app switch — and the owner chose their own accounts.)
+  Widened the same day, by the owner through the site: the app is named
+  **grid-gremlin** (its open edition **grid-gremlin CE**), and the picture is
+  wired — the menu's pages and every bot's fills, numbers and settings open
+  in the right half, by CSS alone, forms drawn and never live: "a real
+  showcase that never touches any real account".
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

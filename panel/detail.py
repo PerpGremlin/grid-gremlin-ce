@@ -40,7 +40,7 @@ def _signed(v):
 TABS = (('fills', 'fills'), ('numbers', 'numbers'), ('edit', 'edit'))
 
 
-def detail_pane(idx, label, botid, contract, listing, show='fills', numbers=''):
+def detail_pane(idx, label, botid, contract, listing, show='fills', numbers='', shown=SHOWN):
     """U78: the picked bot — its name and fleet, a tab per view (U78b), and
     the view: its fills newest first with what its kept record realised and
     paid in fees (`listing`, gridgremlin.fill_list's answer; None: no kept
@@ -78,15 +78,15 @@ def detail_pane(idx, label, botid, contract, listing, show='fills', numbers=''):
                    '<p class="dim">Its record has no whole start yet (it began mid-position), '
                    'so what each fill made is not worked out — never guessed.</p>')
     body = []
-    for r in reversed(rows[-SHOWN:]):
+    for r in reversed(rows[-shown:]):
         what = ('opening balance' if r['kind'] == 'opening'
                 else ('entry' if r['entry'] else 'exit') + (f' · {esc(r["kind"])}' if r['kind'] else ''))
         body.append(f'<tr><td>{time.strftime("%m-%d %H:%M", time.gmtime(r["time_ms"] / 1000))}</td>'
                     f'<td class="{"pos" if r["side"] == "buy" else "neg"}">{r["side"]}</td><td>{what}</td>'
                     f'<td>{_n(r["price"])}</td><td>{_n(r["qty"])}</td><td>{_n(r["fee"], ",.4g")}</td>'
                     f'{_signed(r["realized"])}{_signed(r["net"])}</tr>')
-    older = (f'<p class="dim">{len(rows) - SHOWN} older fills not drawn.</p>'
-             if len(rows) > SHOWN else '')
+    older = (f'<p class="dim">{len(rows) - shown} older fills not drawn.</p>'
+             if len(rows) > shown else '')
     return (f'<aside class="pane">{head}{summary}<table class="fills"><tr><th>UTC</th><th>side</th>'
             '<th></th><th>price</th><th>qty</th><th>fee</th><th>made</th><th>total</th></tr>'
             f'{"".join(body)}</table>{older}</aside>')
