@@ -1020,7 +1020,7 @@ def quick_page(fleets, chosen=0, symbols=()):
         '<form method="post" action="/setup">'
         '<input type="hidden" name="gg" value="1">'
         '<input type="hidden" name="how" value="quick">'
-        f'<table>{presets}</table><table>'
+        f'<div class="fsec"><table>{presets}</table></div><div class="fsec"><table>'   # U88
         f'<tr><td>Account</td><td>{fleet_select(fleets, chosen)}</td>'
         '<td class="dim">which fleet the bot joins</td></tr>'
         '<tr><td>Which coin?</td><td><input name="symbol" size="14" '
@@ -1047,7 +1047,7 @@ def quick_page(fleets, chosen=0, symbols=()):
         'placeholder="today\'s price"></td><td class="dim">reversal only: '
         'the price the two halves meet at. Above today\'s price and the '
         'long half is the one working now, the short half waits above it; '
-        'below, the other way round (D54)</td></tr></table>'
+        'below, the other way round (D54)</td></tr></table></div>'
         '<button name="then" value="gates">Next: review the bot &rarr;'
         '</button> '
         '<button name="then" value="advanced" class="quiet">Open in the '
@@ -1110,12 +1110,12 @@ def advanced_page(strategy, values, fleets, chosen=0, note='', edit=None,
         '<input type="hidden" name="gg" value="1">'
         '<input type="hidden" name="how" value="advanced">'
         f'<input type="hidden" name="strategy" value="{strategy}">'
-        + account +
+        + '<div class="fsec">' + account +             # U88: boxed like the sections below
         '<tr><td>Position limit for the alarm</td><td>'
         f'<input name="ceiling" size="14" value="'
         f'{html.escape(str(values.get("ceiling", "")))}"></td>'
         '<td class="dim">optional: the watchdog pages above this '
-        'position size. Blank = no limit</td></tr></table>'
+        'position size. Blank = no limit</td></tr></table></div>'
         + CHART_BOX + ''.join(groups) +
         '<button>Next: review the bot &rarr;</button></form>' + CHART_JS
         # U81: after the form, so the fields it fills exist when it runs

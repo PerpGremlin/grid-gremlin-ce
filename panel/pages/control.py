@@ -35,13 +35,13 @@ class ControlPages:
             names = ', '.join(Path(f).name for f in self.fleets)
             return self._page(f"""<h1>control <span class="dim">— processes
 and files, never the venue (§13, supervised)</span></h1>
-{''.join(rows)}
+<div class="fsec">{''.join(rows)}
 <form method="post" action="/unit">
 <input type="hidden" name="gg" value="1">
 <select name="action"><option>start</option><option>stop</option>
 <option>restart</option></select>
 type the fleet file name to confirm ({names}):
-<input name="confirm" size="22"><button>do it</button></form>
+<input name="confirm" size="22"><button>do it</button></form></div>
 <p class="dim">the engine is a DETACHED child: closing the panel does
 nothing to it. stop PARKS, never flattens (E3). no auto-restart, ever
 (§6).</p>
@@ -66,14 +66,14 @@ nothing to it. stop PARKS, never flattens (E3). no auto-restart, ever
                         f'</span>{waits}</p>')
         return self._page(f"""<h1>control <span class="dim">— processes and
 files, never the venue (§12)</span></h1>
-{''.join(rows)}
+<div class="fsec">{''.join(rows)}
 <form method="post" action="/unit">
 <input type="hidden" name="gg" value="1">
 <select name="action"><option>restart</option><option>stop</option>
 <option>start</option></select>
 type a unit name to confirm — or several, separated by spaces or commas:
 <input name="confirm" size="44">
-<button>do it</button></form>
+<button>do it</button></form></div>
 <p class="dim">one exception to "never the venue": a STOPPED bot's card
 offers <b>close position</b>, which asks the engine to close what that bot
 left open (X15).</p>
