@@ -159,9 +159,23 @@ def equity_boxes(contract):
             s = sh.get(key)
             word += (f' · Sharpe <b class="{_num_cls(s)}">{s:+.2f}</b>' if s is not None
                      else ' · Sharpe — (under ten days)')
+            tr = (eq.get('trust') or {}).get(key)
+            if s is not None and tr:                # U91b: never a Sharpe alone
+                word += (f' · {tr["likely"]:.0%} likely above zero · '
+                         + (f'about {tr["more"]:,.0f} more days to tell from luck' if tr['more']
+                            else 'told from luck' if tr['more'] == 0 else 'never, at this rate'))
             if key == 'all' and eq.get('all'):
                 word += f' · since {time.strftime("%d %b", time.gmtime(eq["all"][0][0]))}'
         boxes.append(f'<div><div class="dim">equity, {word}</div>{svg}</div>')
     if not boxes:
         return '<div class="dim">equity line: no history yet</div>'
-    return '<div class="eqrow">' + ''.join(boxes) + '</div>'
+    note = (SHARPE_NOTE if 'sharpe' in eq else '')
+    return '<div class="eqrow">' + ''.join(boxes) + '</div>' + note
+
+
+# U91b: the owner's rule for the site — every piece of maths in plain words
+SHARPE_NOTE = ('<p class="dim eqnote">Sharpe: each day\'s gain or loss, averaged, divided by '
+               'how much the days swing, then scaled to a year (times the square root of 365). '
+               'Above 1 is good; below 0 lost money. "Likely above zero" is the chance the true '
+               'figure is above zero, skew and big days counted, and the days are how many more '
+               'it needs before that chance reaches 95%. Money added or taken out moves it too.</p>')

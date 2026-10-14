@@ -76,6 +76,7 @@ padding:.45em 2em;border-bottom:var(--bw) solid var(--edge)}
 align-items:baseline}.hero .fleet{display:contents}.hero .num{text-align:right}
 .hero .tier{font-size:.75em}.hero .big{font-size:1.15em}.hero .spark svg{vertical-align:middle}
 .eqrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(18em,1fr));gap:var(--gap-s) var(--gap);max-width:calc(63em + 2*var(--gap));margin:var(--gap-s) 0}
+.eqnote{max-width:63em;font-size:.88em;margin:0 0 var(--gap-s)}
 .eqbox{border:var(--bw) solid var(--edge);border-radius:6px;padding:.35em .6em}.eqlab{display:flex;gap:var(--gap-s);justify-content:space-between;font-size:.9em}
 svg.eq{display:block}svg.px{display:block;max-width:calc(63em + 2*var(--gap));overflow:visible}
 svg.px .ax{font-size:11px;fill:var(--dim)}svg.px .ax.neg{fill:var(--neg)}

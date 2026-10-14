@@ -1796,6 +1796,13 @@ eventually pin (T1).
   appended. Every thinned line keeps each step's lowest, highest and last
   point, so no box hides a dip (the week's box, keeping each step's last,
   hid the week's lowest point). The public picture draws the same lines.
+  Beneath them, one plain line says what a Sharpe ratio is (the owner's
+  rule for the site: every piece of maths in plain words).
+- **U91b** A Sharpe never shows alone: beside it, the chance the true one is
+  above zero and the further days needed for that chance to reach 95%
+  (skew and fat tails counted; "never, at this rate" at or below zero),
+  as the researcher's Sharpe study computes them. *(the study, 2026-10-14:
+  the paper +1.7 is not yet told from luck; "so +1.7 never shows alone")*
   *(the owner, 2026-10-14: "the 30-day and all time are a superb idea …
   what about sharpe ratios … for lulz")*
 - **L1** A new trade joins a running fleet within a cycle. The trade watch

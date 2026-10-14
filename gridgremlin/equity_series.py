@@ -201,21 +201,52 @@ def history(path, cache=None):
     return cache['points']
 
 
+def _daily_returns(points):
+    days = {}
+    for t, e in points:
+        days[int(t // DAY)] = e
+    closes = [days[k] for k in sorted(days)]
+    return [b / a - 1.0 for a, b in zip(closes, closes[1:]) if a > 0]
+
+
 def sharpe(points):
     """The daily Sharpe ratio on a year's scale: each UTC day's last
     equity against the day before's, their mean over their spread, times
     the square root of 365, with no risk-free rate. None under ten daily
     returns or with no spread. Money added or taken out moves it too."""
-    days = {}
-    for t, e in points:
-        days[int(t // DAY)] = e
-    closes = [days[k] for k in sorted(days)]
-    rets = [b / a - 1.0 for a, b in zip(closes, closes[1:]) if a > 0]
+    rets = _daily_returns(points)
     if len(rets) < 10:
         return None
     mean = sum(rets) / len(rets)
     sd = math.sqrt(sum((r - mean) ** 2 for r in rets) / (len(rets) - 1))
     return mean / sd * math.sqrt(365) if sd > 0 else None
+
+
+def trust(points, z=1.645):
+    """U91b, from the researcher's Sharpe study (research/sharpe.py,
+    Bailey & López de Prado 2012): how far the daily Sharpe can be told
+    from luck — {'likely': the chance the true one is above zero, 'more':
+    the further days needed for that chance to reach 95%, None when it
+    never will (a Sharpe at or below zero)}; skew and fat tails counted.
+    None under ten daily returns."""
+    r = _daily_returns(points)
+    n = len(r)
+    if n < 10:
+        return None
+    m = sum(r) / n
+    pv = sum((x - m) ** 2 for x in r) / n
+    sd = math.sqrt(sum((x - m) ** 2 for x in r) / (n - 1))
+    if pv <= 0 or sd <= 0:
+        return None
+    sr = m / sd
+    g3 = sum((x - m) ** 3 for x in r) / n / pv ** 1.5
+    g4 = sum((x - m) ** 4 for x in r) / n / pv ** 2
+    v = 1 - g3 * sr + (g4 - 1) / 4 * sr * sr
+    if v <= 0:
+        return None
+    likely = 0.5 * (1 + math.erf(sr * math.sqrt(n - 1) / math.sqrt(v) / math.sqrt(2)))
+    more = None if sr <= 0 else max(0.0, 1 + v * (z / sr) ** 2 - n)
+    return {'likely': likely, 'more': more}
 
 
 def long_windows(path, now, cache=None):
@@ -231,7 +262,8 @@ def long_windows(path, now, cache=None):
     bucket = max(HOUR, (now - pts[0][0]) / 300.0)
     return {'30d': [[t, e] for t, e in extremes(month, 3 * HOUR)],
             'all': [[t, e] for t, e in extremes(pts, bucket)],
-            'sharpe': {'30d': sharpe(month), 'all': sharpe(pts)}}
+            'sharpe': {'30d': sharpe(month), 'all': sharpe(pts)},
+            'trust': {'30d': trust(month), 'all': trust(pts)}}
 
 
 def price_windows(path, botid, now, cache=None):
