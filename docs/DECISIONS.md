@@ -1006,6 +1006,13 @@ stands unless the owner corrects it.
   no key (D93), each its own step once the new coins run. Not chosen: Aster
   (smaller), Jupiter (a pool, three markets, no book), and the exchanges whose
   volume far outruns their open interest.
+- **D104 — Market caps from CoinGecko (2026-10-14).** The site asked for a
+  market cap per coin, so its charts and directory can sort coins by size
+  (by volume it can already, from the flow files). Asked for the source, the
+  owner chose CoinGecko's public list (no key; its free tier is for
+  personal, non-commercial use, which the site is) over leaving market cap
+  out. One read every six hours, every coin by its pinned CoinGecko id,
+  kept forever (datagremlin PR #14).
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

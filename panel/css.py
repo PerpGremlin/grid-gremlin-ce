@@ -181,6 +181,17 @@ form td .u label{display:flex;align-items:center;gap:.35em}.fsec>table{width:100
 form td .u i.un{font-style:normal;width:1.2ch;flex:none}
 .fsec.go{border-color:var(--accent)}input[type=range],input[type=checkbox],input[type=radio]{accent-color:var(--accent)}.fsec>h1:first-child{margin-top:.4em}
 .fsec>h2{font-size:1.1em;margin:.3em 0 .5em;padding-bottom:.4em;border-bottom:1px solid var(--edge)}
+/* U89: cleaner cards — the name and side on the left, the state on the
+right, ruled off; the money a quiet panel (the card's own edge already says
+long or short; a second coloured frame fought it), its sign in the number;
+the footer ruled off, its buttons a size smaller */
+.card>div:first-child{display:flex;flex-wrap:wrap;align-items:baseline;gap:.2em .5em;
+padding-bottom:.55em;border-bottom:1px solid var(--edge);margin-top:0}
+.card>div:first-child>.st{margin-left:auto}.card>div:first-child .side{margin-right:0}
+.card .pnl,.card .pnl.pos,.card .pnl.neg{border:0;border-radius:6px;background:color-mix(in srgb,var(--edge) 38%,transparent)}
+.card .foot{border-top:1px solid var(--edge);padding-top:.55em;margin-bottom:0}
+.card .foot a[href]{padding:.1em .6em;font-size:.92em}
+.card span.big.dim{font-size:1.1em}
 @media (max-width:860px){.split{display:block}.pane{position:static;max-height:none;overflow:visible;
 margin-top:calc(var(--gap)*1.5)}}
 """
