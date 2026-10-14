@@ -234,8 +234,8 @@ ggLev(S.getItem('gg-lev')||'now');
 new MutationObserver(function(){
  if(root.classList.contains('light'))S.setItem('gg-light','1');
  else S.removeItem('gg-light');}).observe(root,{attributes:true});
-var nav=document.querySelector('nav.side'),hero=document.querySelector('.hero');
-function top(){if(nav&&hero)nav.style.top=hero.offsetHeight+'px';}
+var hero=document.querySelector('.hero');
+function top(){if(hero)root.style.setProperty('--hero',hero.offsetHeight+'px');}
 top();window.addEventListener('resize',top);
 var y=S.getItem('gg-y:'+location.pathname);
 if(y)window.scrollTo(0,Number(y));

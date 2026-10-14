@@ -1748,6 +1748,14 @@ eventually pin (T1).
   prefix and dash). The kept ledgers are read again only when a file
   changes. *(the owner, 2026-10-13: the panel "looks rather bare bones";
   the half sat empty)*
+- **U86** The panel wears the site's look: its green on near-black, and one
+  thick edge (`--edge`, 2px) on every box — each exchange's section, the
+  cards, the money boxes, the strip, the side panel and the right half. The
+  right half is pinned where it starts: its top is the strip's measured
+  height plus the gap under it (the script sets `--hero` for both columns),
+  so it never slides as the left scrolls. *(the owner, 2026-10-14: "make
+  borders and boxs thicker, adopt the same colour scheme… it moves down a
+  little, then stops")*
 - **L1** A new trade joins a running fleet within a cycle. The trade watch
   stats the trades file once a cycle; a changed file's new rows are each
   built by the fleet's own builder (`main.build_market_bot`, the one every

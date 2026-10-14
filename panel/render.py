@@ -36,7 +36,8 @@ def cards_section(idx, label, contract, view='all', scripted=True):
     # U45: the exchange's money in a box of its own, under its name
     # U59: one link beside the count folds or opens this account's cards
     # alone; its word says which it will do next
-    return (f"<h1 id=\"fleet{idx}\">{esc(label)} {tier_badge(contract)} — {len(contract['bots'])} bots "
+    # U86: each exchange in a box of its own, edge to edge with the site's look
+    return (f"<section class=\"fbox\"><h1 id=\"fleet{idx}\">{esc(label)} {tier_badge(contract)} — {len(contract['bots'])} bots "
             + (f'<a href="javascript:ggFoldIn({idx})" data-foldin="{idx}" class="tier">fold cards</a> '
                if scripted else '')               # an export has no script to run it
             +             f'{sweep_note(contract)} <span class="dim">(read {age}s ago; '
@@ -59,7 +60,7 @@ def cards_section(idx, label, contract, view='all', scripted=True):
             # panel folds or opens every account at once
             f'<details class="acct" data-k="acct:{idx}" open><summary>'
             f"{len(contract['bots'])} bots</summary>"
-            f'<div class="cards">{cards}</div></details>')
+            f'<div class="cards">{cards}</div></details></section>')
 
 
 def render(labelled, static=None, table=False, view='all', pane=None, notice=''):
