@@ -750,6 +750,22 @@ def spec_U88_every_form_on_one_grid_and_each_part_of_a_page_boxed():
     assert res.count('<div class="fsec"><h2>') == 2
 
 
+def spec_U89_cleaner_cards_one_frame_the_state_on_the_right_no_dots():
+    """The owner (2026-10-14): "lets do the cleaner cards". A card's top line
+    holds the side and name left and the state right, ruled off; the money
+    is a quiet panel inside the card, never a second coloured frame (the
+    card's side edge already says long or short); the footer is ruled off,
+    and no link in it, close trade and clear included, starts with a dot."""
+    from panel.server import CSS
+    from panel import card as cardmod
+    assert '.card>div:first-child>.st{margin-left:auto}' in CSS
+    assert '.card .pnl,.card .pnl.pos,.card .pnl.neg{border:0;' in CSS
+    assert '.card .foot{border-top:1px solid var(--edge)' in CSS
+    import inspect
+    src = inspect.getsource(cardmod)
+    assert 'links += (f" · <a' not in src and 'links += " · <a' not in src
+
+
 def spec_U52_a_dca_card_folds_its_ladder_and_says_the_drop_it_covers():
     """The owner: "what am I actually risking with this row" — the
     3Commas summary box on the card, from the contract's terms."""

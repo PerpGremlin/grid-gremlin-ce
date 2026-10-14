@@ -1771,6 +1771,12 @@ eventually pin (T1).
   2026-10-14: "align all the descriptions on one side… the value boxes
   also arent aligned in nearly all pages", and "border sections and stuff
   so it is easily recognizable")*
+- **U89** Cleaner cards: the top line holds the side and name on the left
+  and the state on the right, ruled off; the money is a quiet shaded panel
+  (the card's side edge already says long or short, so a second coloured
+  frame is gone; the number's colour carries the sign); the footer is ruled
+  off with smaller buttons, and none of its links starts with a dot.
+  *(the owner, 2026-10-14: "lets do the cleaner cards next")*
 - **L1** A new trade joins a running fleet within a cycle. The trade watch
   stats the trades file once a cycle; a changed file's new rows are each
   built by the fleet's own builder (`main.build_market_bot`, the one every

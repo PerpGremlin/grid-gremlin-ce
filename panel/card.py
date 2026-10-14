@@ -432,9 +432,9 @@ def card(idx, botid, b, contract, belief, full=False):
     if is_trade and state != 'DEAD' and not flat and not botid.startswith('spo'):
         # L6: a live trade can be ended early from its card — the close page
         # asks for its name and sends one reduce-only market order
-        links += (f" · <a href='/close?fleet={idx}&amp;bot={qarg(botid)}'>close trade</a>")
+        links += (f" <a href='/close?fleet={idx}&amp;bot={qarg(botid)}'>close trade</a>")
     elif is_trade and state == 'DEAD':
-        links += " · <a href='/trade'>clear</a>"
+        links += " <a href='/trade'>clear</a>"
     if state == 'DEAD' and not botid.startswith('spo') and not flat and not (
             is_trade and not abs((belief.get(botid) or {}).get('position') or 0.0) > 1e-12):
         # L8: a stopped trade ended by its own exit or stop — offer the close
@@ -444,7 +444,7 @@ def card(idx, botid, b, contract, belief, full=False):
         # close (HL AVAX after its last round, 2026-10-06: the door led to
         # "nothing"); a holding the panel cannot see is still offered —
         # the close page asks the exchange itself
-        links += (f" · <a href='/close?fleet={idx}&amp;bot={qarg(botid)}'>close "
+        links += (f" <a href='/close?fleet={idx}&amp;bot={qarg(botid)}'>close "
                   'position</a>')
     if not full:
         # U68 (the owner: "far too much for a card … looks like pionex at
