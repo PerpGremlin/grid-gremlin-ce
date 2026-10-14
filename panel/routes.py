@@ -153,6 +153,7 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
         return data
 
     _series = {}                       # U63: per snapshot file, the tail already read
+    _history = {}                      # U91: per snapshot file, the hourly history
 
     def _labelled(self):
         return [(lb, self._with_equity(f, self._contract(f)))
@@ -161,12 +162,16 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
     def _with_equity(self, fleet, contract):
         """U63: the account's equity over the last day and week, from the
         fleet's own snapshot file, beside the readout it was made for."""
-        from gridgremlin.equity_series import equity_windows, snapshot_path
+        from gridgremlin.equity_series import equity_windows, long_windows, snapshot_path
         snap = snapshot_path(fleet)
+        now = time.time()
         try:
-            eq = equity_windows(snap, time.time(), Handler._series.setdefault(snap, {})) if snap else None
+            eq = equity_windows(snap, now, Handler._series.setdefault(snap, {})) if snap else None
+            more = long_windows(snap, now, Handler._history.setdefault(snap, {})) if snap else None
         except (OSError, ValueError):
-            eq = None
+            eq, more = None, None
+        if more:                                   # U91: the month and the whole history
+            eq = dict(eq or {}, **more)
         return dict(contract, equity=eq)
 
     def _authed(self):

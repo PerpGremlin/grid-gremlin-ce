@@ -1787,6 +1787,17 @@ eventually pin (T1).
   2026-10-14: a grid "could be thousands of dollars in profit, but
   simultaneously look underwater … exchanges seem to have the idea"; "yes on
   the cards")*
+- **U91** The exchange's equity box draws four lines: a day, a week, a
+  month and the whole history, the last two each with its Sharpe ratio
+  (each UTC day's last equity against the day before's, their mean over
+  their spread, times √365, no risk-free rate; none under ten daily
+  returns; money added or taken out moves it too). The whole snapshot file
+  is read once, matched for its two leading fields, and then only what was
+  appended. Every thinned line keeps each step's lowest, highest and last
+  point, so no box hides a dip (the week's box, keeping each step's last,
+  hid the week's lowest point). The public picture draws the same lines.
+  *(the owner, 2026-10-14: "the 30-day and all time are a superb idea …
+  what about sharpe ratios … for lulz")*
 - **L1** A new trade joins a running fleet within a cycle. The trade watch
   stats the trades file once a cycle; a changed file's new rows are each
   built by the fleet's own builder (`main.build_market_bot`, the one every
