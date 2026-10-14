@@ -1029,6 +1029,29 @@ stands unless the owner corrects it.
   wired — the menu's pages and every bot's fills, numbers and settings open
   in the right half, by CSS alone, forms drawn and never live: "a real
   showcase that never touches any real account".
+- **D106 — The SvL study published on the site (2026-10-14).** The owner,
+  through the researcher's session, then confirmed here ("yes, all four",
+  with D107–D109): the SvL indicator study — the indicator's author gave the
+  owner permission; the author is not named. As D100: figures in percentages
+  and counts, research and not a recommendation to trade; the site's preview
+  first, public only on the owner's word.
+- **D107 — The regime look published (2026-10-14).** As D106: paper results
+  only, no real-money plan, re-run fresh on the box's data before it goes out.
+- **D108 — The explainers published (2026-10-14).** As D106: Markov models,
+  the hidden Markov model, mean reversion and the like, with the research
+  behind them — "makes traders more informed".
+- **D109 — The owner's story published (2026-10-14).** As D106: how the owner
+  tested ideas with these tools, and the paper results. The researcher gives
+  a skeleton and the facts; the owner writes the prose (their thesis rule).
+- **D110 — The DCA set published (2026-10-14).** As D106, confirmed here: four
+  buy-the-dips studies as one page — QFL inside a public TradingView
+  accumulator, that accumulator's ladder against ours, wider gaps and
+  patience, and widening gaps with a split take-profit. It names the public
+  scripts it tested and describes the engine's own ladder (already public in
+  the CE); mechanics only, no account figures.
+- **D111 — First passage as its own page (2026-10-14).** As D106, confirmed
+  here: the chance a price touches a level, the formula against the market's
+  own curve; split out of D108, which keeps a pointer to it.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
