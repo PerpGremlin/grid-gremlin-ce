@@ -1015,15 +1015,15 @@ stands unless the owner corrects it.
   kept forever (datagremlin PR #14).
 - **D105 — The panel, read-only, in public (2026-10-14).** The owner: a page
   that shows the bot software itself, "the panel as a CE user would, without
-  any write abilities", with a few bots in it. Chosen: the real panel's own
-  render (not a page in the site's style) for one showcase fleet only, on a
-  standard Bybit subaccount's **demo** key (`account: show`; Bybit's AI
-  sub-account is API-only, with no in-app switch to demo), one bot of each
-  kind (a BTC long grid, an ETH short grid, a SOL buy-the-dips). Published by
-  D101's push every 10 minutes, so nothing reaches the trading box; every
-  link into the panel loses its address, and a page with a way to act left
-  in is never written. The owner's other fleets are not shown this way
-  (cf. 2026-10-12).
+  any write abilities". Chosen: the real panel's own render, as a picture —
+  every link inert, no script (the site serves none it has not reviewed), no
+  address off the page — for the paper fleets D101 already publishes, not a
+  separate showcase account: "it isnt real money, it is paper, it doesnt
+  matter", so each paper account's figures show as the panel shows them. A
+  fleet that may reach real money is refused by itself. Written into D101's
+  push folder every 10 minutes; the site checks it and serves it. (A first cut
+  used a new subaccount; Bybit's AI sub-account cannot trade on demo — it is
+  API-only, with no in-app switch — and the owner chose their own accounts.)
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
