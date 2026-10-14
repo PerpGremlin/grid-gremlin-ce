@@ -1065,6 +1065,13 @@ stands unless the owner corrects it.
 - **D111 — First passage as its own page (2026-10-14).** As D106, confirmed
   here: the chance a price touches a level, the formula against the market's
   own curve; split out of D108, which keeps a pointer to it.
+- **D112 — A dated research note published (2026-10-14).** The owner, of
+  the researcher's look at Bitcoin's liquidation levels after the day's
+  CPI release: "this is good. this is really cool. can we publish this?"
+  A session note, dated and frozen (odds as of 14:33 UTC, never
+  refreshed), with its inputs pinned so a re-run gives the same page. As
+  D106: research, not a recommendation; public prices only; the site's
+  preview first, public on the owner's word after a second look.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
