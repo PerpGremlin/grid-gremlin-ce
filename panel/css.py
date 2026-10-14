@@ -192,6 +192,14 @@ padding-bottom:.55em;border-bottom:1px solid var(--edge);margin-top:0}
 .card .foot{border-top:1px solid var(--edge);padding-top:.55em;margin-bottom:0}
 .card .foot a[href]{padding:.1em .6em;font-size:.92em}
 .card span.big.dim{font-size:1.1em}
+/* D105: the published read-only page — the note on top, and the panel's
+links that lead nowhere there drawn as buttons that cannot be pressed */
+.pubnote{margin:-2em -2em 2em;padding:.5em 2em;background:color-mix(in srgb,var(--accent) 14%,var(--bg));
+border-bottom:var(--bw) solid var(--accent);font-size:.92em;white-space:normal;overflow-wrap:anywhere}.pubnote a[href]{padding:0 .4em;margin:0}
+a.off{display:inline-block;padding:.2em .7em;margin:.15em .2em;border:1px dashed var(--edge);border-radius:4px;
+color:var(--dim);cursor:not-allowed;line-height:1.5}nav.side a.off{display:block;margin:.15em var(--gap-s) .15em 0}
+@media(max-width:60em){nav.side a.off{display:inline-block}}@media(max-width:40em){.pubnote{margin:-1em -1em 1em;padding:.5em 1em}}
+a.off.bname{display:inline;border:0;padding:0;margin:0;color:inherit;cursor:default;border-bottom:1px dotted var(--edge);border-radius:0}
 @media (max-width:860px){.split{display:block}.pane{position:static;max-height:none;overflow:visible;
 margin-top:calc(var(--gap)*1.5)}}
 """

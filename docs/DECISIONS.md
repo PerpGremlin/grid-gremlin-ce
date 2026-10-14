@@ -1013,6 +1013,17 @@ stands unless the owner corrects it.
   personal, non-commercial use, which the site is) over leaving market cap
   out. One read every six hours, every coin by its pinned CoinGecko id,
   kept forever (datagremlin PR #14).
+- **D105 — The panel, read-only, in public (2026-10-14).** The owner: a page
+  that shows the bot software itself, "the panel as a CE user would, without
+  any write abilities", with a few bots in it. Chosen: the real panel's own
+  render (not a page in the site's style) for one showcase fleet only, on a
+  standard Bybit subaccount's **demo** key (`account: show`; Bybit's AI
+  sub-account is API-only, with no in-app switch to demo), one bot of each
+  kind (a BTC long grid, an ETH short grid, a SOL buy-the-dips). Published by
+  D101's push every 10 minutes, so nothing reaches the trading box; every
+  link into the panel loses its address, and a page with a way to act left
+  in is never written. The owner's other fleets are not shown this way
+  (cf. 2026-10-12).
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

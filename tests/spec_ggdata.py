@@ -90,3 +90,13 @@ def spec_D91_one_funding_fetcher_for_every_venue():
     assert [x['t'] for x in bn] == [1, 2]
     ok = okx_funding('BTC-USDT-SWAP', fetch=lambda u: {'code': '0', 'data': [{'fundingTime': '5', 'realizedRate': '0.3', 'fundingRate': '0.9'}]})
     assert ok == [{'t': 5, 'rate': 0.3}]                                   # the realised rate
+
+
+def spec_hl_8h_stamps_each_hour_at_the_settlement_it_belongs_to():
+    """Hyperliquid pays at each hour's end for the hour just ended: the
+    01:00 to 08:00 payments are the 00:00-08:00 period, Bybit's 08:00
+    settlement; 09:00 starts the next. Sabotage: keying by the hour's
+    start puts 08:00 in the next bucket and stamps the rest at 00:00."""
+    from ggdata.history import H, hl_8h
+    rows = [{'t': h * H, 'rate': 0.001} for h in range(1, 10)]     # 01:00 .. 09:00
+    assert hl_8h(rows) == [{'t': 8 * H, 'rate': 0.008}, {'t': 16 * H, 'rate': 0.001}]

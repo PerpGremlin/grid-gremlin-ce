@@ -58,9 +58,13 @@ def fetch_hl_funding(coin, start_ms, end_ms):
 
 
 def hl_8h(rows):
-    """Hyperliquid pays hourly; a rehearsal's clock is 8h — sum each bucket."""
+    """Hyperliquid pays hourly; a rehearsal's clock is 8h — sum each bucket,
+    stamped at the settlement it is (Bybit's 08:00 pays for 00:00-08:00).
+    Each payment is for the hour just ended, so 01:00 to 08:00 belong to
+    08:00 (2026-10-14, the research sweep: they were keyed by the hour's
+    start, seven hours early)."""
     out = {}
     for x in rows:
-        b = x['t'] // (8 * H)
+        b = (x['t'] - 1) // (8 * H) + 1
         out[b] = out.get(b, 0.0) + x['rate']
     return [{'t': b * 8 * H, 'rate': r} for b, r in sorted(out.items())]
