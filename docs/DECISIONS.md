@@ -1072,6 +1072,17 @@ stands unless the owner corrects it.
   refreshed), with its inputs pinned so a re-run gives the same page. As
   D106: research, not a recommendation; public prices only; the site's
   preview first, public on the owner's word after a second look.
+- **D113 — How far to trust a Sharpe ratio, for the owner's review
+  (2026-10-14).** The owner: "id like to reveiw the results of all pending
+  resarch." The finished studies written for the site, preview only, each
+  public only once the owner has read it and said so. This one carries one
+  marked section on the paper accounts, ratios and percentages only, for
+  the owner to keep or cut at publication.
+- **D114 — Liquidation levels from pivots, for review (2026-10-14).** As D113.
+- **D115 — Funding carry and the hedged basket, for review (2026-10-14).**
+  As D113, with its own marked section on the paper accounts.
+- **D116 — The grid follow-ups, for review (2026-10-14).** As D113.
+- **D117 — The fib confluence signal, for review (2026-10-14).** As D113.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
