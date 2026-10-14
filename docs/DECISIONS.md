@@ -1091,6 +1091,23 @@ stands unless the owner corrects it.
   method committed before its day closed; turns on 5 minutes to 4 hours,
   known only from the candle that confirms them; later entries judged
   without hindsight. One move is one sample. Preview first.
+- **D119 — The day's research published (2026-10-15).** The owner, of the
+  day's studies: "publish all of today's studies to the site". Eight pages,
+  each read here first, preview then public as before: **D119** grid rungs;
+  **D120** pairs trading; **D121** the adaptive grid; **D122** the S&P 500's
+  RSI and Bitcoin (a public video's claims tested, the channel named);
+  **D123** the same long held two ways (carry with a tilt); **D124** a grid
+  with a trend sleeve; **D125** constant-mix rebalancing; **D126** market
+  making at a retail fee tier. Research, not a recommendation; past prices
+  only; no account figures.
+- **D120 — Pairs trading published (2026-10-15).** As D119.
+- **D121 — The adaptive grid published (2026-10-15).** As D119.
+- **D122 — The S&P 500's RSI and Bitcoin published (2026-10-15).** As D119.
+- **D123 — Carry with a tilt published (2026-10-15).** As D119.
+- **D124 — A grid with a trend sleeve published (2026-10-15).** As D119.
+- **D125 — Constant-mix rebalancing published (2026-10-15).** As D119.
+- **D126 — Market making at a retail fee tier published (2026-10-15).** As
+  D119.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
