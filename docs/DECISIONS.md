@@ -1038,7 +1038,9 @@ stands unless the owner corrects it.
   **Held back the same day** (the owner, through the site): the people whose
   work it rests on are not sure and may want it kept private. Never public;
   out of the site and its preview; not handed over again unless the owner
-  says so.
+  says so. **Released again the same day** (the owner, confirmed here: "Meph
+  agreed"): the author, Meph, gave permission for hobby research and is
+  credited by name; back on the site's preview, public on the owner's word.
 - **D107 — The regime look published (2026-10-14).** As D106: paper results
   only, no real-money plan, re-run fresh on the box's data before it goes out.
 - **D108 — The explainers published (2026-10-14).** As D106: Markov models,
