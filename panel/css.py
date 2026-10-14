@@ -99,6 +99,7 @@ display:block}.hero .fleet{display:block;padding:.15em 0;border-bottom:1px solid
 .tier-test{color:var(--dim)}.tier-main{color:#fff;background:var(--neg);
 border-color:var(--neg);font-weight:700}
 .pnl .parts{color:var(--dim);font-size:.92em}.pnl .parts b{font-weight:normal}
+.pnl .split{display:grid;grid-template-columns:auto auto;justify-content:start;column-gap:1.2em;color:var(--dim);font-size:.92em;margin:.2em 0}.pnl .split b{font-weight:normal}.pnl .split .num{text-align:right}.pnl .split span:nth-child(5)+span b{color:var(--fg)}
 h1+.pnl{max-width:40em;font-size:1.05em}
 .lev-filled{display:none}.lev-on .lev-filled{display:block}.lev-on .lev-now{display:none}
 .rng{display:flex;align-items:center;gap:.6em}.rng svg{flex:1}

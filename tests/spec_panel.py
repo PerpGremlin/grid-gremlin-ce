@@ -2278,3 +2278,31 @@ def spec_U82_a_late_refresh_never_replaces_what_was_just_opened():
         assert word in js, word
     # a dropped answer is neither drawn nor a reason to load the page whole
     assert 'else if(ok===false)location.href=u.href;' in js
+
+
+def spec_U90_a_grid_card_splits_its_total_into_grid_profit_and_trend():
+    """The owner (2026-10-14): a grid "could be thousands of dollars in
+    profit, but simultaneously look underwater" — the exchanges split it.
+    A grid card says its grid profit (the matched trips after fees) and its
+    trend (the rest), which sum to the total exactly, and the price at which
+    the total is nothing; a bot without a matched trip keeps realised and
+    open. Sabotage: a split that drops the fees no longer sums."""
+    import copy
+    from panel.card import grid_split
+    from panel.server import render
+    b = dict(CONTRACT['bots']['spoADAUSDTl'], gap_realized=30.0, gap_trips=12)
+    total = 5.04 - 2.07 - 4.83
+    out = grid_split(b, total)
+    grid, trend = 30.0 - 2.07, total - (30.0 - 2.07)
+    assert f'{grid:+,.2f}' in out and f'{trend:+,.2f}' in out
+    even = 0.2017 - total / 910.57
+    assert 'back to even at' in out and f'{even:,.6g}' in out
+    assert abs(910.57 * (even - 0.2017) + total) < 1e-9         # at that price the total is nothing
+    short = dict(b, position=-910.57, unreal_at_mark=4.83)
+    assert 'in profit while below' in grid_split(short, 5.04 - 2.07 + 4.83)
+    assert grid_split(dict(b, inverse=True), total).count('<span>') == 2   # no price for an inverse book
+    assert grid_split(CONTRACT['bots']['spoADAUSDTl'], total) == ''      # no matched trip
+    c = copy.deepcopy(CONTRACT)
+    c['bots']['spoADAUSDTl'].update(gap_realized=30.0, gap_trips=12)
+    card = render([('demo', c)]).split('class="card ')[1]
+    assert '<div class="split"><span>grid profit</span>' in card
