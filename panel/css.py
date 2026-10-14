@@ -163,22 +163,22 @@ a[href]:focus-visible,button:focus-visible,summary:focus-visible,input:focus-vis
 description start at the same place in every section (each section was its
 own table, sized to its own words); the value boxes one width; a form's
 sections each a box of their own, as the site boxes each part */
-form table{width:100%;max-width:72em}form td,form th{text-align:left}
-form td:first-child:nth-last-child(3),form td:first-child:nth-last-child(2){width:17em}
-form td:nth-child(2):nth-last-child(2){width:15em}
-form td:nth-child(2):nth-last-child(2) input:not([type=checkbox]):not([type=radio]),
-form td:nth-child(2):nth-last-child(2) select{width:100%;max-width:none;box-sizing:border-box}
-form td:last-child:nth-child(3){white-space:normal;min-width:0}
-.pane form td:first-child:nth-last-child(3){width:9em}.pane form td:nth-child(2):nth-last-child(2){width:10em}
-form>details,.fsec{border:var(--bw) solid var(--edge);border-radius:8px;padding:.35em 1em .6em;margin:.8em 0;max-width:72em}
-form>details>summary{font-weight:bold;padding:.15em 0}form>details[open]>summary{border-bottom:1px solid var(--edge);margin-bottom:.4em;padding-bottom:.4em}
-form>details>table,.fsec>table{max-width:none}
-form td .u{display:flex;align-items:center;gap:.35em}form td .u input:not([type=checkbox]){flex:1;min-width:0;width:auto}
-form td .u label{display:flex;align-items:center;gap:.35em}.fsec>table{width:100%}
+:is(form,.fakeform) table{width:100%;max-width:72em}:is(form,.fakeform) td,:is(form,.fakeform) th{text-align:left}
+:is(form,.fakeform) td:first-child:nth-last-child(3),:is(form,.fakeform) td:first-child:nth-last-child(2){width:17em}
+:is(form,.fakeform) td:nth-child(2):nth-last-child(2){width:15em}
+:is(form,.fakeform) td:nth-child(2):nth-last-child(2) input:not([type=checkbox]):not([type=radio]),
+:is(form,.fakeform) td:nth-child(2):nth-last-child(2) select,.fakeform td:nth-child(2):nth-last-child(2) .fin{width:100%;max-width:none;box-sizing:border-box}
+:is(form,.fakeform) td:last-child:nth-child(3){white-space:normal;min-width:0}
+.pane :is(form,.fakeform) td:first-child:nth-last-child(3){width:9em}.pane :is(form,.fakeform) td:nth-child(2):nth-last-child(2){width:10em}
+:is(form,.fakeform)>details,.fsec{border:var(--bw) solid var(--edge);border-radius:8px;padding:.35em 1em .6em;margin:.8em 0;max-width:72em}
+:is(form,.fakeform)>details>summary{font-weight:bold;padding:.15em 0}:is(form,.fakeform)>details[open]>summary{border-bottom:1px solid var(--edge);margin-bottom:.4em;padding-bottom:.4em}
+:is(form,.fakeform)>details>table,.fsec>table{max-width:none}
+:is(form,.fakeform) td .u{display:flex;align-items:center;gap:.35em}:is(form,.fakeform) td .u input:not([type=checkbox]){flex:1;min-width:0;width:auto}
+:is(form,.fakeform) td .u label{display:flex;align-items:center;gap:.35em}.fsec>table{width:100%}
 .carryform{border:var(--bw) solid var(--edge);border-radius:8px;padding:.7em 1em;max-width:72em;box-sizing:border-box}
 .carryform input:not([type=checkbox]),.carryform select{width:9em;height:2em;box-sizing:border-box}
 .carryform button{margin:0}
-form td .u i.un{font-style:normal;width:1.2ch;flex:none}
+:is(form,.fakeform) td .u i.un{font-style:normal;width:1.2ch;flex:none}
 .fsec.go{border-color:var(--accent)}input[type=range],input[type=checkbox],input[type=radio]{accent-color:var(--accent)}.fsec>h1:first-child{margin-top:.4em}
 .fsec>h2{font-size:1.1em;margin:.3em 0 .5em;padding-bottom:.4em;border-bottom:1px solid var(--edge)}
 /* U89: cleaner cards — the name and side on the left, the state on the
@@ -200,6 +200,15 @@ a.off{display:inline-block;padding:.2em .7em;margin:.15em .2em;border:1px dashed
 color:var(--dim);cursor:not-allowed;line-height:1.5}nav.side a.off{display:block;margin:.15em var(--gap-s) .15em 0}
 @media(max-width:60em){nav.side a.off{display:inline-block}}@media(max-width:40em){.pubnote{margin:-1em -1em 1em;padding:.5em 1em}}
 .pub nav.side,.pub .pane{position:static;max-height:none;overflow:visible}
+.rsel{position:absolute;opacity:0;pointer-events:none;width:0;height:0;margin:0}
+.rhsbox>aside{display:none}.pub .rhsbox>aside{position:sticky;top:var(--hero-pub,9em);max-height:calc(100vh - var(--hero-pub,9em) - 1em);overflow:auto}
+label.lab{display:inline-block;padding:.2em .7em;margin:.15em .2em;background:var(--accent-soft);border:1px solid var(--accent);
+border-radius:4px;color:var(--fg);cursor:pointer;line-height:1.5}label.lab:hover{background:var(--accent);color:var(--bg)}
+nav.side label.lab{display:block;margin:.15em var(--gap-s) .15em 0}label.lab.bname{display:inline;padding:0;margin:0;background:none;
+border:0;border-bottom:1px dotted var(--accent);border-radius:0;color:inherit}label.lab.plain{font-size:.8em;margin-left:.6em}
+.card .foot label.lab{padding:.1em .6em;font-size:.92em;margin:0}
+.fin{display:inline-block;min-width:8em;min-height:1.5em;vertical-align:middle;box-sizing:border-box;padding:.15em .4em;border:1px solid var(--edge);border-radius:3px;background:var(--bg)}
+button[disabled]{opacity:.55;cursor:not-allowed}
 a.off.bname{display:inline;border:0;padding:0;margin:0;color:inherit;cursor:default;border-bottom:1px dotted var(--edge);border-radius:0}
 @media (max-width:860px){.split{display:block}.pane{position:static;max-height:none;overflow:visible;
 margin-top:calc(var(--gap)*1.5)}}
