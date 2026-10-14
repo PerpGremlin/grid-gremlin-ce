@@ -5,13 +5,17 @@
 # what was appended, so a 40 MB history costs the page a few kilobytes a
 # refresh. A row the engine could not price (equity null, E9) is skipped.
 import json
+import math
 import os
+import re
 from pathlib import Path
 
 DAY = 86_400.0
 CHUNK = 1 << 20                      # 1 MB: a day of the busiest fleet
 WINDOWS = (('24h', DAY, 300.0),       # name, span, bucket seconds
            ('7d', 7 * DAY, 1800.0))
+EQ_WINDOWS = (('24h', DAY, 600.0),    # U91: equity keeps each bucket's low, high and
+              ('7d', 7 * DAY, 3600.0))  # last, so the buckets are wider for the same weight
 
 
 def snapshot_path(fleet_path):
@@ -107,11 +111,12 @@ def downsample(points, bucket_s):
 
 def windows(points, now):
     """{'24h': [[t, e], …], '7d': [[t, e], …]} — the equity of each row
-    that has one, from one sorted series."""
+    that has one, from one sorted series; each bucket keeps its low, high
+    and last (U91: the last alone hid a week's lowest point)."""
     out = {}
     eq = [(p[0], p[1]) for p in points if p[1] is not None]
-    for name, span, bucket in WINDOWS:
-        out[name] = [[t, e] for t, e in downsample([p for p in eq if p[0] >= now - span], bucket)]
+    for name, span, bucket in EQ_WINDOWS:
+        out[name] = [[t, e] for t, e in extremes([p for p in eq if p[0] >= now - span], bucket)]
     return out
 
 
@@ -132,6 +137,101 @@ def equity_windows(path, now, cache=None):
     pts = read_tail(path, now - 7 * DAY, cache)
     w = windows(pts, now) if pts else None
     return w if w and (w['24h'] or w['7d']) else None
+
+
+# U91: the whole history, for the 30-day and all-time lines. The file is
+# read once from its start, matched for the two leading fields only (the
+# engine writes "t" then "equity" first), one point kept an hour; after
+# that only what was appended. 55 MB costs one pass, not a parse per row.
+_ROW = re.compile(rb'^\{"t": ([0-9.]+), "equity": ([-0-9.eE+]+)', re.M)
+HOUR = 3600.0
+
+
+def extremes(points, bucket_s):
+    """Per bucket, its lowest, highest and last points in time order (one
+    to three), so a thinned line keeps every dip and peak and the box's
+    low and high stay true."""
+    out, cur, key = [], [], None
+    def flush():
+        if cur:
+            keep = {min(cur, key=lambda p: p[1]), max(cur, key=lambda p: p[1]), cur[-1]}
+            out.extend(sorted(keep))
+    for p in points:
+        b = int(p[0] // bucket_s)
+        if b != key:
+            flush()
+            cur, key = [], b
+        cur.append(p)
+    flush()
+    return out
+
+
+def history(path, cache=None):
+    """[(t, equity)], each hour's lowest, highest and last, the whole
+    file; `cache` ({'size', 'points', 'rest'}) makes a second call read
+    only what was appended. Missing file: no points."""
+    cache = cache if cache is not None else {}
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        cache.clear()
+        return []
+    if cache.get('size') is None or cache['size'] > size:
+        cache.update(size=0, points=[], rest=b'')
+    if cache['size'] < size:
+        pts = cache['points']
+        with open(path, 'rb') as f:
+            f.seek(cache['size'])
+            rest = cache['rest']
+            while True:
+                chunk = f.read(CHUNK * 8)
+                if not chunk:
+                    break
+                buf = rest + chunk
+                cut = buf.rfind(b'\n') + 1
+                buf, rest = buf[:cut], buf[cut:]
+                new = [(float(m.group(1)), float(m.group(2))) for m in _ROW.finditer(buf)]
+                if new:
+                    # the last hour already kept may still be filling: re-thin it with the new rows
+                    h = int(new[0][0] // HOUR)
+                    while pts and int(pts[-1][0] // HOUR) == h:
+                        new.insert(0, pts.pop())
+                    pts.extend(extremes(new, HOUR))
+        cache.update(size=size, points=pts, rest=rest)
+    return cache['points']
+
+
+def sharpe(points):
+    """The daily Sharpe ratio on a year's scale: each UTC day's last
+    equity against the day before's, their mean over their spread, times
+    the square root of 365, with no risk-free rate. None under ten daily
+    returns or with no spread. Money added or taken out moves it too."""
+    days = {}
+    for t, e in points:
+        days[int(t // DAY)] = e
+    closes = [days[k] for k in sorted(days)]
+    rets = [b / a - 1.0 for a, b in zip(closes, closes[1:]) if a > 0]
+    if len(rets) < 10:
+        return None
+    mean = sum(rets) / len(rets)
+    sd = math.sqrt(sum((r - mean) ** 2 for r in rets) / (len(rets) - 1))
+    return mean / sd * math.sqrt(365) if sd > 0 else None
+
+
+def long_windows(path, now, cache=None):
+    """U91: {'30d': […], 'all': […], 'sharpe': {'30d': x, 'all': y}} —
+    a month in three-hour steps, the whole history in about 300, each step
+    its lowest, highest and last; None with no history."""
+    if not path:
+        return None
+    pts = history(path, cache)
+    if not pts:
+        return None
+    month = [p for p in pts if p[0] >= now - 30 * DAY]
+    bucket = max(HOUR, (now - pts[0][0]) / 300.0)
+    return {'30d': [[t, e] for t, e in extremes(month, 3 * HOUR)],
+            'all': [[t, e] for t, e in extremes(pts, bucket)],
+            'sharpe': {'30d': sharpe(month), 'all': sharpe(pts)}}
 
 
 def price_windows(path, botid, now, cache=None):

@@ -1,4 +1,7 @@
 """The SVG drawings: the range strip, the equity line, the price line with its levels and fills (U63, U65). Out of render.py (D91 step 3)."""
+import time
+
+from .html_bits import _num_cls
 
 
 
@@ -141,13 +144,24 @@ def price_boxes(prices, window, liq, fills):
 
 
 def equity_boxes(contract):
-    """U63: the two windows under the exchange's box — a day and a week —
-    or one quiet line while the snapshot file has nothing yet."""
+    """U63: the windows under the exchange's box — a day and a week, and
+    (U91) a month and the whole history, each long one with its Sharpe
+    ratio (daily, on a year's scale) — or one quiet line while the snapshot
+    file has nothing yet."""
     eq = contract.get('equity') or {}
-    day, week = equity_svg(eq.get('24h'), 400, 60, labels=True), equity_svg(eq.get('7d'), 400, 60, labels=True)
-    if not day and not week:
+    sh = eq.get('sharpe') or {}
+    boxes = []
+    for key, word in (('24h', '24 h'), ('7d', '7 d'), ('30d', '30 d'), ('all', 'all time')):
+        svg = equity_svg(eq.get(key), 400, 60, labels=True)
+        if not svg:
+            continue
+        if key in ('30d', 'all'):
+            s = sh.get(key)
+            word += (f' · Sharpe <b class="{_num_cls(s)}">{s:+.2f}</b>' if s is not None
+                     else ' · Sharpe — (under ten days)')
+            if key == 'all' and eq.get('all'):
+                word += f' · since {time.strftime("%d %b", time.gmtime(eq["all"][0][0]))}'
+        boxes.append(f'<div><div class="dim">equity, {word}</div>{svg}</div>')
+    if not boxes:
         return '<div class="dim">equity line: no history yet</div>'
-    return ('<div class="eqrow">'
-            + (f'<div><div class="dim">equity, 24 h</div>{day}</div>' if day else '')
-            + (f'<div><div class="dim">equity, 7 d</div>{week}</div>' if week else '')
-            + '</div>')
+    return '<div class="eqrow">' + ''.join(boxes) + '</div>'

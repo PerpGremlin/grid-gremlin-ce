@@ -214,3 +214,48 @@ def spec_H3b_the_funding_rule_judges_the_markets_rate_as_a_yearly_figure_live_an
     # paying funding, the hedge stands down after a day and STAYS down (judged on the market's
     # rates, not on payments that stop): about a day of it paid, not the 3.6% of twelve days
     assert -0.005 < r_neg['funding'] < 0 and r_pos['funding'] > 0.03
+
+
+def spec_U91_a_month_and_the_whole_history_with_their_sharpe_and_every_low_kept():
+    """The owner (2026-10-14): the 30-day and all-time equity "are a superb
+    idea", and a Sharpe ratio "for lulz". The whole file is read once and
+    then only what was appended; each step of a thinned line keeps its
+    lowest, highest and last, so no box hides a dip (the week's box hid
+    a low the old way); the Sharpe ratio is the daily one on a year's
+    scale, none under ten days. Sabotage: keeping only each step's last
+    loses the dip."""
+    import math
+    from gridgremlin.equity_series import extremes, history, long_windows, sharpe
+    d = Path(tempfile.mkdtemp())
+    p = d / 'snapshots-x.jsonl'
+    now = 2_000_000_000.0
+    dip = now - 3 * DAY + 1234
+    _rows(p, now - 40 * DAY, 40 * 24 * 12, step=300,
+          equity=lambda i: 50.0 if now - 40 * DAY + i * 300 == dip - 1234 else 1000.0 * (1.001 ** (i // 288)) * (1 + 0.002 * (-1) ** (i // 288)))
+    cache = {}
+    pts = history(p, cache)
+    assert cache['size'] == p.stat().st_size and len(pts) <= 40 * 24 * 3
+    w = long_windows(p, now, cache)
+    assert set(w) == {'30d', 'all', 'sharpe'}
+    assert min(e for _, e in w['all']) == 50.0 and min(e for _, e in w['30d']) == 50.0   # the dip survives
+    assert min(e for _, e in equity_windows(p, now)['7d']) == 50.0
+    _rows(p, now, 3, step=300, equity=lambda i: 7777.0)                # appended: read alone
+    assert history(p, cache)[-1] == (now + 600, 7777.0)
+    assert extremes([(0.0, 5.0), (10.0, 1.0), (20.0, 9.0), (30.0, 4.0)], 100.0) == [(10.0, 1.0), (20.0, 9.0), (30.0, 4.0)]
+    days = [(k * DAY, 100.0 * (1.01 if k % 2 else 1.0) * 1.001 ** k) for k in range(12)]
+    rets = [b / a - 1 for (_, a), (_, b) in zip(days, days[1:])]
+    m = sum(rets) / len(rets)
+    sd = math.sqrt(sum((r - m) ** 2 for r in rets) / (len(rets) - 1))
+    assert abs(sharpe(days) - m / sd * math.sqrt(365)) < 1e-9
+    assert sharpe(days[:10]) is None                                    # nine returns: too few
+
+
+def spec_U91_the_box_draws_four_lines_and_names_each_sharpe():
+    from panel.drawings import equity_boxes
+    line = [[0.0, 100.0], [3600.0, 101.0]]
+    html = equity_boxes({'equity': {'24h': line, '7d': line, '30d': line, 'all': line,
+                                    'sharpe': {'30d': -4.8, 'all': None}}})
+    for word in ('equity, 24 h', 'equity, 7 d', 'equity, 30 d · Sharpe <b class="neg">-4.80</b>',
+                 'equity, all time · Sharpe — (under ten days) · since 01 Jan'):
+        assert word in html, word
+    assert equity_boxes({}) == '<div class="dim">equity line: no history yet</div>'
