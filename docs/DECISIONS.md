@@ -1057,6 +1057,11 @@ stands unless the owner corrects it.
   the CE); mechanics only, no account figures.
   **Held back the same day**, as D106: never public, not handed over again
   unless the owner says so.
+  **Remade the same day** (the owner, through the site, then confirmed here:
+  "great idea"): a page of our own work only — wider gaps and patience, the
+  split take-profit, and how much leverage a ladder can take — with nothing
+  of the held scripts, their names or their methods, and no QFL. The held
+  version stays held.
 - **D111 — First passage as its own page (2026-10-14).** As D106, confirmed
   here: the chance a price touches a level, the formula against the market's
   own curve; split out of D108, which keeps a pointer to it.
