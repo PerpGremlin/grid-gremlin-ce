@@ -1,0 +1,12 @@
+#!/usr/bin/env python3
+"""grid-gremlin: start the panel and open it (U92). Double-click, or run
+./grid-gremlin from here. ./grid-gremlin --desktop adds it to the menu."""
+import os
+import sys
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+os.chdir(HERE)
+sys.path.insert(0, HERE)
+from panel.launch import main  # noqa: E402
+
+sys.exit(main(sys.argv[1:]))
