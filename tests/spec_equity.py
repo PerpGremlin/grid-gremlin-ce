@@ -236,7 +236,7 @@ def spec_U91_a_month_and_the_whole_history_with_their_sharpe_and_every_low_kept(
     pts = history(p, cache)
     assert cache['size'] == p.stat().st_size and len(pts) <= 40 * 24 * 3
     w = long_windows(p, now, cache)
-    assert set(w) == {'30d', 'all', 'sharpe'}
+    assert set(w) == {'30d', 'all', 'sharpe', 'trust'}
     assert min(e for _, e in w['all']) == 50.0 and min(e for _, e in w['30d']) == 50.0   # the dip survives
     assert min(e for _, e in equity_windows(p, now)['7d']) == 50.0
     _rows(p, now, 3, step=300, equity=lambda i: 7777.0)                # appended: read alone
@@ -259,3 +259,31 @@ def spec_U91_the_box_draws_four_lines_and_names_each_sharpe():
                  'equity, all time · Sharpe — (under ten days) · since 01 Jan'):
         assert word in html, word
     assert equity_boxes({}) == '<div class="dim">equity line: no history yet</div>'
+    assert 'divided by how much the days swing' in html and 'Above 1 is good; below 0 lost money' in html
+    assert 'eqnote' not in equity_boxes({'equity': {'24h': line}})      # no Sharpe shown, no note
+
+
+def spec_U91b_a_sharpe_never_shows_alone():
+    """The researcher's Sharpe study: +1.7 on paper is not yet told from
+    luck. Beside every Sharpe, the chance the true one is above zero and
+    the further days needed to reach 95% (skew and fat tails counted),
+    agreeing with the study's own formulas; "never, at this rate" when the
+    Sharpe is at or below zero. Sabotage: dropping the skew term
+    disagrees with the study."""
+    from gridgremlin.equity_series import trust
+    from panel.drawings import equity_boxes
+    pts = [(k * DAY, 100.0 * (1.02 if k % 3 == 0 else 0.995) ** 1 * 1.003 ** k) for k in range(40)]
+    t = trust(pts)
+    # the study's own psr() and min_trl() on this series (research/sharpe.py,
+    # 2026-10-14), pinned so the public edition, which has no research, checks it too
+    assert abs(t['likely'] - 0.831336803320458) < 1e-12
+    assert abs(t['more'] - 73.70187241719879) < 1e-9
+    down = [(k * DAY, 100.0 * 0.997 ** k * (1.01 if k % 2 else 1.0)) for k in range(40)]
+    assert trust(down)['more'] is None and trust(pts[:10]) is None
+    line = [[0.0, 100.0], [3600.0, 101.0]]
+    html = equity_boxes({'equity': {'all': line, 'sharpe': {'all': -1.84},
+                                    'trust': {'all': {'likely': 0.169, 'more': None}}}})
+    assert '17% likely above zero · never, at this rate' in html
+    html = equity_boxes({'equity': {'all': line, 'sharpe': {'all': 1.67},
+                                    'trust': {'all': {'likely': 0.761, 'more': 279.8}}}})
+    assert '76% likely above zero · about 280 more days to tell from luck' in html
