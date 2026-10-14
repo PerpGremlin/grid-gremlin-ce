@@ -23,3 +23,6 @@ ops/logrotate.conf
 
 # The panel keeps a .bak beside each config it writes (§11)
 configs/*.bak
+
+# The launcher's saved panel key (U92) — a secret, never commit
+.panel-token

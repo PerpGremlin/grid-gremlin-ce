@@ -1805,6 +1805,14 @@ eventually pin (T1).
   the paper +1.7 is not yet told from luck; "so +1.7 never shows alone")*
   *(the owner, 2026-10-14: "the 30-day and all time are a superb idea …
   what about sharpe ratios … for lulz")*
+- **U92** One thing to start: `./grid-gremlin` (or a double-click on it)
+  runs the doctor, whose report never stops the start; starts the panel on a
+  fixed port (41960) with its key saved in `.panel-token` (0600, never
+  committed); and opens the browser on it. With a saved key the cookie lasts
+  30 days, so the plain address can be bookmarked. A second start while the
+  panel runs only opens the browser; `--desktop` adds a menu entry that runs
+  it in a terminal window. Linux first. *(the owner, 2026-10-15: "do 1 2 and
+  3, linux for now")*
 - **L1** A new trade joins a running fleet within a cycle. The trade watch
   stats the trades file once a cycle; a changed file's new rows are each
   built by the fleet's own builder (`main.build_market_bot`, the one every

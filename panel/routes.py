@@ -46,6 +46,7 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
     fleets = ()            # venue sections: one per fleet file
     units = ()             # §12: control is opt-in per launch (--units)
     supervise = False      # §13: systemd's laptop twin (--supervise)
+    keep_cookie = False    # U92: a saved key (--token-file) keeps its cookie 30 days
     labels = ()
     host_ok = ''
     fleet = ''
@@ -222,7 +223,8 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             if secrets.compare_digest(self.path[4:], self.token):
                 self.send_response(303)
                 self.send_header('Set-Cookie',
-                                 f'gg={self.token}; HttpOnly; SameSite=Strict')
+                                 f'gg={self.token}; HttpOnly; SameSite=Strict'
+                                 + ('; Max-Age=2592000' if self.keep_cookie else ''))   # U92: 30 days
                 self.send_header('Location', '/')
                 self.end_headers()
                 return

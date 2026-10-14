@@ -37,14 +37,22 @@ You are here as a tester: run it, poke it, and tell us what you find.
    ```
    It checks Python, `.env`, each exchange with a read-only call, which network
    each key is on, Telegram, and your fleet files. Run it until every line is ✓.
-5. **Start the panel** on one of the example fleets, or on a name that does
-   not exist yet (it offers **init**, then **set up a bot**):
+5. **Start it.** Double-click `grid-gremlin` in this folder (choose "Run in
+   terminal" if asked), or from a terminal:
    ```
-   python3 -m panel.server configs/fleet.demo.json --supervise
+   ./grid-gremlin
    ```
-   Open the link it prints. The **control** page starts the engine; the cards
-   show every bot; **key** explains every word; **set up a bot** makes one
-   from a preset and three answers, through four gates, before anything is
+   It runs the doctor, starts the panel and **opens your browser on it**. The
+   address stays the same, `http://127.0.0.1:41960/`, so bookmark it. Start
+   it again while it runs and it just opens the browser. Close its window, or
+   press Ctrl+C, to stop it. `./grid-gremlin --desktop` adds it to your
+   applications menu. (Linux for now. It opens the demo example, or a fleet
+   you name: `./grid-gremlin configs/mine.json`; a name that does not exist
+   yet offers **init**, then **set up a bot**.)
+
+   In the panel, the **control** page starts the engine; the cards show
+   every bot; **key** explains every word; **set up a bot** makes one from a
+   preset and three answers, through four gates, before anything is
    written.
 
 ## The examples in `configs/`

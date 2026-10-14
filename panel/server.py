@@ -64,6 +64,7 @@ def main(argv):
             Handler.token = secrets.token_urlsafe(16)
             tf.touch(mode=0o600)
             tf.write_text(Handler.token)
+        Handler.keep_cookie = True      # U92: a saved key keeps its cookie, so a bookmark works
     else:
         Handler.token = secrets.token_urlsafe(16)
     Handler.fleets = tuple(a for a in argv if a.endswith('.json'))
@@ -74,8 +75,12 @@ def main(argv):
         return 2
     srv = http.server.ThreadingHTTPServer(('127.0.0.1', port), Handler)
     Handler.host_ok = f'127.0.0.1:{srv.server_port}'
-    print(f'panel: http://{Handler.host_ok}/?t={Handler.token}',
-          flush=True)   # journald/pipes: the URL must not sit in a buffer
+    url = f'http://{Handler.host_ok}/?t={Handler.token}'
+    print(f'panel: {url}', flush=True)   # journald/pipes: the URL must not sit in a buffer
+    if '--open' in argv:                 # U92: the launcher opens the browser on it
+        import threading
+        import webbrowser
+        threading.Timer(0.5, webbrowser.open, (url,)).start()
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
