@@ -144,6 +144,43 @@ ul.watch{margin:.3em 0;padding-left:1.2em}ul.watch li{margin:.2em 0;color:var(--
 .calm{color:var(--calm)}.wild{color:var(--wild)}
 .gauge{display:inline-block;width:5em;height:.5em;background:var(--line);border-radius:3px;vertical-align:middle;overflow:hidden}
 .gauge i{display:block;height:100%;background:var(--wild)}
+/* U87: the polish pass — the heading's quiet line, the card's buttons in a
+row of their own, the side menu boxed like the right half, small spaced
+section labels, the right half's sections ruled, and the small things
+(a card's edge lit on hover, numbers in columns, scrollbars, selection, focus) */
+h1 .meta{display:block;font-size:.78em;font-weight:normal;margin-top:.15em}
+.card .foot>span:last-child{display:flex;flex-wrap:wrap;gap:.25em}.card .foot a[href]{margin:0}
+.card:hover{border-color:var(--accent)}.card.long:hover{border-left-color:var(--pos)}.card.short:hover{border-left-color:var(--neg)}
+nav.side{border:var(--bw) solid var(--edge);border-radius:8px;padding:.2em .8em .8em}
+nav.side h3,.pane h3{text-transform:uppercase;letter-spacing:.08em;font-size:.75em}
+.pane h3{border-top:1px solid var(--edge);padding-top:.8em;margin-top:1em}
+.pane h2{border-bottom:var(--bw) solid var(--edge);padding:.5em 0;margin-bottom:.6em}
+body{font-variant-numeric:tabular-nums}
+*{scrollbar-width:thin;scrollbar-color:var(--edge) transparent}
+::selection{background:var(--accent);color:var(--bg)}
+a[href]:focus-visible,button:focus-visible,summary:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* U88: every form's rows on one grid — the label, the value box and its
+description start at the same place in every section (each section was its
+own table, sized to its own words); the value boxes one width; a form's
+sections each a box of their own, as the site boxes each part */
+form table{width:100%;max-width:72em}form td,form th{text-align:left}
+form td:first-child:nth-last-child(3),form td:first-child:nth-last-child(2){width:17em}
+form td:nth-child(2):nth-last-child(2){width:15em}
+form td:nth-child(2):nth-last-child(2) input:not([type=checkbox]):not([type=radio]),
+form td:nth-child(2):nth-last-child(2) select{width:100%;max-width:none;box-sizing:border-box}
+form td:last-child:nth-child(3){white-space:normal;min-width:0}
+.pane form td:first-child:nth-last-child(3){width:9em}.pane form td:nth-child(2):nth-last-child(2){width:10em}
+form>details,.fsec{border:var(--bw) solid var(--edge);border-radius:8px;padding:.35em 1em .6em;margin:.8em 0;max-width:72em}
+form>details>summary{font-weight:bold;padding:.15em 0}form>details[open]>summary{border-bottom:1px solid var(--edge);margin-bottom:.4em;padding-bottom:.4em}
+form>details>table,.fsec>table{max-width:none}
+form td .u{display:flex;align-items:center;gap:.35em}form td .u input:not([type=checkbox]){flex:1;min-width:0;width:auto}
+form td .u label{display:flex;align-items:center;gap:.35em}.fsec>table{width:100%}
+.carryform{border:var(--bw) solid var(--edge);border-radius:8px;padding:.7em 1em;max-width:72em;box-sizing:border-box}
+.carryform input:not([type=checkbox]),.carryform select{width:9em;height:2em;box-sizing:border-box}
+.carryform button{margin:0}
+form td .u i.un{font-style:normal;width:1.2ch;flex:none}
+.fsec.go{border-color:var(--accent)}input[type=range],input[type=checkbox],input[type=radio]{accent-color:var(--accent)}.fsec>h1:first-child{margin-top:.4em}
+.fsec>h2{font-size:1.1em;margin:.3em 0 .5em;padding-bottom:.4em;border-bottom:1px solid var(--edge)}
 @media (max-width:860px){.split{display:block}.pane{position:static;max-height:none;overflow:visible;
 margin-top:calc(var(--gap)*1.5)}}
 """

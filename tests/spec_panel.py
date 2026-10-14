@@ -697,6 +697,59 @@ def spec_U86_the_sites_look_each_part_boxed_and_the_right_half_never_slides():
     assert 'top:3.2em' not in CSS and '1px solid var(--line)}' not in CSS.split('.card{', 1)[1].split('}', 1)[0]
 
 
+def spec_U87_the_polish_pass_quiet_heading_line_and_buttons_without_stray_dots():
+    """The owner (2026-10-14): "now do the polish pass". The heading is the
+    exchange's name; how fresh it is goes on a quiet line under it. A card's
+    buttons wrap as a row with no separator dots (a "·" stranded at the
+    start of the second line before). The side menu is a box like the right
+    half; section labels are small spaced capitals."""
+    from panel.server import CSS, render
+    page = render([('demo', CONTRACT)])
+    h1 = page.split('<h1 id="fleet0">', 1)[1].split('</h1>', 1)[0]
+    assert '<span class="meta"><span class="dim">watchdog' in h1 and 'refreshes every' in h1.split('class="meta"', 1)[1]
+    foots = [f.split('</div>', 1)[0] for f in page.split('class="dim foot">')[1:]]
+    assert foots and all('·' not in f and '>edit</a> <a' in f for f in foots)
+    assert 'h1 .meta{display:block;font-size:.78em;font-weight:normal' in CSS
+    assert '.card .foot>span:last-child{display:flex;flex-wrap:wrap;gap:.25em}' in CSS
+    assert 'nav.side{border:var(--bw) solid var(--edge);border-radius:8px' in CSS
+    assert 'nav.side h3,.pane h3{text-transform:uppercase' in CSS and '.pane h3{border-top:1px solid var(--edge)' in CSS
+
+
+def spec_U88_every_form_on_one_grid_and_each_part_of_a_page_boxed():
+    """The owner (2026-10-14): on the advanced form "align all the
+    descriptions on one side of the page, still in line with their
+    function… the value boxes also arent aligned in nearly all pages", and
+    border sections as the site does. Each section of a form was its own
+    table, sized to its own words; now every three-cell form row puts its
+    label, value box and description on one grid of fixed columns, the
+    boxes one width, and each section (and each account on the results
+    page) sits in a box. The trade form, which kept box and description in
+    one cell, is three cells like the rest, its unit beside its box."""
+    import re
+    from panel.server import CSS
+    from panel.setup import advanced_page, quick_page
+    from panel.trade_page import trade_form
+    from panel.results import results_page
+    assert 'form td:first-child:nth-last-child(3),form td:first-child:nth-last-child(2){width:17em}' in CSS
+    assert 'form td:nth-child(2):nth-last-child(2){width:15em}' in CSS
+    assert 'select{width:100%;max-width:none;box-sizing:border-box}' in CSS
+    assert 'form td,form th{text-align:left}' in CSS
+    assert 'form>details,.fsec{border:var(--bw) solid var(--edge);border-radius:8px' in CSS
+    for strategy in ('grid', 'martingale'):
+        page = advanced_page(strategy, {}, ['demo', 'hl'], 0)
+        assert page.count('<div class="fsec">') == 1 and '<form' in page
+        for row in re.findall(r'<tr>(.*?)</tr>', page, re.S):
+            assert row.count('<td') == 3, row[:80]                 # one grid: label, box, words
+    quick = quick_page(['demo'], 0)
+    assert quick.count('<div class="fsec">') == 2
+    trade = trade_form(['demo'])
+    rows = re.findall(r'<tr>(.*?)</tr>', trade, re.S)
+    assert len(rows) == 10 and all(r.count('<td') == 3 and '<span class="u">' in r for r in rows)
+    assert '<i class="un">%</i>' in trade and '<i class="un">x</i>' in trade
+    res = results_page([('demo', {'since_first': {}}), ('hl', {'since_first': {}})])
+    assert res.count('<div class="fsec"><h2>') == 2
+
+
 def spec_U52_a_dca_card_folds_its_ladder_and_says_the_drop_it_covers():
     """The owner: "what am I actually risking with this row" — the
     3Commas summary box on the card, from the contract's terms."""

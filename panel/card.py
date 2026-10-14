@@ -193,8 +193,8 @@ def card(idx, botid, b, contract, belief, full=False):
     money_coin, margin_coin = esc(quote_raw), esc(margin_raw)     # P7: names from the file are text
     links = (('' if full else f"<a data-pick href='/?fleet={idx}&amp;bot={qarg(botid)}&amp;show=numbers'>numbers</a>")
              + ('' if ((contract.get('terms') or {}).get(botid) or {}).get('trade') else
-                (' · ' if not full else '') + f"<a data-pick href='/?fleet={idx}&amp;bot={qarg(botid)}&amp;show=edit'>edit</a> · "
-                f"<a href='/setup?fleet={idx}&amp;copy={qarg(botid)}'>copy</a> · "
+                (' ' if not full else '') + f"<a data-pick href='/?fleet={idx}&amp;bot={qarg(botid)}&amp;show=edit'>edit</a> "
+                f"<a href='/setup?fleet={idx}&amp;copy={qarg(botid)}'>copy</a> "
                 f"<a href='/edit?fleet={idx}&amp;bot={qarg(botid)}&amp;mode=remove'>remove"
                 '</a>'))
     # L8: a trade is not a fleet row — edit, copy and remove answered "not in

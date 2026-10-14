@@ -1756,6 +1756,21 @@ eventually pin (T1).
   so it never slides as the left scrolls. *(the owner, 2026-10-14: "make
   borders and boxs thicker, adopt the same colour scheme… it moves down a
   little, then stops")*
+- **U87** The polish pass: an exchange's heading is its name, with how
+  fresh it is on a quiet line under it; a card's buttons wrap as one row
+  with no separator dots; the side menu is a box like the right half;
+  section labels are small spaced capitals, and the right half's sections
+  are ruled apart. A card's edge lights on hover; numbers sit in columns.
+  *(the owner, 2026-10-14: "now do the polish pass")*
+- **U88** Every form row of three cells — label, value box, description —
+  sits on one grid of fixed columns, so the descriptions line up down one
+  side and the value boxes are one width, across sections and pages; each
+  section of a form, each part of the review page and each account on the
+  results page is a box (the one action, create or apply, in green). The
+  trade form keeps its unit (% or x) beside its box. *(the owner,
+  2026-10-14: "align all the descriptions on one side… the value boxes
+  also arent aligned in nearly all pages", and "border sections and stuff
+  so it is easily recognizable")*
 - **L1** A new trade joins a running fleet within a cycle. The trade watch
   stats the trades file once a cycle; a changed file's new rows are each
   built by the fleet's own builder (`main.build_market_bot`, the one every

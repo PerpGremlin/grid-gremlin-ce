@@ -41,15 +41,17 @@ def results_page(labelled):
     for label, c in labelled:
         sf = {b: v for b, v in (c.get('since_first') or {}).items() if v}
         gone = c.get('gone') or {}
+        # U88: each account in a box of its own
         if not sf and not gone:
-            parts.append(f'<h2>{html.escape(label)}</h2><p class="dim">nothing kept yet</p>')
+            parts.append(f'<div class="fsec"><h2>{html.escape(label)}</h2><p class="dim">nothing kept yet</p></div>')
             continue
         rows = ''.join(_result_row(b, v) for b, v in sorted(sf.items()))
-        parts.append(f'<h2>{html.escape(label)}</h2>{head}{rows}</table>')
+        box = f'<div class="fsec"><h2>{html.escape(label)}</h2>{head}{rows}</table>'
         if gone:
-            parts.append(f'<h3 class="dim">{html.escape(label)}: markets that left the fleet</h3>'
-                         + head + ''.join(_result_row(b, v, gone=True) for b, v in sorted(gone.items()))
-                         + '</table>')
+            box += (f'<h3 class="dim">{html.escape(label)}: markets that left the fleet</h3>'
+                    + head + ''.join(_result_row(b, v, gone=True) for b, v in sorted(gone.items()))
+                    + '</table>')
+        parts.append(box + '</div>')
     return ''.join(parts)
 
 

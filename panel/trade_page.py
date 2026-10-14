@@ -14,31 +14,34 @@ def trade_form(labels, msg='', typed=None):
     fleets = ''.join(f'<option value="{i}"{" selected" if str(i) == str(t.get("fleet", "")) else ""}>'
                      f'{html.escape(lb)}</option>' for i, lb in enumerate(labels))
     side = t.get('side', 'long')
+    # U88: three columns like the setup forms — the label, the value box with
+    # its unit beside it, the description — in a box of their own
+    def row(label, box, say='', unit=''):
+        return (f'<tr><td>{label}</td><td><span class="u">{box}<i class="un">{unit}</i></span></td>'
+                f'<td class="dim">{say}</td></tr>')
     return (f'<h1>new trade <span class="dim">— one long or short with its exit (D81)</span></h1>{msg}'
             '<form method="post" action="/trade"><input type="hidden" name="gg" value="1">'
-            '<input type="hidden" name="action" value="open"><table>'
-            f'<tr><td>account</td><td><select name="fleet">{fleets}</select></td></tr>'
-            '<tr><td>side</td><td><select name="side">'
-            f'<option{" selected" if side == "long" else ""}>long</option>'
-            f'<option{" selected" if side == "short" else ""}>short</option></select></td></tr>'
-            f'<tr><td>market</td><td><input name="symbol" value="{v("symbol", "BTCUSDT")}" size="14"> '
-            '<span class="dim">a perp like BTCUSDT</span></td></tr>'
-            f'<tr><td>investment</td><td><input name="capital" value="{v("capital")}" size="10"> '
-            '<span class="dim">the margin, in the quote coin</span></td></tr>'
-            f'<tr><td>investment, again</td><td><input name="retype_capital" value="{v("retype_capital")}" size="10"> '
-            '<span class="dim">on Mainnet only: type it a second time (D64)</span></td></tr>'
-            f'<tr><td>leverage</td><td><input name="leverage" value="{v("leverage", "1")}" size="6">x</td></tr>'
-            f'<tr><td>take profit</td><td><input name="tp" value="{v("tp")}" size="6">% '
-            '<span class="dim">beyond the entry — required: a trade is never without its exit</span></td></tr>'
-            f'<tr><td>stop</td><td><input name="stop" value="{v("stop")}" size="6">% '
-            '<span class="dim">against the entry, watched at the mark each cycle — blank for none</span></td></tr>'
-            f'<tr><td>trailing</td><td><input name="trail" value="{v("trail")}" size="6">% '
-            f'from <input name="trail_from" value="{v("trail_from")}" size="6">% '
-            '<span class="dim">optional: follows the price once it is that far in profit</span></td></tr>'
-            '<tr><td>entry</td><td><label><input type="checkbox" name="maker" value="1"'
-            f'{" checked" if t.get("maker") else ""}> as a maker order</label> '
-            '<span class="dim">unticked: at market</span></td></tr>'
-            '</table><button>open the trade</button></form>'
+            '<input type="hidden" name="action" value="open"><div class="fsec"><table>'
+            + row('account', f'<select name="fleet">{fleets}</select>', 'the fleet the trade joins')
+            + row('side', '<select name="side">'
+                  f'<option{" selected" if side == "long" else ""}>long</option>'
+                  f'<option{" selected" if side == "short" else ""}>short</option></select>')
+            + row('market', f'<input name="symbol" value="{v("symbol", "BTCUSDT")}" size="14">', 'a perp like BTCUSDT')
+            + row('investment', f'<input name="capital" value="{v("capital")}" size="10">',
+                  'the margin, in the quote coin')
+            + row('investment, again', f'<input name="retype_capital" value="{v("retype_capital")}" size="10">',
+                  'on Mainnet only: type it a second time (D64)')
+            + row('leverage', f'<input name="leverage" value="{v("leverage", "1")}" size="6">', unit='x')
+            + row('take profit', f'<input name="tp" value="{v("tp")}" size="6">',
+                  'beyond the entry — required: a trade is never without its exit', unit='%')
+            + row('stop', f'<input name="stop" value="{v("stop")}" size="6">',
+                  'against the entry, watched at the mark each cycle — blank for none', unit='%')
+            + row('trailing', f'<input name="trail" value="{v("trail")}" size="6">% from '
+                  f'<input name="trail_from" value="{v("trail_from")}" size="6">',
+                  'optional: follows the price once it is that far in profit', unit='%')
+            + row('entry', '<label><input type="checkbox" name="maker" value="1"'
+                  f'{" checked" if t.get("maker") else ""}> as a maker order</label>', 'unticked: at market')
+            + '</table></div><button>open the trade</button></form>'
             '<p class="dim">The fleet opens it within a cycle; its card appears with the next '
             'readout. A market and side another bot of the account holds is refused — the '
             'exchange keeps one position per side of a market per account.</p>')
@@ -62,5 +65,5 @@ def open_trades_html(rows_by_fleet):
     return ('<h1>trades in the files</h1><p class="dim">a trade ends itself at its take profit or '
             'stop; <b>close position</b> on its card ends it early. Clear one that has ended, by '
             'typing its name, to open another on that market and side.</p>'
-            '<table><tr><th>account</th><th>trade</th><th>terms</th><th>exit · opened</th><th></th></tr>'
-            + (rows or '<tr><td class="dim" colspan="5">no trades</td></tr>') + '</table>')
+            '<div class="fsec"><table><tr><th>account</th><th>trade</th><th>terms</th><th>exit · opened</th><th></th></tr>'
+            + (rows or '<tr><td class="dim" colspan="5">no trades</td></tr>') + '</table></div>')

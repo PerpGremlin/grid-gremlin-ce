@@ -87,8 +87,8 @@ class FleetAdminPages:
                 '<p class="dim">to revive a stopped bot, type its name in '
                 'the box on its own row and press revive (capitals do not '
                 'matter). One file per fleet; the row says whose.</p>'
-                '<table><tr><th>fleet</th><th>bot</th><th>reason</th><th></th></tr>'
-                + trows + '</table>'
+                '<div class="fsec"><table><tr><th>fleet</th><th>bot</th><th>reason</th><th></th></tr>'
+                + trows + '</table></div>'
                 '<p class="dim">a revival takes effect at the next fleet '
                 'start — the file is the truth; the process reads it at '
                 'build.</p>')

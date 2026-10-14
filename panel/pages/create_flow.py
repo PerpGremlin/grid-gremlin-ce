@@ -174,22 +174,22 @@ class CreateFlowPages:
                 from panel.whatif import section as whatif_section
                 type(self)._adapters[self._market_key(vbot)] = (time.time(),
                                                              adapter)
-                picture += whatif_section(
-                    vbot, adapter, mark, json.dumps(proposal['bot']), fi)
+                more = ('<div class="fsec">' + whatif_section(       # U88: each part boxed
+                    vbot, adapter, mark, json.dumps(proposal['bot']), fi) + '</div>')
             except Exception as e:                          # noqa: BLE001
-                picture += (f'<p class="dim">no what-if: '
-                            f'{_html.escape(str(e))}</p>')
+                more = (f'<p class="dim">no what-if: '
+                        f'{_html.escape(str(e))}</p>')
             try:                   # U73: and how it fits the market it trades
                 from ggdata.market import latest
                 from panel.fit import fit_section
-                picture += fit_section(vbot, self._bars_for(vbot), latest())
+                more += '<div class="fsec">' + fit_section(vbot, self._bars_for(vbot), latest()) + '</div>'
             except Exception as e:                          # noqa: BLE001
-                picture += (f'<p class="dim">no market fit: '
-                            f'{_html.escape(str(e))}</p>')
-            say += (f'<h1 class="dim">in plain words</h1><p class="say">'
-                    f'{_html.escape(sentence(vbot, mark))}</p>' + picture)
+                more += (f'<p class="dim">no market fit: '
+                         f'{_html.escape(str(e))}</p>')
+            say += (f'<div class="fsec"><h1 class="dim">in plain words</h1><p class="say">'
+                    f'{_html.escape(sentence(vbot, mark))}</p>' + picture + '</div>' + more)
         if mode in ('create', 'edit'):
-            say += ('<form method="post" action="/setup">'
+            say += ('<div class="fsec"><form method="post" action="/setup">'
                     '<input type="hidden" name="gg" value="1">'
                     '<input type="hidden" name="how" value="reopen">'
                     '<input type="hidden" name="orig" value="'
@@ -202,12 +202,14 @@ class CreateFlowPages:
                 # U14: the rehearsal, one click from the summary
                 say += ('<p>' + rehearse_bot_form(json.dumps(proposal['bot']))
                         + '</p>')
+            say += '</div>'
         verb = {'create': 'create this bot', 'edit': 'apply the change',
                 'remove': 'remove this bot'}[mode]
         # U17: the apply box sits right under the summary; the file diff
         # and the dry-run orders fold away for whoever wants them
         return self._page(
             f'<h1>{html.escape(botid)} — {html.escape(mode)}: gates passed</h1>' + say +
+            '<div class="fsec go">'                     # U88: the one action, its own box
             f'<form method="post" action="/apply" class="apply">'
             f'<input type="hidden" name="gg" value="1">'
             f'<input type="hidden" name="fleet" value="{fi}">'
@@ -220,7 +222,7 @@ class CreateFlowPages:
             + f'<button>{verb}</button></form>'
             '<p class="dim">this writes the fleet file. A running fleet '
             'takes changed terms within seconds; a new bot, a removed one '
-            'or a changed range waits for a restart (F12).</p>'
+            'or a changed range waits for a restart (F12).</p></div>'
             '<details><summary>the change to the file</summary>'
             f'<pre class="dim">{html.escape(diffs)}</pre></details>'
             '<details><summary>the orders it would place</summary>'
