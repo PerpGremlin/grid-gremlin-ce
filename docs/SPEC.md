@@ -1777,6 +1777,16 @@ eventually pin (T1).
   frame is gone; the number's colour carries the sign); the footer is ruled
   off with smaller buttons, and none of its links starts with a dot.
   *(the owner, 2026-10-14: "lets do the cleaner cards next")*
+- **U90** A grid card splits its total as Bybit and Pionex do: **grid
+  profit**, the matched trips (R12) after fees, and **trend**, the rest (the
+  held coins at the mark, what a slide realised, funding); the two sum to
+  the total exactly. Beneath them, the price at which the total would be
+  nothing, before the closing fee: "back to even at" when under water, "in
+  profit while above/below" when not. A linear book only; a bot without a
+  matched trip (a DCA, a trade) keeps realised and open. *(the owner,
+  2026-10-14: a grid "could be thousands of dollars in profit, but
+  simultaneously look underwater … exchanges seem to have the idea"; "yes on
+  the cards")*
 - **L1** A new trade joins a running fleet within a cycle. The trade watch
   stats the trades file once a cycle; a changed file's new rows are each
   built by the fleet's own builder (`main.build_market_bot`, the one every

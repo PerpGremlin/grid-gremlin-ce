@@ -267,13 +267,13 @@ def card(idx, botid, b, contract, belief, full=False):
         slim_head = (f'<div class="pnl {_num_cls(total)}">'
                      f'<span class="big {_num_cls(total)}">{signed(total)}</span> {money_coin}{coin}{roi}'
                      f' <span class="dim">· {span}</span>'                 # D63: what the figure covers
-                     f'<div class="parts">{pnl_parts(net, b["unreal_at_mark"], b.get("funding"))}</div>'
-                     f'{run_rate(b, contract, cap, bool(((contract.get("terms") or {}).get(botid) or {}).get("trade")) or ((contract.get("terms") or {}).get(botid) or {}).get("strategy") == "martingale")}'
+                     + (grid_split(b, total) or f'<div class="parts">{pnl_parts(net, b["unreal_at_mark"], b.get("funding"))}</div>')
+                     + f'{run_rate(b, contract, cap, bool(((contract.get("terms") or {}).get(botid) or {}).get("trade")) or ((contract.get("terms") or {}).get(botid) or {}).get("strategy") == "martingale")}'
                      '</div>')
         head = (f'<div class="pnl {_num_cls(total)}">'
                 f'<span class="big {_num_cls(total)}">{signed(total)}</span> '
                 f'{money_coin}{coin} <span class="dim">after fees, {span}</span>'
-                f'<div class="parts">'
+                f'{grid_split(b, total)}<div class="parts">'
                 f'{pnl_parts(net, b["unreal_at_mark"], b.get("funding"))}'
                 f'</div>{run_rate(b, contract, ((contract.get("terms") or {}).get(botid) or {}).get("capital"), bool(((contract.get("terms") or {}).get(botid) or {}).get("trade")) or ((contract.get("terms") or {}).get(botid) or {}).get("strategy") == "martingale")}'
                 f'{since_first_line(contract, botid)}</div>')
@@ -488,6 +488,31 @@ def pnl_parts(net, unreal, funding=0.0):
                 f'<b class="{_num_cls(v)}">{v:+,.2f}</b>')
     return (f'realised after fees {part(net)} · funding {part(funding)} · '
             f'open {part(unreal)}')
+
+
+def grid_split(b, total):
+    """U90 (the owner, 2026-10-14: a grid "could be thousands of dollars in
+    profit, but simultaneously look underwater"): the total as Bybit and
+    Pionex split it — grid profit, the matched trips (R12) after fees, and
+    trend, the rest (the held coins at the mark, what a slide realised,
+    funding), the two summing to the total exactly — and the price at which
+    the total would be nothing, before the closing fee. A linear book only
+    (an inverse book's dollars move with 1/price); '' for a bot without a
+    matched trip (a DCA or a trade keeps realised and open)."""
+    if total is None or not b.get('gap_trips') or b.get('gap_realized') is None:
+        return ''
+    grid = b['gap_realized'] - b['fees']
+    trend = total - grid
+    rows = [('grid profit', f'<b class="{_num_cls(grid)}">{grid:+,.2f}</b>'),
+            ('trend', f'<b class="{_num_cls(trend)}">{trend:+,.2f}</b>')]
+    pos, mark = b.get('position') or 0.0, b.get('mark')
+    if abs(pos) > 1e-12 and mark and not b.get('inverse'):
+        even = mark - total / pos
+        if even > 0:
+            rows.append(('back to even at' if total < 0 else
+                         f'in profit while {"above" if pos > 0 else "below"}', f'<b>{even:,.6g}</b>'))
+    return ('<div class="split">' + ''.join(f'<span>{k}</span><span class="num">{v}</span>' for k, v in rows)
+            + '</div>')
 
 
 def since_first_total(sf):
