@@ -1108,6 +1108,21 @@ stands unless the owner corrects it.
 - **D125 — Constant-mix rebalancing published (2026-10-15).** As D119.
 - **D126 — Market making at a retail fee tier published (2026-10-15).** As
   D119.
+- **D127 — The edge studies published, the "no"s included (2026-10-15).**
+  The owner: "i still want to publish our findings. idc if it isnt fruitful
+  for traders, i canre about truth and numbers". Six pages, each read here
+  first, preview then public as before: **D127** the 2% stop / 4% target
+  bracket bot; **D128** time patterns; **D129** crowding and forced selling
+  (the bunched control and the checks added after the first look told
+  plainly); **D130** buying a sharp drop (the flawed same-day control
+  stated); **D131** scaling the carry (its limits first); **D132** momentum
+  across coins (half the last year from squeezed coins' funding stated).
+  Research, not a recommendation; past prices only; no account figures.
+- **D128 — Time patterns published (2026-10-15).** As D127.
+- **D129 — Crowding and forced selling published (2026-10-15).** As D127.
+- **D130 — Buying a sharp drop published (2026-10-15).** As D127.
+- **D131 — Scaling the carry published (2026-10-15).** As D127.
+- **D132 — Momentum across coins published (2026-10-15).** As D127.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
