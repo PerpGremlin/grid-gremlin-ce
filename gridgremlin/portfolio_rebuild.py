@@ -11,7 +11,13 @@ disagrees with the stored one (a fill the replay could not see), and refused
 while the fleet runs (the row is held in memory and written every cycle).
 Stop the fleet first.
 
-  python3 -m gridgremlin.portfolio_rebuild <fleet.json> <name> [--apply]
+  python3 -m gridgremlin.portfolio_rebuild <fleet.json> <name> [--spot] [--apply]
+
+--spot (H9b, 2026-10-15): the spot coins' average-cost books instead,
+replayed from the venue's record since the anchor — every spot fill, and
+the coins an inverse hedge's funding and realised P&L added, each at the
+price of its moment — refused when the replayed coins differ from the
+row's by more than dust.
 """
 import json
 import sys
@@ -49,9 +55,121 @@ def compare(stored, rebuilt):
     return lines, bad
 
 
+def rebuild_spot(events):
+    """H9b: a spot coin's average-cost book replayed from the venue's own
+    record, oldest first. events: ('fill', side, qty, price, fee) for a
+    spot fill; ('coin', amount, price) for coins that came or went without
+    one — an inverse hedge's funding paid in the coin, its realised coin
+    and fees — at the price of that moment."""
+    from .portfolio_bot import spot_fill, spot_sync
+    book = {'coins': 0.0, 'cost': 0.0, 'realized': 0.0, 'fees': 0.0}
+    for e in events:
+        if e[0] == 'fill':
+            spot_fill(book, e[1], float(e[2]), float(e[3]), float(e[4]))
+        else:
+            spot_sync(book, max(book['coins'] + float(e[1]), 0.0), float(e[2]))
+    return book
+
+
+def hedge_coin_events(fills):
+    """An inverse hedge's fills, oldest first, as the coins they realised
+    (less their fee in the coin) at each fill's price — the coins H8 counts
+    in the row's book."""
+    from .portfolio_bot import _apply
+    book = {'position': 0.0, 'avg': 0.0, 'realized': 0.0, 'fees': 0.0}
+    out = []
+    for f in fills:
+        before = book['realized'] - book['fees']
+        _apply(book, f['side'], float(f['price']), float(f['qty']), float(f.get('fee') or 0.0), True)
+        delta = book['realized'] - book['fees'] - before
+        if abs(delta) > 1e-15:
+            out.append((int(f['time_ms']), ('coin', delta, float(f['price']))))
+    return out
+
+
+SPOT_TOL = 0.005        # the replayed coins may differ from the row's by dust, not more
+
+
+def spot_compare(held, rebuilt, prices):
+    """Lines saying each coin's replayed book beside the coins the row
+    holds, and the coins that differ by more than SPOT_TOL (refused)."""
+    lines, bad = [], []
+    for c in sorted(rebuilt):
+        b, have = rebuilt[c], held.get(c, 0.0)
+        if abs(b['coins'] - have) > SPOT_TOL * max(have, 1e-12):
+            bad.append(c)
+        avg = b['cost'] / b['coins'] if b['coins'] > 1e-12 else 0.0
+        lines.append(f"{c}: replayed {b['coins']:.10g} coins against {have:.10g} held · average cost "
+                     f"{avg:,.6g} · floating {b['coins'] * prices.get(c, 0.0) - b['cost']:+,.2f}"
+                     f" · realised {b['realized']:+,.2f}")
+    return lines, bad
+
+
+def funding_coin_events(client, symbol, since_ms, now_ms):
+    """An inverse leg's funding settlements in its coin, each with the
+    price it settled at (execPrice) — read here, from the executions, so
+    the engine's own reader stays as it is."""
+    out, seen = [], set()
+    start = int(since_ms)
+    while start < now_ms:
+        end = min(start + 7 * 86_400_000, now_ms)
+        cursor = None
+        for _ in range(50):
+            page = client.executions_page('inverse', symbol, start, end, cursor, exec_type='Funding')
+            for e in page.get('list', []):
+                key = (e.get('execId'), e.get('side'))
+                if e.get('execType') != 'Funding' or key in seen or e.get('side') != 'Sell':
+                    continue
+                seen.add(key)
+                out.append((int(e.get('execTime') or 0),
+                            ('coin', -float(e.get('execFee') or 0.0), float(e.get('execPrice') or 0.0))))
+            cursor = page.get('nextPageCursor')
+            if not cursor:
+                break
+        start = end
+    return out
+
+
+def main_spot(bot, row, client, now_ms, apply, state):
+    """H9b: every spot coin's cost book rebuilt from the anchor."""
+    prices = {c: float(client.read_symbol_truth('spot', leg['symbol'])['mark'] or 0.0)
+              for c, leg in bot.legs['spot'].items()}
+    held, rebuilt = {}, {}
+    for coin, leg in bot.legs['spot'].items():
+        events = [(int(f['time_ms']), ('fill', f['side'], f['qty'], f['price'], f.get('fee') or 0.0))
+                  for f in bot._own_fills('spot', leg['symbol'], row['since_ms'], now_ms)]
+        hedge = bot.legs['hedge'].get(coin)
+        if hedge and hedge['market_type'] == 'inverse':
+            fills = sorted(bot._own_fills('inverse', hedge['symbol'], row['since_ms'], now_ms),
+                           key=lambda f: (f['time_ms'], f['exec_id']))
+            events += hedge_coin_events(fills)
+            events += funding_coin_events(client, hedge['symbol'], row['since_ms'], now_ms)
+        events.sort(key=lambda e: e[0])
+        print(f'{coin}: {len(events)} events since the anchor')
+        rebuilt[coin] = rebuild_spot([e[1] for e in events])
+        inv = sum(b['realized'] - b['fees'] for k, b in (row.get('books') or {}).items()
+                  if k == f'hedge:{coin}' and hedge and hedge['market_type'] == 'inverse')
+        held[coin] = row['coins'].get(coin, 0.0) + inv
+    lines, bad = spot_compare(held, rebuilt, prices)
+    print('\n'.join(lines))
+    if bad:
+        print(f'refused: the replayed coins disagree on {", ".join(bad)} — something the replay could not see')
+        return 1
+    if not apply:
+        print('dry run — nothing written; --apply replaces the spot cost books')
+        return 0
+    costs = row.setdefault('spot_cost', {})
+    for c, b in rebuilt.items():
+        costs[c] = dict(b, since_ms=row['since_ms'], rebuilt_ms=now_ms)
+    state.set(bot.botid, row)
+    print(f"{bot.botid}: spot cost books rebuilt from the venue's record and written")
+    return 0
+
+
 def main(argv):
     apply = '--apply' in argv
-    argv = [a for a in argv if a != '--apply']
+    spot = '--spot' in argv
+    argv = [a for a in argv if a not in ('--apply', '--spot')]
     if len(argv) != 2:
         print(__doc__.strip())
         return 2
@@ -86,6 +204,8 @@ def main(argv):
         print(f'{bot.botid}: no stored book — nothing to rebuild')
         return 1
     now_ms = int(time.time() * 1000)
+    if spot:
+        return main_spot(bot, row, client, now_ms, apply, state)
     fills_by_book = {}
     for kind in ('hedge', 'short'):
         for coin, leg in bot.legs[kind].items():

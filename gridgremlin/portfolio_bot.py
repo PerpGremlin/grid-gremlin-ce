@@ -920,7 +920,8 @@ class PortfolioBot:
                          'cost': costs[c]['cost'],
                          'avg': costs[c]['cost'] / coins[c] if coins[c] > 1e-12 else None,
                          'floating': coins[c] * prices[c] - costs[c]['cost'],
-                         'realized': costs[c]['realized'], 'since_ms': costs[c]['since_ms']}
+                         'realized': costs[c]['realized'], 'since_ms': costs[c]['since_ms'],
+                         'rebuilt': bool(costs[c].get('rebuilt_ms'))}
                      for c in coins},
             'legs': legs_view,
             'stables': {k: v.get('wallet_balance', 0.0) for k, v in (wallet.get('coins') or {}).items()

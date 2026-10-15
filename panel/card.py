@@ -672,6 +672,15 @@ def holdings_table(v, q, now_ms):
         size = (f"{n(g['size'], ',.0f')} USD" if g['inverse'] else f"{n(g['size'])} {esc(g['coin'])}")
         rows += (f"<tr><td>{what}</td><td>−{size}</td><td>{n(g['avg'])}</td><td>{n(g['mark'])}</td>"
                  f"<td></td>{money(g['unreal'])}{money(g['realized'])}</tr>")
+    # H9b: each coin with its hedge, the pair's result — a short of the coin
+    # gains what the coins lose; the inverse contract's convexity is the rest
+    for c, h in sorted((v.get('spot') or {}).items()):
+        hedged = [g for g in v.get('legs') or [] if g['coin'] == c and g['kind'] == 'hedge']
+        if hedged:
+            rows += (f"<tr class='net'><td>{esc(c)} net, with its hedge</td><td colspan=4 class='dim'>"
+                     "the coins' floating P&amp;L and the hedge's open P&amp;L together</td>"
+                     f"{money(h['floating'] + sum(g['unreal'] for g in hedged))}"
+                     f"{money(h['realized'] + sum(g['realized'] for g in hedged))}</tr>")
     if v.get('borrowed'):
         rows += (f"<tr><td>loan</td><td>−{v['borrowed']:,.2f} {q}</td><td colspan=3 class='dim'>"
                  + (f"{v['borrow_apr']:.2%}/yr" if v.get('borrow_apr') is not None else '')
@@ -683,7 +692,10 @@ def holdings_table(v, q, now_ms):
     if not rows:
         return ''
     first = min((x for x in since if x), default=0)
-    note = (f"<div class='dim'>coins' cost counted from "
+    rebuilt = all((v.get('spot') or {}).get(c, {}).get('rebuilt') for c in (v.get('spot') or {}))
+    when = _t.strftime('%Y-%m-%d %H:%M UTC', _t.gmtime(first / 1000)) if first else ''
+    note = (f"<div class='dim'>coins' cost rebuilt from the exchange's own record since {when}</div>"
+            if rebuilt and first else f"<div class='dim'>coins' cost counted from "
             f"{_t.strftime('%Y-%m-%d %H:%M UTC', _t.gmtime(first / 1000))}: before that, "
             "at the price of the first read</div>" if first else '')
     return ('<h3>what the account holds</h3><table><tr><th></th><th>size</th><th>average</th>'
