@@ -1,0 +1,13 @@
+[Unit]
+Description=Grid Gremlin v3 paper momentum book — daily; Mondays form and settle the week
+
+[Timer]
+# 00:22 is off every watchdog slot (*:1/5, *:4/5), the ledger (:27), the
+# market (:33) and logrotate (:52). Persistent: a run missed while the box
+# was down is caught up, each missed Monday formed from its own candles and
+# marked late.
+OnCalendar=*-*-* 00:22:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

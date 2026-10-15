@@ -1,0 +1,8 @@
+[Unit]
+Description=Grid Gremlin v3 paper momentum book (D134) — public prices only, nothing sent to any venue, kept in logs/momentum-paper.json
+
+[Service]
+Type=oneshot
+WorkingDirectory={{REPO_DIR}}
+Nice=10
+ExecStart=/usr/bin/python3 -m gridgremlin.momentum_paper run

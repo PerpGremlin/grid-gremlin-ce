@@ -2154,6 +2154,30 @@ that pins it (T1).
   keys on either venue refuses by name. The fleet lock is named for the
   account too, so two accounts on one box are two locks.
 
+## Q — the paper momentum book (D134)
+
+- **Q1** The book is the momentum study's one fixed setting, unchanged: at
+  each Monday 00:00 UTC, the 20 USDT perpetuals most traded over the last
+  30 days among those with 60 days of candles, ranked by their return over
+  the last 4 weeks to Sunday's close; long the top fifth, short the bottom
+  fifth, half the money each side, equal weights, held to the next Monday's
+  open. Costs: the taker fee on every change of weight, and the funding
+  paid or received while held. A week is formed from candles up to its
+  Monday's open alone: the same book whatever came after.
+- **Q2** Weeks form from START (2026-10-19) 15 minutes after each Monday's
+  open and settle 15 minutes after the next; a run that missed Mondays
+  catches up in order, each formed from its own candles and marked `late`.
+  A settled week is frozen: no later run rewrites it. Each keeps every
+  universe member's return and funding (random books are scored on the
+  same weeks) and its gross, fee, funding and net.
+- **Q3** A held coin the venue stops answering for before the week settles
+  is closed at the last close a daily run kept (the study's rule for a
+  delisted coin), never at zero.
+- **Q4** The setting is fixed: a ledger written for another setting is
+  refused, not re-scored. A new setting is a new book and a new D-number.
+- **Q5** Paper is paper: the book imports no venue code, reads public
+  prices with plain GETs, holds no key, and sends nothing anywhere.
+
 ## U — the panel's setup form
 
 - **U1** The advanced form reaches every key the config accepts: its schema is
