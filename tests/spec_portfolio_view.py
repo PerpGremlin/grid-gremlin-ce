@@ -211,3 +211,37 @@ def spec_H9_the_full_card_shows_every_holding_the_loan_and_the_cash():
         assert words in full, words
     assert 'USDT cash' not in full                            # a loan is not spare cash
     assert 'what the account holds' not in card(0, 'pfocarry', None, CONTRACT, belief, full=False)
+
+
+def spec_H9b_spot_costs_rebuild_from_the_venues_record():
+    """Bought 1 BTC at 100 and 1 at 120; the inverse hedge's funding paid
+    0.01 BTC at 110; the hedge realised 0.02 BTC at 90 (its fee 0.001 BTC):
+    the book holds 2.029 coins at 220 + 1.1 + 1.71 = 222.81. A replay that
+    disagrees with the coins held by more than dust is refused."""
+    from gridgremlin.portfolio_rebuild import hedge_coin_events, rebuild_spot, spot_compare
+    events = [('fill', 'buy', 1.0, 100.0, 0.0), ('fill', 'buy', 1.0, 120.0, 0.0),
+              ('coin', 0.01, 110.0), ('coin', 0.019, 90.0)]
+    b = rebuild_spot(events)
+    assert abs(b['coins'] - 2.029) < 1e-12 and abs(b['cost'] - (220.0 + 1.1 + 0.019 * 90.0)) < 1e-9
+    hedge = hedge_coin_events([{'time_ms': 1, 'side': 'sell', 'price': 100.0, 'qty': 1000.0, 'fee': 0.001},
+                               {'time_ms': 2, 'side': 'buy', 'price': 90.0, 'qty': 1000.0, 'fee': 0.0}])
+    assert [t for t, _ in hedge] == [1, 2]
+    assert abs(hedge[0][1][1] + 0.001) < 1e-12                    # the fee, in the coin
+    assert abs(hedge[1][1][1] - 1000.0 * (1 / 90.0 - 1 / 100.0)) < 1e-12 and hedge[1][1][2] == 90.0
+    lines, bad = spot_compare({'BTC': 2.029}, {'BTC': b}, {'BTC': 130.0})
+    assert bad == [] and 'replayed 2.029 coins against 2.029 held' in lines[0]
+    assert spot_compare({'BTC': 2.2}, {'BTC': b}, {'BTC': 130.0})[1] == ['BTC']
+
+
+def spec_H9b_each_coin_shows_its_net_with_its_hedge():
+    """The coins' floating P&L and the hedge's open P&L, side by side and
+    summed: the pair's result; and a rebuilt book says so."""
+    from panel.card import card
+    view = dict(VIEW, spot={'BTC': {'coins': 0.75, 'price': 60000.0, 'value': 45000.0, 'cost': 48000.0,
+                                    'avg': 64000.0, 'floating': -3000.0, 'realized': 0.0,
+                                    'since_ms': 86_400_000, 'rebuilt': True}},
+                legs=[{'kind': 'hedge', 'coin': 'BTC', 'symbol': 'BTCUSD', 'inverse': True, 'size': 48000.0,
+                       'avg': 64000.0, 'mark': 60000.0, 'unreal': 3200.0, 'realized': 0.0}])
+    full = card(0, 'pfocarry', None, CONTRACT, {'pfocarry': {'alive': True, 'portfolio': view}}, full=True)
+    assert 'BTC net, with its hedge' in full and '>200.00<' in full
+    assert "rebuilt from the exchange's own record since 1970-01-02" in full and 'counted from' not in full

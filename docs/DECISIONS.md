@@ -1155,6 +1155,9 @@ stands unless the owner corrects it.
   sides, on Bybit's official collateral rates and liquidation rule. One
   account with the coins paid for survived every crash; separate accounts
   and borrowing did not pay. Preview, then public on his proofread (D135).
+- **D137 — D131 retired (2026-10-15).** The owner, of the first carry-scaling
+  page once D136 replaced it: "retire 37". Never public; the study stays in
+  STUDY.md as the step before D136.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

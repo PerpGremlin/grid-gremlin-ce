@@ -2113,6 +2113,16 @@ that pins it (T1).
   stablecoins in the wallet that count as collateral. Costs count from the
   first read after this build, and the card says from when.
   *(the owner, 2026-10-15: "it should show each position and its pnl")*
+- **H9b** A portfolio row's spot cost books rebuild from the venue's own
+  record (`portfolio_rebuild --spot`): every spot fill since the anchor,
+  and the coins an inverse hedge's funding and realised P&L added, each at
+  the price of its moment, replayed through H9's book; dry-run unless told
+  to apply; refused while the fleet runs, and refused when the replayed
+  coins differ from the row's by more than dust. The card says whether the
+  costs were rebuilt or count from a first read, and shows each coin's
+  net with its hedge: the coins' floating P&L and the hedge's open P&L
+  together, the pair's result. *(the owner, 2026-10-15: the coins' P&L read
+  near zero from the first read; Bybit's demo shows no spot P&L)*
 - **H6** The card says the three truths. A portfolio's card shows the
   stack's value and coins, one line per asset (weight target → actual,
   hedge ratio target → actual, coins hedged, the regime word when the tilt
