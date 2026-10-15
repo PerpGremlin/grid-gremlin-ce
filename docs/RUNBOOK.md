@@ -38,6 +38,7 @@ does) and `docs/SPEC.md` (why it is pinned that way).
 | `grid-gremlin3-logrotate.timer` | hourly: rotation, then archive compression | the disk alarm catches it |
 | `grid-gremlin3-market.timer`, `-market-report.timer` | hourly readings; reports at 00/08/16 UTC | cards lose the market line |
 | `grid-gremlin3-archive.timer`, `-digest.timer` | 23:56 the day's results; 23:58 the digest | no digest |
+| `grid-gremlin3-momentum-paper.timer` (optional) | 00:22 daily: a paper momentum book on public prices, nothing sent anywhere; `python3 -m gridgremlin.momentum_paper show` | a missed Monday is caught up, marked late |
 
 `systemctl --user status <unit>` · `journalctl --user -u <unit> -n 50` ·
 the fleet logs: `logs/fleet-<fleet>.log` (grep the botid).

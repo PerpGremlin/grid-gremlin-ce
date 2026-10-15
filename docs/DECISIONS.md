@@ -1126,6 +1126,27 @@ stands unless the owner corrects it.
 - **D133 — Momentum tested again on 2018–2020 spot, published (2026-10-15).**
   As D127: the follow-up D132 named, the setting fixed before any older
   price was read.
+- **D134 — A paper momentum book, scored against random books (2026-10-15).**
+  The owner, of the live paper book the momentum studies pointed to: "yes
+  to all". Narrowed to blue chips at his request first, momentum lost
+  clearly (2021–2026: every lookback lost, the fixed one beating 26% of
+  random books), so he chose the top-20 setting with its risk stated
+  ("also 3"): small coins can go to zero, each is capped at 12.5% and the
+  60% stop ends the test. The study's fixed setting runs forward from Monday 2026-10-19
+  on Binance's public daily candles and funding (SPEC Q): no orders, no
+  keys, a daily timer, a frozen weekly ledger. It is judged by the score
+  the research side committed before the first trade: looks at 52 and 104
+  weeks; a pass needs a profit and a Sharpe above 97.5% of 1,000 random
+  books on the same weeks; a 60% drop from the peak, under half the random
+  books beaten at week 26, or the ledger drifting from the rebuild ends it
+  as a fail. Clearing the bar takes about a year at the best Sharpe seen,
+  four or more at the tuning years'. Nothing trades from it unless it
+  passes and the owner gives a new D-number.
+- **D135 — Momentum among blue chips only, for the preview (2026-10-15).**
+  The owner asked for momentum narrowed to Bitcoin and the top coins; the
+  page shows it lost (D134's reason for the top-20 setting). His standing
+  rule from today: every finished study goes to the site's preview, and
+  public only after he has proofread it there and said yes.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

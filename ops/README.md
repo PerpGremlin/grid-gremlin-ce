@@ -140,7 +140,7 @@ keys as it reads the file. Per fleet: `fleet.service` →
 `watchdog-failed.service` → `grid-gremlin3-<fleet>-watchdog.*` /
 `grid-gremlin3-<fleet>-watchdog-failed.service`. Once per box, listing every
 fleet file in `{{MORE_FLEET_CONFIGS}}`: `logrotate.*`, `fills.*`, `archive.*`,
-`digest.*`, `market.*`, `market-report.*` → `grid-gremlin3-<name>.*`; `phone.service` →
+`digest.*`, `market.*`, `market-report.*`, `momentum-paper.*` → `grid-gremlin3-<name>.*`; `phone.service` →
 `grid-gremlin3-phone.service`; `panel.service` → `gg-panel.service`. The
 panel shows the fleets in the order its unit names them — the owner's: the
 Bybit accounts first, Hyperliquid after (U59).
@@ -152,7 +152,8 @@ systemctl --user enable --now grid-gremlin3-<fleet>.service           # each fle
 systemctl --user enable --now grid-gremlin3-<fleet>-watchdog.timer    # each fleet
 systemctl --user enable --now grid-gremlin3-logrotate.timer grid-gremlin3-fills.timer \
   grid-gremlin3-archive.timer grid-gremlin3-digest.timer \
-  grid-gremlin3-market.timer grid-gremlin3-market-report.timer
+  grid-gremlin3-market.timer grid-gremlin3-market-report.timer \
+  grid-gremlin3-momentum-paper.timer
 systemctl --user enable --now grid-gremlin3-phone.service gg-panel.service
 loginctl enable-linger $USER        # units survive logout
 ```
