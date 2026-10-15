@@ -1123,6 +1123,9 @@ stands unless the owner corrects it.
 - **D130 — Buying a sharp drop published (2026-10-15).** As D127.
 - **D131 — Scaling the carry published (2026-10-15).** As D127.
 - **D132 — Momentum across coins published (2026-10-15).** As D127.
+- **D133 — Momentum tested again on 2018–2020 spot, published (2026-10-15).**
+  As D127: the follow-up D132 named, the setting fixed before any older
+  price was read.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
