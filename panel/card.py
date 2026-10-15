@@ -621,6 +621,7 @@ def portfolio_card(idx, botid, contract, belief, full=False):
                 + (f" · {due}" if due else '') + '</div>')
         body = (f'<table><tr><th>asset</th><th>weight</th><th>hedge ratio</th>'
                 f'<th>coins hedged</th><th>coins held</th><th></th></tr>{rows}</table>'
+                + (holdings_table(v, q, contract['generated_ms']) if full else '')
                 + (('<div class="numbers"><h3>the numbers</h3><table>'
                 f"<tr><td>value</td>{money(v.get('value'), cls=False)}</tr>"
                 f"<tr><td>anchor</td>{money(v.get('anchor'), cls=False)}</tr>"
@@ -647,6 +648,47 @@ def portfolio_card(idx, botid, contract, belief, full=False):
             f'<div class="two"><div>{head}</div><div>{facts}</div></div>'
             + (fold(idx, botid, body, word='assets') if body else '')          # U58
             + f'<div class="dim foot"><span>{esc(botid)}</span><span>{links}</span></div></div>')
+
+
+def holdings_table(v, q, now_ms):
+    """The carry view (the owner, 2026-10-15): everything the account holds
+    for the row, each with its own result — the coins with their floating
+    P&L at the average cost, every short with its open and realised P&L,
+    the loan as the debt it is, and the stablecoins in the wallet that
+    count as collateral."""
+    import time as _t
+
+    def n(x, f=',.6g'):
+        return '—' if x is None else format(x, f)
+    rows = ''
+    since = []
+    for c, h in sorted((v.get('spot') or {}).items()):
+        rows += (f"<tr><td>{esc(c)} spot</td><td>{n(h['coins'])}</td><td>{n(h.get('avg'))}</td>"
+                 f"<td>{n(h['price'])}</td><td>{n(h['value'], ',.2f')}</td>{money(h['floating'])}"
+                 f"{money(h['realized'])}</tr>")
+        since.append(h.get('since_ms') or 0)
+    for g in v.get('legs') or []:
+        what = f"{esc(g['symbol'])} {'hedge' if g['kind'] == 'hedge' else 'short'}"
+        size = (f"{n(g['size'], ',.0f')} USD" if g['inverse'] else f"{n(g['size'])} {esc(g['coin'])}")
+        rows += (f"<tr><td>{what}</td><td>−{size}</td><td>{n(g['avg'])}</td><td>{n(g['mark'])}</td>"
+                 f"<td></td>{money(g['unreal'])}{money(g['realized'])}</tr>")
+    if v.get('borrowed'):
+        rows += (f"<tr><td>loan</td><td>−{v['borrowed']:,.2f} {q}</td><td colspan=3 class='dim'>"
+                 + (f"{v['borrow_apr']:.2%}/yr" if v.get('borrow_apr') is not None else '')
+                 + "</td>" + money(-(v.get('interest') or 0.0)) + "<td class='dim'>interest paid</td></tr>")
+    for coin, bal in sorted((v.get('stables') or {}).items()):
+        if bal > 0:
+            rows += (f"<tr><td>{esc(coin)} cash</td><td>{bal:,.2f}</td><td colspan=3 class='dim'>"
+                     "collateral, counted in full</td><td></td><td></td></tr>")
+    if not rows:
+        return ''
+    first = min((x for x in since if x), default=0)
+    note = (f"<div class='dim'>coins' cost counted from "
+            f"{_t.strftime('%Y-%m-%d %H:%M UTC', _t.gmtime(first / 1000))}: before that, "
+            "at the price of the first read</div>" if first else '')
+    return ('<h3>what the account holds</h3><table><tr><th></th><th>size</th><th>average</th>'
+            '<th>price</th><th>value</th><th>open P&amp;L</th><th>realised</th></tr>'
+            f'{rows}</table>{note}')
 
 
 def holding_html(pos, avg, mark, botid, inverse=False, quote=None):

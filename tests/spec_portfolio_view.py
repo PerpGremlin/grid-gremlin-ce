@@ -169,3 +169,45 @@ def spec_H8b_a_portfolio_rows_hedge_books_rebuild_from_the_venues_fills():
     assert abs(lin['position'] - 0.006) < 1e-12 and abs(lin['realized'] - 4.0) < 1e-9 and abs(lin['fees'] - 0.56) < 1e-12
     _, bad = compare({'hedge:BTC': dict(lin, position=0.01)}, {'hedge:BTC': lin})
     assert bad == ['hedge:BTC']                                             # a fill unseen: refused
+
+
+def spec_H9_the_carry_view_holds_each_coin_at_its_average_cost():
+    """Buy 1 BTC at 100 (fee 0.1 quote, taken as 0.001 coin) and 1 at 120:
+    1.999 coins cost 220. Sell 1 at 130 (fee 0.13): realised 130 − 110.055
+    − 0.13; the rest keeps its average. A coin that arrives without a fill
+    joins at the price of the moment; one that leaves takes the average."""
+    from gridgremlin.portfolio_bot import spot_fill, spot_sync
+    b = {'coins': 0.0, 'cost': 0.0, 'realized': 0.0, 'fees': 0.0}
+    spot_fill(b, 'buy', 1.0, 100.0, 0.1)
+    spot_fill(b, 'buy', 1.0, 120.0, 0.0)
+    assert abs(b['coins'] - 1.999) < 1e-12 and abs(b['cost'] - 220.0) < 1e-12
+    avg = 220.0 / 1.999
+    spot_fill(b, 'sell', 1.0, 130.0, 0.13)
+    assert abs(b['realized'] - (130.0 - avg - 0.13)) < 1e-9
+    assert abs(b['cost'] / b['coins'] - avg) < 1e-9
+    spot_sync(b, b['coins'] + 0.5, 140.0)                      # funding paid in the coin
+    assert abs(b['cost'] - (0.999 * avg + 0.5 * 140.0)) < 1e-9
+    before = b['cost'] / b['coins']
+    spot_sync(b, b['coins'] / 2, 90.0)                        # the wallet's bound took half
+    assert abs(b['cost'] / b['coins'] - before) < 1e-9
+
+
+def spec_H9_the_full_card_shows_every_holding_the_loan_and_the_cash():
+    """Spot coins with their floating P&L, each short with its open and
+    realised P&L, the loan as a debt, spare stablecoins as collateral, and
+    from when the costs count — on the full card only."""
+    from panel.card import card
+    view = dict(VIEW, borrowed=5000.0, leverage=1.5, borrow_apr=0.04, interest=12.5,
+                spot={'BTC': {'coins': 0.75, 'price': 60000.0, 'value': 45000.0, 'cost': 42000.0,
+                              'avg': 56000.0, 'floating': 3000.0, 'realized': 0.0, 'since_ms': 86_400_000}},
+                legs=[{'kind': 'hedge', 'coin': 'BTC', 'symbol': 'BTCUSD', 'inverse': True, 'size': 45000.0,
+                       'avg': 56000.0, 'mark': 60000.0, 'unreal': -3000.0, 'realized': 4.0}],
+                stables={'USDC': 250.0, 'USDT': -5000.0})
+    belief = {'pfocarry': {'alive': True, 'portfolio': view}}
+    full = card(0, 'pfocarry', None, CONTRACT, belief, full=True)
+    for words in ('what the account holds', 'BTC spot', '56,000', '3,000.00', 'BTCUSD hedge',
+                  '−45,000 USD', '-3,000.00', 'loan', '−5,000.00 USDT', '4.00%/yr', 'USDC cash',
+                  'collateral, counted in full', 'counted from 1970-01-02'):
+        assert words in full, words
+    assert 'USDT cash' not in full                            # a loan is not spare cash
+    assert 'what the account holds' not in card(0, 'pfocarry', None, CONTRACT, belief, full=False)

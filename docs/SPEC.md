@@ -2100,6 +2100,19 @@ that pins it (T1).
   replay could not see). The spot side's books are not touched.
   *(the owner, 2026-10-11: the carry row's realised figure kept the pre-H8
   arithmetic — "do it")*
+- **H9** The carry view: a portfolio row's full card lists everything the
+  account holds for it, each with its own result. Every spot coin with its
+  average cost, price, value and floating P&L (an average-cost book: a buy
+  adds its coins less the venue's coin fee at what it cost; a sell leaves
+  at the average and realises the difference less its quote fee; coins
+  that come or go without a spot fill — funding in the coin, a hedge's
+  realised coin, an adoption, the wallet's bound — join at the price of the
+  moment or leave at the average, so the book always holds the row's
+  coins); every short with its size, entry, mark, open and realised P&L;
+  the loan as a debt with its rate and the interest paid; and the
+  stablecoins in the wallet that count as collateral. Costs count from the
+  first read after this build, and the card says from when.
+  *(the owner, 2026-10-15: "it should show each position and its pnl")*
 - **H6** The card says the three truths. A portfolio's card shows the
   stack's value and coins, one line per asset (weight target → actual,
   hedge ratio target → actual, coins hedged, the regime word when the tilt

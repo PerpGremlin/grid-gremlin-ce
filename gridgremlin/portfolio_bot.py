@@ -19,6 +19,7 @@ DELEVER_LEAST = 0.03         # the least worth cutting
 FLOOR_BUFFER = 0.05          # the floor is restored to this much above itself
 RELAX_STEP = 0.05            # the ratchet eases back toward the file's leverage by this per tick
 LEG_CODES = {'spot': 's', 'hedge': 'h', 'short': 'x'}
+STABLES = ('USDT', 'USDC', 'USDE', 'DAI', 'FDUSD')   # cash the account counts as collateral
 
 
 def _unreal(mt, size, avg, mark):
@@ -58,6 +59,38 @@ def _apply(book, side, price, qty, fee, inverse):
         if book['position'] <= 1e-12:
             book['position'], book['avg'] = 0.0, 0.0
     book['fees'] += fee
+
+
+def spot_fill(book, side, qty, price, fee):
+    """The spot coins' own average-cost book (the carry view, the owner
+    2026-10-15): a buy adds its coins (less the fee the venue takes in the
+    coin) at what it cost; a sell takes coins out at the average and
+    realises the difference, less its quote fee."""
+    if side == 'buy':
+        book['coins'] += qty - (fee / price if price else 0.0)
+        book['cost'] += qty * price
+    else:
+        take = min(qty, book['coins'])
+        avg = book['cost'] / book['coins'] if book['coins'] > 1e-12 else price
+        book['cost'] -= avg * take
+        book['coins'] -= take
+        book['realized'] += take * (price - avg) - fee
+        if book['coins'] <= 1e-12:
+            book['coins'], book['cost'] = 0.0, 0.0
+    book['fees'] += fee
+
+
+def spot_sync(book, coins, price):
+    """Coins that came or went without a spot fill — funding paid in the
+    coin, an inverse hedge's realised coin, an adopted holding, the wallet's
+    bound (D76) — join at the price of the moment or leave at the average,
+    so the book always holds what the row holds."""
+    have = book['coins']
+    if coins > have + 1e-12:
+        book['cost'] += (coins - have) * price
+    elif coins < have - 1e-12:
+        book['cost'] *= coins / have if have > 0 else 0.0
+    book['coins'] = coins
 
 
 class RegimeReader:
@@ -285,6 +318,9 @@ class PortfolioBot:
                             if f['side'] == 'buy' and f.get('price') else 0.0)
                 row['coins'][coin] = max(row['coins'].get(coin, 0.0)
                                          + (q if f['side'] == 'buy' else -q) - fee_coin, 0.0)
+                book = (row.get('spot_cost') or {}).get(coin)
+                if book is not None and f.get('price'):
+                    spot_fill(book, f['side'], q, float(f['price']), float(f.get('fee') or 0.0))
                 fresh.append(f['exec_id'])
         for kind in ('hedge', 'short'):
             for coin, leg in self.legs[kind].items():
@@ -691,6 +727,7 @@ class PortfolioBot:
         held, unreal = {'hedge': {}, 'short': {}}, 0.0
         open_coin = {}                 # H8: an inverse hedge's open P&L, in its coin
         lin_open = 0.0
+        legs_view = []
         for (k, c), t in perps.items():
             leg = self.legs[k][c]
             size, avg = self._short_size(t, leg)
@@ -699,6 +736,11 @@ class PortfolioBot:
             held[k][c] = (size / px if inv and px else size)
             u = _unreal(leg['market_type'], size, avg, px)
             unreal += u
+            book = row['books'].get(f'{k}:{c}') or {}
+            legs_view.append({'kind': k, 'coin': c, 'symbol': leg['symbol'], 'inverse': inv,
+                              'size': size, 'avg': avg, 'mark': px, 'unreal': u,
+                              'realized': (book.get('realized', 0.0) - book.get('fees', 0.0))
+                              * (px if inv else 1.0)})
             if inv and k == 'hedge' and px:
                 open_coin[c] = u / px
             elif not inv:
@@ -727,6 +769,12 @@ class PortfolioBot:
         # (net short), over-hedged after a fall (net long): the drift the
         # return-split audit measured (2026-10-09)
         plan_coins = {c: coins[c] + open_coin.get(c, 0.0) for c in coins}
+        costs = row.setdefault('spot_cost', {})
+        for c in coins:
+            if c not in costs:              # first seen: its cost from this read on, said so
+                costs[c] = {'coins': coins[c], 'cost': coins[c] * prices[c], 'realized': 0.0,
+                            'fees': 0.0, 'since_ms': now_ms}
+            spot_sync(costs[c], coins[c], prices[c])
         self._judge_borrow_rate(held, prices, now_ms)
         stack = sum(coins[c] * prices[c] for c in coins)
         self._mark_tilt(plan_coins, held, prices)
@@ -868,6 +916,15 @@ class PortfolioBot:
                 row['last_tick_ms'] = now_ms         # a refused leg keeps the tick open
         self.portfolio_view = {
             'stack': {c: {'coins': coins[c], 'value': coins[c] * prices[c]} for c in coins},
+            'spot': {c: {'coins': coins[c], 'price': prices[c], 'value': coins[c] * prices[c],
+                         'cost': costs[c]['cost'],
+                         'avg': costs[c]['cost'] / coins[c] if coins[c] > 1e-12 else None,
+                         'floating': coins[c] * prices[c] - costs[c]['cost'],
+                         'realized': costs[c]['realized'], 'since_ms': costs[c]['since_ms']}
+                     for c in coins},
+            'legs': legs_view,
+            'stables': {k: v.get('wallet_balance', 0.0) for k, v in (wallet.get('coins') or {}).items()
+                        if k in STABLES and abs(v.get('wallet_balance') or 0.0) > 1e-9},
             'stack_value': stack, 'cash': row['cash'], 'parked': sum(row['parked'].values()),
             'borrowed': max(-row['cash'], 0.0),
             'leverage': (stack / (stack + row['cash'])) if stack + row['cash'] > 0 else None,
