@@ -1158,6 +1158,16 @@ stands unless the owner corrects it.
 - **D137 — D131 retired (2026-10-15).** The owner, of the first carry-scaling
   page once D136 replaced it: "retire 37". Never public; the study stays in
   STUDY.md as the step before D136.
+- **D138 — A weekly check of every collected coin (2026-10-15).** The owner,
+  asked through the site what happens when a coin like RSR dies or drops out
+  of the real market's top: "the checks should be weekly. because in crypto
+  thats all it takes. a few bad days, then gone to 0", and of the limits,
+  "kee them". Mondays 01:07 UTC, every collected coin against Bybit's top 100
+  by 30-day traded value and CoinGecko's top 150 by market cap, delisting, a
+  venue gone, volume or open interest under 40% of normal, and a fall of over
+  half in a week. A list for the owner, never an action; published studies
+  stay frozen and the site marks a dropped coin rather than deleting it
+  (datagremlin PR #15).
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
