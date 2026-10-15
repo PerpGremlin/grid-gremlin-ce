@@ -1147,6 +1147,14 @@ stands unless the owner corrects it.
   page shows it lost (D134's reason for the top-20 setting). His standing
   rule from today: every finished study goes to the site's preview, and
   public only after he has proofread it there and said yes.
+- **D136 — The carry trade in one account, for the preview (2026-10-15).**
+  The owner's redo of D131: "did we test the scaling carry trade on a
+  cross margin account where equity from one side feeds the other". Coins
+  and short in one cross account, minute spot, futures and mark prices,
+  every crash since 2020 with 10 October 2025 in focus, leverage on both
+  sides, on Bybit's official collateral rates and liquidation rule. One
+  account with the coins paid for survived every crash; separate accounts
+  and borrowing did not pay. Preview, then public on his proofread (D135).
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
