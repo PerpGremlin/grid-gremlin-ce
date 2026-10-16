@@ -385,9 +385,10 @@ def spec_H6_the_tilt_line_is_the_shorts_excess_over_neutral_marked_each_read():
 
 
 def spec_H3_a_refused_leg_is_asked_again_at_the_next_read_not_the_next_day():
-    """The carry fleet's first minute (2026-10-08): the stack bought, both
-    inverse hedges refused (collateral off) — and the tick was stamped, so
-    the row would have run a day long and naked."""
+    """The carry fleet's first minute (2026-10-08): both inverse hedges
+    refused (collateral off) — and the tick was stamped, so the row would
+    have run a day long and naked. Since H10 (2026-10-16) a refused hedge
+    also keeps its buy from being placed."""
     venue, lines, clock = _venue(), [], Clock()
     venue.t_ms = int(clock.t * 1000)
     bot, _ = _bot(venue, lines, clock=clock)
@@ -401,16 +402,18 @@ def spec_H3_a_refused_leg_is_asked_again_at_the_next_read_not_the_next_day():
         return real(mt, symbol, *a, **k)
     venue.place_market = collateral_off
     bot.cycle()
-    assert [o[0] for o in venue.orders] == ['spot', 'spot'] and bot.row['last_tick_ms'] is None
-    assert sum('asked again at the next read' in ln for ln in lines) == 2
+    assert venue.orders == [] and bot.row['last_tick_ms'] is None       # H10: no buy without its hedge
+    assert sum('its buy is not placed' in ln for ln in lines) == 2
     clock.t += 61; venue.t_ms = int(clock.t * 1000)
     bot.cycle()                                                  # still refused, quietly
-    assert len(venue.orders) == 2 and sum('asked again' in ln for ln in lines) == 2
+    assert venue.orders == [] and sum('its buy is not placed' in ln for ln in lines) == 2
     gate['on'] = True
     clock.t += 61; venue.t_ms = int(clock.t * 1000)
-    bot.cycle()                                                  # the switch is on: hedged within the minute
-    assert [(o[0], o[2]) for o in venue.orders[2:]] == [('inverse', 'Sell'), ('inverse', 'Sell')]
+    bot.cycle()                                                  # the switch is on: hedged and bought within the minute
+    assert [(o[0], o[2]) for o in venue.orders] == [('inverse', 'Sell'), ('inverse', 'Sell'), ('spot', 'Buy'), ('spot', 'Buy')]
     assert bot.row['last_tick_ms'] == int(clock.t * 1000)
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    bot.cycle()
     assert len([o for o in venue.orders if o[0] == 'spot']) == 2       # the stack was not bought twice
 
 
@@ -474,8 +477,8 @@ def spec_H2_new_terms_on_a_restart_are_cash_to_spend_and_a_leg_to_add_planned_at
     assert any('capital raised by 45,000.00' in ln for ln in lines) and any('assets or weights changed' in ln for ln in lines)
     new = [(o[0], o[1], o[2], o[3]) for o in venue.orders[4:]]
     # the 45,000 goes where the book is short: all of it into SOL (its deficit is exactly 45,000)
-    assert new[0] == ('spot', 'SOLUSDT', 'Buy', 300.0) and ('spot', 'BTCUSDT', 'Buy') not in [n[:3] for n in new]
-    assert ('inverse', 'SOLUSD', 'Sell', 45000.0) in new                 # its own hedge
+    assert new[:2] == [('inverse', 'SOLUSD', 'Sell', 45000.0), ('spot', 'SOLUSDT', 'Buy', 300.0)]   # H10: its hedge first
+    assert ('spot', 'BTCUSDT', 'Buy') not in [n[:3] for n in new]
     assert len([n for n in new if n[1] in ('BTCUSD', 'ETHUSD')]) == 0   # the others sat at ratio: untouched
     assert again.row['cash'] == 0.0 and again.row['terms_seen']['capital'] == 135000.0
     # a lowered capital is said and nothing is sold
@@ -694,7 +697,9 @@ def spec_H2_cash_is_bounded_by_the_wallet_and_sells_go_before_buys_in_a_tick():
     bot.cycle()
     kinds = [(o[0], o[2]) for o in venue.orders]
     assert kinds.index(('spot', 'Sell')) < kinds.index(('spot', 'Buy'))        # the BTC sale pays the ETH buys
-    assert kinds[-2:] == [('inverse', 'Sell'), ('inverse', 'Sell')]
+    legs = [(o[1], o[2]) for o in venue.orders]
+    assert legs.index(('ETHUSD', 'Sell')) < legs.index(('ETHUSDT', 'Buy'))     # H10: the hedge before its buy
+    assert kinds.count(('inverse', 'Sell')) == 2
     # the book believes in cash the wallet does not hold: bounded, said once, and the tick completes
     bot.row['cash'] = 31000.0
     bot.state.set(bot.botid, bot.row)
@@ -1108,3 +1113,82 @@ def spec_H8_an_inverse_legs_average_entry_is_harmonic_and_its_fee_is_in_the_coin
     _apply(lin, 'sell', 100.0, 1.0, 0.0, False)
     _apply(lin, 'sell', 200.0, 1.0, 0.0, False)
     assert lin['avg'] == 150.0                                                    # a linear leg stays arithmetic
+
+
+def spec_H10_a_buy_never_stands_without_its_hedge():
+    """The carry sub's 10x tick (2026-10-16): the spot buys landed on the
+    loan, then every hedge was refused for margin — the row stood net long
+    and unhedged. Now each coin's hedge goes first: a refused hedge keeps
+    its buy back and the other coin still goes; a refused buy closes the
+    hedge just opened, said once, and the coin waits an hour, not a minute."""
+    from gridgremlin.exchange.errors import VenueError
+    from gridgremlin.portfolio_bot import PAIR_BACKOFF_S
+    venue, lines, clock = _venue(), [], Clock()
+    venue.t_ms = int(clock.t * 1000)
+    bot, _ = _bot(venue, lines, clock=clock)
+    real = venue.place_market
+    no = {('inverse', 'BTCUSD', 'Sell')}
+
+    def margin(mt, symbol, side, *a, **k):
+        if (mt, symbol, side) in no:
+            raise VenueError('retCode 110007: ab not enough for new order', kind='other')
+        return real(mt, symbol, side, *a, **k)
+    venue.place_market = margin
+    bot.cycle()
+    assert [(o[1], o[2]) for o in venue.orders] == [('ETHUSD', 'Sell'), ('ETHUSDT', 'Buy')]
+    assert venue.coins.get('BTC', 0.0) == 0.0 and bot.row['last_tick_ms'] is None
+    # the buy refused after its hedge opened: the hedge is closed again
+    no.clear(); no.add(('spot', 'BTCUSDT', 'Buy'))
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    n = len(venue.orders)
+    bot.cycle()
+    assert [(o[1], o[2], o[5]) for o in venue.orders[n:]] == [('BTCUSD', 'Sell', False), ('BTCUSD', 'Buy', True)]
+    assert not venue.positions.get('BTCUSD') and any('is closed again' in ln for ln in lines)
+    # it waits: no churn on the next read, nor the one after
+    for _ in range(2):
+        clock.t += 61; venue.t_ms = int(clock.t * 1000)
+        n = len(venue.orders)
+        bot.cycle()
+        assert len(venue.orders) == n
+    # past the wait, with the venue willing: hedged and bought, the tick done
+    no.clear()
+    clock.t += PAIR_BACKOFF_S; venue.t_ms = int(clock.t * 1000)
+    n = len(venue.orders)
+    bot.cycle()
+    assert [(o[1], o[2]) for o in venue.orders[n:]] == [('BTCUSD', 'Sell'), ('BTCUSDT', 'Buy')]
+    assert venue.coins['BTC'] > 0 and bot.row['last_tick_ms'] == int(clock.t * 1000)
+
+
+def spec_H10_a_failed_undo_reaches_the_phone():
+    from gridgremlin.events import PHONE_KINDS
+    from gridgremlin.exchange.errors import VenueError
+    venue, lines, clock = _venue(), [], Clock()
+    venue.t_ms = int(clock.t * 1000)
+    bot, _ = _bot(venue, lines, clock=clock)
+    real = venue.place_market
+
+    def stuck(mt, symbol, side, *a, **k):
+        if symbol == 'BTCUSDT' or (symbol == 'BTCUSD' and side == 'Buy'):
+            raise VenueError('venue says no', kind='other')
+        return real(mt, symbol, side, *a, **k)
+    venue.place_market = stuck
+    bot.cycle()
+    alarm = [ln for ln in lines if 'the hedge stands alone (H10)' in ln]
+    assert len(alarm) == 1 and 'margin' in PHONE_KINDS and ' margin ' in alarm[0]
+
+
+def spec_H11_each_legs_view_carries_the_venues_leverage_and_its_ceiling():
+    venue, lines, clock = _venue(), [], Clock()
+    venue.t_ms = int(clock.t * 1000)
+    legs = _legs()
+    legs['hedge']['BTC']['spec'] = {'max_leverage': 100.0}
+    bot, _ = _bot(venue, lines, clock=clock, legs=legs)
+    bot.cycle()
+    for book in venue.positions.values():
+        for p in book.values():
+            p['leverage'] = 100.0
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    bot.cycle()
+    got = {g['coin']: (g['leverage'], g['max_leverage']) for g in bot.portfolio_view['legs']}
+    assert got == {'BTC': (100.0, 100.0), 'ETH': (100.0, None)}
+    assert bot.portfolio_view['spot_leverage_most'] == 1.0                 # no margin block: no loan, 1×

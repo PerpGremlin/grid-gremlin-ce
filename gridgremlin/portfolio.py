@@ -8,7 +8,7 @@ design; SPEC.md holds what is built.
 import re
 
 from .config import (ConfigError, _enum, _flag, _fraction, _num,
-                     _reject_unknown, _refuse, _utc_ms)
+                     _reject_unknown, _refuse, _utc_ms, SPOT_LEVERAGE_MOST)
 
 PORTFOLIO_KEYS = ('strategy', 'name', 'venue', 'account', 'capital', 'assets',
                   'hedge', 'rebalance', 'regime', 'funding_rule', 'risk',
@@ -76,7 +76,7 @@ def validate_portfolio(row, where='row'):
         _reject_unknown(margin, ('spot_leverage', 'borrow_apr_max'), w)
         if not cfg['spot_borrow']:
             _refuse(f"{w}: margin on the stack borrows quote — it needs 'spot_borrow': true (D24)")
-        lev = _num(margin, 'spot_leverage', w, least=1.0, most=10.0, required=True)
+        lev = _num(margin, 'spot_leverage', w, least=1.0, most=SPOT_LEVERAGE_MOST, required=True)
         margin['spot_leverage'] = lev
         margin['borrow_apr_max'] = _fraction(margin, 'borrow_apr_max', w) or 0.08
         cfg['margin'] = margin

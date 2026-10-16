@@ -15,6 +15,7 @@ MARKET_TYPES = ('linear', 'inverse', 'spot')
 VENUE_ICONS = {'bybit': '🟠⚫ Bybit',
                'hyperliquid': '🟢🟢 Hyperliquid'}   # owner's final pick
 SIDES = ('long', 'short')
+SPOT_LEVERAGE_MOST = 10.0   # Bybit unified spot margin's ceiling: the most a spot row may borrow to
 STRATEGIES = ('grid', 'martingale', 'portfolio')
 SPACING_TYPES = ('percent', 'fixed')
 EXIT_FLOORS = ('rung', 'basis')
@@ -452,7 +453,7 @@ def validate_grid(row, where='row'):
                 'ceiling reviewed together (D26); the toggle is martingale-only')
     cfg['seed'] = _flag(cfg, 'seed')
     cfg['spot_borrow'] = _flag(cfg, 'spot_borrow')
-    sl = _num(cfg, 'spot_leverage', where, least=1.0, most=10.0)
+    sl = _num(cfg, 'spot_leverage', where, least=1.0, most=SPOT_LEVERAGE_MOST)
     if (cfg['spot_borrow'] or sl is not None) and cfg['market_type'] != 'spot':
         _refuse(f"{where}: 'spot_borrow'/'spot_leverage' apply to market_type "
                 "'spot' only")
@@ -633,7 +634,7 @@ def validate_martingale(row, where='row'):
     # D59: a DCA bot on (margin) spot. Long only this phase — a spot short
     # borrows the COIN, a different book; leverage is the spot multiple
     cfg['spot_borrow'] = _flag(cfg, 'spot_borrow')
-    sl = _num(cfg, 'spot_leverage', where, least=1.0, most=10.0)
+    sl = _num(cfg, 'spot_leverage', where, least=1.0, most=SPOT_LEVERAGE_MOST)
     if cfg['market_type'] == 'spot':
         if cfg['venue'] != 'bybit':
             _refuse(f"{where}: a spot DCA bot runs on Bybit (D59)")

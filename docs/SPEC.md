@@ -2123,6 +2123,22 @@ that pins it (T1).
   net with its hedge: the coins' floating P&L and the hedge's open P&L
   together, the pair's result. *(the owner, 2026-10-15: the coins' P&L read
   near zero from the first read; Bybit's demo shows no spot P&L)*
+- **H10** A buy never stands without its hedge. In a tick, spot sells go
+  first; then each coin whose buy adds a hedge places the hedge before the
+  buy. A refused hedge keeps its buy back (said once, asked again at the
+  next read); a refused buy closes the hedge just opened and the coin
+  waits an hour before trying again, so a refusal can't churn fees every
+  minute; a close that fails too reaches the phone. The other perps go
+  last. It doesn't hedge coins already held unhedged; the next ticks'
+  hedges do. *(the carry sub's 10x tick, 2026-10-16: the buys landed on the
+  loan, then every hedge was refused for margin)*
+- **H11** Each coin's leverage on the card. A portfolio row's assets show
+  the spot's leverage (the row's loan on its equity, 1× without one) of
+  the most a spot row may borrow (`SPOT_LEVERAGE_MOST`, Bybit's 10×; 1×
+  for a row with no margin block), and its hedge's or short's leverage as
+  the venue holds it, of the venue's ceiling (`leverageFilter`) when read.
+  *(the owner, 2026-10-16: "1x for no leverage up to whatever can be set
+  exchange side")*
 - **H6** The card says the three truths. A portfolio's card shows the
   stack's value and coins, one line per asset (weight target → actual,
   hedge ratio target → actual, coins hedged, the regime word when the tilt
