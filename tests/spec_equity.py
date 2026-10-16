@@ -260,6 +260,7 @@ def spec_U91_the_box_draws_four_lines_and_names_each_sharpe():
         assert word in html, word
     assert equity_boxes({}) == '<div class="dim">equity line: no history yet</div>'
     assert 'divided by how much the days swing' in html and 'Above 1 is good; below 0 lost money' in html
+    assert "Credits: the Sharpe ratio is William F. Sharpe's" in html and 'Bailey and Marcos López de Prado' in html
     assert 'eqnote' not in equity_boxes({'equity': {'24h': line}})      # no Sharpe shown, no note
 
 

@@ -178,4 +178,8 @@ SHARPE_NOTE = ('<p class="dim eqnote">Sharpe: each day\'s gain or loss, averaged
                'how much the days swing, then scaled to a year (times the square root of 365). '
                'Above 1 is good; below 0 lost money. "Likely above zero" is the chance the true '
                'figure is above zero, skew and big days counted, and the days are how many more '
-               'it needs before that chance reaches 95%. Money added or taken out moves it too.</p>')
+               'it needs before that chance reaches 95%. Money added or taken out moves it too. '
+               'Credits: the Sharpe ratio is William F. Sharpe\'s ("Mutual Fund Performance", 1966); '
+               'the chance and the days are the probabilistic Sharpe ratio and minimum track '
+               'record length of David H. Bailey and Marcos López de Prado ("The Sharpe Ratio '
+               'Efficient Frontier", 2012).</p>')
