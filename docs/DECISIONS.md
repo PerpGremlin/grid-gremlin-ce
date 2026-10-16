@@ -1169,6 +1169,18 @@ stands unless the owner corrects it.
   stay frozen and the site marks a dropped coin rather than deleting it
   (datagremlin PR #15).
 
+- **D139 — The agent study: rules, filter, discretion, random (2026-10-16).**
+  The owner asked how to research the agent: "do we give it an algorithm to
+  work on, or do we give it TA, data and discretion ... like a human
+  decides". Proposed: both, side by side, against controls: A a fixed
+  algorithm, B the model taking or skipping A's candidates, C the model's
+  own discretion, D C's trades at random, and flat. Replayed only on prices
+  after the deciding model's training cutoff, anonymised, with no
+  look-ahead, then live on paper. The owner: "ill run with your
+  suggestions. this will be some cool research". The method is fixed in
+  `docs/AGENT.md` before any code. The budget and how the model is called
+  stay his.
+
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
 inline above.*
