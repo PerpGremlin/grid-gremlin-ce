@@ -1179,7 +1179,12 @@ stands unless the owner corrects it.
   look-ahead, then live on paper. The owner: "ill run with your
   suggestions. this will be some cool research". The method is fixed in
   `docs/AGENT.md` before any code. The budget and how the model is called
-  stay his.
+  stay his. Widened the same day, by the owner: model size is a
+  research point ("wether flagship or basic ... can improve
+  performance/result"), so B and C run on each model of the family. And
+  E: the flagship trades, a smaller model audits each opening's reasoning
+  against the numbers and approves or vetoes ("using a friend of a lower
+  model to verify and audit reasoning and logic").
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
