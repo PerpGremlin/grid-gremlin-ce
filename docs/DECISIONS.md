@@ -1049,6 +1049,10 @@ stands unless the owner corrects it.
 - **D109 — The owner's story published (2026-10-14).** As D106: how the owner
   tested ideas with these tools, and the paper results. The researcher gives
   a skeleton and the facts; the owner writes the prose (their thesis rule).
+  **Dropped 2026-10-16** (the owner: "the peice i write - forget about it.
+  im writing my thesis myself"): no story page; his thesis is his own, and
+  we read it when he asks. Everything else goes research → page → his
+  proofread → publish.
 - **D110 — The DCA set published (2026-10-14).** As D106, confirmed here: four
   buy-the-dips studies as one page — QFL inside a public TradingView
   accumulator, that accumulator's ladder against ours, wider gaps and
