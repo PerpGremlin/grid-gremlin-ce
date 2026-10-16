@@ -17,7 +17,10 @@ def parse_instrument(category, info):
             'settle_coin': info.get('settleCoin'),
             'base_coin': info.get('baseCoin'),
             'margin_trading': info.get('marginTrading'),
-            'funding_interval_minutes': _f(info.get('fundingInterval'), 480.0)}
+            'funding_interval_minutes': _f(info.get('fundingInterval'), 480.0),
+            # the venue's leverage ceiling on a perp (none on spot): shown beside
+            # the leg's own setting, never applied to a Bybit adapter
+            'max_leverage': _f((info.get('leverageFilter') or {}).get('maxLeverage')) or None}
     if info.get('status') != 'Trading':
         raise VenueError(f"{info['symbol']}: status {info.get('status')!r}")
     return spec

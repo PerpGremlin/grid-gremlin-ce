@@ -245,3 +245,30 @@ def spec_H9b_each_coin_shows_its_net_with_its_hedge():
     full = card(0, 'pfocarry', None, CONTRACT, {'pfocarry': {'alive': True, 'portfolio': view}}, full=True)
     assert 'BTC net, with its hedge' in full and '>200.00<' in full
     assert "rebuilt from the exchange's own record since 1970-01-02" in full and 'counted from' not in full
+
+
+def spec_H11_each_coin_shows_its_spot_and_hedge_leverage_up_to_the_venues():
+    """The owner (2026-10-16): 'display spot leverage and hedge leverage per
+    ticker. 1x for no leverage up to whatever can be set exchange side.'"""
+    from gridgremlin.exchange.bybit.truth import parse_instrument
+    from panel.position_view import position_page
+    info = {'symbol': 'BTCUSD', 'status': 'Trading', 'priceFilter': {'tickSize': '0.5'},
+            'lotSizeFilter': {'qtyStep': '1', 'minOrderQty': '1'}, 'settleCoin': 'BTC',
+            'leverageFilter': {'minLeverage': '1', 'maxLeverage': '100.00'}}
+    assert parse_instrument('inverse', info)['max_leverage'] == 100.0
+    spot = dict(info, symbol='BTCUSDT', lotSizeFilter={'basePrecision': '0.000001', 'minOrderAmt': '1'})
+    del spot['leverageFilter']
+    assert parse_instrument('spot', spot)['max_leverage'] is None
+    c = json.loads(json.dumps(CONTRACT))
+    v = c['watchdog']['belief']['bots']['pfocarry']['portfolio']
+    leg = {'inverse': True, 'size': 45000.0, 'avg': 60000.0, 'mark': 60000.0, 'unreal': 0.0, 'realized': 0.0}
+    v['legs'] = [dict(leg, kind='hedge', coin='BTC', symbol='BTCUSD', leverage=100.0, max_leverage=100.0),
+                 dict(leg, kind='hedge', coin='ETH', symbol='ETHUSD', leverage=10.0, max_leverage=None)]
+    v.update(borrowed=1_080_000.0, leverage=7.3, spot_leverage_most=10.0)
+    html = position_page(0, 'demo', 'pfocarry', c, c['watchdog']['belief']['bots'])
+    assert "<th>leverage</th>" in html
+    assert "<td>spot 7.30× <span class='dim'>of 10×</span> · hedge 100× <span class='dim'>of 100×</span></td>" in html
+    assert "<td>spot 7.30× <span class='dim'>of 10×</span> · hedge 10×</td>" in html     # no ceiling read: none said
+    v.update(borrowed=0.0, leverage=0.98, spot_leverage_most=1.0)          # no loan: 1×, of 1×
+    html = position_page(0, 'demo', 'pfocarry', c, c['watchdog']['belief']['bots'])
+    assert "spot 1.00× <span class='dim'>of 1×</span>" in html

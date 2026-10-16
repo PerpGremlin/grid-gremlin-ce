@@ -594,6 +594,18 @@ def portfolio_card(idx, botid, contract, belief, full=False):
                 + (f' · interest <b class="neg">−{v["interest"]:,.2f}</b>' if v.get('interest') else '')
                 + '</div></div>')
         rows = ''
+        # the owner (2026-10-16): each coin's leverage, spot and hedge, from 1×
+        # (none) up to what the venue allows — the spot's is the row's loan
+        spot_lev = max(v.get('leverage') or 1.0, 1.0) if v.get('borrowed') else 1.0
+        legs = {(g.get('kind'), g.get('coin')): g for g in v.get('legs') or []}
+
+        def lev_cell(coin, w):
+            spot = f"spot {spot_lev:.2f}× <span class='dim'>of {v.get('spot_leverage_most') or 1.0:g}×</span>" if w > 0 else ''
+            g = legs.get(('hedge' if w > 0 else 'short', coin)) or {}
+            perp = (f"{'hedge' if w > 0 else 'short'} {g['leverage']:g}×"
+                    + (f" <span class='dim'>of {g['max_leverage']:g}×</span>" if g.get('max_leverage') else '')
+                    if g.get('leverage') else '')
+            return ' · '.join(x for x in (spot, perp) if x) or '—'
         for a in v.get('assets') or []:
             w, act = a.get('weight') or 0.0, a.get('actual') or 0.0
             hedged, coins = a.get('hedged') or 0.0, (v.get('stack') or {}).get(a['coin'], {}).get('coins') or 0.0
@@ -604,7 +616,8 @@ def portfolio_card(idx, botid, contract, belief, full=False):
                      + (f"<td>{w:.0%} → {act:.0%}</td>" if w > 0 else f"<td>short {abs(w):.0%}</td>")
                      + (f"<td>{a.get('ratio') or 0:g} → {ratio_act:.2f}</td><td>{hedged:,.6g}</td>"
                         if w > 0 else f"<td>—</td><td>{a.get('short') or 0.0:,.6g}</td>")
-                     + f"<td>{coins:,.6g}</td><td class='dim'>{_h.escape(note)}</td></tr>")
+                     + f"<td>{coins:,.6g}</td><td>{lev_cell(a['coin'], w)}</td>"
+                     + f"<td class='dim'>{_h.escape(note)}</td></tr>")
         nxt = v.get('next_tick_ms')
         due = ''
         if nxt:
@@ -620,7 +633,7 @@ def portfolio_card(idx, botid, contract, belief, full=False):
                 + (f" · shorts cut {v['delevered']}×" if v.get('delevered') else '')
                 + (f" · {due}" if due else '') + '</div>')
         body = (f'<table><tr><th>asset</th><th>weight</th><th>hedge ratio</th>'
-                f'<th>coins hedged</th><th>coins held</th><th></th></tr>{rows}</table>'
+                f'<th>coins hedged</th><th>coins held</th><th>leverage</th><th></th></tr>{rows}</table>'
                 + (holdings_table(v, q, contract['generated_ms']) if full else '')
                 + (('<div class="numbers"><h3>the numbers</h3><table>'
                 f"<tr><td>value</td>{money(v.get('value'), cls=False)}</tr>"

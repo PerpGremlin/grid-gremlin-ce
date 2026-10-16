@@ -9,6 +9,7 @@ rebalance once a day is a taker act by design.
 """
 import time
 
+from .config import SPOT_LEVERAGE_MOST
 from .exchange.errors import VenueError
 from .portfolio import plan_portfolio, regime_word
 
@@ -18,6 +19,7 @@ DELEVER_STEP = 0.25          # the most the floor cuts in one read
 DELEVER_LEAST = 0.03         # the least worth cutting
 FLOOR_BUFFER = 0.05          # the floor is restored to this much above itself
 RELAX_STEP = 0.05            # the ratchet eases back toward the file's leverage by this per tick
+PAIR_BACKOFF_S = 3600.0      # H10: after a buy undone for its refused hedge, the coin waits this long
 LEG_CODES = {'spot': 's', 'hedge': 'h', 'short': 'x'}
 STABLES = ('USDT', 'USDC', 'USDE', 'DAI', 'FDUSD')   # cash the account counts as collateral
 
@@ -737,8 +739,13 @@ class PortfolioBot:
             u = _unreal(leg['market_type'], size, avg, px)
             unreal += u
             book = row['books'].get(f'{k}:{c}') or {}
+            pos = t['positions'].get(leg['adapter'].position_idx('Sell', False) or 0) or {}
             legs_view.append({'kind': k, 'coin': c, 'symbol': leg['symbol'], 'inverse': inv,
                               'size': size, 'avg': avg, 'mark': px, 'unreal': u,
+                              # the owner (2026-10-16): each leg's leverage as the
+                              # venue holds it, and the most the venue allows
+                              'leverage': pos.get('leverage'),
+                              'max_leverage': (leg.get('spec') or {}).get('max_leverage'),
                               'realized': (book.get('realized', 0.0) - book.get('fees', 0.0))
                               * (px if inv else 1.0)})
             if inv and k == 'hedge' and px:
@@ -891,22 +898,60 @@ class PortfolioBot:
                                   regimes=regimes, funding_trailing=trailing)
         if plan['tick']:
             spent, refused = 0.0, False
-            # spot sells first, then spot buys, then the perps: a buy is paid
-            # from the sale beside it, and the hedges follow what landed
-            rank = {('spot', 'sell'): 0, ('spot', 'buy'): 1}
-            for o in sorted(plan['orders'], key=lambda o: rank.get((o['leg'][0], o['side']), 2)):
+            # spot sells first, so a buy is paid from the sale beside it. H10: a
+            # buy never stands without its hedge — a coin's added hedge goes
+            # before its buy, a refused hedge skips the buy, and a refused buy
+            # closes the hedge it just opened; then the coin waits PAIR_BACKOFF_S
+            # so a refusal can't churn fees every read. Other perps go last.
+            buying = {o['leg'][1] for o in plan['orders'] if o['leg'][0] == 'spot' and o['side'] == 'buy'}
+            paired = {o['leg'][1] for o in plan['orders']
+                      if o['leg'][0] == 'hedge' and o['side'] == 'sell' and o['leg'][1] in buying}
+            rank = {('spot', 'sell'): 0, ('hedge', 'sell'): 1, ('spot', 'buy'): 2}
+            backoff = row.setdefault('pair_backoff', {})
+            opened, skip = {}, set()
+            for o in sorted(plan['orders'],
+                            key=lambda o: (rank.get((o['leg'][0], o['side']), 3)
+                                           if o['leg'][1] in paired or o['leg'][0] == 'spot'
+                                           or o['side'] != 'sell' else 3)):
                 kind, c = o['leg']
                 side = ('Buy' if o['side'] == 'buy' else 'Sell')
+                if c in paired and (kind, side) in (('hedge', 'Sell'), ('spot', 'Buy')):
+                    if c in skip:
+                        continue
+                    if now_ms < backoff.get(c, 0):
+                        refused = True
+                        skip.add(c)
+                        continue
                 try:
                     done = self._place(kind, c, side, o['coins'], prices[c], o['why'])
                 except (VenueError, OSError) as e:
                     refused = True
+                    if c in paired and (kind, side) == ('hedge', 'Sell'):
+                        skip.add(c)
+                        self._say_once(f'place:{kind}:{c}', 'warn',
+                                       f'hedge {c}: sell refused: {e} — its buy is not placed; '
+                                       'asked again at the next read')
+                        continue
+                    if c in paired and (kind, side) == ('spot', 'Buy') and opened.get(c):
+                        backoff[c] = now_ms + int(PAIR_BACKOFF_S * 1000)
+                        try:
+                            self._place('hedge', c, 'Buy', opened[c], prices[c], 'undo: its buy was refused')
+                            self._say_once(f'place:{kind}:{c}', 'warn',
+                                           f'spot {c}: buy refused: {e} — the hedge opened for it '
+                                           f'is closed again; asked again in {PAIR_BACKOFF_S / 3600:g} h (H10)')
+                        except (VenueError, OSError) as e2:
+                            self.notify.event('margin', self.botid,                 # the phone
+                                              f'spot {c}: buy refused ({e}) and closing its new hedge '
+                                              f'failed too ({e2}) — the hedge stands alone (H10)')
+                        continue
                     self._say_once(f'place:{kind}:{c}', 'warn',
                                    f'{kind} {c}: {o["side"]} refused: {e} — asked again '
                                    'at the next read, not the next tick')
                     continue
                 if done:
                     placed += 1
+                    if kind == 'hedge' and side == 'Sell' and c in paired:
+                        opened[c] = done
                     if kind == 'spot' and side == 'Buy':
                         spent += done * prices[c]
             row['cash'] = (row['cash'] - spent if cfg.get('margin')      # a loan stays negative
@@ -930,6 +975,7 @@ class PortfolioBot:
             'borrowed': max(-row['cash'], 0.0),
             'leverage': (stack / (stack + row['cash'])) if stack + row['cash'] > 0 else None,
             'lever_cap': row.get('lever_cap'),
+            'spot_leverage_most': SPOT_LEVERAGE_MOST if cfg.get('margin') else 1.0,
             'assets': [{'coin': a['coin'], 'weight': a['weight'],
                         'actual': (coins.get(a['coin'], 0.0) * prices[a['coin']] / stack) if stack and a['weight'] > 0 else 0.0,
                         'ratio': (cfg['hedges'].get(a['coin']) or {}).get('ratio'),
