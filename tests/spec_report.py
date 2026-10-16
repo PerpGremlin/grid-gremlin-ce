@@ -450,6 +450,18 @@ def spec_R14_a_truncated_window_widens_to_the_last_flat_or_the_cap():
         venue_size=3.0)
     assert how3 == 'cap'                                # never truly flat
     assert len(own3) == 3
+    # the mirror (invETHUSDl, 2026-10-16): a slice's phantom flat, then exits
+    # alone summing to MINUS the holding — the size matches, the sign never
+    mirror = [_fill(now - 400 * h, 'buy', 100, 4, link=f'{L}-1-m'),
+              _fill(now - 40 * h, 'buy', 95, 2, link=f'{L}-2-n'),
+              _fill(now - 30 * h, 'sell', 100, 2, link=f'{L}-0-o'),     # the phantom flat
+              _fill(now - 10 * h, 'sell', 101, 1, link=f'{L}-0-p'),
+              _fill(now - 5 * h, 'sell', 102, 1, link=f'{L}-0-q')]
+    own4, how4, _s4 = count_from_flat(
+        L, 24.0, now, lambda s: [f for f in mirror if f['time_ms'] >= s], 'buy',
+        venue_size=2.0)
+    assert how4 == 'cap' and len(own4) == 5, (how4, len(own4))     # never the -2 book
+    assert ledger(own4, [L], entry_sides={L: 'buy'})[L]['position'] == 2.0
 
 
 def spec_R9_zero_spread_is_margin_against_the_cost_it_closes():

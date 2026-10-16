@@ -1367,7 +1367,10 @@ eventually pin (T1).
   and the truncation mark stands, naming the exchange's own position figure
   as the truth. *(2026-10-05: the busiest grid's card read -14,090 over 24 h — sells
   of lots bought before the window, a remainder priced from nothing — on a
-  round the exchange showed at +9,559.)*
+  round the exchange showed at +9,559.)* The match is signed, in the bot's
+  own direction: exits alone after a slice's phantom flat sum to minus the
+  holding and are refused. *(audit 2026-10-16: invETHUSDl read -3,076 on the
+  card and the paper bots page against the exchange's +3,076.)*
 - **R13** A round begins flat at its base order. A martingale's book in a
   window that opened mid-round carries a phantom position that no later close
   can land at zero, so its rounds and average per round counted nothing (the
@@ -1813,6 +1816,14 @@ eventually pin (T1).
   panel runs only opens the browser; `--desktop` adds a menu entry that runs
   it in a terminal window. Linux first. *(the owner, 2026-10-15: "do 1 2 and
   3, linux for now")*
+- **U93** The panel's smaller numbers (independent audit 2026-10-16): an
+  inverse bot with no book in the window still counts $1 contracts; an
+  unpriced book's realised is "—", never +0.00; a mark past the
+  liquidation price says so (stale, or liquidated) instead of a distance;
+  a portfolio row whose loan exceeds its equity says so instead of 1.00×;
+  the equity box keeps cents on a move under 100; flat equity over ten
+  days is "no day-to-day movement"; a trade's `by` and `opened` are text;
+  the panel's pages carry a phone viewport; the public page leaves it to the site.
 - **L1** A new trade joins a running fleet within a cycle. The trade watch
   stats the trades file once a cycle; a changed file's new rows are each
   built by the fleet's own builder (`main.build_market_bot`, the one every
@@ -1854,6 +1865,9 @@ eventually pin (T1).
   ended. A trade's card names it a trade, states its exit and who opened it
   when, offers **close trade** while it holds (the close page, one
   reduce-only market order) and **clear** once it has ended.
+- **L6b** A running trade is never cleared: the clear is refused, its row
+  and its close trade kept. Cleared, nothing would own its position after
+  the next restart. *(independent audit 2026-10-16)*
 - **L7** A running trade is closed by its own bot, never from outside: a
   close request (`{t, by, reason}`) rides in the trade's record in the
   trades file; the fleet hands it to the trade's bot — at once when the

@@ -289,7 +289,7 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
         if self.path == '/rehearse':
             from panel.nav import PAGE_END
             from panel.reference import KEEP_JS
-            body = (f'<!doctype html><meta charset="utf-8">'
+            body = (f'<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
                     f'<title>rehearse</title><style>{CSS}</style>{BACK}{FORM}{PAGE_END}{KEEP_JS}')
             self.send_response(200)
             self.send_header('Content-Type', 'text/html; charset=utf-8')
@@ -302,7 +302,7 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             from .carry import carry_page
             from .nav import PAGE_END, side_nav
             q = dict(urllib.parse.parse_qsl(self.path.partition('?')[2]))
-            body = (f'<!doctype html><meta charset="utf-8"><title>carry</title><style>{CSS}</style>'
+            body = (f'<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>carry</title><style>{CSS}</style>'
                     f'{side_nav()}<main>{carry_page(latest(), q)}</main>{PAGE_END}{KEEP_JS}')
             self.send_response(200)
             self.send_header('Content-Type', 'text/html; charset=utf-8')
@@ -313,7 +313,7 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             from panel.reference import KEEP_JS
             from .nav import PAGE_END, side_nav
             from .results import results_page
-            body = (f'<!doctype html><meta charset="utf-8"><title>results</title><style>{CSS}</style>'
+            body = (f'<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>results</title><style>{CSS}</style>'
                     f'{side_nav()}{results_page(self._labelled())}{PAGE_END}{KEEP_JS}')
             self.send_response(200)
             self.send_header('Content-Type', 'text/html; charset=utf-8')
@@ -548,7 +548,7 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
         self.end_headers()
         from panel.nav import PAGE_END
         from panel.reference import KEEP_JS
-        self.wfile.write(tidy(f'<!doctype html><meta charset="utf-8">'
+        self.wfile.write(tidy(f'<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
                               f'<title>grid-gremlin</title><style>{CSS}</style>'
                               + BACK + body + PAGE_END + KEEP_JS).encode())
 

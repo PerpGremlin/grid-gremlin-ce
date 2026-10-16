@@ -64,6 +64,10 @@ def cards_section(idx, label, contract, view='all', scripted=True):
             f'<div class="cards">{cards}</div></details></section>')
 
 
+# the panel on a phone (audit 2026-10-16); the showcase drops it, the site adds its own
+VIEWPORT = '<meta name="viewport" content="width=device-width,initial-scale=1">'
+
+
 def render(labelled, static=None, table=False, view='all', pane=None, notice=''):
     """One renderer, two artefacts (§4): the live page, or — with
     static=timestamp-text — a self-contained export: no refresh, no
@@ -94,7 +98,8 @@ def render(labelled, static=None, table=False, view='all', pane=None, notice='')
             body = f'<div class="split"><div class="bots">{body}</div>{pane or empty_pane()}</div>'
         body = f'<div class="page">{nav_panel(table, view)}<main>{body}</main></div>'
         chrome = KEEP_JS
-    return f"""<!doctype html><meta charset="utf-8">
+    vp = '' if static else VIEWPORT
+    return f"""<!doctype html><meta charset="utf-8">{vp}
 <title>grid-gremlin</title><style>{CSS}</style>
 {head}{hero_strip(labelled)}{f'<p class="neg">{notice}</p>' if notice and not static else ''}{body}
 {chrome}

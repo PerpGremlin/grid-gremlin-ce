@@ -20,7 +20,7 @@ def exchange_table(botid, b, belief, terms):
 
     def n(v, f=',.6g'):
         return '—' if v is None else f'{v:{f}}'
-    inverse = bool((b or {}).get('inverse'))
+    inverse = bool((b or {}).get('inverse')) or (terms or {}).get('market_type') == 'inverse'   # no book, still $1 contracts
     qty = None if pos is None else abs(pos)
     value = None if qty is None or not mark else (qty if inverse else qty * mark)
     fmt = ',.2f' if margin_coin in ('USDT', 'USDC', 'USD') else ',.6g'
@@ -34,8 +34,8 @@ def exchange_table(botid, b, belief, terms):
             ('maint. margin', f"{n(mv.get('mm'), fmt)} {margin_coin}" if mv.get('mm') is not None else '—'),
             ('leverage', f"{mv['leverage']:g}×" if mv.get('leverage') else '—'),
             ('unrealised P&amp;L', f"{n((b or {}).get('unreal_at_mark'), '+,.2f')} {money_coin}"),
-            ('realised, after fees', f"{n(((b or {}).get('realized') or 0) - ((b or {}).get('fees') or 0), '+,.2f')} {money_coin}"
-                                      if b else '—'),
+            ('realised, after fees', f"{n(b['realized'] - (b.get('fees') or 0), '+,.2f')} {money_coin}"
+                                      if b and b.get('realized') is not None else '—'),   # unpriced is unknown, not 0
             ('funding', f"{n((b or {}).get('funding'), '+,.2f')} {money_coin}" if b else '—')]
     return ('<div class="scroll"><table class="xch"><tr>' + ''.join(f'<th>{k}</th>' for k, _ in rows) + '</tr><tr>'
             + ''.join(f'<td>{v}</td>' for _, v in rows) + '</tr></table></div>')

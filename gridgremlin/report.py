@@ -653,7 +653,10 @@ def count_from_flat(botid, hours, now_ms, pull, entry_side,
             since = [f for f in fills if f['time_ms'] >= start]
             held = sum(f['qty'] if f['side'] == entry_side else -f['qty']
                        for f in since)
-            if venue_size is None or abs(abs(held) - venue_size) <= (
+            # signed: exits alone after a slice's phantom flat sum to minus
+            # the holding (invETHUSDl -3076 against the venue's +3076, the
+            # audit of 2026-10-16) — the bot's own direction or nothing
+            if venue_size is None or abs(held - venue_size) <= (
                     1e-9 * max(1.0, venue_size) + EPS):
                 return since, 'flat', start
         if h >= WIDEN_CAP_HOURS:

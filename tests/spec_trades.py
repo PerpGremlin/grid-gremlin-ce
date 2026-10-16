@@ -264,6 +264,9 @@ def spec_L6_the_panels_trade_form_opens_refuses_with_the_typing_kept_and_clears(
         assert 'linBTCUSDTl' in listed and 'long BTCUSDT 200 at 3x' in listed
         wrong = _call(base, '/trade', {'action': 'clear', 'fleet': '0', 'confirm': 'linXRPUSDTl'})
         assert 'not a trade' in wrong
+        from gridgremlin.tombstones import Tombstones, path_for
+        f = d / 'f.json'
+        Tombstones(str(path_for(str(f), json.loads(f.read_text())))).add('linBTCUSDTl', 'took profit')   # it ended (L6b)
         cleared = _call(base, '/trade', {'action': 'clear', 'fleet': '0', 'confirm': 'linBTCUSDTl'})
         assert 'linBTCUSDTl: cleared' in cleared and json.loads((d / 'logs' / 'trades-f.json').read_text()) == []
     finally:
