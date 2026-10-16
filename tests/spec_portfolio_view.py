@@ -272,3 +272,6 @@ def spec_H11_each_coin_shows_its_spot_and_hedge_leverage_up_to_the_venues():
     v.update(borrowed=0.0, leverage=0.98, spot_leverage_most=1.0)          # no loan: 1×, of 1×
     html = position_page(0, 'demo', 'pfocarry', c, c['watchdog']['belief']['bots'])
     assert "spot 1.00× <span class='dim'>of 1×</span>" in html
+    v.update(borrowed=120.0, leverage=None, spot_leverage_most=3.0)        # the engine's None: equity gone
+    html = position_page(0, 'demo', 'pfocarry', c, c['watchdog']['belief']['bots'])
+    assert "spot: loan exceeds equity" in html and "spot 1.00×" not in html   # never the calmest number (audit 10-16)

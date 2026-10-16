@@ -63,8 +63,9 @@ def equity_svg(points, width=120, height=18, labels=False):
     if not labels:
         return svg
     pct = change / pts[0][1] * 100 if pts[0][1] else 0.0
-    return (f'<div class="eqbox"><div class="dim eqlab"><span>low {lo:,.0f}</span><span>high {hi:,.0f}</span>'
-            f'<b class="{cls}">{change:+,.0f} ({pct:+.1f}%)</b></div>{svg}</div>')
+    f = ',.0f' if hi - lo >= 100 else ',.2f'          # a small account's move is not rounded away
+    return (f'<div class="eqbox"><div class="dim eqlab"><span>low {lo:{f}}</span><span>high {hi:{f}}</span>'
+            f'<b class="{cls}">{change:+{f}} ({pct:+.1f}%)</b></div>{svg}</div>')
 
 
 def price_svg(series, window=None, liq=None, fills=(), height=180):
@@ -157,8 +158,11 @@ def equity_boxes(contract):
             continue
         if key in ('30d', 'all'):
             s = sh.get(key)
+            pts = eq.get(key) or []
+            days = (pts[-1][0] - pts[0][0]) / 86400 if len(pts) > 1 else 0
             word += (f' · Sharpe <b class="{_num_cls(s)}">{s:+.2f}</b>' if s is not None
-                     else ' · Sharpe — (under ten days)')
+                     else ' · Sharpe — (under ten days)' if days < 10
+                     else ' · Sharpe — (no day-to-day movement)')
             tr = (eq.get('trust') or {}).get(key)
             if s is not None and tr:                # U91b: never a Sharpe alone
                 word += (f' · {tr["likely"]:.0%} likely above zero · '

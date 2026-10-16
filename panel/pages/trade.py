@@ -54,6 +54,9 @@ class TradePages:
             f, _fleet, rows, path = self._trades_of(fi)
             if form.get('action') == 'clear':
                 botid = form.get('confirm', '').strip()
+                if botid and self._live_trade(fi, botid):       # L6b: clear is for a trade that has ended
+                    raise TradeError(f'{botid}: still running — close trade first (on its card); '
+                                     'clear is for a trade that has ended')
                 from gridgremlin.tombstones import path_for
                 gone = clear_trade(path, botid, path_for(f, json.loads(Path(f).read_text())))
                 if gone is None:

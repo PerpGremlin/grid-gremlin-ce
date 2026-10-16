@@ -110,7 +110,7 @@ def kind_line(terms):
             parts.append(f"stop −{terms['stop_pct'] * 100:g}% at the mark")
         if terms.get('trail_pct'):
             parts.append(f"trailing {terms['trail_pct'] * 100:g}%")
-        who = (f" · opened {terms['opened'][:16].replace('T', ' ')} by {terms.get('by', '?')}"
+        who = (f" · opened {esc(str(terms['opened'])[:16].replace('T', ' '))} by {esc(str(terms.get('by', '?')))}"
                if terms.get('opened') else '')
         return f'trade on {market} · {lev_s} · ' + ' · '.join(parts) + who
     if terms.get('strategy') == 'martingale':
@@ -330,10 +330,12 @@ def card(idx, botid, b, contract, belief, full=False):
         # far the mark is from it (2026-10-06: HYPE, isolated, went with no
         # line on its card saying how close it stood)
         away = abs(mark - mv['liq']) / mark * 100
-        if away < 10:
-            alerts.append(f"liquidates at {mv['liq']:,.6g} · {away:.1f}% away")
-        held += (f'</div><div class="{"neg" if away < 5 else "dim"}">'
-                 f"liquidates at {mv['liq']:,.6g} · {away:.1f}% away")
+        past = (mark >= mv['liq']) if botid.endswith('s') else (mark <= mv['liq'])   # the mark beyond it: stale or gone
+        said = (f"mark is past the liquidation price {mv['liq']:,.6g} — the margin read is stale, or it was liquidated"
+                if past else f"liquidates at {mv['liq']:,.6g} · {away:.1f}% away")
+        if past or away < 10:
+            alerts.append(said)
+        held += (f'</div><div class="{"neg" if past or away < 5 else "dim"}">' + said)
     mkt = (contract.get('market') or {}).get(botid)
     if mkt and mkt.get('thin'):
         alerts.append(f"market {mkt.get('line') or ''} · THIN for this fleet")
@@ -597,10 +599,12 @@ def portfolio_card(idx, botid, contract, belief, full=False):
         # the owner (2026-10-16): each coin's leverage, spot and hedge, from 1×
         # (none) up to what the venue allows — the spot's is the row's loan
         spot_lev = max(v.get('leverage') or 1.0, 1.0) if v.get('borrowed') else 1.0
+        gone = bool(v.get('borrowed')) and v.get('leverage') is None    # the engine's None: the loan exceeds the equity
         legs = {(g.get('kind'), g.get('coin')): g for g in v.get('legs') or []}
 
         def lev_cell(coin, w):
-            spot = f"spot {spot_lev:.2f}× <span class='dim'>of {v.get('spot_leverage_most') or 1.0:g}×</span>" if w > 0 else ''
+            spot = ("<b class='neg'>spot: loan exceeds equity</b>" if gone and w > 0 else
+                    f"spot {spot_lev:.2f}× <span class='dim'>of {v.get('spot_leverage_most') or 1.0:g}×</span>" if w > 0 else '')
             g = legs.get(('hedge' if w > 0 else 'short', coin)) or {}
             perp = (f"{'hedge' if w > 0 else 'short'} {g['leverage']:g}×"
                     + (f" <span class='dim'>of {g['max_leverage']:g}×</span>" if g.get('max_leverage') else '')

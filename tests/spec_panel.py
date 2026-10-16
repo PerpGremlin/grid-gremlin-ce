@@ -1074,7 +1074,7 @@ def spec_U12_the_bots_can_be_arranged_by_side_or_by_pairs():
     assert '<b class="on">pairs</b>' in cards and 'href="/?view=side"' in cards
     assert 'href="/table?view=pairs"' in cards             # the choice rides
     table = render([('demo', c)], table=True, view='side')
-    assert '<th colspan="15" class="grp">shorts</th>' in table
+    assert '<th colspan="16" class="grp">shorts</th>' in table
     assert 'href="/table?view=pairs"' in table and 'href="/?view=side"' \
         in table
     assert 'class="grp"' not in render([('demo', c)])      # as listed
@@ -1649,6 +1649,11 @@ def spec_V17_a_card_says_where_the_exchange_liquidates_it():
     c['watchdog']['belief']['bots']['spoADAUSDTl'] = snapshot_row(
         [B()], {'equity': 1.0, 'mm_rate': 0.0}, 0)['bots']['spoADAUSDTl']
     assert 'liquidates at' not in _everything(c)
+    B.margin_view['liq'] = 0.2100                   # a long's mark already below it (audit 2026-10-16)
+    c['watchdog']['belief']['bots']['spoADAUSDTl'] = snapshot_row(
+        [B()], {'equity': 1.0, 'mm_rate': 0.0}, 0)['bots']['spoADAUSDTl']
+    page = _everything(c)
+    assert 'mark is past the liquidation price 0.21' in page and '% away' not in page.split('past the liquidation')[1][:80]
 
 
 def spec_V17_the_bot_keeps_the_venues_liquidation_price():
@@ -1944,7 +1949,7 @@ def spec_U63_the_strip_carries_a_sparkline_and_the_box_the_days_and_the_weeks_li
     html = render([('demo', c)])
     assert '<span class="spark" title="equity, 24 h"><svg class="eq"' in html
     assert 'equity, 24 h</div><div class="eqbox">' in html and 'equity, 7 d</div><div class="eqbox">' in html
-    assert '<span>low 1,000</span><span>high 1,011</span><b class="pos">+11 (+1.1%)</b>' in html
+    assert '<span>low 1,000.00</span><span>high 1,011.00</span><b class="pos">+11.00 (+1.1%)</b>' in html
     assert html.count('<polyline') == 3 and '<legend' not in html and 'stroke-width="2"' in html
     assert '<title>' in html                                        # the box's native tooltip
     out = render([('demo', c)], static='then')
@@ -1953,7 +1958,7 @@ def spec_U63_the_strip_carries_a_sparkline_and_the_box_the_days_and_the_weeks_li
     assert 'equity line: no history yet' in render([('demo', CONTRACT)])
     assert 'class="spark"' not in render([('demo', CONTRACT)])
     down = equity_svg([[0, 10.0], [60, 5.0]], 400, 60, labels=True)
-    assert '<b class="neg">-5 (-50.0%)</b>' in down and 'fill="var(--neg)"' in down
+    assert '<b class="neg">-5.00 (-50.0%)</b>' in down and 'fill="var(--neg)"' in down
 
 
 def spec_U64b_grid_profit_is_the_matched_trips_and_the_run_starts_at_the_first_fill():
@@ -2262,6 +2267,29 @@ def spec_P7_names_from_the_files_are_drawn_as_text():
         close()
 
 
+def spec_L6b_a_running_trade_is_never_cleared():
+    """Clear is for a trade that has ended (L6). A trade still running is
+    refused with its row and the close-trade path kept: cleared, nothing
+    would own its position after the next restart (audit 2026-10-16)."""
+    from spec_setup import _call, _served_fleet
+    from gridgremlin.trade import build_row
+    from gridgremlin.trades import add_trade, fleet_rows, trade_status, trades_path
+    from gridgremlin.tombstones import Tombstones, path_for
+    base, d, close = _served_fleet()
+    try:
+        f = str(d / 'f.json')
+        raw = json.loads(open(f).read())
+        _fl, rows = fleet_rows(f)
+        tp = trades_path(f, raw)
+        bid = add_trade(tp, rows, build_row('long', 'SOLUSDT', {'capital': '100', 'tp': '1', 'stop': '1'}))
+        assert trade_status(tp, bid, Tombstones(str(path_for(f, raw)))) == 'live'
+        page = _call(base, '/trade', {'action': 'clear', 'fleet': '0', 'confirm': bid})
+        assert 'still running' in page and 'cleared</h1>' not in page, page[-600:]
+        assert trade_status(tp, bid, Tombstones(str(path_for(f, raw)))) == 'live'   # the row stays
+    finally:
+        close()
+
+
 def spec_U82_a_late_refresh_never_replaces_what_was_just_opened():
     """The live page's swap: an answer arriving after a newer swap began is
     dropped (a counter, newest wins), the timer waits while a swap is in
@@ -2306,3 +2334,31 @@ def spec_U90_a_grid_card_splits_its_total_into_grid_profit_and_trend():
     c['bots']['spoADAUSDTl'].update(gap_realized=30.0, gap_trips=12)
     card = render([('demo', c)]).split('class="card ')[1]
     assert '<div class="split"><span>grid profit</span>' in card
+
+
+def spec_U93_the_audit_of_2026_10_16_the_panels_smaller_numbers():
+    """An inverse bot with no book in the window still counts $1 contracts;
+    an unpriced book's realised is unknown, never +0.00; a trade's `by` and
+    `opened` are text; flat equity over ten days is not "under ten days";
+    the panel carries a phone viewport and the showcase leaves it to the site."""
+    import time
+    from panel.card import kind_line
+    from panel.drawings import equity_boxes
+    from panel.position_view import exchange_table
+    from panel.render import VIEWPORT
+    from panel.server import render
+    bl = {'invETHUSDl': {'alive': True, 'position': 5000.0}}
+    t = {'market_type': 'inverse', 'symbol': 'ETHUSD', 'quote': 'USD', 'margin_coin': 'ETH'}
+    page = exchange_table('invETHUSDl', None, bl, t)
+    assert '5,000 USD' in page and '5,000 ETH' not in page
+    page = exchange_table('invETHUSDl', {'position': 5000.0, 'mark': 2000.0, 'inverse': True,
+                                         'realized': None, 'fees': 0.1}, bl, t)
+    assert '+0.00' not in page.split('realised')[0] + page.split('</tr><tr>')[1].split('</td>')[-4]
+    line = kind_line({'trade': True, 'tp_pct': 0.01, 'opened': '2026-10-16T10:00', 'by': '<b>x</b>',
+                      'market_type': 'linear', 'leverage': 1})
+    assert '<b>x</b>' not in line and '&lt;b&gt;x&lt;/b&gt;' in line
+    now = time.time()
+    flat = {'equity': {'30d': [[now - 20 * 86400 + i * 86400, 100.0] for i in range(21)], 'sharpe': {'30d': None}}}
+    assert 'no day-to-day movement' in equity_boxes(flat) and 'under ten days' not in equity_boxes(flat)
+    html = render([('demo', CONTRACT)])
+    assert VIEWPORT in html and VIEWPORT not in render([('demo', CONTRACT)], static='then')

@@ -30,7 +30,7 @@ def section(idx, label, contract, view='all'):
         ordered += members
     for botid, b in ordered:
         if botid is None:                      # U12: a group's heading row
-            rows.append(f'<tr><th colspan="15" class="grp">{esc(b)}</th></tr>')
+            rows.append(f'<tr><th colspan="16" class="grp">{esc(b)}</th></tr>')
             continue
         if b is not None and b.get('realized') is None:
             b = None                     # an inverse book with no mark (the second audit)
