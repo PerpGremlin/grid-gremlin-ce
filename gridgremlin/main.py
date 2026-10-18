@@ -209,6 +209,17 @@ def loss_limit(cfg):
     return cfg.get('max_loss')
 
 
+def fleet_wallet(wallets):
+    """The fleet's one wallet from each venue's: the equity known summed,
+    the worst MMR, and (U100) what is free to trade — only when every
+    venue's was read, a part never shown as the whole."""
+    known = [w['equity'] for w in wallets.values() if w['equity'] is not None]
+    free = [w.get('available') for w in wallets.values()]
+    return {'equity': sum(known) if known else None,
+            'mm_rate': max((w['mm_rate'] or 0.0) for w in wallets.values()),
+            'available': sum(free) if free and None not in free else None}
+
+
 def snapshot_row(bots, wallet, now, tiers=None):
     """F4/E3: derived from venue truth only; the DEAD are visible. F9: a
     dead bot no longer reads the venue, so its position is NOTHING — not
@@ -216,6 +227,8 @@ def snapshot_row(bots, wallet, now, tiers=None):
     phantom breach every re-alert window for 48 days). D65: `tiers` is the
     network each venue's client connected to, as the fleet itself holds it."""
     return {'t': now, 'equity': wallet['equity'], 'mm_rate': wallet['mm_rate'],
+            # U100: what the exchange says is free to trade (fleet_wallet)
+            **({'available': wallet['available']} if wallet.get('available') is not None else {}),
             **({'tiers': dict(tiers)} if tiers else {}),
             'bots': {b.botid: {'alive': b.alive,
                                'position': (b._last_pos or 0.0) if b.alive
@@ -910,11 +923,7 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
                             f'wallet read failed: {type(e).__name__}: '
                             f'{e} — '
                             'this cycle runs with unknown equity (E9)')
-                known = [w['equity'] for w in wallets.values()
-                         if w['equity'] is not None]
-                wallet = {'equity': sum(known) if known else None,
-                          'mm_rate': max((w['mm_rate'] or 0.0)
-                                         for w in wallets.values())}
+                wallet = fleet_wallet(wallets)
                 caps = fleet.get('account_caps')
                 if caps:                                         # D56
                     for v in wallets:

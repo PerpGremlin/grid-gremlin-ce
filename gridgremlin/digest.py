@@ -212,8 +212,11 @@ def section(fleet_path, now, day_start, archive_root='logs/daily',
         mb = levs[0].get('equity') if levs else None
         margin = (f' (margin balance {mb:,.0f}, the leverage is on it)'
                   if mb and abs(mb - snap['equity']) > 0.01 * snap['equity'] else '')
+        free = snap.get('available')                       # U100
         lines.append(f"equity {snap['equity']:,.0f}" + margin + lev
-                     + (f' · margin rate {mm:.1%}' if mm is not None else ''))
+                     + (f' · margin rate {mm:.1%}' if mm is not None else '')
+                     + (f" · free to trade {free:,.0f} ({free / snap['equity']:.0%})"
+                        if free is not None and snap['equity'] else ''))
     state = state if state is not None else {}
     first = tag not in state
     counts, place = log_events(log_path(fleet_path), state.get(tag, 0))

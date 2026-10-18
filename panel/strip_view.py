@@ -33,6 +33,37 @@ def exchange_mmr(contract):
             f' <span class="dim">· the exchange liquidates at 100%{old}</span></div>')
 
 
+FREE_WARN = 0.2            # the share of equity free to trade under which its line is red
+
+
+def free_share(belief):
+    """U100: (free to trade, its share of equity) from a snapshot's belief;
+    None when either is unknown."""
+    free, eq = belief.get('available'), belief.get('equity')
+    if free is None or not eq:
+        return None
+    return free, free / eq
+
+
+def exchange_free(contract):
+    """U100: what the exchange says is free to open more with — Bybit's
+    available balance, Hyperliquid's withdrawable — and its share of the
+    equity, from the fleet's latest snapshot; red under FREE_WARN, its age
+    said when old, nothing claimed without one. (The owner, 2026-10-19:
+    "the users cannot see what they have left before they burn through
+    their immediate margin".)"""
+    got = free_share((contract.get('watchdog') or {}).get('belief') or {})
+    if got is None:
+        return ''
+    free, share = got
+    stale = snapshot_age(contract)
+    old = f' · as of {stale}' if stale else ''
+    cls = 'neg' if share < FREE_WARN else 'dim'
+    return (f'<div class="parts free">free to trade <b class="{cls}">{free:,.2f}</b> '
+            f'{venue_money(contract)} <b class="{cls}">({share:.0%} of equity)</b>'
+            f' <span class="dim">· what the exchange lets you open more with{old}</span></div>')
+
+
 def exchange_since_first(contract):
     """R18: the exchange box's kept line — every bot's whole result summed;
     a bot whose figure cannot be whole is named as left out, never
@@ -105,9 +136,12 @@ def hero_strip(labelled):
         rate = ((c.get('watchdog') or {}).get('belief') or {}).get('mm_rate')
         if rate is not None:                                     # U66
             lev += (f' · MMR <b class="{"neg" if rate >= MMR_WARN else ""}">{rate:.1%}</b>')
+        got = free_share((c.get('watchdog') or {}).get('belief') or {})
+        if got is not None:                                      # U100
+            lev += (f' · free <b class="{"neg" if got[1] < FREE_WARN else ""}">{got[1]:.0%}</b>')
         stale = snapshot_age(c)
         if stale:
-            # U94: the dead count and the MMR are the engine's last snapshot's
+            # U94: the dead count, the MMR and the free share are the engine's last snapshot's
             lev += f' · <b class="neg">engine read {stale}</b>'
         # six cells per fleet in one grid, so every column lines up whatever
         # the words' lengths (the owner: "so it looks squared")

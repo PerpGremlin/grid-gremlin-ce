@@ -767,6 +767,7 @@ def _watchdog_view(fleet):
                           'bots': row.get('bots', {}),
                           'equity': row.get('equity'),        # R19
                           'mm_rate': row.get('mm_rate'),
+                          'available': row.get('available'),  # U100
                           'tiers': row.get('tiers')}          # D65
         return {'ceilings': ceilings, 'swept_s_ago': swept,
                 'belief': belief}

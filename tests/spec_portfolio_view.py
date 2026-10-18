@@ -131,6 +131,47 @@ def spec_U66_every_accounts_box_and_the_strip_say_its_mmr():
     assert 'MMR <b class="">3.5%</b>' in strip
 
 
+def spec_U100_every_account_says_what_is_free_to_trade():
+    """The owner (2026-10-19): "the users cannot see what they have left
+    before they burn through their immediate margin" — the exchange's own
+    available balance, from the fleet's snapshot, beside the MMR."""
+    from gridgremlin.main import fleet_wallet, snapshot_row
+    a = {'equity': 1000.0, 'mm_rate': 0.1, 'available': 300.0}
+    b = {'equity': 500.0, 'mm_rate': 0.3, 'available': 100.0}
+    assert fleet_wallet({'bybit': a, 'hyperliquid': b}) == {'equity': 1500.0, 'mm_rate': 0.3, 'available': 400.0}
+    unread = {'equity': None, 'mm_rate': None, 'unread': True}
+    assert fleet_wallet({'bybit': a, 'hyperliquid': unread})['available'] is None   # a part is not the whole
+    from panel.strip_view import FREE_WARN, exchange_free, hero_strip
+    assert snapshot_row([], {'equity': 1000.0, 'mm_rate': 0.1, 'available': 300.0}, 0)['available'] == 300.0
+    assert 'available' not in snapshot_row([], {'equity': 1000.0, 'mm_rate': 0.1, 'available': None}, 0)
+    assert 'available' not in snapshot_row([], {'equity': 1000.0, 'mm_rate': 0.1}, 0)
+    calm = {'watchdog': {'belief': {'equity': 1000.0, 'available': 300.0, 'age_s': 60}},
+            'terms': {'x': {'quote': 'USDT'}}}
+    line = exchange_free(calm)
+    assert 'free to trade <b class="dim">300.00</b> USDT' in line and '(30% of equity)' in line
+    assert 'as of' not in line
+    low = exchange_free({'watchdog': {'belief': {'equity': 1000.0, 'available': 1000.0 * FREE_WARN - 1,
+                                                 'age_s': 1800}}})
+    assert 'class="neg"' in low and 'as of 30 min ago' in low
+    assert exchange_free({}) == '' and exchange_free({'watchdog': {'belief': {'equity': 1000.0}}}) == ''
+    assert exchange_free({'watchdog': {'belief': {'equity': 0.0, 'available': 5.0}}}) == ''
+    c = {'bots': {}, 'watchdog': {'belief': {'mm_rate': 0.035, 'equity': 200.0, 'available': 30.0,
+                                             'bots': {}}}, 'terms': {}}
+    assert 'free <b class="neg">15%</b>' in hero_strip([('Bybit demo', c)])
+    import json
+    from spec_setup import _call, _served_fleet
+    base, d, close = _served_fleet()
+    try:                                             # the snapshot, read through to the account's box
+        wd = json.loads((d / 'wd.json').read_text())
+        (d / 'wd.json').write_text(json.dumps(dict(wd, snapshot=str(d / 'snap.jsonl'))))
+        (d / 'snap.jsonl').write_text(json.dumps({'t': 9e9, 'equity': 800.0, 'mm_rate': 0.1,
+                                                  'available': 200.0, 'bots': {}}) + '\n')
+        page = _call(base, '/')
+        assert 'free to trade <b class="dim">200.00</b>' in page and '(25% of equity)' in page
+    finally:
+        close()
+
+
 def spec_U66_a_cards_fold_aligns_its_headings_with_their_numbers():
     """The owner: in the numbers, with assets dropped down, "some headings
     are misaligned" — the info pages' `details td{text-align:left}` and its

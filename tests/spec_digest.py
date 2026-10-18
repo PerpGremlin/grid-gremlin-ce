@@ -72,7 +72,7 @@ def spec_F17_the_digest_says_each_exchange_and_its_health():
             Path('logs/daily/demo').mkdir(parents=True)
             Path('logs/fills').mkdir(parents=True)
             Path('logs/snap.jsonl').write_text(json.dumps({
-                't': now - 30, 'equity': 5000.0, 'mm_rate': 0.05,
+                't': now - 30, 'equity': 5000.0, 'mm_rate': 0.05, 'available': 1500.0,
                 'bots': {'linBTCUSDTl': {'alive': True, 'position': 0.0}}})
                 + '\n')
             Path('configs/wd.json').write_text(json.dumps({
@@ -108,6 +108,7 @@ def spec_F17_the_digest_says_each_exchange_and_its_health():
     assert 'kept history +10.00' in text and 'equity 5,000' in text
     assert ('account leverage 2.50x (all filled: 2.50x on a fall, 2.50x on '
             'a rise)') in text
+    assert 'free to trade 1,500 (30%)' in text                     # U100
     assert 'since the log began (first digest): kills 1' in text
     assert 'health: 1/1 bots alive' in text
     assert state['demo'] > 0                         # the place, to remember

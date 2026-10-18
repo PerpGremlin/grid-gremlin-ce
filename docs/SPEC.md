@@ -1573,6 +1573,17 @@ eventually pin (T1).
   folded tables align each heading with its numbers (right), the first
   column left and as wide as it needs — the info pages' `details td` rule
   had reached into them. *(the owner, 2026-10-11)*
+- **U100** Every account says what is free to trade — the exchange's own
+  figure, Bybit's `totalAvailableBalance`, Hyperliquid's withdrawable (plus
+  free spot USDC on a unified account), read every tick already for the
+  margin floor — from the fleet's latest snapshot: in its box ("free to
+  trade 300.00 USDT (30% of equity) · what the exchange lets you open more
+  with"), its share beside the MMR in the strip, and in the nightly digest's
+  equity line; red under 20%, its age said when the snapshot is old, nothing
+  claimed without one. A fleet across venues sums them only when every
+  wallet was read: a part is never shown as the whole. *(the owner,
+  2026-10-19: "the users cannot see what they have left before they burn
+  through their immediate margin")*
 - **U67** *(retired by D96, 2026-10-12: the front page's right half is
   U78's)* The fleet page is
   two halves on a wide screen — the bots, and the

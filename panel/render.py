@@ -11,7 +11,7 @@ from .fleet_bits import sweep_note
 from .html_bits import REFRESH_S, _num_cls, esc
 from .nav import VIEWS, grouped, nav_panel
 from .results import agent_box
-from .strip_view import exchange_leverage, exchange_mmr, exchange_since_first, hero_strip, portfolio_total, tier_badge, venue_money
+from .strip_view import exchange_free, exchange_leverage, exchange_mmr, exchange_since_first, hero_strip, portfolio_total, tier_badge, venue_money
 from .table import section
 
 
@@ -63,7 +63,7 @@ def cards_section(idx, label, contract, view='all', scripted=True):
             f'{pnl_parts(net, sum(opened) if opened else None, funding)}'
             + (f' · portfolio rows <b class="{_num_cls(pfo)}">{pfo:+,.2f}</b>' if pfo else '')
             + f'</div>{left}{exchange_since_first(contract)}{exchange_leverage(contract)}'
-            f'{exchange_mmr(contract)}</div>'                                     # U66
+            f'{exchange_mmr(contract)}{exchange_free(contract)}</div>'            # U66, U100
             f'{equity_boxes(contract)}'                                          # U63
             f'{agent_box(contract)}'                                             # J5
             # U59: the account folds to its heading and its box; the side
