@@ -167,6 +167,34 @@ def spec_T6_a_rung_outside_the_window_never_fills():
     assert wide['entry_fills'] == 4
 
 
+def spec_T6b_a_resting_exit_is_not_moved_by_the_quote_guard():
+    # bought at 59000, its exit placed at 60000 from 59500's open; the next
+    # open sits inside the guard of 60000: the venue order stays (B4) and fills
+    cfg = _cfg(slide=None)
+    r = backtest(cfg, ADAPTER, [_bar(60000.0, 60100.0, 58995.0, 59500.0),
+                                _bar(59500.0, 59600.0, 59400.0, 59500.0),
+                                _bar(59999.5, 60100.0, 59990.0, 60050.0)])
+    assert r['entry_fills'] == 1 and r['trips'] == 1 and r['held'] == 0.0
+    # never placed (no bar opened clear of the guard): it goes a rung up
+    fresh = backtest(cfg, ADAPTER, [_bar(60000.0, 60100.0, 58995.0, 59999.5),
+                                    _bar(59999.5, 60100.0, 59990.0, 60050.0)])
+    assert fresh['trips'] == 0 and fresh['held'] > 0
+
+
+def spec_T6b_a_resting_exit_outside_the_window_still_fills():
+    # W3: the 60000 exit rests from 59500; the next open (58700) puts it
+    # outside a 2% window, and the venue order is still there to fill
+    cfg = _cfg(slide=None, place_within_pct=0.02)
+    r = backtest(cfg, ADAPTER, [_bar(60000.0, 60100.0, 58995.0, 59500.0),
+                                _bar(59500.0, 59600.0, 59400.0, 59500.0),
+                                _bar(58700.0, 60100.0, 58650.0, 60050.0)])
+    assert r['entry_fills'] == 1 and r['trips'] == 1
+    # never resting (bought and gapped away before it was placed): no fill
+    gapped = backtest(cfg, ADAPTER, [_bar(60000.0, 60100.0, 58995.0, 58700.0),
+                                     _bar(58700.0, 60100.0, 58650.0, 60050.0)])
+    assert gapped['trips'] == 0
+
+
 # --- C: the key is bounded ----------------------------------------------------
 
 def spec_C3_slide_knobs_are_bounded_and_defaulted():

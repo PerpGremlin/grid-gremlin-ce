@@ -2725,6 +2725,10 @@ that pins it (T1).
   (G21) is honoured in whole bars: the trigger must still hold at the open of
   ⌈confirm_seconds / bar⌉ further bars. *(the 48-day post-mortem: an hourly replay
   carried 3× the live short inventory)*
+- **T6b** An exit placed at one bar's open and not filled rests into the next, as
+  the venue order does: B4 exempts it from the quote guard and W3 keeps it outside
+  the window; one never placed is judged afresh. *(the rungs study, 2026-10-15: on
+  1-second bars the backtest re-placed nearly every resting sell)*
 - **T10** The grid's rehearsal charges the market's own funding: a Bybit
   futures grid's window reads the settlements (public), and each one the
   held position crosses is paid or received at its rate on the notional at

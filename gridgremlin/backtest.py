@@ -19,6 +19,10 @@
 # account's MMR — (its maintenance margin + the row's) over (its equity +
 # the row's P&L) — the cross-margin gauge Bybit liquidates at 100%: the
 # peak, and the first bar it would have reached 100%.
+# T6b: an exit placed at one bar's open and still unfilled RESTS into the
+# next, as on the venue: B4 exempts it from the quote guard and W3 keeps it
+# outside the window. Re-checking the guard every bar without that moved
+# nearly every exit on 1-second bars (the rungs study, 2026-10-15).
 import math
 
 from .ladder import plan_grid, slide_offset
@@ -73,6 +77,7 @@ def backtest(cfg, adapter, bars, fee_rate=BYBIT_MAKER, funding_rate_hourly=0.0,
     funding_total = [0.0]
 
     paused_bars = 0
+    resting = frozenset()      # T6b: exit rungs left resting by the last bar
     for n_bar, bar in enumerate(bars):
         # T14: a research gate — `entries(i, bar)` False pauses new entries for
         # the bar (exits keep working, as D56's cap); asked at the bar's open
@@ -90,10 +95,16 @@ def backtest(cfg, adapter, bars, fee_rate=BYBIT_MAKER, funding_rate_hourly=0.0,
         # that live would skip — optimistic (audit 2026-08-07 LOW)
         half = bar['o'] * spread_bps / 20_000.0
         desired = plan_grid(cfg, adapter, bar['o'], held, basis,
-                            bar['o'] - half, bar['o'] + half, offset=offset,
+                            bar['o'] - half, bar['o'] + half, resting, offset=offset,
                             held_rungs=(list(lots) if rung_mode else None))
-        # T6/W1: only what the live bot would have RESTING can fill
-        desired = window(desired, bar['o'], cfg.get('place_within_pct', 0.05))
+        # T6/W1: only what the live bot would have RESTING can fill; W3: an
+        # exit already resting outside the window stays
+        exit_side = 'Sell' if long else 'Buy'
+        inside = {id(o) for o in window(desired, bar['o'],
+                                        cfg.get('place_within_pct', 0.05))}
+        desired = [o for o in desired if id(o) in inside
+                   or (o['side'] == exit_side and o['rung'] in resting)]
+        filled = set()
         for o in desired:
             if o['side'] == ('Buy' if long else 'Sell'):        # entries
                 through = bar['l'] < o['price'] if long else bar['h'] > o['price']
@@ -117,12 +128,15 @@ def backtest(cfg, adapter, bars, fee_rate=BYBIT_MAKER, funding_rate_hourly=0.0,
                     held = held_steps * step
                     fees += adapter.notional(qty, o['price']) * fee_rate
                     trips += 1
+                    filled.add(o['rung'])
                     if lots:                       # G23: the lot this exit closed
                         want = o['rung'] + lot_step
                         lots.remove(want if want in lots
                                     else (min(lots) if long else max(lots)))
+        resting = frozenset(o['rung'] for o in desired
+                            if o['side'] == exit_side and o['rung'] not in filled)
         if held_steps == 0:
-            held, basis, lots = 0.0, None, []
+            held, basis, lots, resting = 0.0, None, [], frozenset()
         max_held = max(max_held, held)
         if events:                                   # T10: the market's settlements
             t0 = bar.get('t')
