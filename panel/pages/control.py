@@ -62,7 +62,7 @@ nothing to it. stop PARKS, never flattens (E3). no auto-restart, ever
                 if parts:
                     waits = (' <span class="dim">— waiting for a restart: '
                              + '; '.join(parts) + '</span>')
-            rows.append(f'<p>unit <b>{u}</b>: <span class="{cls}">{state}'
+            rows.append(f'<p>unit <b>{html.escape(u)}</b>: <span class="{cls}">{state}'
                         f'</span>{waits}</p>')
         return self._page(f"""<h1>control <span class="dim">— processes and
 files, never the venue (§12)</span></h1>
@@ -122,6 +122,32 @@ written config (§11).</p>
             return False
         return botid in names
 
+    def _snapshot_held(self, fi, botid):
+        """X15d for a trade (L7): the size a bot or running trade holds, as
+        the engine's last snapshot states it — what the close page shows and
+        the second typing must match, and what a removal warns of (U97).
+        None when the snapshot does not say or it holds nothing."""
+        from gridgremlin.equity_series import snapshot_path
+        snap = snapshot_path(self.fleets[min(fi, len(self.fleets) - 1)])
+        try:
+            last = Path(snap).read_text().strip().splitlines()[-1]
+            pos = ((json.loads(last).get('bots') or {}).get(botid) or {}).get('position')
+        except (TypeError, OSError, ValueError, IndexError, AttributeError):
+            return None
+        return abs(pos) if isinstance(pos, (int, float)) and abs(pos) > 1e-12 else None
+
+    def _still_held(self, fi, botid):
+        """U97: removing a row closes nothing (the audit, 2026-10-16) — the
+        remove pages say what the bot still holds, when it holds anything."""
+        held = self._snapshot_held(fi, botid)
+        if not held:
+            return ''
+        return ('<div class="refusal"><b>it still holds a position</b> — '
+                f'{held:.10g}, as the engine\'s last snapshot says. Removing the '
+                'row does not close it: after the restart no bot manages it, and it '
+                'stays open on the exchange. To close it first, stop the fleet and '
+                'use <b>close position</b> on its card.</div>')
+
     def _close_page(self):
         import html as _html
         if not self.units and not self.supervise:
@@ -136,6 +162,13 @@ written config (§11).</p>
         if self._live_trade(fi, botid):
             # L7: a running trade is closed by its own bot, never from
             # outside — the panel writes the request, the fleet acts on it
+            real = self._mainnet(self.fleets[min(fi, len(self.fleets) - 1)], 'bybit')
+            held = self._snapshot_held(fi, botid) if real else None
+            if real and held is None:
+                return self._page(refusal_box('cannot close', f'{botid}: on real money the '
+                                              'size is typed a second time, and the engine has '
+                                              'not reported what this trade holds yet — try '
+                                              'after its next snapshot'))
             return self._page(
                 f'<h1>close trade {b}</h1>'
                 '<p class="say">The fleet closes this trade at market within a '
@@ -147,7 +180,11 @@ written config (§11).</p>
                 f'<input type="hidden" name="bot" value="{b}">'
                 f'type the trade\'s name to close it: <input name="confirm" '
                 f'size="18" placeholder="{b}"> '
-                '<button class="danger">close at market</button></form>')
+                + (f'<br><span class="neg">real money</span> — it holds <b>{held:.10g}</b> '
+                   '(the engine\'s last snapshot); type the size a second time: '
+                   '<input name="size" size="14" placeholder="the size above"> '
+                   if real else '')                                    # X15d
+                + '<button class="danger">close at market</button></form>')
         real = self._mainnet(self.fleets[min(fi, len(self.fleets) - 1)], 'bybit')
         got = self._run_close(fi, botid, dry=True)
         if 'refused' in got:
@@ -192,6 +229,12 @@ written config (§11).</p>
         path = self._live_trade(fi, botid)
         if path:                                                    # L7
             from gridgremlin.trades import TradeError, request_close
+            if self._mainnet(self.fleets[min(fi, len(self.fleets) - 1)], 'bybit'):
+                held, typed = self._snapshot_held(fi, botid), _f(str(form.get('size', '')).replace(',', ''))
+                if held is None or typed is None or abs(typed - held) > 1e-9 * max(1.0, held):
+                    return self._page(refusal_box(                  # X15d: name and size
+                        'not closed', 'on real money the size is typed a second time, '
+                                      'exactly as the page shows it'))
             try:
                 req = request_close(path, botid, 'owner', 'close trade on the panel')
             except (TradeError, OSError) as e:
@@ -240,7 +283,7 @@ written config (§11).</p>
                 notes.append(sup.stop(fleet))
             if act in ('start', 'restart'):
                 notes.append(sup.start(fleet))
-            return self._page(f'<h1>{Path(fleet).name}: {act}</h1><p>'
+            return self._page(f'<h1>{html.escape(Path(fleet).name)}: {html.escape(act)}</h1><p>'
                               + '<br>'.join(notes)
                               + '</p><p><a href="/control">control</a> · '
                                 '<a href="/">fleet</a></p>')
@@ -267,7 +310,7 @@ written config (§11).</p>
                                    + list(dict.fromkeys(typed)),
                                    capture_output=True, text=True, timeout=90)
                 note = html.escape(r.stderr.strip() or f'{act}: done')
-                return self._page(f'<h1>{html.escape(unit)}: {act}</h1>'
+                return self._page(f'<h1>{html.escape(unit)}: {html.escape(act)}</h1>'
                                   f'<p>{note}</p>'
                                   '<p><a href="/control">control</a> · '
                                   '<a href="/">fleet</a></p>')
@@ -280,7 +323,7 @@ written config (§11).</p>
                 # the fartcoin bot still rests"): start does nothing to a
                 # running unit, and "done" was a lie
                 return self._page(
-                    f'<h1 class="neg">{unit}: not started</h1><p>it is '
+                    f'<h1 class="neg">{html.escape(unit)}: not started</h1><p>it is '
                     'already running, and <b>start</b> does nothing to a '
                     'running unit. To load a new or removed bot, or a '
                     'changed range, grid count or ladder, choose '
@@ -289,7 +332,7 @@ written config (§11).</p>
             r = subprocess.run(['systemctl', '--user', act, unit],
                                capture_output=True, text=True, timeout=60)
             note = html.escape(r.stderr.strip() or f'{act}: done')
-            return self._page(f'<h1>{unit}: {act}</h1><p>{note}</p>'
+            return self._page(f'<h1>{html.escape(unit)}: {html.escape(act)}</h1><p>{note}</p>'
                               '<p><a href="/control">control</a> · '
                               '<a href="/">fleet</a></p>')
         # /revive — under the engine's own lock (X7, audit 2026-10-05)

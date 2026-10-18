@@ -13,7 +13,7 @@ def spec_U92_the_launcher_starts_the_panel_on_a_fixed_address_and_opens_it():
     and never stops the start; a second start while the panel runs only
     opens the browser; --desktop adds a menu entry. Sabotage: dropping the
     saved key from the command gives a new address every start."""
-    from panel.launch import PORT, TOKEN_FILE, desktop_entry, fleet_arg, main, panel_command
+    from panel.launch import PORT, TOKEN_FILE, desktop_entry, fleet_arg, main, panel_command, saved_key
     root = Path(tempfile.mkdtemp())
     (root / 'configs').mkdir()
     assert fleet_arg([], root) == 'configs/mine.json'                  # nothing yet: the panel offers init
@@ -40,7 +40,7 @@ def spec_U92_the_launcher_starts_the_panel_on_a_fixed_address_and_opens_it():
         port = busy.getsockname()[1]
         ran.clear()
         assert main(['--port', str(port)], root=root, opener=opened.append, run=ran.append) == 0
-        assert opened == [f'http://127.0.0.1:{port}/'] and not ran
+        assert opened == [f'http://127.0.0.1:{port}/' + saved_key(root)] and not ran   # P8
     entry = desktop_entry(root)
     assert f'Exec="{root / "grid-gremlin"}"' in entry and 'Terminal=true' in entry and 'Name=grid-gremlin' in entry
     old = os.environ.get('XDG_DATA_HOME')

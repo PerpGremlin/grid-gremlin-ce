@@ -157,6 +157,8 @@ class CreateFlowPages:
                    f"the mid {float(proposal['pair']['mid']):,.6g}; the "
                    'short half above it follows once this one is written '
                    '(D54).</p>')
+        if mode == 'remove':
+            say += self._still_held(fi, botid)              # U97
         if mode != 'remove':
             import html as _html
             from panel.setup import form_from_bot, sentence

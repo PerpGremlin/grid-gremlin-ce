@@ -76,7 +76,9 @@ def main(argv):
     srv = http.server.ThreadingHTTPServer(('127.0.0.1', port), Handler)
     Handler.host_ok = f'127.0.0.1:{srv.server_port}'
     url = f'http://{Handler.host_ok}/?t={Handler.token}'
-    print(f'panel: {url}', flush=True)   # journald/pipes: the URL must not sit in a buffer
+    tf = argv[argv.index('--token-file') + 1] if '--token-file' in argv else None
+    print(start_line(Handler.host_ok, Handler.token, tf, sys.stdout.isatty()),
+          flush=True)                    # journald/pipes: the line must not sit in a buffer
     if '--open' in argv:                 # U92: the launcher opens the browser on it
         import threading
         import webbrowser
@@ -85,6 +87,17 @@ def main(argv):
         srv.serve_forever()
     except KeyboardInterrupt:
         return 0
+
+def start_line(host, token, token_file, tty):
+    """P8: what the panel prints as it starts. A saved key never goes to the
+    system log on every start (the audit, 2026-10-16): under a service the
+    line names the token file instead; a terminal, or a one-off key that
+    lives nowhere else, still shows the whole address."""
+    if token_file and not tty:
+        return (f'panel: http://{host}/ — the key is in its token file '
+                f'({Path(token_file).name}); open /?t=<key> once')
+    return f'panel: http://{host}/?t={token}'
+
 
 if __name__ == '__main__':
     sys.exit(main(sys.argv[1:]))

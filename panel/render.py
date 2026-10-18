@@ -56,7 +56,9 @@ def cards_section(idx, label, contract, view='all', scripted=True):
             f'<div class="pnl {_num_cls(total)}"><span class="dim">this '
             'exchange</span> <span class="big '
             f'{_num_cls(total)}">{total:+,.2f}</span> {venue_money(contract)} '
-            '<span class="dim">after fees, each bot counted as its card says</span>'
+            '<span class="dim">after fees, each bot counted as its card says — most since it was '
+            'last flat, so not the same window as the equity line below, which runs from the '
+            'first snapshot with top-ups in</span>'                                  # U98
             f'<div class="parts">'
             f'{pnl_parts(net, sum(opened) if opened else None, funding)}'
             + (f' · portfolio rows <b class="{_num_cls(pfo)}">{pfo:+,.2f}</b>' if pfo else '')

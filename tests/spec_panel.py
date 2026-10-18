@@ -2470,3 +2470,95 @@ def spec_P6b_only_the_panels_own_scripts_run_and_its_forms_carry_a_secret():
         assert post(form_token('tok')) != 403
     finally:
         close()
+
+
+def spec_P7b_unit_names_on_the_control_page_are_text():
+    """The audit, 2026-10-16: a unit name from the launch is drawn escaped
+    on the control page, as every other name from a file (P7)."""
+    from panel.server import Handler
+    from spec_setup import _call, _served_fleet
+    base, d, close = _served_fleet()
+    saved = Handler.units
+    try:
+        Handler.units = ('<i>x</i>.service',)
+        page = _call(base, '/control')
+        assert '<i>x</i>' not in page and '&lt;i&gt;x&lt;/i&gt;.service' in page
+    finally:
+        Handler.units = saved
+        close()
+
+
+def spec_U97_removing_a_bot_says_what_it_still_holds():
+    """The audit, 2026-10-16: removing a row closes nothing — the remove
+    page and its review say what the bot holds by the engine's last
+    snapshot, and that it stays open with no bot to manage it; a flat bot's
+    pages say nothing of it."""
+    import json as _json
+    import urllib.parse
+    from spec_setup import _call, _served_fleet
+    base, d, close = _served_fleet()
+    try:
+        botid = 'linETHUSDTl'
+        door = f'/edit?fleet=0&bot={botid}&mode=remove'
+        assert 'still holds a position' not in _call(base, door)
+        (d / 's').write_text(_json.dumps({'t': 0, 'bots': {botid: {'position': 0.25}}}) + '\n')
+        page = _call(base, door)             # the door; the review shows the same box
+        assert 'it still holds a position</b> — 0.25' in page and 'does not close it' in page
+    finally:
+        close()
+
+
+def spec_P8_the_door_takes_localhost_refuses_with_a_way_back_and_keeps_the_key_out_of_logs():
+    """The audit, 2026-10-16: `localhost` is the same panel as 127.0.0.1 (an
+    Origin must still match the Host it came to); a refusal is a page with
+    the way back; a service's start line names the token file instead of
+    printing the key; the launcher reopens a running panel signed in, and
+    never with a key others can read."""
+    import os
+    import tempfile
+    import urllib.error
+    from pathlib import Path as _P
+    from panel.launch import TOKEN_FILE, saved_key
+    from panel.server import start_line
+    from spec_setup import _served_fleet
+    base, d, close = _served_fleet()
+    port = base.rsplit(':', 1)[1]
+
+    def get(host, path='/', data=None, origin=None):
+        h = {'Cookie': 'gg=tok', 'Host': f'{host}:{port}'}
+        if origin:
+            h['Origin'] = origin
+        try:
+            r = urllib.request.urlopen(urllib.request.Request(base + path, data=data, headers=h))
+            return r.status, r.read().decode()
+        except urllib.error.HTTPError as e:
+            return e.code, e.read().decode()
+    try:
+        assert get('localhost')[0] == 200 and get('127.0.0.1')[0] == 200
+        code, page = get('evil.example')
+        assert code == 403 and 'wrong Host' in page and 'back to your bots' in page
+        body = f'gg={form_token("tok")}&action=clear&fleet=0&confirm=x'.encode()
+        assert get('localhost', '/trade', body, origin=f'http://127.0.0.1:{port}')[0] == 403
+        assert get('localhost', '/trade', body, origin=f'http://localhost:{port}')[0] == 200
+        code, page = get('127.0.0.1', '/?t=nope')
+        assert code == 403 and '<a href="/">back to your bots</a>' in page
+    finally:
+        close()
+    assert start_line('127.0.0.1:41900', 'k3y', '/x/.panel-token', tty=False) == (
+        'panel: http://127.0.0.1:41900/ — the key is in its token file (.panel-token); open /?t=<key> once')
+    assert 'k3y' in start_line('127.0.0.1:41900', 'k3y', '/x/.panel-token', tty=True)
+    assert 'k3y' in start_line('127.0.0.1:41900', 'k3y', None, tty=False)      # a one-off key lives nowhere else
+    root = _P(tempfile.mkdtemp())
+    assert saved_key(root) == ''
+    (root / TOKEN_FILE).write_text('k3y\n')
+    os.chmod(root / TOKEN_FILE, 0o600)
+    assert saved_key(root) == '?t=k3y'
+    os.chmod(root / TOKEN_FILE, 0o644)
+    assert saved_key(root) == ''
+
+
+def spec_U98_the_exchange_box_says_its_window():
+    """The audit, 2026-10-16: the exchange box says its figure is each
+    bot's own window, not the equity line's (a reader took the gap for a bug)."""
+    from panel.server import render
+    assert 'not the same window as the equity line below' in render([('demo', CONTRACT)])

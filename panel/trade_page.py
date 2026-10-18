@@ -29,7 +29,7 @@ def trade_form(labels, msg='', typed=None):
             + row('market', f'<input name="symbol" value="{v("symbol", "BTCUSDT")}" size="14">', 'a perp like BTCUSDT')
             + row('investment', f'<input name="capital" value="{v("capital")}" size="10">',
                   'the margin, in the quote coin')
-            + row('investment, again', f'<input name="retype_capital" value="{v("retype_capital")}" size="10">',
+            + row('investment, again', f'<input name="retype_capital" value="" size="10">',
                   'on Mainnet only: type it a second time (D64)')
             + row('leverage', f'<input name="leverage" value="{v("leverage", "1")}" size="6">', unit='x')
             + row('take profit', f'<input name="tp" value="{v("tp")}" size="6">',

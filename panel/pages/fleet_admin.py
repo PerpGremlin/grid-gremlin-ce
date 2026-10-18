@@ -57,7 +57,7 @@ class FleetAdminPages:
             return (f'<h1>remove {html.escape(botid)}</h1><p class="dim">the bot and its '
                     'watchdog line leave together; the remaining fleet must '
                     'still validate (F1). The running fleet is untouched until '
-                    'restarted (§11).</p>'
+                    'restarted (§11).</p>' + self._still_held(fi, botid) +    # U97
                     f'<form method="post" action="/create">'
                     f'<input type="hidden" name="gg" value="1">'
                     f'<input type="hidden" name="mode" value="remove">'

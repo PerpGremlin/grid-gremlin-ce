@@ -234,12 +234,23 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
 
     def _deny(self, code, why):
         self.send_response(code)
-        self.send_header('Content-Type', 'text/plain')
+        self.send_header('Content-Type', 'text/html; charset=utf-8')
         self.end_headers()
-        self.wfile.write(why.encode())
+        # P8: a refusal says why and offers the way back (the audit,
+        # 2026-10-16: a bare line of text, nowhere to go)
+        self.wfile.write((f'<!doctype html><meta charset="utf-8"><title>refused</title>'
+                          f'<p>{html.escape(why)}</p>'
+                          + ('' if code == 401 else '<p><a href="/">back to your bots</a></p>')
+                          ).encode())
+
+    def _host_is_ours(self):
+        """The rebinding defence, with `localhost` beside 127.0.0.1 (P8:
+        the same panel, refused by name)."""
+        return self.headers.get('Host', '') in (
+            self.host_ok, self.host_ok.replace('127.0.0.1', 'localhost', 1))
 
     def do_GET(self):
-        if self.headers.get('Host', '') != self.host_ok:
+        if not self._host_is_ours():
             return self._deny(403, 'wrong Host')       # rebinding defence
         if self.path.startswith('/?t='):
             if secrets.compare_digest(self.path[4:], self.token):
@@ -252,7 +263,7 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
                 return
             return self._deny(403, 'bad token')
         if not self._authed():
-            return self._deny(401, 'open the tokened URL from the terminal')
+            return self._deny(401, 'open the panel with its key: /?t=<key> (the terminal shows it, or the token file holds it)')
         if not self._fleet_ok(dict(urllib.parse.parse_qsl(
                 self.path.split('?', 1)[1] if '?' in self.path else '')).get('fleet')):
             return self._deny(400, 'no such fleet')
@@ -366,12 +377,12 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
 
 
     def do_POST(self):
-        if self.headers.get('Host', '') != self.host_ok:
+        if not self._host_is_ours():
             return self._deny(403, 'wrong Host')
         if not self._authed():
-            return self._deny(401, 'open the tokened URL from the terminal')
+            return self._deny(401, 'open the panel with its key: /?t=<key> (the terminal shows it, or the token file holds it)')
         origin = self.headers.get('Origin', '')
-        if origin and origin != f'http://{self.host_ok}':
+        if origin and origin != f"http://{self.headers.get('Host', '')}":
             return self._deny(403, 'wrong Origin')     # cross-site write
         try:                                     # a negative length read
             n = int(self.headers.get('Content-Length') or 0)   # to EOF and

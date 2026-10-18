@@ -416,3 +416,41 @@ def spec_R24_the_panel_serves_the_results_page():
         assert 'href="/results"' in page                      # it wears the navigation (U60)
     finally:
         close()
+
+
+def spec_X15d_closing_a_live_trade_on_real_money_asks_its_size_twice():
+    """The audit, 2026-10-16: on a real-money fleet the close-trade page
+    shows the size the engine's snapshot says the trade holds and asks for
+    it again; a wrong or missing size closes nothing, the right one writes
+    the request; no snapshot yet, no close. Play money asks the name only;
+    a refused trade's second typing is never refilled (D64)."""
+    from panel.server import Handler
+    from spec_setup import _call, _served_fleet
+    base, d, close = _served_fleet()
+    saved = Handler.units
+    try:
+        Handler.units = ('some.service',)
+        assert 'linBTCUSDTl: queued' in _call(base, '/trade', {
+            'action': 'open', 'fleet': '0', 'side': 'long', 'symbol': 'BTCUSDT',
+            'capital': '200', 'leverage': '3', 'tp': '0.6', 'stop': '0.6'})
+        assert 'type the size a second time' not in _call(base, '/close?fleet=0&bot=linBTCUSDTl')
+        fleet = json.loads((d / 'f.json').read_text())
+        (d / 'f.json').write_text(json.dumps(dict(fleet, allow_mainnet=True)))
+        assert 'not reported what this trade holds' in _call(base, '/close?fleet=0&bot=linBTCUSDTl')
+        (d / 's').write_text(json.dumps({'t': 0, 'bots': {'linBTCUSDTl': {'position': 0.0072}}}) + '\n')
+        page = _call(base, '/close?fleet=0&bot=linBTCUSDTl')
+        assert 'it holds <b>0.0072</b>' in page and 'type the size a second time' in page
+        form = {'fleet': '0', 'bot': 'linBTCUSDTl', 'confirm': 'linBTCUSDTl'}
+        for size in (None, '0.007', 'x'):
+            got = _call(base, '/close', form if size is None else dict(form, size=size))
+            assert 'not closed' in got, size
+        assert 'close' not in json.loads((d / 'logs' / 'trades-f.json').read_text())[0]
+        assert 'close requested' in _call(base, '/close', dict(form, size='0.0072'))
+        refused = _call(base, '/trade', {
+            'action': 'open', 'fleet': '0', 'side': 'long', 'symbol': 'ETHUSDT',
+            'capital': '300', 'retype_capital': '3000', 'tp': '1'})
+        assert 'trade refused' in refused and 'name="retype_capital" value=""' in refused
+        assert 'name="capital" value="300"' in refused                   # the rest is kept
+    finally:
+        Handler.units = saved
+        close()

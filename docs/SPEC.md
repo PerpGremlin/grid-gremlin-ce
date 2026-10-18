@@ -864,7 +864,10 @@ eventually pin (T1).
 - **X15d** On a fleet that may reach real money, the panel's close page
   asks for the bot's name and the size typed a second time (D97, D64's
   shape); without the size nothing runs, and the engine is asked to close
-  exactly that size (`--expect`). The run half rides in the engine's own
+  exactly that size (`--expect`). A running trade's close (L7) asks the
+  same: the size its last snapshot gives, typed again, or nothing is
+  requested; no snapshot size yet, no close. A refused second typing is
+  never refilled (D64). *(audit 2026-10-16)* The run half rides in the engine's own
   argv (`close.command`); the panel never names it (D65). *(was, 2026-10-13
   morning: the page said to close it on the exchange, under D48)*
 - **X15b** On Hyperliquid the close command waits for the fleet (D77): nonces
@@ -1835,6 +1838,12 @@ eventually pin (T1).
   not priced" on its card and drops its ROI; the exchange box and the strip
   say how many such books their total leaves out; the box's parts show the
   portfolio rows its total adds.
+- **U97** Removing a bot says what it still holds (audit 2026-10-16): the
+  remove page shows the size the engine's last snapshot gives, and that
+  removing the row closes nothing — no bot manages it after the restart.
+- **U98** The exchange box says its window: each bot as its card counts it,
+  mostly since it was last flat — not the equity line's window (audit
+  2026-10-16).
 - **U96** The table and the card agree (audit 2026-10-16): a stopped bot
   reads DEAD in both, holding or not, and a slid grid is judged against its
   slid window in both (U57's arithmetic, one function).
@@ -2588,6 +2597,12 @@ that pins it (T1).
   and a swapped-in script takes the page's nonce). The forms' hidden `gg`
   is an HMAC of the launch's secret, compared in constant time; the old
   constant `1` or another launch's value is refused. *(audit 2026-10-16)*
+- **P8** The door, kindly (audit 2026-10-16): `localhost` is the same panel
+  as 127.0.0.1 (an Origin must match the Host it came to); a refusal is a
+  page saying why with the way back; under a service the start line names
+  the token file and never prints the key (a terminal, or a one-off key,
+  still shows the whole address); the launcher reopens a running panel
+  signed in from the saved key, never from a key others can read.
 - **P7** Names that come from files — fleet and unit names, tombstone ids,
   the money, margin and settle coins — are drawn as escaped text; a
   refusal's reason goes raw into `refusal_box`, which escapes it once.

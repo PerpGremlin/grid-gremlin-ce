@@ -43,6 +43,20 @@ def in_use(port):
         return s.connect_ex(('127.0.0.1', port)) == 0
 
 
+def saved_key(root=ROOT):
+    """P8: `?t=<key>` from the saved key, so a second start opens the panel
+    signed in (it opened `/` bare, and a browser without the cookie got
+    401); empty when there is none or it is readable by others."""
+    tf = Path(root) / TOKEN_FILE
+    try:
+        if tf.stat().st_mode & 0o077:
+            return ''
+        key = tf.read_text().strip()
+    except OSError:
+        return ''
+    return f'?t={key}' if key else ''
+
+
 def panel_command(fleet, port, root=ROOT):
     return [sys.executable, '-m', 'panel.server', fleet, '--supervise',
             '--port', str(port), '--token-file', str(Path(root) / TOKEN_FILE), '--open']
@@ -69,7 +83,7 @@ def main(argv, root=ROOT, opener=webbrowser.open, run=subprocess.call, doctor=No
     if in_use(port):
         url = f'http://127.0.0.1:{port}/'
         print(f'grid-gremlin is already running: opening {url}', flush=True)
-        opener(url)
+        opener(url + saved_key(root))         # P8: with the key, so it opens signed in
         return 0
     if doctor is None:
         from gridgremlin.doctor import run as doctor      # from the repo root: the script starts there
