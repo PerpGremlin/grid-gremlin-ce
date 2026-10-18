@@ -25,18 +25,18 @@ and merges — nothing merges without that review. An accepted change is
 then carried into the private edition this one is written from, so it
 survives the next release.
 
-## Sign your commits
+## Nothing about you is needed
 
-Every commit carries a Developer Certificate of Origin sign-off, which
-says you have the right to submit the work under this project's licence:
+No name, email or phone number is asked for, in an issue or a pull request.
+A GitHub account under any name will do; to keep your email out of your
+commits, use GitHub's private `noreply` address (Settings → Emails). Your
+findings are wanted; who you are is not.
 
-```
-git commit -s
-```
+## The licence of a contribution
 
-adds `Signed-off-by: Your Name <you@example.com>`. By submitting a
-contribution you agree that it is licensed under the Apache License 2.0,
-as the License itself says (section 5).
+By submitting a contribution you agree that it is licensed under the
+Apache License 2.0, as the License itself says (section 5). No sign-off
+line is needed.
 
 ## Where to look first
 

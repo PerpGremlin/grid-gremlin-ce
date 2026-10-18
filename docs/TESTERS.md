@@ -62,6 +62,8 @@ In order of usefulness:
 4. **A word that confused you**: what the screen said, what you expected.
 
 Use the issue templates. Never paste keys, account figures or hostnames.
+Nothing about you is asked for: no name, email or phone number; a GitHub
+account under any name will do.
 
 ## What not to do
 

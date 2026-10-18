@@ -1235,6 +1235,17 @@ stands unless the owner corrects it.
   futures box per coin; each coin checked at its size before anything is
   sent; a refusal part way puts back what changed; a refusal at a start is
   said, never a fleet that will not start.
+- **D144 — Findings without who you are (2026-10-19).** The owner: "if
+  users feel like they have to give out an email or phone number, they
+  wont be inclined to report stuff." The edition sends nothing of a user's
+  anywhere but their own exchange and their own Telegram; the one ask was
+  D68's sign-off (DCO), a name and email in public history for good. It
+  goes: a contribution is licensed by the Apache License's section 5
+  alone, and the README, CONTRIBUTING and testers' guide say no name,
+  email or phone number is needed, a GitHub account under any name will
+  do (F23b). A route with no GitHub account at all (a separate Telegram
+  bot for findings, never the alerts bot) is a public way in and waits for
+  its own D-number.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

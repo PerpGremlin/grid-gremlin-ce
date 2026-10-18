@@ -1071,6 +1071,9 @@ eventually pin (T1).
   that runs the suite on every pull request, or the scan refuses it (D68).
   The testers' runbook (`docs/public/RUNBOOK.md`) stands where the private
   one does, so F28 holds in the exported tree too.
+- **F23b** A finding never asks who you are (D144): the edition's README,
+  CONTRIBUTING, testers' guide and issue templates ask for no name, email or
+  phone number and carry no sign-off rule; the first three say so.
 - **F24** The dead-man's switch (D74). At the end of every completed watchdog
   run — breached or not, paged or not — one GET to `DEADMAN_URL` when `.env`
   names it; the outside check alarms when the pings stop. A failed ping is

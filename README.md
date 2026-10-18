@@ -114,7 +114,9 @@ the cards, `/market` on the phone, and the daily digest.
 Findings are the point. Open an issue with one of the templates: a **failing
 spec** (the best report there is), a **reproduction**, a **description**, or
 a **word on the screen that the key did not explain**. Never include keys,
-account figures or hostnames; redact them.
+account figures or hostnames; redact them. Nothing about you is asked
+for: no name, email or phone number, and a GitHub account under any name
+will do (`CONTRIBUTING.md`).
 
 ## Where the detail is
 
@@ -128,7 +130,7 @@ account figures or hostnames; redact them.
 **Apache License 2.0** — `LICENSE` and `NOTICE`. Use it, change it, build on
 it, keep the notice. Contributions are welcome under the same licence:
 `CONTRIBUTING.md` says how (one change per pull request with its spec, the
-suite green, commits signed off).
+suite green; no sign-off, no personal details).
 
 This is software, not advice and not a service. Trading carries risk of
 loss, more so with leverage; this edition cannot reach real money.
