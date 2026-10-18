@@ -12,7 +12,8 @@ from .config import (ConfigError, _enum, _flag, _fraction, _num,
 
 PORTFOLIO_KEYS = ('strategy', 'name', 'venue', 'account', 'capital', 'assets',
                   'hedge', 'rebalance', 'regime', 'funding_rule', 'risk',
-                  'margin', 'spot_borrow', 'spot_quote')
+                  'margin', 'spot_borrow', 'spot_quote', 'perp_leverage')
+PERP_LEVERAGE_MOST = 125.0   # the gate's ceiling; the venue's own (leverageFilter) is checked at the build
 PRODUCTS = ('usdt', 'usdc', 'inverse')
 H = 3_600_000
 CASH_RESERVE = 0.003         # of the cash a tick spends, kept for the buys' fees (three refusals by a hair, 2026-10-08)
@@ -153,6 +154,13 @@ def validate_portfolio(row, where='row'):
                         "exists not to have. Name 'usdt' or 'usdc' (H1c)")
             shorts[c] = prod
     cfg['short_products'] = shorts
+
+    # --- the perps' leverage (D143; opt-in: absent, the venue's setting stands) ----
+    pl = _num(cfg, 'perp_leverage', where, least=1.0, most=PERP_LEVERAGE_MOST)
+    if pl is None:
+        cfg.pop('perp_leverage', None)
+    else:
+        cfg['perp_leverage'] = float(pl)
 
     # --- the clock -----------------------------------------------------------------
     reb = cfg.get('rebalance') or {}

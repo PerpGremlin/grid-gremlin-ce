@@ -1192,3 +1192,62 @@ def spec_H11_each_legs_view_carries_the_venues_leverage_and_its_ceiling():
     got = {g['coin']: (g['leverage'], g['max_leverage']) for g in bot.portfolio_view['legs']}
     assert got == {'BTC': (100.0, 100.0), 'ETH': (100.0, None)}
     assert bot.portfolio_view['spot_leverage_most'] == 1.0                 # no margin block: no loan, 1×
+
+
+class _LevCatalogue:
+    """The venue's catalogue with a leverage ceiling, and its set-leverage."""
+    def __init__(self, most='100', refuse=None):
+        self.most, self.refuse, self.set = most, refuse, []
+
+    def instruments_info(self, mt, symbol):
+        coin = symbol.replace('USDT', '').replace('USD', '')
+        info = {'symbol': symbol, 'status': 'Trading', 'baseCoin': coin,
+                'settleCoin': {'spot': 'USDT', 'linear': 'USDT', 'inverse': coin}[mt],
+                'priceFilter': {'tickSize': '0.1'},
+                'lotSizeFilter': ({'basePrecision': '0.000001', 'minOrderQty': '0.00001', 'minOrderAmt': '1'}
+                                  if mt == 'spot' else {'qtyStep': '1', 'minOrderQty': '1'})}
+        if mt != 'spot':
+            info['leverageFilter'] = {'maxLeverage': self.most}
+        return info
+
+    def ensure_collateral(self, coin):
+        pass
+
+    def ensure_hedge_mode(self, mt, symbol):
+        pass
+
+    def set_leverage(self, category, symbol, lev, sell=None):
+        if self.refuse:
+            from gridgremlin.exchange.errors import VenueError
+            raise VenueError(self.refuse, kind='other')
+        self.set.append((category, symbol, lev))
+
+
+def spec_H12_perp_leverage_is_gated_and_set_on_every_perp_at_the_build():
+    """D143 (the owner, 2026-10-18): "a way to adjust the leverage of the
+    derivatives positions and the spot positions for the carry accounts"."""
+    from gridgremlin.main import build_portfolio
+    for bad in (0.5, 126, 'x'):
+        try:
+            validate_config(dict(ROW, perp_leverage=bad))
+        except ConfigError as e:
+            assert 'perp_leverage' in str(e), e
+        else:
+            raise AssertionError(f'perp_leverage {bad!r} passed the gate')
+    assert 'perp_leverage' not in validate_config(dict(ROW))       # absent: the venue's own stands
+    tmp = Path(tempfile.mkdtemp())
+    cat = _LevCatalogue()
+    build_portfolio(validate_config(dict(ROW)), cat, Notifier(sink=[].append),
+                    PortfolioState(tmp / 'a.json'), Tombstones(tmp / 'ta.json'))
+    assert cat.set == []                                            # nothing asked, nothing sent
+    build_portfolio(validate_config(dict(ROW, perp_leverage=3)), cat, Notifier(sink=[].append),
+                    PortfolioState(tmp / 'b.json'), Tombstones(tmp / 'tb.json'))
+    assert cat.set == [('inverse', 'BTCUSD', 3.0), ('inverse', 'ETHUSD', 3.0)], cat.set
+    cat = _LevCatalogue(most='2')
+    try:
+        build_portfolio(validate_config(dict(ROW, perp_leverage=3)), cat, Notifier(sink=[].append),
+                        PortfolioState(tmp / 'c.json'), Tombstones(tmp / 'tc.json'))
+    except ConfigError as e:
+        assert 'allows 2× at most' in str(e) and cat.set == [], (e, cat.set)
+    else:
+        raise AssertionError('a leverage above the venue ceiling was built')

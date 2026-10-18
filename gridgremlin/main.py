@@ -136,6 +136,12 @@ def build_portfolio(cfg, client, notifier, state, tombs):
                 except VenueError as e:
                     _vn(notifier, cfg['venue']).event('warn', cfg['botid'],
                                                       f'collateral switch for {coin} deferred: {e}')
+    if cfg.get('perp_leverage'):
+        # D143: the file's leverage for the perps, set at every build
+        from .portfolio_bot import set_perp_leverage
+        why = set_perp_leverage(client, legs, cfg['perp_leverage'])
+        if why:
+            raise ConfigError(f"{cfg['botid']}: perp_leverage {cfg['perp_leverage']:g} refused — {why}")
     from .portfolio_bot import RegimeReader
     reader = RegimeReader() if cfg.get('regime') else None
     return PortfolioBot(cfg, legs, client, notifier, state, tombstones=tombs,

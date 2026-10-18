@@ -28,6 +28,7 @@ from .pages.fleet_admin import FleetAdminPages
 from .pages.control import ControlPages
 from .pages.position import PositionPages
 from .pages.trade import TradePages
+from .pages.lever import LeverPages
 
 CACHE_TTL_S = 30.0       # the readout reads the venues; 10 s fed the rate limit
 
@@ -53,7 +54,7 @@ def form_token(token):
     return hmac.new(token.encode(), b'gg-form', hashlib.sha256).hexdigest()[:32]
 
 
-class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, PositionPages, TradePages, http.server.BaseHTTPRequestHandler):
+class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, PositionPages, TradePages, LeverPages, http.server.BaseHTTPRequestHandler):
     server_version = 'gg-panel'
     token = ''
     fleets = ()            # venue sections: one per fleet file
@@ -409,6 +410,8 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             return self._close_act(form)
         if self.path == '/trade':
             return self._trade_post(form)
+        if self.path == '/lever':                            # D143
+            return self._lever_post(form)
         if self.path == '/init':
             from panel.create import init_pair
             try:

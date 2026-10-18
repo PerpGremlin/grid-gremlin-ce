@@ -1161,3 +1161,92 @@ def spec_F30b_D99_on_mainnet_the_tier_is_the_smallest_that_fits():
             'venue': 'bybit', 'market_type': 'linear', 'symbol': 'BTCUSDT', 'leverage': 2,
             'ladder_notional': 2_000.0})], Notifier(sink=lambda s: None))
         assert v.risk == [want, want] and v.lev == [2], (env, v.risk)
+
+
+def _pfo_world(refuse=None):
+    """A running portfolio row as the watch sees it: its cfg, legs, client."""
+    import json
+    from gridgremlin.config import validate_fleet
+    from gridgremlin.events import Notifier
+    from gridgremlin.reload import FleetWatch
+    pfo = {'strategy': 'portfolio', 'name': 'carry', 'capital': 1000,
+           'spot_borrow': True, 'margin': {'spot_leverage': 2.0, 'borrow_apr_max': 0.1},
+           'assets': [{'coin': 'BTC', 'weight': 1.0}, {'coin': 'ETH', 'weight': 1.0}],
+           'risk': {'max_weight': 1.0}, 'hedge': {'product': 'inverse', 'ratio': 1.0}}
+    watch, bots, venue, lines, fleet = _watch_world([_GRID])
+    raw = json.loads(fleet.read_text())
+    raw['bots'].append(pfo)
+    fleet.write_text(json.dumps(raw))
+
+    class Client:
+        def __init__(self):
+            self.calls = []
+
+        def set_leverage(self, category, symbol, lev, sell=None):
+            self.calls.append((category, symbol, lev))
+            if refuse:
+                from gridgremlin.exchange.errors import VenueError
+                raise VenueError(refuse, kind='other')
+
+    class Row:
+        def __init__(self, cfg):
+            self.cfg, self.botid, self.client = cfg, cfg['botid'], Client()
+            self.legs = {'spot': {}, 'short': {},
+                         'hedge': {c: {'market_type': 'inverse', 'symbol': f'{c}USD',
+                                       'spec': {'max_leverage': 50.0}} for c in ('BTC', 'ETH')}}
+    row = Row(dict(validate_fleet(json.loads(json.dumps(raw)))['bots'][1], account='carry'))   # as the fleet stamps it
+    bots.append(row)
+    watch = FleetWatch(fleet, bots, {'bybit': venue, 'hyperliquid': venue.hl}, Notifier(sink=lines.append))
+    return watch, row, raw, fleet, lines, venue
+
+
+def spec_F12_a_portfolio_rows_leverage_is_applied_live_the_perps_on_the_venue_first():
+    """D143: the spot's leverage (its weights, its loan) and the perps' move
+    live; the perps' goes to the row's own account's client, each leg."""
+    import json
+    watch, row, raw, fleet, lines, venue = _pfo_world()
+    p = raw['bots'][1]
+    p['margin']['spot_leverage'] = 4.0
+    p['assets'] = [{'coin': 'BTC', 'weight': 2.0}, {'coin': 'ETH', 'weight': 2.0}]
+    p['risk']['max_weight'] = 2.0
+    p['perp_leverage'] = 5
+    fleet.write_text(json.dumps(raw))
+    assert watch.apply() == {'pfocarry': 'applied'}
+    assert row.client.calls == [('inverse', 'BTCUSD', 5.0), ('inverse', 'ETHUSD', 5.0)]
+    assert venue.calls == []                                 # the row's account, not the fleet's
+    assert row.cfg['margin']['spot_leverage'] == 4.0 and row.cfg['perp_leverage'] == 5.0
+    assert [a['weight'] for a in row.cfg['assets']] == [2.0, 2.0] and row.cfg['account'] == 'carry'
+    assert any('spot leverage 2x -> 4x' in ln and 'perp leverage 0x -> 5x' in ln for ln in lines), lines
+    assert watch.apply() == {}
+
+
+def spec_F12_a_portfolio_leverage_refused_applies_nothing_and_other_changes_wait():
+    import json
+    watch, row, raw, fleet, lines, venue = _pfo_world(refuse='retCode 110013: cannot set leverage')
+    p = raw['bots'][1]
+    p['margin']['spot_leverage'] = 4.0
+    p['assets'] = [{'coin': 'BTC', 'weight': 2.0}, {'coin': 'ETH', 'weight': 2.0}]
+    p['risk']['max_weight'] = 2.0
+    p['perp_leverage'] = 5
+    fleet.write_text(json.dumps(raw))
+    assert watch.apply() == {'pfocarry': 'refused'}
+    assert row.cfg['margin']['spot_leverage'] == 2.0 and 'perp_leverage' not in row.cfg
+    assert any('REFUSED: BTCUSD: retCode 110013' in ln for ln in lines), lines
+    p['perp_leverage'] = 60                                   # above the leg's ceiling: never sent
+    fleet.write_text(json.dumps(raw))
+    row.client.calls.clear()
+    assert watch.apply() == {'pfocarry': 'refused'} and row.client.calls == []
+    assert any('allows 50× at most' in ln for ln in lines)
+    base = dict(json.loads(json.dumps(raw['bots'][1])), margin={'spot_leverage': 2.0, 'borrow_apr_max': 0.1},
+                assets=[{'coin': 'BTC', 'weight': 1.0}, {'coin': 'ETH', 'weight': 1.0}], risk={'max_weight': 1.0})
+    base.pop('perp_leverage')
+    for change in ({'capital': 2000},                                     # the book's
+                   {'margin': None, 'spot_borrow': False,                 # the loan's block taken away
+                    'assets': [{'coin': 'BTC', 'weight': 0.5}, {'coin': 'ETH', 'weight': 0.5}]},
+                   {'margin': {'spot_leverage': 3.0}, 'risk': {'max_weight': 1.0},
+                    'assets': base['assets'] + [{'coin': 'SOL', 'weight': 1.0}]}):   # a coin added
+        q = {k: v for k, v in dict(json.loads(json.dumps(base)), **change).items() if v is not None}
+        raw['bots'][1] = q
+        fleet.write_text(json.dumps(raw))
+        assert watch.apply() == {'pfocarry': 'restart'}, q
+        assert row.cfg['capital'] == 1000.0 and row.cfg['margin']['spot_leverage'] == 2.0

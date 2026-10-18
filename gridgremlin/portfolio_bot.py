@@ -120,6 +120,24 @@ class RegimeReader:
         return None
 
 
+def set_perp_leverage(client, legs, lev):
+    """D143: the row's perps (its hedges and outright shorts) set to `lev`
+    on the venue, each its own market. Checked against every leg's ceiling
+    (leverageFilter) before anything is sent; None when done, else the
+    refusal in words — the venue's own when it is the venue's."""
+    perps = [leg for kind in ('hedge', 'short') for leg in (legs.get(kind) or {}).values()]
+    for leg in perps:
+        most = (leg.get('spec') or {}).get('max_leverage')
+        if most and lev > most:
+            return f"{leg['symbol']} allows {most:g}× at most, not {lev:g}×"
+    for leg in perps:
+        try:
+            client.set_leverage(leg['market_type'], leg['symbol'], lev)
+        except (VenueError, OSError) as e:
+            return f"{leg['symbol']}: {e}"
+    return None
+
+
 class PortfolioBot:
     """`legs`: {'spot': {coin: {symbol, adapter}}, 'hedge': {coin:
     {market_type, symbol, adapter}}, 'short': {coin: {...}}} — resolved by

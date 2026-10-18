@@ -984,7 +984,8 @@ eventually pin (T1).
   a change among the COLD keys (identity, strategy, venue, lattice, slide, seed,
   floor, a martingale's sizes and deviations) applies nothing of that row and
   names what waits for a restart. A portfolio row is known to the watch by
-  its own id, and any change to it waits for a restart (H2), said so. A leverage change goes to the venue first, one
+  its own id; its leverage is applied live (H12), and any other change to it
+  waits for a restart (H2), said so. A leverage change goes to the venue first, one
   leverage per market (the legs' highest, as at build) on Bybit, one per coin
   on Hyperliquid (its updateLeverage, as the build asserts it); the venue's
   refusal is said in its own words and nothing of that row is applied. *(live
@@ -1844,6 +1845,17 @@ eventually pin (T1).
 - **U98** The exchange box says its window: each bot as its card counts it,
   mostly since it was last flat — not the equity line's window (audit
   2026-10-16).
+- **U99** A portfolio row's leverage on the panel (D143). Its card's edit
+  shows two boxes, spot (1 to `SPOT_LEVERAGE_MOST`) and futures (1–125, blank
+  keeps the file's), and the rest stays the file's. The new row keeps each
+  weight's share and sign and sums to the spot figure (rounded, the last
+  weight closing the sum), raises `max_weight` when the weights outgrow it,
+  and adds the loan's block (`spot_borrow`, `margin` at the gate's 8% cap)
+  when the stack first borrows, keeping it at 1× after. The review writes
+  nothing: it says the change in words (that futures leverage on a cross
+  account moves margin set aside, not the liquidation) and as a diff, and
+  the write needs the row's name typed and the file unchanged since the
+  review (U84). A fleet that may reach real money is refused: by hand (D64).
 - **U96** The table and the card agree (audit 2026-10-16): a stopped bot
   reads DEAD in both, holding or not, and a slid grid is judged against its
   slid window in both (U57's arithmetic, one function).
@@ -2176,6 +2188,21 @@ that pins it (T1).
   the venue holds it, of the venue's ceiling (`leverageFilter`) when read.
   *(the owner, 2026-10-16: "1x for no leverage up to whatever can be set
   exchange side")*
+- **H12** The row's leverage, set and changed live (D143). `perp_leverage`
+  (1–125; absent, the venue's setting stands) is set on the venue for
+  every hedge and outright short at the build, each checked against its
+  market's ceiling first (`leverageFilter`) — a leg above it, or the venue's
+  refusal, refuses the build by name. In a running fleet a change to the
+  row's spot leverage (the `margin` block and `spot_borrow`), its weights'
+  sizes (coins, sides and holdings unchanged), `risk.max_weight` or
+  `perp_leverage` is applied live: the perps' on the venue first, through
+  the row's own account's client, and a refusal (the ceiling or the venue)
+  applies nothing; then the row takes the new terms and the next read plans
+  the stack at them (H2's terms, said). Anything else, and taking a
+  borrowing row's `margin` block away, waits for a restart.
+  *(the owner, 2026-10-18: "we need to add a way to adjust the leverage of
+  the derivativers positions and the spot positions for the carry
+  accounts")*
 - **H6** The card says the three truths. A portfolio's card shows the
   stack's value and coins, one line per asset (weight target → actual,
   hedge ratio target → actual, coins hedged, the regime word when the tilt

@@ -94,7 +94,8 @@ own in the panel — the panel writes the same file.
 `examples/fleet.portfolio.json`: the hedged portfolio (README §4b) — two
 coins on spot at equal weights, each hedged one for one by its inverse
 perpetual, the funding collected and compounded, rebalanced daily; pure
-carry, no leverage. It is edited in the file, not the form, and it starts
+carry, no leverage. It is edited in the file, not the form (its leverage,
+spot and futures, is on its card's **edit**), and it starts
 from its capital in cash on a demo account.
 `fleet.agent.json`: the agent experiment (docs/AGENT.md) in paper — no
 bots and no keys; a model sends trade intents through one door, they are

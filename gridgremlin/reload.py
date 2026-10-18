@@ -43,6 +43,20 @@ def _portfolio_terms(cfg):
     return {k: v for k, v in cfg.items() if not k.startswith('_') and k != 'account'}
 
 
+def _portfolio_cold(cfg):
+    """D143: a portfolio row's terms less what may move live — its spot
+    leverage (the margin block and its loan's right), the weights' sizes
+    (the coins, their sides and holdings stay), the per-asset cap and the
+    perps' leverage. Equal here, a change is applied live; else a restart."""
+    t = _portfolio_terms(cfg)
+    for k in ('margin', 'spot_borrow', 'perp_leverage'):
+        t.pop(k, None)
+    t['assets'] = [{'coin': a['coin'], 'long': a['weight'] > 0, 'holding': a.get('holding', 0.0)}
+                   for a in t.get('assets') or []]
+    t['risk'] = {k: v for k, v in (t.get('risk') or {}).items() if k != 'max_weight'}
+    return t
+
+
 def _user_keys(cfg):
     """The row as written, minus the engine's derived values and notes."""
     derived = {'ladder_notional', 'ladder_total_notional', 'ladder_total_coins',
@@ -101,14 +115,8 @@ class FleetWatch:
                                     'until the next restart (F12)', urgent=True)
                 continue
             if new.get('strategy') == 'portfolio':
-                # H2: a portfolio row learns new terms at a restart, never live —
-                # its legs, book and clock are the restart's to re-read
                 if _portfolio_terms(bot.cfg) != _portfolio_terms(new):
-                    self.notifier.event('warn', bot.botid,
-                                        'the file changed the portfolio row — it learns new '
-                                        'terms at the next restart; nothing is applied live (H2)',
-                                        urgent=True)
-                    out[bot.botid] = 'restart'
+                    out[bot.botid] = self._portfolio_apply(bot, new)
                 continue
             old_u, new_u = _user_keys(bot.cfg), _user_keys(new)
             changed = {k for k in set(old_u) | set(new_u)
@@ -148,6 +156,51 @@ class FleetWatch:
                                 f'applied live from the file: {said} (F12)')
             out[bot.botid] = 'applied'
         return out
+
+    def _portfolio_apply(self, bot, new):
+        """D143: a portfolio row's leverage — the spot's (its weights and its
+        loan) and the perps' — is applied live: the perps' on the venue
+        first, a refusal applying nothing; the next read plans the stack at
+        the new weights (H2's terms). Anything else is a restart's, as H2
+        always had it: its legs, book and clock are the restart's to re-read.
+        Taking a margin row's loan block away is a restart's too: the row
+        would stop counting a loan it still owes."""
+        old_m, new_m = bot.cfg.get('margin'), new.get('margin')
+        if _portfolio_cold(bot.cfg) != _portfolio_cold(new) or (old_m and not new_m):
+            self.notifier.event('warn', bot.botid,
+                                'the file changed the portfolio row — it learns new '
+                                'terms at the next restart; only its leverage is '
+                                'applied live (H2, D143)', urgent=True)
+            return 'restart'
+        lev = new.get('perp_leverage')
+        if lev and lev != bot.cfg.get('perp_leverage'):
+            from .portfolio_bot import set_perp_leverage
+            client = getattr(bot, 'client', None) or self.clients.get(new['venue'])
+            why = (set_perp_leverage(client, bot.legs, lev) if client is not None
+                   else 'no client to set leverage on')
+            if why:
+                self.notifier.event('warn', bot.botid,
+                                    f'perp leverage {bot.cfg.get("perp_leverage") or 0:g} -> {lev:g} '
+                                    f'REFUSED: {why} — nothing of this row is applied (D143)',
+                                    urgent=True)
+                return 'refused'
+
+        def lev_of(cfg):
+            return (cfg.get('margin') or {}).get('spot_leverage', 1.0)
+        said = []
+        if lev_of(bot.cfg) != lev_of(new):
+            said.append(f'spot leverage {lev_of(bot.cfg):g}x -> {lev_of(new):g}x')
+        if bot.cfg.get('perp_leverage') != lev:
+            said.append(f"perp leverage {bot.cfg.get('perp_leverage') or 0:g}x -> "
+                        + (f'{lev:g}x' if lev else "the venue's own"))
+        if [a['weight'] for a in bot.cfg['assets']] != [a['weight'] for a in new['assets']]:
+            said.append('weights ' + ', '.join(f"{a['coin']} {a['weight']:g}" for a in new['assets']))
+        new = dict(new, account=bot.cfg.get('account'))
+        bot.cfg = new
+        self.notifier.event('repeat', bot.botid,
+                            'applied live from the file: ' + ('; '.join(said) or 'its limits')
+                            + ' — the next read plans the stack at them (D143)')
+        return 'applied'
 
     def _set_leverage(self, bot, new):
         """The venue first. None on success, else the venue's words."""

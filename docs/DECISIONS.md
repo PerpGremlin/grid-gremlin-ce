@@ -1215,6 +1215,20 @@ stands unless the owner corrects it.
   asks about). The owner chose WSL ("A for windows"): the edition's README
   says how, unchanged code. A native port is not built.
 
+- **D143 — A portfolio row's leverage from the panel, applied live
+  (2026-10-18).** The owner: "we need to add a way to adjust the leverage
+  of the derivativers positions and the spot positions for the carry
+  accounts". Until now the spot's leverage was the fleet file's, learned
+  at a restart, and the engine never set the perps' (H11 showed the
+  venue's). The owner chose the panel, live ("Panel, live") over the panel
+  at a restart and the file alone. A new key, `perp_leverage`, sets every
+  hedge and short; the card's edit writes it and the spot's (the weights
+  scaled) through a review and the typed name; the running fleet applies
+  both without a restart (H12, U99). The rest of the row stays the file's
+  and a restart's (H2). On a cross-margin account a perp's leverage moves
+  the margin it sets aside, not the account's liquidation; the review
+  says so.
+
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
 inline above.*

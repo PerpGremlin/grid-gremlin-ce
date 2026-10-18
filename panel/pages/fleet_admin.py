@@ -48,9 +48,9 @@ class FleetAdminPages:
         if bot is None:
             return None
         if bot.get('strategy') == 'portfolio' and mode != 'remove':
-            return (f'<h1>{html.escape(botid)}</h1><p class="dim">a portfolio row (D78) is edited in '
-                    'the fleet file by hand — its assets, hedges, clock and risk are the '
-                    'row\'s own terms; the setup form knows one market at a time. '
+            from panel.lever import lever_form                      # D143
+            return (lever_form(fi, botid, bot)
+                    + '<p class="dim">its coins, hedges, clock and risk: the fleet file, by hand (D78). '
                     f'<a href="/edit?fleet={fi}&amp;bot={qarg(botid)}&amp;mode=remove">remove</a> is '
                     'here.</p>')
         if mode == 'remove':
