@@ -5,7 +5,7 @@ import html
 import time
 from .css import CSS
 from .reference import KEEP_JS
-from .card import card, pnl_parts
+from .card import card, pnl_parts, unpriced
 from .drawings import equity_boxes
 from .fleet_bits import sweep_note
 from .html_bits import REFRESH_S, _num_cls, esc
@@ -27,7 +27,13 @@ def cards_section(idx, label, contract, view='all', scripted=True):
                else sum(funded))
     opened = [b['unreal_at_mark'] for b in live
               if b['unreal_at_mark'] is not None]
-    total = sum(card_total(b) for b in live) + portfolio_total(contract)    # H6
+    pfo = portfolio_total(contract)
+    total = sum(card_total(b) for b in live) + pfo                          # H6
+    # U95: the books whose open part is not priced are named, never a silent 0
+    gap = sum(1 for b in contract['bots'].values() if unpriced(b))
+    left = (f'<div class="parts neg">{gap} bot{"s" if gap != 1 else ""} holding a position '
+            'not priced (mark unread): their open part is not in this total</div>'
+            if gap else '')
     cards = '</div><div class="cards">'.join(
         (f'<div class="grp">{esc(title)}</div>' if title else '')
         + ''.join(card(idx, botid, b, contract, belief)
@@ -53,7 +59,8 @@ def cards_section(idx, label, contract, view='all', scripted=True):
             '<span class="dim">after fees, each bot counted as its card says</span>'
             f'<div class="parts">'
             f'{pnl_parts(net, sum(opened) if opened else None, funding)}'
-            f'</div>{exchange_since_first(contract)}{exchange_leverage(contract)}'
+            + (f' · portfolio rows <b class="{_num_cls(pfo)}">{pfo:+,.2f}</b>' if pfo else '')
+            + f'</div>{left}{exchange_since_first(contract)}{exchange_leverage(contract)}'
             f'{exchange_mmr(contract)}</div>'                                     # U66
             f'{equity_boxes(contract)}'                                          # U63
             f'{agent_box(contract)}'                                             # J5

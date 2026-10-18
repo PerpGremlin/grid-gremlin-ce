@@ -1,7 +1,7 @@
 """The table view (U12): one row per bot. Out of render.py (D91 step 3)."""
 from gridgremlin.report import card_total
 import time
-from .card import _side_tag, settle
+from .card import _side_tag, settle, slid_range
 from .drawings import strip
 from .fleet_bits import sweep_note
 from .html_bits import REFRESH_S, esc, money, qarg
@@ -67,12 +67,13 @@ def section(idx, label, contract, view='all'):
                   f"<a href='/setup?fleet={idx}&amp;copy={qarg(botid)}'>copy</a>"
                   "</td></tr>")
             continue
-        state = ('HOLDING' if abs(b['position']) > 1e-12 else 'FLAT')
+        state = ('DEAD' if (belief.get(botid) or {}).get('alive') is False   # U96: as the card
+                 else 'HOLDING' if abs(b['position']) > 1e-12 else 'FLAT')
         openat = (f"{b['position']:.10g} @ {b['avg_cost']:.6g}"
                   if abs(b['position']) > 1e-12 else '—')
         total = card_total(b)                                   # D63
         note = ' *' if b['truncated'] else ''
-        rng = contract.get('ranges', {}).get(botid)
+        rng, slid = slid_range(contract.get('ranges', {}).get(botid), belief.get(botid))   # U96
         floor = contract.get('fee_floors', {}).get(botid)
         wd = contract.get('watchdog') or {}
         ceil = (wd.get('ceilings') or {}).get(botid)
@@ -86,12 +87,12 @@ def section(idx, label, contract, view='all'):
         if rng and b['mark']:
             edge = (f"<td>{strip(rng, b['mark'])}</td>"
                     f"<td class='dim'>{(b['mark'] - rng['lower']) / b['mark'] * 100:.1f}%"
-                    f" / {(rng['upper'] - b['mark']) / b['mark'] * 100:.1f}%</td>")
+                    f" / {(rng['upper'] - b['mark']) / b['mark'] * 100:.1f}%{slid}</td>")
         else:
             edge = '<td class="dim">—</td><td class="dim">—</td>'
         rows.append(
             f'<tr><td>{_side_tag(botid)}{esc(botid)}{note}</td>'
-            f'<td class="dim">{state}</td>'
+            f'<td class="{"neg" if state == "DEAD" else "dim"}">{state}</td>'
             f"<td>{b['fills']}</td>{money(b['realized'])}"
             f"{money(b['fees'], cls=False)}{money(b.get('funding'))}"
             f"<td>{openat}</td>"

@@ -180,6 +180,49 @@ def orders_line(ov):
     return out
 
 
+def slid_range(rng, bl):
+    """U57: the window as it has slid (G17): the home lattice's gap times
+    the engine's offset, so the price is judged against the window the bot
+    trades, not the home it started from — the card and the table alike
+    (U96). (range, words) — the words empty when it has not slid."""
+    off = (bl or {}).get('offset')
+    if not rng or not off or rng.get('rungs', 0) <= 1:
+        return rng, ''
+    gap = (rng['upper'] - rng['lower']) / (rng['rungs'] - 1)
+    return (dict(rng, lower=rng['lower'] + off * gap, upper=rng['upper'] + off * gap),
+            f' · window slid {off:+d} rungs from home')
+
+
+def unpriced(b):
+    """U95: a book holding a position whose open part could not be priced
+    (its mark unread): its total counts that part as nothing, so every
+    total it enters says so (the audit, 2026-10-16)."""
+    return (b is not None and abs(b.get('position') or 0.0) > 1e-12
+            and (b.get('realized') is None or b.get('unreal_at_mark') is None))
+
+
+UNPRICED = ' <span class="neg">+ an open position not priced (its mark was not read)</span>'
+
+
+SNAP_STALE_S = 600          # the engine snapshots about once a minute
+
+
+def snapshot_age(contract):
+    """U94: how old the engine's last snapshot is, in words, when it is
+    stale — the state, cap, margin, liquidation and loss limit on a card
+    are that snapshot's, not this second's (the audit, 2026-10-16). None
+    when fresh or when there is no snapshot (nothing claimed)."""
+    bl = (contract.get('watchdog') or {}).get('belief') or {}
+    age = bl.get('age_s')
+    if age is None or age <= SNAP_STALE_S:
+        return None
+    if age < 7200:
+        return f'{age // 60:.0f} min ago'
+    if age < 172800:
+        return f'{age // 3600:.0f} h ago'
+    return f'{age // 86400:.0f} days ago'
+
+
 def card(idx, botid, b, contract, belief, full=False):
     """One bot, one card: its state in a word, what it made, where the
     price sits in its range. Everything the table row said is still here;
@@ -261,18 +304,19 @@ def card(idx, botid, b, contract, belief, full=False):
         net = b['realized'] - b['fees']
         cap = ((contract.get('terms') or {}).get(botid) or {}).get('capital')
         roi = (f' <span class="{_num_cls(total)}">{total / cap * 100:+.2f}%</span>'
-               f' <span class="dim">on {cap:,.0f}</span>' if cap else '')
+               f' <span class="dim">on {cap:,.0f}</span>' if cap and not unpriced(b) else '')
+        part = UNPRICED if unpriced(b) else ''        # U95: never a 0 for the open part
         # U68: the card's money at a glance, as the bot pages of the big
         # venues show it; every other line is the numbers page's
         slim_head = (f'<div class="pnl {_num_cls(total)}">'
-                     f'<span class="big {_num_cls(total)}">{signed(total)}</span> {money_coin}{coin}{roi}'
+                     f'<span class="big {_num_cls(total)}">{signed(total)}</span> {money_coin}{coin}{roi}{part}'
                      f' <span class="dim">· {span}</span>'                 # D63: what the figure covers
                      + (grid_split(b, total) or f'<div class="parts">{pnl_parts(net, b["unreal_at_mark"], b.get("funding"))}</div>')
                      + f'{run_rate(b, contract, cap, bool(((contract.get("terms") or {}).get(botid) or {}).get("trade")) or ((contract.get("terms") or {}).get(botid) or {}).get("strategy") == "martingale")}'
                      '</div>')
         head = (f'<div class="pnl {_num_cls(total)}">'
                 f'<span class="big {_num_cls(total)}">{signed(total)}</span> '
-                f'{money_coin}{coin} <span class="dim">after fees, {span}</span>'
+                f'{money_coin}{coin}{part} <span class="dim">after fees, {span}</span>'
                 f'{grid_split(b, total)}<div class="parts">'
                 f'{pnl_parts(net, b["unreal_at_mark"], b.get("funding"))}'
                 f'</div>{run_rate(b, contract, ((contract.get("terms") or {}).get(botid) or {}).get("capital"), bool(((contract.get("terms") or {}).get(botid) or {}).get("trade")) or ((contract.get("terms") or {}).get(botid) or {}).get("strategy") == "martingale")}'
@@ -315,6 +359,11 @@ def card(idx, botid, b, contract, belief, full=False):
     if not full:
         more = ''                                 # U56: the numbers are the page's
     alerts = []                                   # U68: what a slim card still says
+    stale = snapshot_age(contract)
+    if stale and botid in belief:
+        # U94: the engine's figures below are its last snapshot's
+        alerts.append(f"the engine's state, margin and limits are from {stale}")
+        held += f"</div><div class=\"neg\">the engine's state, margin and limits are from {stale}"
     capped = (belief.get(botid) or {}).get('capped')
     if capped:
         alerts.append(f'capped: {capped} — adds nothing, exits run' if pos else
@@ -392,15 +441,7 @@ def card(idx, botid, b, contract, belief, full=False):
         bad = rec.get('unexplained') is not None and abs(rec['unexplained']) > abs(rec['outside']) * 0.5 + 1e-9
         held += f'</div><div class="{"neg" if bad else "dim"}">{line}'
     where = ''
-    slid = ''
-    if rng and (belief.get(botid) or {}).get('offset') and rng.get('rungs', 0) > 1:
-        # U57: the window as it has slid (G17): the home lattice's gap times
-        # the offset, so the card judges the price against the window the
-        # bot trades, not the home it started from
-        gap = (rng['upper'] - rng['lower']) / (rng['rungs'] - 1)
-        off = belief[botid]['offset']
-        rng = dict(rng, lower=rng['lower'] + off * gap, upper=rng['upper'] + off * gap)
-        slid = f' · window slid {off:+d} rungs from home'
+    rng, slid = slid_range(rng, belief.get(botid))
     if rng and mark:
         lo, hi = rng['lower'], rng['upper']
         if lo <= mark <= hi:
@@ -648,6 +689,10 @@ def portfolio_card(idx, botid, contract, belief, full=False):
                 + (f"<tr><td>loss limit</td><td>{bl['loss']['result']:,.2f} of {bl['loss']['limit']:,.2f}</td></tr>"
                    if bl.get('loss') else '')
                 + '</table></div>') if full else ''))
+    stale = snapshot_age(contract)
+    if stale and v:
+        # U94: every figure on this card is the engine's last snapshot
+        head += f'<div class="neg">valued by the engine {stale}</div>'
     cls = 'neg' if state == 'DEAD' else 'dim'
     # H6: the portfolio's card spans the cards' row — six columns of assets
     # and three money lines ran past a 21em card's border (the owner, 2026-10-08)

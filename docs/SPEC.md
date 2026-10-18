@@ -1824,6 +1824,20 @@ eventually pin (T1).
   the equity box keeps cents on a move under 100; flat equity over ten
   days is "no day-to-day movement"; a trade's `by` and `opened` are text;
   the panel's pages carry a phone viewport; the public page leaves it to the site.
+- **U94** The engine's figures say their age (audit 2026-10-16): a card's
+  state, cap, margin, liquidation and loss limit, and a portfolio row's
+  whole valuation, are the engine's last snapshot; when it is over ten
+  minutes old the card says how old, and the strip says "engine read …"
+  beside the leverage. A fresh snapshot claims nothing, nor does a bot the
+  snapshot does not hold.
+- **U95** An unpriced open position is named, never a silent 0 (audit
+  2026-10-16): a book holding with its mark unread says "an open position
+  not priced" on its card and drops its ROI; the exchange box and the strip
+  say how many such books their total leaves out; the box's parts show the
+  portfolio rows its total adds.
+- **U96** The table and the card agree (audit 2026-10-16): a stopped bot
+  reads DEAD in both, holding or not, and a slid grid is judged against its
+  slid window in both (U57's arithmetic, one function).
 - **L1** A new trade joins a running fleet within a cycle. The trade watch
   stats the trades file once a cycle; a changed file's new rows are each
   built by the fleet's own builder (`main.build_market_bot`, the one every

@@ -2362,3 +2362,66 @@ def spec_U93_the_audit_of_2026_10_16_the_panels_smaller_numbers():
     assert 'no day-to-day movement' in equity_boxes(flat) and 'under ten days' not in equity_boxes(flat)
     html = render([('demo', CONTRACT)])
     assert VIEWPORT in html and VIEWPORT not in render([('demo', CONTRACT)], static='then')
+
+
+def spec_U94_the_engines_figures_say_their_age_when_old():
+    """The card's state, cap, margin, liquidation and loss limit are the
+    engine's last snapshot; past ten minutes the card and the strip say how
+    old, and a fresh snapshot claims nothing (the audit, 2026-10-16)."""
+    import copy
+    from panel.server import render
+    old = copy.deepcopy(CONTRACT)
+    old['watchdog']['belief']['age_s'] = 25 * 60
+    old['watchdog']['belief']['bots']['spoADAUSDTl'] = {'alive': True, 'position': 910.57}
+    page = render([('demo', old)])
+    hero = page.split('<div class="hero">')[1].split('</div></div>')[0]
+    assert 'engine read 25 min ago' in hero
+    said = "the engine's state, margin and limits are from 25 min ago"
+    assert said in page                                    # the slim card
+    assert _everything(old).count(said) >= 3               # both bots' own pages too
+    gone = copy.deepcopy(old)
+    del gone['watchdog']['belief']['bots']['spoADAUSDTl']
+    assert said not in render([('demo', gone)])            # not in the snapshot: no claim
+    old['watchdog']['belief']['age_s'] = 5 * 3600
+    assert 'engine read 5 h ago' in render([('demo', old)])
+    page = render([('demo', CONTRACT)])
+    assert 'engine read' not in page and 'margin and limits are from' not in page
+
+
+def spec_U95_an_unpriced_open_position_is_named_never_a_silent_0():
+    """A bot holding with its mark unread counts its open part as nothing:
+    its card says so and drops the ROI; the exchange box and the strip name
+    how many such books its total leaves out; the box's parts show the
+    portfolio rows it adds (the audit, 2026-10-16)."""
+    import copy
+    from panel.server import render
+    c = copy.deepcopy(CONTRACT)
+    c['terms'] = {'spoADAUSDTl': {'capital': 1000.0, 'quote': 'USDT'}}
+    page = render([('demo', c)])
+    assert 'not priced' not in page and 'unpriced' not in page and '%</span>' in page
+    c['bots']['spoADAUSDTl'].update(unreal_at_mark=None, mark=None)
+    page = render([('demo', c)])
+    assert 'an open position not priced' in page and '%</span> <span class="dim">on 1,000' not in page
+    assert '1 bot holding a position not priced' in page
+    assert '+ 1 unpriced' in page.split('<div class="hero">')[1].split('</div></div>')[0]
+    c = copy.deepcopy(CONTRACT)
+    c['watchdog']['belief']['bots']['spoBTCUSDTl'] = {'alive': True, 'portfolio': {'total': 12.5}}
+    assert 'portfolio rows <b class="pos">+12.50</b>' in render([('demo', c)])
+
+
+def spec_U96_the_table_and_the_card_agree_on_state_and_window():
+    """A stopped bot holding reads DEAD in the table as on its card, and a
+    slid grid's window is the same slid window in both (the audit,
+    2026-10-16: the table said HOLDING and judged the home range)."""
+    import copy
+    from panel.server import render
+    c = copy.deepcopy(CONTRACT)
+    c['watchdog']['belief']['bots']['spoADAUSDTl'] = {'alive': False, 'position': 910.57, 'offset': 2}
+    table = render([('demo', c)], table=True)
+    row = table.split('spoADAUSDTl')[1].split('</tr>')[0]
+    assert '>DEAD<' in row and 'HOLDING' not in row
+    assert 'window slid +2 rungs from home' in row
+    gap = (0.23 - 0.155) / 15
+    lo = 0.155 + 2 * gap
+    assert f"{(0.2017 - lo) / 0.2017 * 100:.1f}%" in row
+    assert 'DEAD' in render([('demo', c)]).split('spoADAUSDTl')[1]
