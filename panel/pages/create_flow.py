@@ -435,7 +435,7 @@ class CreateFlowPages:
         self.send_response(200)
         self.send_header('Content-Type', 'text/html; charset=utf-8')
         self.end_headers()
-        self.wfile.write(tidy(body).encode())
+        self._out(body)
 
     def _setup_post(self, form):
         from panel.create import public_mark

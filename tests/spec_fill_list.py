@@ -126,7 +126,7 @@ def spec_U78_a_pick_on_the_live_server_reads_the_fleet_as_the_readout_does():
             # U78c: the edit door in the half — the same form, posting where it always did
             door = get(f'/?fleet=0&bot={B}&show=edit')
             assert '<b class="on">edit</b>' in door and '<form method="post" action="/setup">' in door
-            assert 'value="80000"' in door and '<script>' in door.split('<aside class="pane">')[1]
+            assert 'value="80000"' in door and '<script nonce="' in door.split('<aside class="pane">')[1]
             assert door.count('<form method="post" action="/setup">') == 1            # the half's only
             assert '<form method="post" action="/setup">' in get(f'/edit?fleet=0&bot={B}')
             # U78d: the side panel's pages in the half — each the page's own body

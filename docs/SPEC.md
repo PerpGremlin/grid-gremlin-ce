@@ -2575,11 +2575,19 @@ that pins it (T1).
   a negative, past the end) is refused with 400 before any page runs,
   never read as another fleet. *(review 2026-10-11)*
 - **P6** Every panel answer — page, fragment, refusal, redirect — carries
-  `X-Frame-Options: DENY`, `Content-Security-Policy: frame-ancestors 'none'`,
+  `X-Frame-Options: DENY`, a `Content-Security-Policy` with `frame-ancestors 'none'` (P6b),
   `X-Content-Type-Options: nosniff` and `Cache-Control: no-store`, from one
   `end_headers`. The close command is spawned only for a bot that is a row
   of the fleet file or one of its trades, so no `--` word reaches its argv.
   *(the second audit, 2026-10-13)*
+- **P6b** Only the panel's own scripts run: the policy is `script-src
+  'nonce-…'` (with `object-src`, `base-uri` and `frame-ancestors` none,
+  `form-action` self), the nonce new for every answer and stamped on each
+  `<script>` as the page goes out; no inline handler or `javascript:` link
+  is drawn (the buttons carry `data-` marks the page's one script reads,
+  and a swapped-in script takes the page's nonce). The forms' hidden `gg`
+  is an HMAC of the launch's secret, compared in constant time; the old
+  constant `1` or another launch's value is refused. *(audit 2026-10-16)*
 - **P7** Names that come from files — fleet and unit names, tombstone ids,
   the money, margin and settle coins — are drawn as escaped text; a
   refusal's reason goes raw into `refusal_box`, which escapes it once.

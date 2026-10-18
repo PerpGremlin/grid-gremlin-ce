@@ -198,7 +198,7 @@ wants and the hedge it holds, as coins.</td></tr>
 # answer arriving late is dropped (seq) — and the timer waits while a swap is
 # in flight or a form in the right half is being typed in (dirty).
 KEEP_JS = """<script>(function(){
-var S=sessionStorage,open={},root=document.documentElement,KINDS=['fold','acct'];
+var N=(document.currentScript||{}).nonce||'',S=sessionStorage,open={},root=document.documentElement,KINDS=['fold','acct'];
 try{open=JSON.parse(S.getItem('gg-open')||'{}');}catch(e){}
 function wire(scope){
  KINDS.forEach(function(c){var g=S.getItem('gg-fold:'+c);
@@ -251,7 +251,7 @@ function swap(url){var my=++seq;busy++;
   ['.hero','main'].forEach(function(q){var a=document.querySelector(q),b=doc.querySelector(q);
    if(a&&b)a.innerHTML=b.innerHTML;});
   document.querySelectorAll('main .pane script').forEach(function(old){
-   var s=document.createElement('script');s.text=old.text;old.replaceWith(s);});
+   var s=document.createElement('script');s.nonce=N;s.text=old.text;old.replaceWith(s);});
   wire(document.querySelector('main')||document);picks();top();return true;})
  .then(function(v){busy--;return v;},function(e){busy--;throw e;});}
 function dirty(){var a=document.activeElement;
@@ -262,6 +262,13 @@ function dirty(){var a=document.activeElement;
    return e.selectedIndex!==d;}
   return e.value!==e.defaultValue;});}
 document.addEventListener('click',function(e){
+ var t=e.target.closest&&e.target.closest('[data-fold],[data-foldin],[data-size],[data-lev],[data-back],[data-theme]');
+ if(t){e.preventDefault();var d=t.dataset;
+  if('fold' in d)ggFold(d.fold,d.cls);else if('foldin' in d)ggFoldIn(d.foldin);
+  else if('size' in d)ggSize(d.size);else if('lev' in d)ggLev(d.lev);
+  else if('back' in d)history.back();else root.classList.toggle('light');return;}
+ var o=e.target.closest&&e.target.closest('button[data-once]');
+ if(o)setTimeout(function(){o.disabled=true;o.textContent=o.dataset.once;},0);
  var a=e.target.closest&&e.target.closest('a[data-pick]');
  if(!a||e.ctrlKey||e.metaKey||e.shiftKey||e.button)return;
  var u=new URL(a.href,location.href),v=new URLSearchParams(location.search).get('view');

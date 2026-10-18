@@ -25,6 +25,9 @@ def _serve(contract):
     return srv, f'http://{H.host_ok}'
 
 
+from panel.routes import form_token
+FT = form_token('tok123')        # P6b: the forms' token for this launch
+
 CONTRACT = {'window_hours': 6.0, 'generated_ms': 0, 'unowned': {},
             
             'ranges': {'spoADAUSDTl': {'lower': 0.155, 'upper': 0.23,
@@ -118,7 +121,7 @@ def spec_P3_rehearse_speaks_the_engines_refusal_verbatim():
 
     srv, base = _serve(CONTRACT)
     try:
-        req = urllib.request.Request(f'{base}/rehearse', data=b'gg=1',
+        req = urllib.request.Request(f'{base}/rehearse', data=f'gg={FT}'.encode(),
                                      method='POST')
         try:
             urllib.request.urlopen(req)
@@ -126,7 +129,7 @@ def spec_P3_rehearse_speaks_the_engines_refusal_verbatim():
         except urllib.error.HTTPError as e:
             assert e.code == 401
         req = urllib.request.Request(
-            f'{base}/rehearse', data=b'gg=1', method='POST',
+            f'{base}/rehearse', data=f'gg={FT}'.encode(), method='POST',
             headers={'Cookie': 'gg=tok123',
                      'Origin': 'http://evil.example'})
         try:
@@ -280,7 +283,7 @@ def spec_C1_control_is_opt_in_and_typed():
         assert 'is off on this' in page and '--units' in page
         assert '<form' not in page.split('</nav>')[-1] and '<button' not in page.split('</nav>')[-1].replace('class="quiet theme"', '')
         req = urllib.request.Request(
-            f'{base}/unit', data=b'gg=1&action=stop&confirm=wrong',
+            f'{base}/unit', data=f'gg={FT}&action=stop&confirm=wrong'.encode(),
             method='POST', headers={'Cookie': 'gg=tok123'})
         try:
             urllib.request.urlopen(req)
@@ -1132,7 +1135,7 @@ def spec_U13_a_rehearsal_that_cannot_run_says_why_on_the_page():
     try:
         req = urllib.request.Request(
             f'{base}/rehearse', method='POST',
-            data=b'gg=1&symbol=ADAUSDT&side=long&lower=0.2&upper=0.3'
+            data=f'gg={FT}&symbol=ADAUSDT'.encode() + b'&side=long&lower=0.2&upper=0.3'
                  b'&rungs=16&capital=1500&days=',
             headers={'Cookie': 'gg=tok123'})
         page = urllib.request.urlopen(req).read().decode()
@@ -1217,10 +1220,10 @@ def spec_X15_the_close_is_armed_typed_and_run_by_the_engine():
         assert 'can only reduce the position' in page
         assert 'class="danger">close at market' in page
         assert ran == [('linAVAXUSDTs', True)]         # looked, sold nothing
-        code, page = call('/close', b'gg=1&fleet=0&bot=linAVAXUSDTs'
+        code, page = call('/close', f'gg={FT}'.encode() + b'&fleet=0&bot=linAVAXUSDTs'
                                     b'&confirm=yes')
         assert 'not closed' in page and len(ran) == 1  # a click is no decision
-        code, page = call('/close', b'gg=1&fleet=0&bot=linAVAXUSDTs'
+        code, page = call('/close', f'gg={FT}'.encode() + b'&fleet=0&bot=linAVAXUSDTs'
                                     b'&confirm=LINAVAXUSDTS')      # U18
         assert 'closed 53.8' in page and ran[-1] == ('linAVAXUSDTs', False)
     finally:
@@ -1319,7 +1322,7 @@ def spec_U44_a_holding_is_said_in_coins_value_and_cost():
     assert '0.08 BTC' in inv and 'worth 8,000 USD' in inv and '(0.1 BTC)' in inv
     assert holding_html(0.0, 0.0, 1.0, 'linBTCUSDTl') == 'holding nothing'
     page = render([])
-    assert "ggSize('coin')" in page and '<h3>size in</h3>' in page
+    assert 'data-size="coin"' in page and '<h3>size in</h3>' in page
     assert '.only-coin .u-value' in CSS
 
 
@@ -1871,12 +1874,12 @@ def spec_U59_an_account_folds_to_its_heading_and_box_and_the_side_panel_folds_ev
         h1 = html.index(f'<h1 id="fleet{i}">')
         box = html.index('<span class="dim">this exchange</span>', h1)
         assert h1 < box < html.index(f'data-k="acct:{i}"', h1)      # heading, box, then the fold
-    assert 'javascript:ggFold(\'folded\',\'acct\')" data-fold="folded" data-cls="acct">folded</a>' in html
-    assert 'javascript:ggFold(\'open\',\'acct\')" data-fold="open" data-cls="acct">full</a>' in html
+    assert '<a href="#" data-fold="folded" data-cls="acct">folded</a>' in html
+    assert '<a href="#" data-fold="open" data-cls="acct">full</a>' in html
     assert 'data-cls="fold">folded</a>' not in html                   # U68: the cards' switch is gone
     # one link beside each account's count folds or opens that account's cards alone
     for i in (0, 1):
-        assert f'bots <a href="javascript:ggFoldIn({i})" data-foldin="{i}" class="tier">fold cards</a>' in html
+        assert f'bots <a href="#" data-foldin="{i}" class="tier">fold cards</a>' in html
     from panel.server import KEEP_JS
     assert 'details.acct[data-k="acct:\'+i+\'"] details.fold' in KEEP_JS and 'window.ggFoldIn=function(i)' in KEEP_JS
     assert "a.textContent=all?'fold cards':'open cards'" in KEEP_JS
@@ -2139,7 +2142,7 @@ def spec_P5_the_door_reads_exactly_the_cookie_and_the_fleet_it_is_given():
         assert code('/position?fleet=0&bot=spoADAUSDTl') == 200
         for f in ('abc', '-1', '1', '0x0', '1e0'):
             assert code(f'/position?fleet={f}&bot=spoADAUSDTl') == 400, f
-            assert code('/close', data=f'gg=1&fleet={f}'.encode()) == 400, f
+            assert code('/close', data=f'gg={FT}&fleet={f}'.encode()) == 400, f
     finally:
         srv.shutdown()
 
@@ -2165,12 +2168,11 @@ def spec_P6_every_answer_carries_the_security_headers():
     from spec_setup import _served_fleet
     base, d, close = _served_fleet()
     want = {'X-Frame-Options': 'DENY',
-            'Content-Security-Policy': "frame-ancestors 'none'",
             'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store'}
 
     def heads(path, data=None, cookie=True):
         body = (None if data is None else
-                urllib.parse.urlencode(dict(data, gg='1')).encode())
+                urllib.parse.urlencode(dict(data, gg=form_token('tok'))).encode())
         req = urllib.request.Request(base + path, data=body,
                                      headers={'Cookie': 'gg=tok'} if cookie else {})
         try:
@@ -2187,6 +2189,8 @@ def spec_P6_every_answer_carries_the_security_headers():
         for code, h in answers:
             for k, v in want.items():
                 assert h.get(k) == v, (code, k, h.get(k))
+            csp = h.get('Content-Security-Policy') or ''
+            assert "frame-ancestors 'none'" in csp and "script-src 'nonce-" in csp, (code, csp)
     finally:
         close()
 
@@ -2425,3 +2429,44 @@ def spec_U96_the_table_and_the_card_agree_on_state_and_window():
     lo = 0.155 + 2 * gap
     assert f"{(0.2017 - lo) / 0.2017 * 100:.1f}%" in row
     assert 'DEAD' in render([('demo', c)]).split('spoADAUSDTl')[1]
+
+
+def spec_P6b_only_the_panels_own_scripts_run_and_its_forms_carry_a_secret():
+    """The audit, 2026-10-16: the policy names a nonce made for each answer,
+    every script on the page carries it, and nothing runs inline beside
+    them (no handler, no javascript: link); the forms' hidden token comes
+    from the launch's secret — the old constant 1, or another launch's
+    token, is refused before anything is read."""
+    import re
+    import urllib.error
+    import urllib.parse
+    from spec_setup import _served_fleet
+    base, d, close = _served_fleet()
+
+    def get(path):
+        r = urllib.request.urlopen(urllib.request.Request(base + path, headers={'Cookie': 'gg=tok'}))
+        return r.headers['Content-Security-Policy'], r.read().decode()
+
+    def post(gg):
+        data = urllib.parse.urlencode({'gg': gg, 'action': 'clear', 'fleet': '0', 'confirm': 'nope'}).encode()
+        try:
+            return urllib.request.urlopen(urllib.request.Request(
+                base + '/trade', data=data, headers={'Cookie': 'gg=tok'})).status
+        except urllib.error.HTTPError as e:
+            return e.code
+    try:
+        seen = set()
+        for path in ('/', '/setup', '/trade', '/rehearse', '/control', '/table'):
+            csp, page = get(path)
+            n = re.search(r"'nonce-([^']+)'", csp).group(1)
+            seen.add(n)
+            tags = re.findall(r'<script\b[^>]*>', page)
+            assert tags and all(t == f'<script nonce="{n}">' for t in tags), (path, tags[:2])
+            assert 'javascript:' not in page and not re.search(r'\son[a-z]+=', page), path
+            forms = re.findall(r'name="gg" value="([^"]*)"', page)
+            assert all(v == form_token('tok') for v in forms), path
+        assert len(seen) == 6                                  # a new nonce each answer
+        assert post('1') == 403 and post(form_token('other')) == 403
+        assert post(form_token('tok')) != 403
+    finally:
+        close()

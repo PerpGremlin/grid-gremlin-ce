@@ -43,8 +43,7 @@ def rehearse_form(values=None):
         '<span><button>rehearse</button> <button name="optimize" value="1" '
         'class="quiet" title="replays your range with 5 to 77 grids over the '
         'last two weeks and shows which did best, and whether that holds up '
-        '(T9) — about six minutes while the fleets run; press once" onclick="setTimeout(function(b){b.disabled=1;'
-        'b.textContent=\'sweeping, about six minutes\u2026\'},0,this)">'
+        '(T9) — about six minutes while the fleets run; press once" data-once="sweeping, about six minutes\u2026">'
         'compare grid counts</button></span></div>\n'
         '<input type="hidden" name="gg" value="1"></form>\n'
         '<p class="dim">any USDT or USDC perpetual Bybit lists, typed as '
@@ -55,7 +54,7 @@ def rehearse_form(values=None):
         'a promise —\nsame candles are never same fills. The replay plans '
         'against a synthetic\n1bp spread so guard-band drops happen as '
         'they would live (§9).</p>\n'
-        '<p><a href="javascript:history.back()">&larr; back</a> · '
+        '<p><a href="#" data-back>&larr; back</a> · '
         '<a href="/">back to your bots</a></p>')
 
 
@@ -96,9 +95,8 @@ def rehearse_bot_form(bot_json, days='7'):
             'prices <button>rehearse</button> <button name="optimize" '
             'value="1" class="quiet" title="replays your range with 5 to 77 '
             'grids over the last two weeks and shows which did best, and '
-            'whether that holds up (T9) — about six minutes while the fleets run; press once" onclick="setTimeout('
-            'function(b){b.disabled=1;b.textContent=\'sweeping, about six '
-            'minutes\u2026\'},0,this)">compare grid counts</button>'
+            'whether that holds up (T9) — about six minutes while the fleets run; press once" data-once="sweeping, about six '
+            'minutes\u2026">compare grid counts</button>'
             '</form>')
 
 

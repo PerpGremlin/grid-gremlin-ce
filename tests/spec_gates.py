@@ -212,7 +212,7 @@ def spec_D97_on_mainnet_the_panels_close_asks_for_the_size_a_second_time():
         page = _call(base, '/close?fleet=0&bot=linETHUSDTl')
         assert 'real money' in page and 'type the size a second time' in page
         calls.clear()
-        form = {'gg': '1', 'fleet': '0', 'bot': 'linETHUSDTl', 'confirm': 'linETHUSDTl'}
+        form = {'fleet': '0', 'bot': 'linETHUSDTl', 'confirm': 'linETHUSDTl'}
         refused = _call(base, '/close', form)
         assert 'not closed' in refused and calls == []
         _call(base, '/close', dict(form, size='0.25'))

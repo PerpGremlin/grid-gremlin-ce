@@ -8,6 +8,7 @@ from gridgremlin.apply import check_link_fits, make_botid, widest_rung
 from gridgremlin.config import (GRID_KEYS, MARTINGALE_KEYS, SLIDE_KEYS,
                                 STOP_KEYS, validate_config)
 from gridgremlin.main import BYBIT_LINK_LIMIT
+from panel.routes import form_token          # P6b: the forms' token for a launch
 from panel.setup import (CAUTION, PRESETS, advanced_page, bot_from_form,
                          config_paths, fields, form_from_bot, quick_bot,
                          quick_page, sentence)
@@ -387,7 +388,7 @@ def _served_fleet():
 def _call(base, path, data=None):
     import urllib.parse
     import urllib.request
-    body = urllib.parse.urlencode(dict(data, gg='1')).encode() \
+    body = urllib.parse.urlencode(dict(data, gg=form_token('tok'))).encode() \
         if data is not None else None
     req = urllib.request.Request(base + path, data=body,
                                  headers={'Cookie': 'gg=tok'})
@@ -1571,7 +1572,7 @@ def spec_U26_the_page_answers_at_once_and_refreshes_until_the_verdict():
     Handler._rehearsal_runner = staticmethod(fake)
     base, d, close = _served_fleet()
     try:
-        data = urllib.parse.urlencode({'gg': '1', 'symbol': 'BTCUSDT',
+        data = urllib.parse.urlencode({'gg': form_token('tok'), 'symbol': 'BTCUSDT',
                                        'side': 'long', 'lower': '80000',
                                        'upper': '90000', 'rungs': '21',
                                        'capital': '1000', 'days': '7',
@@ -1728,7 +1729,7 @@ def spec_U29_leaving_the_page_stops_the_run_and_the_page_says_so():
     base, d, close = _served_fleet()
     try:
         import urllib.parse, urllib.request
-        data = urllib.parse.urlencode({'gg': '1', 'symbol': 'BTCUSDT',
+        data = urllib.parse.urlencode({'gg': form_token('tok'), 'symbol': 'BTCUSDT',
                                        'side': 'long', 'lower': '80000',
                                        'upper': '90000', 'rungs': '21',
                                        'capital': '1000', 'days': '7',
@@ -2083,7 +2084,7 @@ def spec_U60_every_page_wears_the_panels_navigation():
     assert BACK == side_nav() and BACK.startswith('<div class="page"><nav class="side">')
     for href in ('/', '/table', '/control', '/setup', '/rehearse', '/export', '/key'):
         assert f'href="{href}"' in side_nav(), href
-    assert 'history.back()' in side_nav() and 'leaving a form saves nothing' in side_nav()
+    assert '<a href="#" data-back>' in side_nav() and 'leaving a form saves nothing' in side_nav()
     assert 'href="/table"' in page_links() and 'href="/"' in page_links(table=True)
     assert 'class="bar"' not in side_nav()            # .bar is the progress bar's; the column is nav.side
     base, d, close = _served_fleet()

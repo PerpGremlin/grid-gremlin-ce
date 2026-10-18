@@ -95,10 +95,9 @@ def side_nav():
             '<a href="/control">control</a><a href="/setup">new bot</a><a href="/trade">new trade</a>'
             '<a href="/rehearse">rehearse a grid</a><a href="/results">results</a><a href="/carry">carry</a>'
             '<a href="/export">export snapshot</a>'
-            '<a href="/key">key</a><a href="javascript:history.back()">&larr; back</a>'
+            '<a href="/key">key</a><a href="#" data-back>&larr; back</a>'
             '<span class="dim">leaving a form saves nothing</span>'
-            '<button class="quiet theme" onclick="document.documentElement.'
-            'classList.toggle(\'light\')">theme</button></nav><main>')
+            '<button class="quiet theme" data-theme>theme</button></nav><main>')
 
 
 PAGE_END = '</main></div>'
@@ -121,15 +120,14 @@ def nav_panel(table, view):
     # has nothing to fold; the numbers live on the position's page (U56)
     numbers = ('' if table else
                # U59: every account's cards behind its heading and its box
-               '<h3>accounts</h3><a href="javascript:ggFold(\'open\',\'acct\')" data-fold="open" data-cls="acct">full</a>'
-               '<a href="javascript:ggFold(\'folded\',\'acct\')" data-fold="folded" data-cls="acct">folded</a>')
+               '<h3>accounts</h3><a href="#" data-fold="open" data-cls="acct">full</a>'
+               '<a href="#" data-fold="folded" data-cls="acct">folded</a>')
     # U44: what a holding is said in, as Bybit's preference
-    size = ''.join(f'<a href="javascript:ggSize(\'{k}\')" data-size="{k}">{w}</a>'
+    size = ''.join(f'<a href="#" data-size="{k}">{w}</a>'
                    for k, w in SIZE_VIEWS)
     # R19: the account's leverage now, or as if every order filled
-    lev = ('<a href="javascript:ggLev(\'now\')" data-lev="now">now</a>'
-           '<a href="javascript:ggLev(\'filled\')" data-lev="filled">if all filled</a>')
+    lev = ('<a href="#" data-lev="now">now</a>'
+           '<a href="#" data-lev="filled">if all filled</a>')
     return (f'<nav class="side"><h3>pages</h3>{pages}<h3>arrange</h3>{arrange}'
             f'{numbers}<h3>size in</h3>{size}<h3>leverage</h3>{lev}'
-            '<button class="quiet theme" onclick="document.documentElement.'
-            'classList.toggle(\'light\')">theme</button></nav>')
+            '<button class="quiet theme" data-theme>theme</button></nav>')

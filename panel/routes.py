@@ -35,9 +35,22 @@ CACHE_TTL_S = 30.0       # the readout reads the venues; 10 s fed the rate limit
 # never framed by another site, never sniffed into another type, never kept
 # by a cache (the 2026-10-13 audit, part 4)
 SECURITY_HEADERS = (('X-Frame-Options', 'DENY'),
-                    ('Content-Security-Policy', "frame-ancestors 'none'"),
                     ('X-Content-Type-Options', 'nosniff'),
                     ('Cache-Control', 'no-store'))
+# P6b: only the panel's own scripts run — each answer's <script> tags carry
+# a nonce made for that answer, and nothing else (no inline handler, no
+# javascript: link) is allowed (the audit, 2026-10-16)
+CSP = ("script-src 'nonce-{n}'; object-src 'none'; base-uri 'none'; "
+       "form-action 'self'; frame-ancestors 'none'")
+_FORM_SLOT = re.compile(r"""name=(["'])gg\1 value=(["'])1\2""")
+
+
+def form_token(token):
+    """P6b: the forms' hidden `gg` — derived from the launch's secret, so a
+    page elsewhere cannot know it (it was the constant 1)."""
+    import hashlib
+    import hmac
+    return hmac.new(token.encode(), b'gg-form', hashlib.sha256).hexdigest()[:32]
 
 
 class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, PositionPages, TradePages, http.server.BaseHTTPRequestHandler):
@@ -59,7 +72,16 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
     def end_headers(self):
         for k, v in SECURITY_HEADERS:                      # P6: once, for all
             self.send_header(k, v)
+        self._nonce = secrets.token_urlsafe(16)            # P6b: this answer's
+        self.send_header('Content-Security-Policy', CSP.format(n=self._nonce))
         super().end_headers()
+
+    def _out(self, body):
+        """P6b: a page out — its scripts stamped with this answer's nonce,
+        its forms with the launch's token. After end_headers, always."""
+        page = tidy(body).replace('<script>', f'<script nonce="{self._nonce}">')
+        page = _FORM_SLOT.sub(f'name="gg" value="{form_token(self.token)}"', page)
+        self.wfile.write(page.encode())
 
     _locks = {}               # U47: one readout per fleet at a time
 
@@ -272,7 +294,7 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
                              'attachment; filename="grid-gremlin-'
                              + time.strftime('%Y%m%d-%H%M%S') + '.html"')
             self.end_headers()
-            self.wfile.write(tidy(body).encode())
+            self._out(body)
             return
         if self.path == '/trade':
             return self._page(self._trade_html())             # L6 (D81)
@@ -294,7 +316,7 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             self.send_response(200)
             self.send_header('Content-Type', 'text/html; charset=utf-8')
             self.end_headers()
-            self.wfile.write(tidy(body).encode())
+            self._out(body)
             return
         if self.path.split('?')[0] == '/carry':                      # U69
             from ggdata.market import latest
@@ -307,7 +329,7 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             self.send_response(200)
             self.send_header('Content-Type', 'text/html; charset=utf-8')
             self.end_headers()
-            self.wfile.write(tidy(body).encode())
+            self._out(body)
             return
         if self.path == '/results':                                   # R24
             from panel.reference import KEEP_JS
@@ -318,7 +340,7 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             self.send_response(200)
             self.send_header('Content-Type', 'text/html; charset=utf-8')
             self.end_headers()
-            self.wfile.write(tidy(body).encode())
+            self._out(body)
             return
         base, _, query = self.path.partition('?')
         q = dict(urllib.parse.parse_qsl(query))
@@ -340,7 +362,7 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
                          'application/json' if self.path == '/data'
                          else 'text/html; charset=utf-8')
         self.end_headers()
-        self.wfile.write(tidy(body).encode())
+        self._out(body)
 
 
     def do_POST(self):
@@ -357,8 +379,9 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             n = 0                                              # 2026-10-05)
         raw = self.rfile.read(max(0, min(n, 16384))).decode(errors='replace')
         form = dict(urllib.parse.parse_qsl(raw))
-        if form.pop('gg', None) != '1':
-            return self._deny(403, 'missing form token')
+        if not secrets.compare_digest((form.pop('gg', None) or '').encode(),
+                                      form_token(self.token).encode()):
+            return self._deny(403, 'missing form token')          # P6b
         if not self._fleet_ok(form.get('fleet')):
             return self._deny(400, 'no such fleet')
         if self.path in ('/create', '/apply'):
@@ -453,7 +476,7 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
         self.send_response(200)
         self.send_header('Content-Type', 'text/html; charset=utf-8')
         self.end_headers()
-        self.wfile.write(tidy(body).encode())
+        self._out(body)
 
 
     @staticmethod
@@ -548,9 +571,9 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
         self.end_headers()
         from panel.nav import PAGE_END
         from panel.reference import KEEP_JS
-        self.wfile.write(tidy(f'<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+        self._out((f'<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
                               f'<title>grid-gremlin</title><style>{CSS}</style>'
-                              + BACK + body + PAGE_END + KEEP_JS).encode())
+                              + BACK + body + PAGE_END + KEEP_JS))
 
 
     _bars = {}                       # (venue, market, symbol) -> (t, bars)

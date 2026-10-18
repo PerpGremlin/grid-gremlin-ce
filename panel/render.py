@@ -44,7 +44,7 @@ def cards_section(idx, label, contract, view='all', scripted=True):
     # alone; its word says which it will do next
     # U86: each exchange in a box of its own, edge to edge with the site's look
     return (f"<section class=\"fbox\"><h1 id=\"fleet{idx}\">{esc(label)} {tier_badge(contract)} — {len(contract['bots'])} bots "
-            + (f'<a href="javascript:ggFoldIn({idx})" data-foldin="{idx}" class="tier">fold cards</a> '
+            + (f'<a href="#" data-foldin="{idx}" class="tier">fold cards</a> '
                if scripted else '')               # an export has no script to run it
             # U87: the heading is the name; how fresh it is, a quiet line under it
             + f'<span class="meta">{sweep_note(contract)} <span class="dim">(read {age}s ago; '
