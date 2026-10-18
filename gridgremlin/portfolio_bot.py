@@ -120,21 +120,68 @@ class RegimeReader:
         return None
 
 
-def set_perp_leverage(client, legs, lev):
-    """D143: the row's perps (its hedges and outright shorts) set to `lev`
-    on the venue, each its own market. Checked against every leg's ceiling
-    (leverageFilter) before anything is sent; None when done, else the
-    refusal in words — the venue's own when it is the venue's."""
-    perps = [leg for kind in ('hedge', 'short') for leg in (legs.get(kind) or {}).values()]
-    for leg in perps:
+def _leg_now(client, leg):
+    """A perp's leverage on the venue now and the most its risk-limit tier
+    allows at the position's size: (leverage, most), None where unread.
+    A venue caps leverage by size as well as by market (Bybit 110013,
+    2026-10-18: SOLUSD's 50× refused at its size, 40× the most)."""
+    lev = most = None
+    try:
+        rows = (client.position_list(leg['market_type'], leg['symbol']) or {}).get('list') or []
+        mine = [r for r in rows if r.get('side') in ('Sell', '', None)] or rows
+        if mine:
+            lev = float(mine[0].get('leverage') or 0) or None
+            rid, value = mine[0].get('riskId'), float(mine[0].get('positionValue') or 0)
+            tiers = client.risk_limit_tiers(leg['market_type'], leg['symbol'])
+            tier = (next((t for t in tiers if str(t['id']) == str(rid)), None) if rid not in (None, '')
+                    else next((t for t in tiers if value <= t['limit']), None))
+            most = (tier or {}).get('max_leverage') or None
+    except (AttributeError, VenueError, OSError, KeyError, TypeError, ValueError):
+        pass
+    return lev, most
+
+
+def set_perp_leverage(client, legs, want):
+    """D143: the row's perps (its hedges and outright shorts) set on the
+    venue, each its own market — `want` is {coin: leverage}. Every leg is
+    checked first against its market's ceiling (leverageFilter) and its
+    risk-limit tier's at its size, and nothing is sent when one is over;
+    a venue refusal part way puts back the legs already changed. None when
+    done, else what happened in words — the venue's own when it is the
+    venue's."""
+    perps = {c: leg for kind in ('hedge', 'short') for c, leg in (legs.get(kind) or {}).items()}
+    plan = []
+    for c, lev in want.items():
+        leg = perps.get(c)
+        if leg is None:
+            continue
+        now, tier_most = _leg_now(client, leg)
         most = (leg.get('spec') or {}).get('max_leverage')
         if most and lev > most:
-            return f"{leg['symbol']} allows {most:g}× at most, not {lev:g}×"
-    for leg in perps:
+            return f"{leg['symbol']} allows {most:g}× at most, not {lev:g}× — nothing was changed"
+        if tier_most and lev > tier_most:
+            return (f"{leg['symbol']} allows {tier_most:g}× at its size (the venue's risk limit), "
+                    f"not {lev:g}× — nothing was changed")
+        if now is None or abs(now - lev) > 1e-9:
+            plan.append((leg, lev, now))
+    done = []
+    for leg, lev, before in plan:
         try:
             client.set_leverage(leg['market_type'], leg['symbol'], lev)
         except (VenueError, OSError) as e:
-            return f"{leg['symbol']}: {e}"
+            back, stuck = [], []
+            for d_leg, _, d_before in done:
+                try:
+                    if d_before is None:
+                        raise VenueError('its leverage before was not read', kind='other')
+                    client.set_leverage(d_leg['market_type'], d_leg['symbol'], d_before)
+                    back.append(f"{d_leg['symbol']} {d_before:g}×")
+                except (VenueError, OSError):
+                    stuck.append(d_leg['symbol'])
+            return (f"{leg['symbol']}: {e}"
+                    + (f" — put back: {', '.join(back)}" if back else '')
+                    + (f" — NOT put back, still at the new leverage: {', '.join(stuck)}" if stuck else ''))
+        done.append((leg, lev, before))
     return None
 
 

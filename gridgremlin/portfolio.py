@@ -156,11 +156,22 @@ def validate_portfolio(row, where='row'):
     cfg['short_products'] = shorts
 
     # --- the perps' leverage (D143; opt-in: absent, the venue's setting stands) ----
-    pl = _num(cfg, 'perp_leverage', where, least=1.0, most=PERP_LEVERAGE_MOST)
+    # one number for every perp, or {coin: number} for some; kept as {coin: x}
+    perps = [c for c, h in hedges.items() if h['ratio'] > 0] + list(shorts)
+    pl = cfg.get('perp_leverage')
+    w = f'{where}.perp_leverage'
     if pl is None:
         cfg.pop('perp_leverage', None)
+    elif isinstance(pl, dict):
+        for c in pl:
+            if c not in perps:
+                _refuse(f"{w}: {c} has no hedge or short in this row — name the coins "
+                        f"whose perps it sets ({', '.join(perps) or 'none'})")
+        cfg['perp_leverage'] = {c: float(_num(pl, c, w, least=1.0, most=PERP_LEVERAGE_MOST, required=True))
+                                for c in perps if c in pl}
     else:
-        cfg['perp_leverage'] = float(pl)
+        n = _num(cfg, 'perp_leverage', where, least=1.0, most=PERP_LEVERAGE_MOST)
+        cfg['perp_leverage'] = {c: float(n) for c in perps}
 
     # --- the clock -----------------------------------------------------------------
     reb = cfg.get('rebalance') or {}

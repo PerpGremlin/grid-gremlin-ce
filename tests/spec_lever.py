@@ -14,23 +14,26 @@ def spec_U99_the_new_row_keeps_shares_and_signs_and_validates():
     derivativers positions and the spot positions for the carry accounts"."""
     from gridgremlin.config import validate_config
     from panel.lever import lever_row, said
-    new = lever_row(PFO, 10, 5)
+    new = lever_row(PFO, 10, {'BTC': 5, 'ETH': 5, 'SOL': 5})
     assert [a['weight'] for a in new['assets']] == [4.0, 3.0, 3.0], new['assets']
     assert new['margin'] == {'borrow_apr_max': 0.08, 'spot_leverage': 10} and new['spot_borrow'] is True
-    assert new['risk']['max_weight'] == 5.0 and new['perp_leverage'] == 5      # the cap follows the weights
+    assert new['risk']['max_weight'] == 5.0 and new['perp_leverage'] == {'BTC': 5, 'ETH': 5, 'SOL': 5}
     cfg = validate_config(json.loads(json.dumps(new)))
-    assert cfg['margin']['spot_leverage'] == 10.0 and cfg['perp_leverage'] == 5.0
+    assert cfg['margin']['spot_leverage'] == 10.0 and cfg['perp_leverage']['SOL'] == 5.0
     assert PFO['assets'][0]['weight'] == 0.4 and 'margin' not in PFO           # the old row untouched
-    back = lever_row(new, 1, None)
+    back = lever_row(new, 1, {'SOL': 4})
     assert [a['weight'] for a in back['assets']] == [0.4, 0.3, 0.3]
-    assert back['margin']['spot_leverage'] == 1 and back['perp_leverage'] == 5   # the loan's block stays; blank keeps
+    assert back['margin']['spot_leverage'] == 1                                  # the loan's block stays
+    assert back['perp_leverage'] == {'BTC': 5, 'ETH': 5, 'SOL': 4}               # a blank coin keeps its own
+    assert lever_row(dict(PFO, perp_leverage=50), 1, {'SOL': 40})['perp_leverage'] == {
+        'BTC': 50.0, 'ETH': 50.0, 'SOL': 40}                                     # one number becomes per coin
     validate_config(json.loads(json.dumps(back)))
     odd = lever_row(dict(PFO, assets=[{'coin': 'BTC', 'weight': 1 / 3}, {'coin': 'ETH', 'weight': 1 / 3},
                                       {'coin': 'SOL', 'weight': 1 / 3}]), 7, None)
     validate_config(json.loads(json.dumps(odd)))                                # rounded, still sums exactly
     short = lever_row(dict(PFO, assets=[{'coin': 'BTC', 'weight': 0.5}, {'coin': 'ETH', 'weight': -0.5}]), 2, None)
     assert [a['weight'] for a in short['assets']] == [1.0, -1.0]
-    for bad in ((0.5, None), (11, None), (2, 0.5), (2, 126)):
+    for bad in ((0.5, None), (11, None), (2, {'BTC': 0.5}), (2, {'BTC': 126}), (2, {'DOGE': 3})):
         try:
             lever_row(PFO, *bad)
         except ValueError:
@@ -38,7 +41,8 @@ def spec_U99_the_new_row_keeps_shares_and_signs_and_validates():
         raise AssertionError(f'{bad} passed')
     words = ' '.join(said(PFO, new))
     assert 'from 1× to 10×' in words and 'has not borrowed before' in words
-    assert "from what the exchange holds to 5×" in words and 'not when the account is liquidated' in words
+    assert 'BTC from what the exchange holds to 5×' in words and 'not when the account is liquidated' in words
+    assert 'put back' in words
 
 
 def spec_U99_the_panel_reviews_asks_for_the_name_and_writes_onto_what_it_read():
@@ -51,7 +55,8 @@ def spec_U99_the_panel_reviews_asks_for_the_name_and_writes_onto_what_it_read():
         f.write_text(json.dumps(fleet))
         door = _call(base, '/edit?fleet=0&bot=pfocarry')
         assert 'action="/lever"' in door and 'name="spot"' in door and 'value="1"' in door
-        form = {'fleet': '0', 'orig': 'pfocarry', 'spot': '3', 'perp': '4'}
+        assert all(f'name="perp_{c}"' in door for c in ('BTC', 'ETH', 'SOL'))
+        form = {'fleet': '0', 'orig': 'pfocarry', 'spot': '3', 'perp_BTC': '4', 'perp_SOL': '2', 'perp_ETH': ''}
         review = _call(base, '/lever', form)
         assert 'from 1× to 3×' in review and 'name="confirm"' in review
         assert json.loads(f.read_text()) == fleet                      # a review writes nothing
@@ -61,11 +66,12 @@ def spec_U99_the_panel_reviews_asks_for_the_name_and_writes_onto_what_it_read():
         ok = _call(base, '/lever', dict(form, seen=seen, confirm='PFOcarry'))
         assert 'pfocarry: written' in ok
         row = json.loads(f.read_text())['bots'][1]
-        assert row['margin']['spot_leverage'] == 3 and row['perp_leverage'] == 4
+        assert row['margin']['spot_leverage'] == 3 and row['perp_leverage'] == {'BTC': 4, 'SOL': 2}
         assert sum(a['weight'] for a in row['assets']) == 3
         again = _call(base, '/lever', dict(form, seen=seen, confirm='pfocarry'))   # the file moved since
         assert 'the file changed since you reviewed it' in again
         assert 'type the leverage as a number' in _call(base, '/lever', dict(form, spot='lots'))
+        assert 'type the leverage as a number' in _call(base, '/lever', dict(form, perp_ETH='lots'))
         assert 'from 1 to 10' in _call(base, '/lever', dict(form, spot='12'))
         assert 'no portfolio row' in _call(base, '/lever', dict(form, orig=fleet['bots'][0].get('symbol', 'x')))
         f.write_text(json.dumps(dict(json.loads(f.read_text()), allow_mainnet=True)))

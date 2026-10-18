@@ -1214,10 +1214,17 @@ def spec_F12_a_portfolio_rows_leverage_is_applied_live_the_perps_on_the_venue_fi
     assert watch.apply() == {'pfocarry': 'applied'}
     assert row.client.calls == [('inverse', 'BTCUSD', 5.0), ('inverse', 'ETHUSD', 5.0)]
     assert venue.calls == []                                 # the row's account, not the fleet's
-    assert row.cfg['margin']['spot_leverage'] == 4.0 and row.cfg['perp_leverage'] == 5.0
+    assert row.cfg['margin']['spot_leverage'] == 4.0 and row.cfg['perp_leverage'] == {'BTC': 5.0, 'ETH': 5.0}
     assert [a['weight'] for a in row.cfg['assets']] == [2.0, 2.0] and row.cfg['account'] == 'carry'
-    assert any('spot leverage 2x -> 4x' in ln and 'perp leverage 0x -> 5x' in ln for ln in lines), lines
+    assert any('spot leverage 2x -> 4x' in ln and "perp leverage BTC the venue's own, ETH the venue's own"
+               " -> BTC 5x, ETH 5x" in ln for ln in lines), lines
     assert watch.apply() == {}
+    p['perp_leverage'] = {'BTC': 5, 'ETH': 8}                # one coin alone: only its market is sent
+    fleet.write_text(json.dumps(raw))
+    row.client.calls.clear()
+    assert watch.apply() == {'pfocarry': 'applied'}
+    assert row.client.calls == [('inverse', 'ETHUSD', 8.0)], row.client.calls
+    assert any('perp leverage ETH 5x -> ETH 8x' in ln for ln in lines), lines
 
 
 def spec_F12_a_portfolio_leverage_refused_applies_nothing_and_other_changes_wait():
@@ -1231,7 +1238,7 @@ def spec_F12_a_portfolio_leverage_refused_applies_nothing_and_other_changes_wait
     fleet.write_text(json.dumps(raw))
     assert watch.apply() == {'pfocarry': 'refused'}
     assert row.cfg['margin']['spot_leverage'] == 2.0 and 'perp_leverage' not in row.cfg
-    assert any('REFUSED: BTCUSD: retCode 110013' in ln for ln in lines), lines
+    assert any('REFUSED: BTCUSD: retCode 110013' in ln and 'Nothing else' in ln for ln in lines), lines
     p['perp_leverage'] = 60                                   # above the leg's ceiling: never sent
     fleet.write_text(json.dumps(raw))
     row.client.calls.clear()

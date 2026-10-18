@@ -29,10 +29,13 @@ class LeverPages:
             return self._page(refusal_box('not reviewed', 'this fleet may reach real money: its '
                                           'leverage is changed in the fleet file by hand (D64)'))
         spot = _f(form.get('spot'))
-        perp_text = (form.get('perp') or '').strip()
-        perp = _f(perp_text) if perp_text else None
+        perp, typed = {}, {}
+        for k, v in form.items():
+            if k.startswith('perp_') and (v or '').strip():
+                typed[k] = v.strip()
+                perp[k[5:].upper()] = _f(v.strip())
         try:
-            if spot is None or (perp_text and perp is None):
+            if spot is None or any(x is None for x in perp.values()):
                 raise ValueError('type the leverage as a number, like 3')
             new_row = lever_row(raw['bots'][i], spot, perp)
         except ValueError as e:
@@ -72,7 +75,8 @@ class LeverPages:
             f'<input type="hidden" name="fleet" value="{fi}">'
             f'<input type="hidden" name="orig" value="{e(botid, quote=True)}">'
             f'<input type="hidden" name="spot" value="{e(form.get("spot", ""), quote=True)}">'
-            f'<input type="hidden" name="perp" value="{e(perp_text, quote=True)}">'
+            + ''.join(f'<input type="hidden" name="{e(k, quote=True)}" value="{e(v, quote=True)}">'
+                      for k, v in typed.items()) +
             f'<input type="hidden" name="seen" value="{e(json.dumps(seen), quote=True)}">'
             f'<label>type <b>{e(botid)}</b> to write it <input name="confirm" size="14"></label> '
             '<button>write it</button></form><p><a href="/">back, change nothing</a></p>')

@@ -141,7 +141,12 @@ def build_portfolio(cfg, client, notifier, state, tombs):
         from .portfolio_bot import set_perp_leverage
         why = set_perp_leverage(client, legs, cfg['perp_leverage'])
         if why:
-            raise ConfigError(f"{cfg['botid']}: perp_leverage {cfg['perp_leverage']:g} refused — {why}")
+            # said, never a fleet that will not start: the legs run on as the
+            # venue holds them until the file asks for what the venue allows
+            _vn(notifier, cfg['venue']).event('warn', cfg['botid'],
+                                              f'perp leverage not set — {why}; the venue\'s setting '
+                                              'stands until the file asks for what it allows (D143)',
+                                              urgent=True)
     from .portfolio_bot import RegimeReader
     reader = RegimeReader() if cfg.get('regime') else None
     return PortfolioBot(cfg, legs, client, notifier, state, tombstones=tombs,

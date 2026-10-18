@@ -1195,9 +1195,11 @@ def spec_H11_each_legs_view_carries_the_venues_leverage_and_its_ceiling():
 
 
 class _LevCatalogue:
-    """The venue's catalogue with a leverage ceiling, and its set-leverage."""
-    def __init__(self, most='100', refuse=None):
-        self.most, self.refuse, self.set = most, refuse, []
+    """The venue's catalogue with a leverage ceiling, each position's
+    leverage and risk tier, and its set-leverage."""
+    def __init__(self, most='100', refuse=(), tier_most=None, now=None):
+        self.most, self.refuse, self.tier_most = most, refuse, tier_most or {}
+        self.now, self.set = dict(now or {}), []
 
     def instruments_info(self, mt, symbol):
         coin = symbol.replace('USDT', '').replace('USD', '')
@@ -1210,6 +1212,14 @@ class _LevCatalogue:
             info['leverageFilter'] = {'maxLeverage': self.most}
         return info
 
+    def position_list(self, mt, symbol):
+        return {'list': [{'side': 'Sell', 'leverage': str(self.now.get(symbol, 10)), 'riskId': 2,
+                          'positionValue': '5'}]}
+
+    def risk_limit_tiers(self, mt, symbol):
+        return [{'id': 1, 'limit': 1.0, 'mm_rate': 0.01, 'max_leverage': 100.0},
+                {'id': 2, 'limit': 10.0, 'mm_rate': 0.02, 'max_leverage': self.tier_most.get(symbol, 100.0)}]
+
     def ensure_collateral(self, coin):
         pass
 
@@ -1217,17 +1227,20 @@ class _LevCatalogue:
         pass
 
     def set_leverage(self, category, symbol, lev, sell=None):
-        if self.refuse:
+        if symbol in self.refuse:
             from gridgremlin.exchange.errors import VenueError
-            raise VenueError(self.refuse, kind='other')
+            raise VenueError(f'retCode 110013: cannot set leverage on {symbol}', kind='other')
         self.set.append((category, symbol, lev))
+        self.now[symbol] = lev
 
 
 def spec_H12_perp_leverage_is_gated_and_set_on_every_perp_at_the_build():
     """D143 (the owner, 2026-10-18): "a way to adjust the leverage of the
-    derivatives positions and the spot positions for the carry accounts"."""
+    derivativers positions and the spot positions for the carry accounts",
+    then "set the leverage for the futurees individually. spot is one
+    leverage for all"."""
     from gridgremlin.main import build_portfolio
-    for bad in (0.5, 126, 'x'):
+    for bad in (0.5, 126, 'x', {'BTC': 0.5}, {'SOL': 3}, {'BTC': None}):
         try:
             validate_config(dict(ROW, perp_leverage=bad))
         except ConfigError as e:
@@ -1235,19 +1248,38 @@ def spec_H12_perp_leverage_is_gated_and_set_on_every_perp_at_the_build():
         else:
             raise AssertionError(f'perp_leverage {bad!r} passed the gate')
     assert 'perp_leverage' not in validate_config(dict(ROW))       # absent: the venue's own stands
+    assert validate_config(dict(ROW, perp_leverage=3))['perp_leverage'] == {'BTC': 3.0, 'ETH': 3.0}
+    assert validate_config(dict(ROW, perp_leverage={'ETH': 7}))['perp_leverage'] == {'ETH': 7.0}
     tmp = Path(tempfile.mkdtemp())
+    n = iter(range(100))
+
+    def build(cfg, cat):
+        lines = []
+        k = next(n)
+        build_portfolio(validate_config(dict(ROW, **cfg)), cat, Notifier(sink=lines.append),
+                        PortfolioState(tmp / f'{k}.json'), Tombstones(tmp / f't{k}.json'))
+        return lines
     cat = _LevCatalogue()
-    build_portfolio(validate_config(dict(ROW)), cat, Notifier(sink=[].append),
-                    PortfolioState(tmp / 'a.json'), Tombstones(tmp / 'ta.json'))
+    build({}, cat)
     assert cat.set == []                                            # nothing asked, nothing sent
-    build_portfolio(validate_config(dict(ROW, perp_leverage=3)), cat, Notifier(sink=[].append),
-                    PortfolioState(tmp / 'b.json'), Tombstones(tmp / 'tb.json'))
-    assert cat.set == [('inverse', 'BTCUSD', 3.0), ('inverse', 'ETHUSD', 3.0)], cat.set
-    cat = _LevCatalogue(most='2')
-    try:
-        build_portfolio(validate_config(dict(ROW, perp_leverage=3)), cat, Notifier(sink=[].append),
-                        PortfolioState(tmp / 'c.json'), Tombstones(tmp / 'tc.json'))
-    except ConfigError as e:
-        assert 'allows 2× at most' in str(e) and cat.set == [], (e, cat.set)
-    else:
-        raise AssertionError('a leverage above the venue ceiling was built')
+    build({'perp_leverage': {'BTC': 3, 'ETH': 5}}, cat)
+    assert cat.set == [('inverse', 'BTCUSD', 3.0), ('inverse', 'ETHUSD', 5.0)], cat.set
+    cat.set.clear()
+    build({'perp_leverage': {'BTC': 3, 'ETH': 5}}, cat)
+    assert cat.set == []                                            # already so: nothing sent
+    for c, words in ((_LevCatalogue(most='2'), 'allows 2× at most'),
+                     (_LevCatalogue(tier_most={'ETHUSD': 4.0}), 'ETHUSD allows 4× at its size')):
+        lines = build({'perp_leverage': 5}, c)                      # a fleet that still starts
+        assert c.set == [] and any(words in ln and 'not set' in ln for ln in lines), lines
+
+
+def spec_H12_a_refusal_part_way_puts_back_the_legs_already_changed():
+    from gridgremlin.portfolio_bot import set_perp_leverage
+    legs = {'hedge': {c: {'market_type': 'inverse', 'symbol': f'{c}USD', 'spec': {'max_leverage': 100.0}}
+                      for c in ('BTC', 'ETH', 'SOL')}}
+    cat = _LevCatalogue(refuse=('SOLUSD',), now={'BTCUSD': 10, 'ETHUSD': 20, 'SOLUSD': 10})
+    why = set_perp_leverage(cat, legs, {'BTC': 30, 'ETH': 30, 'SOL': 30})
+    assert cat.set == [('inverse', 'BTCUSD', 30), ('inverse', 'ETHUSD', 30),
+                       ('inverse', 'BTCUSD', 10.0), ('inverse', 'ETHUSD', 20.0)], cat.set
+    assert 'SOLUSD: retCode 110013' in why and 'put back: BTCUSD 10×, ETHUSD 20×' in why, why
+    assert cat.now == {'BTCUSD': 10.0, 'ETHUSD': 20.0, 'SOLUSD': 10}

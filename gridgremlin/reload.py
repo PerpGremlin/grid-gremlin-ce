@@ -172,17 +172,20 @@ class FleetWatch:
                                 'terms at the next restart; only its leverage is '
                                 'applied live (H2, D143)', urgent=True)
             return 'restart'
-        lev = new.get('perp_leverage')
-        if lev and lev != bot.cfg.get('perp_leverage'):
+        old_p, new_p = bot.cfg.get('perp_leverage') or {}, new.get('perp_leverage') or {}
+        want = {c: x for c, x in new_p.items() if old_p.get(c) != x}
+
+        def levs(d, coins):
+            return ', '.join(f"{c} {d[c]:g}x" if c in d else f"{c} the venue's own" for c in coins)
+        if want:
             from .portfolio_bot import set_perp_leverage
             client = getattr(bot, 'client', None) or self.clients.get(new['venue'])
-            why = (set_perp_leverage(client, bot.legs, lev) if client is not None
+            why = (set_perp_leverage(client, bot.legs, want) if client is not None
                    else 'no client to set leverage on')
             if why:
                 self.notifier.event('warn', bot.botid,
-                                    f'perp leverage {bot.cfg.get("perp_leverage") or 0:g} -> {lev:g} '
-                                    f'REFUSED: {why} — nothing of this row is applied (D143)',
-                                    urgent=True)
+                                    f'perp leverage {levs(want, want)} REFUSED: {why}. Nothing '
+                                    'else of this row is applied (D143)', urgent=True)
                 return 'refused'
 
         def lev_of(cfg):
@@ -190,9 +193,10 @@ class FleetWatch:
         said = []
         if lev_of(bot.cfg) != lev_of(new):
             said.append(f'spot leverage {lev_of(bot.cfg):g}x -> {lev_of(new):g}x')
-        if bot.cfg.get('perp_leverage') != lev:
-            said.append(f"perp leverage {bot.cfg.get('perp_leverage') or 0:g}x -> "
-                        + (f'{lev:g}x' if lev else "the venue's own"))
+        moved = [c for c in list(new_p) + [c for c in old_p if c not in new_p]
+                 if old_p.get(c) != new_p.get(c)]
+        if moved:
+            said.append(f'perp leverage {levs(old_p, moved)} -> {levs(new_p, moved)}')
         if [a['weight'] for a in bot.cfg['assets']] != [a['weight'] for a in new['assets']]:
             said.append('weights ' + ', '.join(f"{a['coin']} {a['weight']:g}" for a in new['assets']))
         new = dict(new, account=bot.cfg.get('account'))

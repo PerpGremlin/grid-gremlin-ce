@@ -1846,16 +1846,18 @@ eventually pin (T1).
   mostly since it was last flat — not the equity line's window (audit
   2026-10-16).
 - **U99** A portfolio row's leverage on the panel (D143). Its card's edit
-  shows two boxes, spot (1 to `SPOT_LEVERAGE_MOST`) and futures (1–125, blank
-  keeps the file's), and the rest stays the file's. The new row keeps each
-  weight's share and sign and sums to the spot figure (rounded, the last
-  weight closing the sum), raises `max_weight` when the weights outgrow it,
-  and adds the loan's block (`spot_borrow`, `margin` at the gate's 8% cap)
-  when the stack first borrows, keeping it at 1× after. The review writes
-  nothing: it says the change in words (that futures leverage on a cross
-  account moves margin set aside, not the liquidation) and as a diff, and
-  the write needs the row's name typed and the file unchanged since the
-  review (U84). A fleet that may reach real money is refused: by hand (D64).
+  shows one box for the spot (1 to `SPOT_LEVERAGE_MOST`) and one per coin
+  for its perps (1–125; blank keeps that coin's setting in the file), and
+  the rest stays the file's. The new row keeps each weight's share and sign
+  and sums to the spot figure (rounded, the last weight closing the sum),
+  raises `max_weight` when the weights outgrow it, adds the loan's block
+  (`spot_borrow`, `margin` at the gate's 8% cap) when the stack first
+  borrows and keeps it at 1× after, and writes `perp_leverage` per coin. The
+  review writes nothing: it says the change in words (each coin checked at
+  its size, a partial refusal put back, and that futures leverage on a cross
+  account moves margin set aside, not the liquidation) and as a diff; the
+  write needs the row's name typed and the file unchanged since the review
+  (U84). A fleet that may reach real money is refused: by hand (D64).
 - **U96** The table and the card agree (audit 2026-10-16): a stopped bot
   reads DEAD in both, holding or not, and a slid grid is judged against its
   slid window in both (U57's arithmetic, one function).
@@ -2189,20 +2191,28 @@ that pins it (T1).
   *(the owner, 2026-10-16: "1x for no leverage up to whatever can be set
   exchange side")*
 - **H12** The row's leverage, set and changed live (D143). `perp_leverage`
-  (1–125; absent, the venue's setting stands) is set on the venue for
-  every hedge and outright short at the build, each checked against its
-  market's ceiling first (`leverageFilter`) — a leg above it, or the venue's
-  refusal, refuses the build by name. In a running fleet a change to the
-  row's spot leverage (the `margin` block and `spot_borrow`), its weights'
-  sizes (coins, sides and holdings unchanged), `risk.max_weight` or
-  `perp_leverage` is applied live: the perps' on the venue first, through
-  the row's own account's client, and a refusal (the ceiling or the venue)
-  applies nothing; then the row takes the new terms and the next read plans
+  is one number (1–125) for every hedge and outright short, or one per coin
+  of them, kept as `{coin: x}`; a coin left out, or the key absent, keeps
+  the venue's setting. Each named leg is checked first against its market's
+  ceiling (`leverageFilter`) and the most its risk-limit tier allows at the
+  position's size, and nothing is sent when one is over; a leg already at
+  its figure is not sent; a venue refusal part way puts back the legs
+  already changed to what they were, and says which (or which could not
+  be). At the build a refusal is said, urgent, and the fleet starts with
+  the venue's settings. In a running fleet a change to the row's spot
+  leverage (the `margin` block and `spot_borrow`), its weights' sizes
+  (coins, sides and holdings unchanged), `risk.max_weight` or
+  `perp_leverage` is applied live: the changed coins' perps on the venue
+  first, through the row's own account's client, a refusal applying
+  nothing else; then the row takes the new terms and the next read plans
   the stack at them (H2's terms, said). Anything else, and taking a
   borrowing row's `margin` block away, waits for a restart.
   *(the owner, 2026-10-18: "we need to add a way to adjust the leverage of
   the derivativers positions and the spot positions for the carry
-  accounts")*
+  accounts"; then "we may need to be able to set the leverage for the
+  futurees individually. spot is one leverage for all". The first live use
+  set 50× on all three: BTCUSD and ETHUSD took it, SOLUSD refused it at its
+  size (110013, 40× the most), and the two were not put back)*
 - **H6** The card says the three truths. A portfolio's card shows the
   stack's value and coins, one line per asset (weight target → actual,
   hedge ratio target → actual, coins hedged, the regime word when the tilt

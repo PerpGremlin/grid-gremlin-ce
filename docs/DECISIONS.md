@@ -1227,7 +1227,14 @@ stands unless the owner corrects it.
   both without a restart (H12, U99). The rest of the row stays the file's
   and a restart's (H2). On a cross-margin account a perp's leverage moves
   the margin it sets aside, not the account's liquidation; the review
-  says so.
+  says so. *Amended the same evening:* the first use set 50× on all three
+  hedges; SOLUSD refused it at its size (its risk-limit tier allows 40×)
+  after BTCUSD and ETHUSD had taken it, and the next start would have
+  refused the fleet. The owner: "we may need to be able to set the leverage
+  for the futurees individually. spot is one leverage for all". So: one
+  futures box per coin; each coin checked at its size before anything is
+  sent; a refusal part way puts back what changed; a refusal at a start is
+  said, never a fleet that will not start.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
