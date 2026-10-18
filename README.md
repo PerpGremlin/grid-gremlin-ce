@@ -9,6 +9,32 @@ file or a flag says (D68). Everything you see — fills, P&L, stops, the
 market readings — is real exchange behaviour on demo and testnet accounts.
 You are here as a tester: run it, poke it, and tell us what you find.
 
+## On Windows: run it inside WSL
+
+The engine runs on Linux and macOS. On Windows 10 (version 2004 or later)
+or 11, run it inside **WSL**, the Linux that Windows ships with. It is not a
+virtual machine to look after: a Linux terminal, and its files, beside
+Windows.
+
+1. Open **PowerShell as administrator** and run `wsl --install`. Restart
+   when it asks.
+2. **Ubuntu** opens by itself after the restart (or find it in the Start
+   menu). Choose a user name and password: that is your Linux login, not
+   your Windows one.
+3. In that Ubuntu window, get git and Python (Ubuntu 24.04 ships 3.12):
+   ```
+   sudo apt update && sudo apt install -y git python3
+   ```
+4. Follow the steps below **in the Ubuntu window**, and clone into your
+   Linux home (`cd ~` first), not under `/mnt/c`: Windows' own drives
+   cannot keep `.env` private, and the engine refuses a readable one.
+5. The panel's address works in your **Windows browser** as it is. If no
+   browser opens when you start it, copy the address the terminal prints
+   (`http://127.0.0.1:41960/?t=…`) into your browser.
+
+Close the Ubuntu window to stop everything. A native Windows version is
+not built; tell us if WSL is a wall for you.
+
 ## Ten minutes to a running bot
 
 1. **Python 3.12 or newer.** `python3 --version`.

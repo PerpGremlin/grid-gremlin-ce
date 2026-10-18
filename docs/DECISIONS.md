@@ -1190,6 +1190,31 @@ stands unless the owner corrects it.
   against the numbers and approves or vetoes ("using a friend of a lower
   model to verify and audit reasoning and logic").
 
+- **D140 — Binance's order-book depth as history (2026-10-18).** The owner:
+  "we need to get more data. the liquidation numbers and stuff on
+  orderbooks would be better with more data". A survey of sources (free
+  first) found Binance's public archive keeps each perpetual's book depth
+  within 0.2 to 5% of the price, every 30 seconds, from 2023. The owner
+  chose it ("do 1 and 2"): the data box reads it back to 2023, one reading
+  per five minutes, kept forever (datagremlin PR #16). Whether derived
+  charts may be published under Binance's terms is checked before any are.
+
+- **D141 — Liquidations of the past, one day a month (2026-10-18).** The
+  same word: Tardis.dev's free samples, the first day of every month, every
+  liquidation Binance, Bybit and OKX published, from 2020, kept forever
+  beside the live record (datagremlin PR #16). Binance's before April 2021
+  are complete, so its share then against now measures the live feed's
+  undercount. Tardis's licence lets published figures be totals over ten
+  minutes or more, never the rows. The paid full history (about US$350–700
+  a month) stays the owner's call.
+
+- **D142 — Windows testers run the community edition in WSL (2026-10-18).**
+  The owner: "a couple of potential testers i know are windows users". The
+  edition does not run on Windows itself (file locks, the private-file
+  check, and a liveness check that on Windows would end the process it
+  asks about). The owner chose WSL ("A for windows"): the edition's README
+  says how, unchanged code. A native port is not built.
+
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
 inline above.*
