@@ -1604,6 +1604,10 @@ eventually pin (T1).
   wallet was read: a part is never shown as the whole. *(the owner,
   2026-10-19: "the users cannot see what they have left before they burn
   through their immediate margin")*
+- **U101** "Close" is said only where a position closes (the owner, 2026-10-20):
+  leaving a view says **back**; no link or button in the panel is labelled
+  "close" or × alone, and every close left names what it closes (close
+  position, close trade, close at market, close everything).
 - **U67** *(retired by D96, 2026-10-12: the front page's right half is
   U78's)* The fleet page is
   two halves on a wide screen — the bots, and the

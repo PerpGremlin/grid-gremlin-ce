@@ -134,7 +134,7 @@ def spec_U78_a_pick_on_the_live_server_reads_the_fleet_as_the_readout_does():
                                ('setup', 'action="/setup"'), ('trade', '<form'),
                                ('rehearse', 'action="/rehearse"'), ('control', 'control')):
                 half = get(f'/?show={name}').split('<aside class="pane">', 1)[1]
-                assert mark in half and 'data-pick href="/">close</a>' in half, name
+                assert mark in half and 'data-pick href="/">back</a>' in half, name
             assert 'Pick a bot by its name' in get('/?show=nonsense')                 # not a page: the empty half
             assert f'data-pick href="/?show=results">results</a>' in get('/')         # the menu opens the half
             assert 'results since the first kept fill' in get('/results')            # the page still stands

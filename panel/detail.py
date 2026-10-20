@@ -17,7 +17,7 @@ PAGES = {'setup': 'new bot', 'trade': 'new trade', 'rehearse': 'rehearse a grid'
 
 def page_pane(name, body):
     """U78d: one of the panel's pages in the right half, under its name."""
-    return (f'<aside class="pane"><h2>{esc(PAGES[name])} <a class="plain" data-pick href="/">close</a></h2>'
+    return (f'<aside class="pane"><h2>{esc(PAGES[name])} <a class="plain" data-pick href="/">back</a></h2>'
             f'{body}</aside>')
 
 
@@ -56,7 +56,7 @@ def detail_pane(idx, label, botid, contract, listing, show='fills', numbers='', 
                     f'<a data-pick href="/?fleet={idx}&amp;bot={qarg(botid)}&amp;show={key}">{word}</a>'
                     for key, word in TABS)
     head = (f'<h2>{esc(name)} <span class="dim">{esc(label)}</span> '
-            f'<a class="plain" data-pick href="/">close</a></h2>'
+            f'<a class="plain" data-pick href="/">back</a></h2>'
             f'<p class="ptabs">{tabs}</p>')
     if show in ('numbers', 'edit'):
         return f'<aside class="pane">{head}{numbers}</aside>'

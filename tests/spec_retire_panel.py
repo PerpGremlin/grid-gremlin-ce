@@ -226,3 +226,18 @@ def spec_X15e_closing_everything_on_real_money_asks_the_size_twice():
     finally:
         Handler.units = saved
         close()
+
+
+def spec_U101_close_is_said_only_where_a_position_closes():
+    """The owner, 2026-10-20: a "close" that only leaves a screen could be
+    read as close position. A link or button whose whole label is "close"
+    (or ×) appears nowhere in the panel; leaving a view says back. Every
+    close that remains names what it closes."""
+    import re
+    root = Path(__file__).parent.parent / 'panel'
+    bare = re.compile(r'>\s*(close|×|&times;)\s*</(a|button)>', re.I)
+    hits = [f'{p.name}: {m.group(0)}' for p in sorted(root.rglob('*.py'))
+            for m in bare.finditer(p.read_text())]
+    assert hits == [], hits
+    from panel.detail import page_pane
+    assert 'data-pick href="/">back</a>' in page_pane('results', '')
