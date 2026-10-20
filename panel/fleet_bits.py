@@ -66,7 +66,9 @@ def windows_html(draft, out):
             continue
         gap = (a or b)['gap_pct']
         mark = (' <b>&larr; 14d</b>' if n == w14['best'] else '') + \
-               (' <b>&larr; 7d</b>' if n == w7['best'] else '')
+               (' <b>&larr; 7d</b>' if n == w7['best'] else '') + \
+               (" <span class='neg'>stopped</span>" if a and a.get('stopped')
+                else '')                                                 # T15
         cls = ' class="pos"' if lo <= n <= hi else ''
         share = ('—' if not a or a.get('fee_share') is None
                  else f"{a['fee_share'] * 100:.0f}%")
@@ -161,7 +163,8 @@ def sweep_html(draft, out):
             continue
         share = ('—' if r['fee_share'] is None
                  else f"{r['fee_share'] * 100:.0f}%")
-        mark = ' <b>&larr; best</b>' if r['rungs'] == out['best'] else ''
+        mark = (' <b>&larr; best</b>' if r['rungs'] == out['best'] else '') + \
+            (" <span class='neg'>stopped</span>" if r.get('stopped') else '')   # T15
         cls = ' class="pos"' if lo <= r['rungs'] <= hi else ''
         rows += (f"<tr{cls}><td>{r['rungs']}{mark}</td>"
                  f"<td>{r['gap_pct']:.2f}%</td>{money(r['net'])}"

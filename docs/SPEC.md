@@ -2732,6 +2732,21 @@ that pins it (T1).
   the venue order does: B4 exempts it from the quote guard and W3 keeps it outside
   the window; one never placed is judged afresh. *(the rungs study, 2026-10-15: on
   1-second bars the backtest re-placed nearly every resting sell)*
+- **T15** The backtester ends a grid where its stop or loss limit ends the bot,
+  with the engine's own level (X8's `stop_level_for`, after each slide). A touch
+  (no cool-down, `server_side`, or X12's emergency level) fires inside its bar at
+  the level, or at the open when the bar opened past it; that bar's entries fill
+  down to it and its exits wait. X9's timeout counts consecutive closes past the
+  level, ⌈confirm_seconds / bar⌉ of them (G21's whole bars); X12's candle stop
+  compares closes at its candle's boundaries. X14's loss limit (realised less
+  fees plus open, since the window's start) and, with the account given, an
+  `account_equity` stop fire at the price that reaches them. X1 sells what is
+  held at the taker fee, keeping X6's floor core; X13 keeps it all, marked to the
+  end; X14 is always X1. Nothing trades after. A `position_sl` stop, and an
+  `account_equity` one without the account, are said as not modelled. The panel's
+  rehearsal, the grid-count comparison and the CLI say what the stop did, judged
+  on the candles' prices, not the mark. *(the owner, 2026-10-20: the rehearsal
+  ran a stopped grid on as if no stop were set)*
 - **T10** The grid's rehearsal charges the market's own funding: a Bybit
   futures grid's window reads the settlements (public), and each one the
   held position crosses is paid or received at its rate on the notional at

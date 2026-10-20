@@ -174,9 +174,16 @@ def verdict(draft, out, typed=None, bot_json=None, days='7'):
                        f"{cross['price']:,.6g}, {_html.escape(_day_utc(cross['t']))}</b>" if cross else
                        ' — never 100%')
                     + '</td></tr>' + risk)
+        from gridgremlin.backtest_cli import stop_words
+        said = stop_words(draft, out, when=_day_utc)
+        stop_row = ('' if not said else
+                    '<tr><td>stop</td><td style="text-align:left;white-space:normal">'
+                    + ("<b class='neg'>" + _html.escape(said) + '</b>'
+                       if out.get('stopped') else _html.escape(said))
+                    + '</td></tr>')                                    # T15
         detail = (f"<tr><td>trips / entry fills</td>"
                   f"<td>{out['trips']} / {out['entry_fills']}</td></tr>"
-                  + holding + risk
+                  + holding + stop_row + risk
                   + ('' if out.get('funding_modelled') or draft.get('market_type') == 'spot' else
                      '<tr><td>funding</td><td>not modelled for this market</td></tr>'))
         foot = ('window shown, never annualised. beat the hold benchmark '

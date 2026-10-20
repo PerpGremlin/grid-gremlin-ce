@@ -37,6 +37,29 @@ def rehearse(draft, bars, adapter, fee=BYBIT_MAKER, bar_minutes=60, funding=None
     return r
 
 
+def stop_words(draft, r, when=str):
+    """T15: what the row's stop and loss limit did in the replay, in one
+    sentence for the panel and the CLI alike; None when the row has neither.
+    `when` turns the bar's time (ms) into words."""
+    has = (draft.get('stop') or draft.get('max_loss')) and \
+        draft.get('strategy', 'grid') != 'martingale'
+    if not has:
+        return None
+    s = r.get('stopped')
+    if s:
+        at = f", {when(s['t'])}" if s.get('t') is not None else ''
+        said = (f"fired ({s['reason']}) at {s['price']:,.6g}{at}: "
+                + ('sold what it held at the taker fee; nothing traded after'
+                   if s['action'] == 'flatten' else
+                   f"orders cancelled, {s['held_after']:.10g} kept and marked "
+                   'to the end'))
+    else:
+        said = 'never fired in this window'
+    gaps = r.get('stop_not_modelled') or []
+    return (said + ' (judged on these candles\' prices, not the mark)'
+            + (f"; not modelled: {', '.join(gaps)}" if gaps else ''))
+
+
 SWEEP_STEP = 8          # T8: the coarse pass (5, 13, 21 … 77); the best is
                         # then refined by 4 and by 2 — 14 replays, not 22
                         # (a 30-day sweep took 293 s on the one-core box)
@@ -91,7 +114,8 @@ def sweep_rungs(raw, bars, adapter, fee=BYBIT_MAKER, bar_minutes=5,
             else None
         return {'rungs': n, 'gap_pct': gap * 100.0, 'net': r['net'],
                 'total': r['total'], 'trips': r['trips'], 'fees': r['fees'],
-                'fee_share': share, 'max_drawdown': r['max_drawdown']}
+                'fee_share': share, 'max_drawdown': r['max_drawdown'],
+                'stopped': r['stopped']}
 
     total = len([n for n in cands if n >= 2]) + 4      # the refinements
     done = 0
@@ -410,7 +434,8 @@ def main(argv):
                 continue
             share = f"{r['fee_share'] * 100:>6.0f}%" if r['fee_share'] \
                 is not None else f"{'—':>7}"
-            mark = '  <- best' if r['rungs'] == sw['best'] else ''
+            mark = ('  <- best' if r['rungs'] == sw['best'] else '') + \
+                ('  stopped' if r.get('stopped') else '')       # T15
             print(f"{r['rungs']:>6}{r['gap_pct']:>7.2f}{r['net']:>10.2f}"
                   f"{r['trips']:>7}{share}{r['max_drawdown']:>9.2f}{mark}")
         if sw['dropped']:
@@ -441,6 +466,9 @@ def main(argv):
     print(f"  {r['trips']} exit trips / {r['entry_fills']} entry fills;  "
           f"ends holding {r['held']:.10g}"
           + (f" @ {r['basis']:,.6g}" if r['basis'] else ''))
+    said = None if dca else stop_words(cfg, r)
+    if said:
+        print(f'  stop: {said}')
     return 0
 
 
