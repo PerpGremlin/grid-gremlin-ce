@@ -50,6 +50,8 @@ def watch_list(labelled):
             said = []
             if bl.get('alive') is False:
                 said.append('stopped')
+            if bl.get('paused'):
+                said.append('paused')                     # D145
             if bl.get('capped'):
                 said.append(f"capped: {bl['capped']}")
             mark = _mark(c, botid, b, bl)

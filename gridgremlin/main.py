@@ -243,6 +243,10 @@ def snapshot_row(bots, wallet, now, tiers=None):
                                             'result': b._loss_now}}
                                   if b.alive and getattr(b, '_loss_now', None)
                                   is not None else {}),
+                               # D145: paused by retire, since when
+                               **({'paused': b.paused.get('t')}
+                                  if b.alive and getattr(b, 'paused', None)
+                                  else {}),
                                # D56/D70: held back by a cap, and why
                                **({'capped': b.capped}
                                   if b.alive and getattr(b, 'capped', None)
@@ -886,6 +890,8 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
             state_path(fleet_path, fleet, 'trades'), bots, fleet.get('_identities', []),
             lambda cfg: build_live_trade(cfg, fleet, clients, bots, notifier),
             notifier, clients)
+        from .retire import RetireWatch, requests_path
+        retire_watch = RetireWatch(requests_path(fleet_path), bots, notifier)   # D145
         while cycles is None or n < cycles:
             try:
                 try:
@@ -903,6 +909,11 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
                                                             f"closing {', '.join(asked)} (J3/L7)", urgent=True)
                     except Exception as e:                   # noqa: BLE001
                         notifier.event('warn', 'fleet', f'agent day-loss check: {type(e).__name__}: {e} (J3)')
+                try:
+                    retire_watch.poll()
+                except Exception as e:                       # noqa: BLE001
+                    notifier.event('warn', 'fleet',
+                                   f'retire watch: {type(e).__name__}: {e} — running on (D145)')
                 try:
                     trade_watch.poll()
                 except Exception as e:                       # noqa: BLE001

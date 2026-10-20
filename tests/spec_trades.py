@@ -228,14 +228,14 @@ def spec_L8_a_trades_card_offers_only_what_a_trade_can_do():
     for full in (False, True):
         html = card(0, bot, c['bots'][bot], c, belief, full=full)
         assert '/edit?' not in html and 'show=edit' not in html and 'copy=' not in html \
-            and 'mode=remove' not in html, full
+            and '/retire?' not in html, full
         assert "<a href='/trade'>clear</a>" in html and 'close position' not in html, full
     belief[bot] = {'alive': False, 'position': 0.004}                    # stopped holding: the close stays
     html = card(0, bot, dict(c['bots'][bot], position=0.004), c, belief)
     assert "close position</a>" in html and "<a href='/trade'>clear</a>" in html
     grid = 'spoADAUSDTl'                                                 # a fleet row keeps its links
     g = card(0, grid, c['bots'][grid], c, belief)
-    assert f"bot={grid}&amp;show=edit'>edit</a>" in g and 'mode=remove' in g and f'copy={grid}' in g
+    assert f"bot={grid}&amp;show=edit'>edit</a>" in g and '/retire?' in g and f'copy={grid}' in g   # D145: remove is inside retire
 
 
 def spec_L6_the_panels_trade_form_opens_refuses_with_the_typing_kept_and_clears():

@@ -29,6 +29,7 @@ from .pages.control import ControlPages
 from .pages.position import PositionPages
 from .pages.trade import TradePages
 from .pages.lever import LeverPages
+from .pages.retire import RetirePages
 
 CACHE_TTL_S = 30.0       # the readout reads the venues; 10 s fed the rate limit
 
@@ -54,7 +55,7 @@ def form_token(token):
     return hmac.new(token.encode(), b'gg-form', hashlib.sha256).hexdigest()[:32]
 
 
-class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, PositionPages, TradePages, LeverPages, http.server.BaseHTTPRequestHandler):
+class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, PositionPages, TradePages, LeverPages, RetirePages, http.server.BaseHTTPRequestHandler):
     server_version = 'gg-panel'
     token = ''
     fleets = ()            # venue sections: one per fleet file
@@ -312,6 +313,8 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             return self._page(self._trade_html())             # L6 (D81)
         if self.path.startswith('/close?'):
             return self._close_page()
+        if self.path.startswith('/retire?'):
+            return self._retire_page()                        # D145
         if self.path.startswith('/position?'):
             return self._position_page()
         if self.path.startswith('/edit?'):
@@ -408,6 +411,8 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             return self._control_act(form, self.path)
         if self.path == '/close':
             return self._close_act(form)
+        if self.path == '/retire':
+            return self._retire_act(form)                     # D145
         if self.path == '/trade':
             return self._trade_post(form)
         if self.path == '/lever':                            # D143

@@ -766,6 +766,8 @@ class RoundMixin:
                 return {'round': 'expired'}
             if self.capped:                       # D56: the account is full;
                 return {'round': 'capped'}        # the next round waits
+            if self.paused:                       # D145: retire's pause
+                return {'round': 'paused'}
             from .ladder import ladder_fits, order_qty
             if not ladder_fits(cfg, truth['mark']):                 # D89
                 if not self._unplaceable_warned:

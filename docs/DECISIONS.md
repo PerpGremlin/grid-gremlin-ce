@@ -1246,6 +1246,17 @@ stands unless the owner corrects it.
   do (F23b). A route with no GitHub account at all (a separate Telegram
   bot for findings, never the alerts bot) is a public way in and waits for
   its own D-number.
+- **D145 — Retire from the panel (2026-10-20).** Asked whether **remove**
+  closes a bot's position (it did not: it only took the row out, and the
+  bot's orders and position stayed on the exchange, managed by nothing),
+  the owner: "yeah build the retire button. remove bot should be an option
+  inside of the retire option" — a page of steps from pausing to closing
+  the coin's position outright. The card's **remove** becomes **retire**:
+  pause, stand down keeping the position, stand down closing everything,
+  and remove inside it, offered once nothing of the bot runs (X15e). The
+  panel stays keyless: it writes a request and the running fleet's bot
+  acts on it, as a trade's close does (L7). D92's command stays for a
+  stopped fleet.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

@@ -885,6 +885,23 @@ eventually pin (T1).
   its running fleet it refuses before any client is built; never mainnet,
   never spot; `--dry` changes nothing. Then the row leaves the file by a
   PR.
+- **X15e** Retire from the panel, through the running fleet (D145): the
+  card's **retire** opens one page with the steps, gentlest first —
+  **pause** (no order that adds exposure rests, no round opens, no seed;
+  exits and the stop work; **resume** lifts it), **stand down, keep the
+  position** (tombstone, its own orders cancelled, nothing sold, X13's
+  residue said), **stand down and close everything** (the same, then its
+  whole position sold at market, floor core included, never spot's) —
+  and **remove** inside it. The panel writes `logs/retire-<fleet>.json`;
+  the fleet's RetireWatch hands each request to its bot (a pause set or
+  lifted, a stand-down once, a restart included) and the bot acts under
+  its own links. A pause may become a stand-down; a stand-down stands.
+  The bot's name is typed; closing on real money types the size a second
+  time. Removal is offered only for a bot that has stood down or never
+  started (a running bot's row taken out leaves what it owns unmanaged);
+  with it, the request and the tombstone go. A stand-down asked with
+  remove waits for the tombstone, then removes. Not for a trade (close
+  trade) or a portfolio row (its flatten).
 - **F1** Every fleet names a watchdog config, and its account guards (staleness,
   mm_rate, equity floor, drawdown) cover every bot. A per-bot position bound is
   opt-in (D32): present, it is checked; absent, the bot has no limit of its own. A

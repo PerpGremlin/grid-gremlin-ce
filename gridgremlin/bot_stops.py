@@ -327,9 +327,12 @@ class StopsMixin:
                 f"{self.cfg['max_loss_since']} (realised {realised:+.10g} "
                 f'after fees, open {open_:+.10g})')
 
-    def _execute_stop(self, truth, held, reason, flatten=False):
+    def _execute_stop(self, truth, held, reason, flatten=False, keep=False, whole=False):
         """X1 (D1): flatten, cancel, kill, never restart. X4: the event
-        states what still rests. X5: owned orders only, from paginated truth."""
+        states what still rests. X5: owned orders only, from paginated truth.
+        D145: `keep` sells nothing (retire, keeping the position); `whole`
+        sells the floor core too (retire, closing everything) — never spot,
+        whose wallet may hold the operator's own coins."""
         cfg, adapter = self.cfg, self.adapter
         if self.tombs:                 # X7: durable BEFORE the flatten — a
             try:                       # crash mid-stop stays dead
@@ -338,9 +341,11 @@ class StopsMixin:
                 self.notify.event('warn', self.botid,   # flatten itself (M3)
                                   f'tombstone write FAILED ({e}) — stopping '
                                   'anyway; this bot may revive on restart', urgent=True)
-        leave = (not flatten and (cfg.get('stop') or {}).get('action')
-                 == 'leave_position')          # X14 always closes
-        qty = 0.0 if leave else self._flatten_scope(held)   # X13: by choice
+        leave = keep or (not flatten and (cfg.get('stop') or {}).get('action')
+                         == 'leave_position')  # X14 always closes
+        qty = (0.0 if leave else                             # X13: by choice
+               abs(held or 0.0) if whole and cfg['market_type'] != 'spot'
+               else self._flatten_scope(held))
         if qty > 0:
             self._gen += 1
             try:
@@ -362,8 +367,10 @@ class StopsMixin:
         except Exception:                                    # noqa: BLE001
             left = None
         if leave:
-            residue = (f'position {abs(held):.10g} LEFT OPEN by this row\'s '
-                       'own choice (leave_position, X13) — UNPROTECTED and '
+            residue = (f'position {abs(held):.10g} LEFT OPEN '
+                       + ('as its retirement asked (D145)' if keep else
+                          'by this row\'s own choice (leave_position, X13)')
+                       + ' — UNPROTECTED and '
                        'yours to manage; anything the venue holds on the '
                        'position itself still rests' if held else
                        'position flat')

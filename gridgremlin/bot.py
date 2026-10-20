@@ -88,6 +88,10 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
         self.capped = None             # D56: the account cap's reason, set
                                        # by the fleet each cycle; None = free
         self.notional_now = 0.0        # D56: |held| at mark, in quote
+        self.paused = None             # D145: retire's pause, set by the
+                                       # fleet's RetireWatch: no new exposure
+        self.retire_request = None     # D145: retire's stand-down (hold or
+                                       # close), handed over the same way
         self.close_request = None      # L7: a trade's close request, handed
                                        # over by the fleet from the trades
                                        # file (durable there, not E3 state)
@@ -124,7 +128,7 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
         one lot per exit-side rung. Observable as done from the venue alone."""
         if not self.cfg.get('seed') or held != 0 or self._last_pos is not None:
             return False
-        if self.capped:                                 # D56: no new exposure
+        if self.capped or self.paused:                  # D56/D145: no new exposure
             return False
         if any(rung_of(o['link_id'], self.botid) is not None
                for o in truth['orders']):
@@ -342,6 +346,13 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
             self._execute_stop(truth, held, f"closed on request by {r.get('by')}: "
                                f"{r.get('reason') or 'no reason given'} (L7)", flatten=True)
             return None
+        if self.retire_request:                                    # D145
+            r = self.retire_request
+            self._execute_stop(truth, held, f"retired by {r.get('by')}: "
+                               f"{r.get('reason') or 'no reason given'} (D145)",
+                               flatten=r['action'] == 'close', keep=r['action'] == 'hold',
+                               whole=r['action'] == 'close')
+            return None
         if cfg.get('max_loss'):                                    # X14
             reason = self._max_loss_hit(truth, held, basis, now)
             if reason:
@@ -517,8 +528,8 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
             desired = plan_grid(cfg, adapter, ref, held, basis, bid, ask,
                                 resting_exits, offset=self.offset,
                                 held_rungs=held_rungs)
-        if self.capped:
-            # D56: the account is at its cap — no order that ADDS exposure
+        if self.capped or self.paused:
+            # D145: a paused bot likewise. D56: the account is at its cap — no order that ADDS exposure
             # rests; exits keep working, so the cap is reached and left by
             # the bots' own selling, never by a forced close
             desired = [d for d in desired

@@ -100,8 +100,8 @@ def section(idx, label, contract, view='all'):
             f"<td>{b['bought']:,.4g}</td><td>{b['sold']:,.4g}</td>"
             f"{edge}<td>{settle(b, floor)}</td>{watch}"
             f"<td class='dim'><a href='/edit?fleet={idx}&amp;bot={qarg(botid)}'>edit"
-            f"</a> <a href='/edit?fleet={idx}&amp;bot={qarg(botid)}&amp;mode=remove'>"
-            f"remove</a> <a href='/setup?fleet={idx}&amp;copy={qarg(botid)}'>copy</a>"
+            f"</a> <a href='/retire?fleet={idx}&amp;bot={qarg(botid)}'>"
+            f"retire</a> <a href='/setup?fleet={idx}&amp;copy={qarg(botid)}'>copy</a>"
             "</td></tr>")
     return f"""
 <h1 id="fleet{idx}">{esc(label)} {tier_badge(contract)} — last {contract['window_hours']:g}h {sweep_note(contract)}

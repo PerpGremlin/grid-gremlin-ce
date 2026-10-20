@@ -238,7 +238,7 @@ def card(idx, botid, b, contract, belief, full=False):
              + ('' if ((contract.get('terms') or {}).get(botid) or {}).get('trade') else
                 (' ' if not full else '') + f"<a data-pick href='/?fleet={idx}&amp;bot={qarg(botid)}&amp;show=edit'>edit</a> "
                 f"<a href='/setup?fleet={idx}&amp;copy={qarg(botid)}'>copy</a> "
-                f"<a href='/edit?fleet={idx}&amp;bot={qarg(botid)}&amp;mode=remove'>remove"
+                f"<a href='/retire?fleet={idx}&amp;bot={qarg(botid)}'>retire"   # D145: remove is inside
                 '</a>'))
     # L8: a trade is not a fleet row — edit, copy and remove answered "not in
     # this fleet" (the owner, 2026-10-11, on tilt's ended BTC trade); a trade
@@ -364,6 +364,11 @@ def card(idx, botid, b, contract, belief, full=False):
         # U94: the engine's figures below are its last snapshot's
         alerts.append(f"the engine's state, margin and limits are from {stale}")
         held += f"</div><div class=\"neg\">the engine's state, margin and limits are from {stale}"
+    paused = (belief.get(botid) or {}).get('paused')
+    if paused:
+        # D145: retire's pause — undone on its retire page
+        alerts.append(f'paused since {paused} — adds nothing, exits run')
+        held += f'</div><div class="neg">paused since {esc(paused)} — adds nothing, exits run'
     capped = (belief.get(botid) or {}).get('capped')
     if capped:
         alerts.append(f'capped: {capped} — adds nothing, exits run' if pos else
