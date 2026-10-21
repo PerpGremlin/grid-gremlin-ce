@@ -144,11 +144,13 @@ def price_boxes(prices, window, liq, fills):
     return ((f'<h3>price, 24 h</h3>{day}' if day else '') + (f'<h3>price, 7 d</h3>{week}' if week else ''))
 
 
-def equity_boxes(contract):
+def equity_boxes(contract, idx=0):
     """U63: the windows under the exchange's box — a day and a week, and
     (U91) a month and the whole history, each long one with its Sharpe
     ratio (daily, on a year's scale) — or one quiet line while the snapshot
-    file has nothing yet."""
+    file has nothing yet. U103: one window at a time; its heading is the
+    switch to the next (radios and CSS, no script, so an export works
+    the same)."""
     eq = contract.get('equity') or {}
     sh = eq.get('sharpe') or {}
     boxes = []
@@ -170,11 +172,21 @@ def equity_boxes(contract):
                             else 'told from luck' if tr['more'] == 0 else 'never, at this rate'))
             if key == 'all' and eq.get('all'):
                 word += f' · since {time.strftime("%d %b", time.gmtime(eq["all"][0][0]))}'
-        boxes.append(f'<div><div class="dim">equity, {word}</div>{svg}</div>')
+        boxes.append((key, word.split(' · ')[0], word, svg))
     if not boxes:
         return '<div class="dim">equity line: no history yet</div>'
     note = (SHARPE_NOTE if 'sharpe' in eq else '')
-    return '<div class="eqrow">' + ''.join(boxes) + '</div>' + note
+    name = f'eq-{idx}'
+    radios = ''.join(f'<input type="radio" name="{name}" id="{name}-{k}" class="rsel eqpick"'
+                     f'{" checked" if i == 0 else ""}>' for i, (k, *_) in enumerate(boxes))
+    wins = []
+    for i, (key, short, word, svg) in enumerate(boxes):
+        nk, nshort = boxes[(i + 1) % len(boxes)][:2]
+        head = (f'<label for="{name}-{nk}" class="eqnext">equity, {word} '
+                f'<span class="eqgo">{nshort} ▸</span></label>' if len(boxes) > 1
+                else f'equity, {word}')
+        wins.append(f'<div class="eqwin"><div class="dim">{head}</div>{svg}</div>')
+    return f'<div class="eqrow eqsw">{radios}{"".join(wins)}</div>' + note
 
 
 # U91b: the owner's rule for the site — every piece of maths in plain words

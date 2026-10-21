@@ -207,13 +207,17 @@ function wire(scope){
   if(d.dataset.k in open)d.open=!!open[d.dataset.k];
   d.addEventListener('toggle',function(){
    open[d.dataset.k]=d.open?1:0;S.setItem('gg-open',JSON.stringify(open));});});}
+function eqs(scope){scope.querySelectorAll('input.eqpick').forEach(function(r){
+ var v=S.getItem('gg-eq:'+r.name);if(v&&document.getElementById(v))r.checked=(r.id===v);});}
+document.addEventListener('change',function(e){var r=e.target;
+ if(r.classList&&r.classList.contains('eqpick'))S.setItem('gg-eq:'+r.name,r.id);});
 function inAcct(i){return document.querySelectorAll('details.acct[data-k="acct:'+i+'"]');}
 function picks(){document.querySelectorAll('[data-fold]').forEach(function(a){
  a.classList.toggle('pick',a.dataset.fold===(S.getItem('gg-fold:'+a.dataset.cls)||'open'));});
  document.querySelectorAll('[data-foldin]').forEach(function(a){var all=true;
   inAcct(a.dataset.foldin).forEach(function(d){if(!d.open)all=false;});
   a.textContent=all?'fold cards':'open cards';});}
-wire(document);picks();
+wire(document);picks();eqs(document);
 window.ggFold=function(k,c){document.querySelectorAll('details.'+c).forEach(function(d){
  d.open=(k==='open');delete open[d.dataset.k];});
  S.setItem('gg-open',JSON.stringify(open));S.setItem('gg-fold:'+c,k);picks();};
@@ -252,7 +256,7 @@ function swap(url){var my=++seq;busy++;
    if(a&&b)a.innerHTML=b.innerHTML;});
   document.querySelectorAll('main .pane script').forEach(function(old){
    var s=document.createElement('script');s.nonce=N;s.text=old.text;old.replaceWith(s);});
-  wire(document.querySelector('main')||document);picks();top();return true;})
+  wire(document.querySelector('main')||document);picks();eqs(document);top();return true;})
  .then(function(v){busy--;return v;},function(e){busy--;throw e;});}
 function dirty(){var a=document.activeElement;
  if(a&&a.closest&&a.closest('.pane form'))return true;

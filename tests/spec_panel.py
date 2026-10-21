@@ -1957,7 +1957,8 @@ def spec_U63_the_strip_carries_a_sparkline_and_the_box_the_days_and_the_weeks_li
                    '7d': [[now - 6 * 86400 + i * 1800, 900.0 + i] for i in range(200)]}
     html = render([('demo', c)])
     assert '<span class="spark" title="equity, 24 h"><svg class="eq"' in html
-    assert 'equity, 24 h</div><div class="eqbox">' in html and 'equity, 7 d</div><div class="eqbox">' in html
+    assert ('equity, 24 h <span class="eqgo">7 d ▸</span></label></div><div class="eqbox">' in html
+            and 'equity, 7 d <span class="eqgo">24 h ▸</span></label></div><div class="eqbox">' in html)
     assert '<span>low 1,000.00</span><span>high 1,011.00</span><b class="pos">+11.00 (+1.1%)</b>' in html
     assert html.count('<polyline') == 3 and '<legend' not in html and 'stroke-width="2"' in html
     assert '<title>' in html                                        # the box's native tooltip

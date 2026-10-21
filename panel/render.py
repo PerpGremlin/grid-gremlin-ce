@@ -64,7 +64,7 @@ def cards_section(idx, label, contract, view='all', scripted=True):
             + (f' · portfolio rows <b class="{_num_cls(pfo)}">{pfo:+,.2f}</b>' if pfo else '')
             + f'</div>{left}{exchange_since_first(contract)}{exchange_leverage(contract)}'
             f'{exchange_mmr(contract)}{exchange_free(contract)}</div>'            # U66, U100
-            f'{equity_boxes(contract)}'                                          # U63
+            f'{equity_boxes(contract, idx)}'                                          # U63
             f'{agent_box(contract)}'                                             # J5
             # U59: the account folds to its heading and its box; the side
             # panel folds or opens every account at once

@@ -1617,6 +1617,12 @@ eventually pin (T1).
   order resting · take-profits at …, held in the exchange's conditional
   book". A grid's words are unchanged. The engine's side shows after a
   fleet restart.
+- **U103** The account's equity lines show one window at a time (the
+  owner, 2026-10-21: "should be a switch. click to move to the next one").
+  The heading of the shown window is the switch to the next: 24 h → 7 d →
+  30 d → all time → 24 h, only the windows that have a line. Radios and
+  CSS, no script, so an export does the same; the panel keeps each
+  account's pick across its refresh. A single window draws no switch.
 - **U67** *(retired by D96, 2026-10-12: the front page's right half is
   U78's)* The fleet page is
   two halves on a wide screen — the bots, and the

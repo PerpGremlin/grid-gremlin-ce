@@ -76,6 +76,7 @@ padding:.45em 2em;border-bottom:var(--bw) solid var(--edge)}
 align-items:baseline}.hero .fleet{display:contents}.hero .num{text-align:right}
 .hero .tier{font-size:.75em}.hero .big{font-size:1.15em}.hero .spark svg{vertical-align:middle}
 .eqrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(18em,1fr));gap:var(--gap-s) var(--gap);max-width:calc(63em + 2*var(--gap));margin:var(--gap-s) 0}
+.eqsw{display:block;max-width:36em}.eqsw>.eqwin{display:none}.eqsw>input:nth-of-type(1):checked~.eqwin:nth-of-type(1){display:block}.eqsw>input:nth-of-type(2):checked~.eqwin:nth-of-type(2){display:block}.eqsw>input:nth-of-type(3):checked~.eqwin:nth-of-type(3){display:block}.eqsw>input:nth-of-type(4):checked~.eqwin:nth-of-type(4){display:block}.eqnext{cursor:pointer}.eqgo{float:right;color:var(--accent)}.eqnext:hover .eqgo{text-decoration:underline}
 .eqnote{max-width:63em;font-size:.88em;margin:0 0 var(--gap-s)}
 .eqbox{border:var(--bw) solid var(--edge);border-radius:6px;padding:.35em .6em}.eqlab{display:flex;gap:var(--gap-s);justify-content:space-between;font-size:.9em}
 svg.eq{display:block}svg.px{display:block;max-width:calc(63em + 2*var(--gap));overflow:visible}

@@ -264,6 +264,33 @@ def spec_U91_the_box_draws_four_lines_and_names_each_sharpe():
     assert 'eqnote' not in equity_boxes({'equity': {'24h': line}})      # no Sharpe shown, no note
 
 
+def spec_U103_one_window_at_a_time_its_heading_steps_to_the_next():
+    """The owner (2026-10-21): the 24 h, 7 d, 30 d and all-time lines as a
+    switch, click to move to the next. One radio per window drawn, the
+    first checked; each heading is the label for the next, the last
+    wrapping to the first; the CSS shows only the checked one; names are
+    per account so two accounts switch apart; no script, so an export
+    switches alike; the panel keeps the pick across its refresh.
+    A single window draws no switch."""
+    import re
+    from panel.css import CSS
+    from panel.drawings import equity_boxes
+    from panel.reference import KEEP_JS as SCRIPT
+    line = [[0.0, 100.0], [3600.0, 101.0]]
+    html = equity_boxes({'equity': {'24h': line, '7d': line, 'all': line}}, 2)
+    assert re.findall(r'<input type="radio" name="eq-2" id="eq-2-(\w+)" class="rsel eqpick"( checked)?>', html) == \
+        [('24h', ' checked'), ('7d', ''), ('all', '')]
+    assert re.findall(r'<label for="eq-2-(\w+)" class="eqnext">equity, ([\w ]+?)(?: ·[^<]*)? <span', html) == \
+        [('7d', '24 h'), ('all', '7 d'), ('24h', 'all time')]
+    assert html.count('class="eqwin"') == 3 and 'name="eq-0"' not in equity_boxes({'equity': {'24h': line, '7d': line}}, 1)
+    assert '.eqsw>.eqwin{display:none}' in CSS
+    for n in range(1, 5):
+        assert f'.eqsw>input:nth-of-type({n}):checked~.eqwin:nth-of-type({n}){{display:block}}' in CSS
+    assert "S.setItem('gg-eq:'+r.name,r.id)" in SCRIPT and 'eqs(document);top();' in SCRIPT
+    one = equity_boxes({'equity': {'24h': line}})
+    assert '<label' not in one and 'checked' in one and 'equity, 24 h</div>' in one
+
+
 def spec_U91b_a_sharpe_never_shows_alone():
     """The researcher's Sharpe study: +1.7 on paper is not yet told from
     luck. Beside every Sharpe, the chance the true one is above zero and
