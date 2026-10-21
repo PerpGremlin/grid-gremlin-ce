@@ -1257,6 +1257,22 @@ stands unless the owner corrects it.
   panel stays keyless: it writes a request and the running fleet's bot
   acts on it, as a trade's close does (L7). D92's command stays for a
   stopped fleet.
+- **D146 — The fleets widen for the long haul (2026-10-21).** The owner:
+  "lets widen all grids and dcas and then reduce rungs/grids. lets make
+  these bots more survivable for long term harvesting and safety." Every
+  grid sits 25% either side of the day's price (gold 12%, its swings being
+  smaller), with 12 rungs at equal percentage gaps (the slow ETH row keeps
+  its 8), no slide, and a stop where it had one two rungs past the edge;
+  every DCA rests its safety orders 5% apart. The studies' one change that
+  held up was a range of 25–30% either side, and the rung count barely
+  mattered (STUDY.md): less risk, not shown to earn. The slide goes because
+  its saved offsets count rungs of the old ladders, and a bounded grid stops
+  buying at its floor rather than following a fall. Leverage and capital
+  are unchanged. The fleets restart on it with retire (D145), so the seven
+  clean days start again. Asked the same day about the audit's open fee
+  question, the owner: "only account for fees when we pay them" — a fee
+  counts when it is paid, as now: an entry's fee at its fill, an exit's at
+  its fill, none projected.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

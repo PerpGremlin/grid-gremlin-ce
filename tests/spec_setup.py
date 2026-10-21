@@ -360,7 +360,13 @@ def _served_fleet():
           'assumes_sole_actor': True}
     (d / 'wd.json').write_text(json.dumps(wd))
     seed_row = dict(next(r for r in _shipped_rows()
-                         if r['symbol'] == 'ETHUSDT' and r['side'] == 'long'))
+                         if r['symbol'] == 'ETHUSDT' and r['side'] == 'long'),
+                    # pinned: the form's specs need a slide row of many rungs,
+                    # whatever the live fleet runs (widened 2026-10-21)
+                    lower=2579, upper=2840, rungs=41,
+                    slide={'trigger_rungs': 2, 'max_rungs': 400, 'confirm_seconds': 900,
+                           'ref_position': 0.5, 'direction': 'both'},
+                    max_position_base='unbounded')                 # D34, with 'both'
     (d / 'f.json').write_text(json.dumps(
         {'watchdog': str(d / 'wd.json'), 'bots': [seed_row]}))
     saved = pc.public_mark, pc.public_adapter, pc.public_bars
