@@ -1273,6 +1273,23 @@ stands unless the owner corrects it.
   question, the owner: "only account for fees when we pay them" — a fee
   counts when it is paid, as now: an entry's fee at its fill, an exit's at
   its fill, none projected.
+- **D147 — Tokenised assets: research and data, no bots (2026-10-21).** The
+  owner: "i want to conduct research to see whats the actual difference,
+  are they worth it, and how they compare to other cryptocurrencies over
+  time, mostly the majors. i want to conduct as much study on them as we do
+  on crypto. i tink in time it will be the default way shares are traded …
+  so i want to learn now." Tokenised gold, indices and single stocks (perps
+  and tokens on the venues we read) are studied as deeply as crypto: how
+  far they track what they stand for, what their closed-market hours do,
+  and how they compare with the crypto majors over time. The data server
+  collects them, keyless, and the site shows them for information,
+  education and research, under its existing warning. Yahoo's prices serve
+  research as the reference for the real asset; the site republishes no
+  third party's prices, only the exchanges' own. No bot trades a stock perp
+  ("we wont test bots on stocks just now"); that would be its own D-number.
+  RWA credit and yield-bearing stablecoins are left out for now. Should the
+  legal line blur, the owner's fallback is an open-source collector
+  application rather than a page of others' data.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
