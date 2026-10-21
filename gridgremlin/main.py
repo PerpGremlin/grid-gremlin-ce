@@ -255,6 +255,9 @@ def snapshot_row(bots, wallet, now, tiers=None):
                                **({'margin': b.margin_view}
                                   if b.alive and getattr(b, 'margin_view',
                                                          None) else {}),
+                               # U102: a DCA round's take-profits, as kept at the venue
+                               **({'exits': b.exits_view}
+                                  if b.alive and getattr(b, 'exits_view', None) else {}),
                                # V15: what rests and what waits (W1)
                                **({'orders': b.orders_view}
                                   if b.alive and getattr(b, 'orders_view',

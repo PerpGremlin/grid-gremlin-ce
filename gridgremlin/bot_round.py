@@ -622,6 +622,7 @@ class RoundMixin:
         to the ladder plan."""
         cfg, adapter = self.cfg, self.adapter
         idx = adapter.position_idx(self._entry_side, False) or 0
+        self.exits_view = None                   # U102: set below while a round holds
         if held == 0:
             # D37: a resting maker base is a round STARTING, not the
             # leftovers of one that finished — a restart mid-entry with
@@ -853,6 +854,8 @@ class RoundMixin:
                     return out
         if self.cfg.get('take_profit_tranches'):
             targets = self._round_targets(basis, held, truth['mark'])
+            self.exits_view = {'at': 'conditional' if hosted else 'orders',   # U102
+                               'prices': [p for p, q in targets if q > 0]}
             # M11: a tranche has fired iff fewer targets remain than configured
             fired = len(targets) < len(self.cfg['take_profit_tranches'])
             trailed = self._maintain_trailing(truth, basis, held, idx,
@@ -911,6 +914,7 @@ class RoundMixin:
             return trailed                           # M21: the round ends
         targets = self._round_targets(basis, held)
         target = targets[0][0]
+        self.exits_view = {'at': 'position' if hosted else 'orders', 'prices': [target]}   # U102
         tp_order = None
         if hosted:
             venue_tp = truth['positions'].get(idx, {}).get('take_profit')

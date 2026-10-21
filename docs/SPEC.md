@@ -1608,6 +1608,15 @@ eventually pin (T1).
   leaving a view says **back**; no link or button in the panel is labelled
   "close" or × alone, and every close left names what it closes (close
   position, close trade, close at market, close everything).
+- **U102** A DCA's card says its safety orders and its exits (the first-day
+  check, 2026-10-21: a full round's card said "nothing resting" while its
+  take-profits sat on the exchange). The engine keeps, each cycle a round
+  holds, where its take-profits are kept — on the position, in Bybit's
+  conditional book (split ones), or as resting orders — and at what
+  prices; the snapshot carries it (`exits`) and the card reads "no safety
+  order resting · take-profits at …, held in the exchange's conditional
+  book". A grid's words are unchanged. The engine's side shows after a
+  fleet restart.
 - **U67** *(retired by D96, 2026-10-12: the front page's right half is
   U78's)* The fleet page is
   two halves on a wide screen — the bots, and the

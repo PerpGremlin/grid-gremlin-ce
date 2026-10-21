@@ -90,6 +90,8 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
         self.notional_now = 0.0        # D56: |held| at mark, in quote
         self.paused = None             # D145: retire's pause, set by the
                                        # fleet's RetireWatch: no new exposure
+        self.exits_view = None         # U102: a round's take-profits as kept at
+                                       # the venue — where, and at what prices
         self.retire_request = None     # D145: retire's stand-down (hold or
                                        # close), handed over the same way
         self.close_request = None      # L7: a trade's close request, handed

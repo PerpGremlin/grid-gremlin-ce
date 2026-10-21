@@ -156,13 +156,37 @@ def state_tag(state, cls=''):
             f'{state}</span>')
 
 
-def orders_line(ov):
+EXITS_AT = {'position': 'on the position', 'conditional': "in the exchange's conditional book",
+            'orders': 'as resting orders'}
+
+
+def exits_words(ex):
+    """U102: a DCA round's take-profits as the engine keeps them at the venue."""
+    prices = [p for p in (ex or {}).get('prices') or [] if p]
+    if not prices:
+        return ''
+    ps = ' and '.join(f'{p:,.6g}' for p in prices)
+    return (f"take-profit{'s' if len(prices) > 1 else ''} at {ps}, held "
+            + EXITS_AT.get(ex.get('at'), 'at the exchange'))
+
+
+def orders_line(ov, exits=None, dca=False):
     """U35: what rests and what waits, in words, from the engine's own
-    snapshot (V15). None when the engine has not said."""
-    if not ov:
+    snapshot (V15). None when the engine has not said. U102: a DCA's own
+    orders are its safety orders, and its exits are said beside them —
+    "nothing resting" read as no exit at all while the take-profits sat
+    on the exchange (the first-day check, 2026-10-21)."""
+    if not ov and not exits:
         return None
+    ov = ov or {}
     r, w = ov.get('resting') or {}, ov.get('waiting') or {}
     pct = (ov.get('within_pct') or 0.0) * 100
+    if dca:
+        n = (r.get('buys') or 0) + (r.get('sells') or 0)
+        out = (f'{n} safety order{"" if n == 1 else "s"} resting' if n
+               else 'no safety order resting')
+        ex = exits_words(exits)
+        return out + (f' · {ex}' if ex else '')
 
     def n(k, word):
         v = (k or {}).get(word + 's', 0)
@@ -234,6 +258,7 @@ def card(idx, botid, b, contract, belief, full=False):
     ceil = ((contract.get('watchdog') or {}).get('ceilings') or {}).get(botid)
     quote_raw, margin_raw = units_of(botid, (contract.get('terms') or {}).get(botid))   # U53
     money_coin, margin_coin = esc(quote_raw), esc(margin_raw)     # P7: names from the file are text
+    dca = ((contract.get('terms') or {}).get(botid) or {}).get('strategy') == 'martingale'   # U102
     links = (('' if full else f"<a data-pick href='/?fleet={idx}&amp;bot={qarg(botid)}&amp;show=numbers'>numbers</a>")
              + ('' if ((contract.get('terms') or {}).get(botid) or {}).get('trade') else
                 (' ' if not full else '') + f"<a data-pick href='/?fleet={idx}&amp;bot={qarg(botid)}&amp;show=edit'>edit</a> "
@@ -257,8 +282,8 @@ def card(idx, botid, b, contract, belief, full=False):
         head = ('<span class="big dim">waits for the fleet\'s restart</span>'
                 if botid not in belief else
                 '<span class="big dim">no fills</span>'
-                + (f' <span class="dim">— {orders_line(bl.get("orders"))}'
-                   '</span>' if bl.get('orders') else ''))          # U35
+                + (f' <span class="dim">— {orders_line(bl.get("orders"), bl.get("exits"), dca)}'
+                   '</span>' if bl.get('orders') or bl.get('exits') else ''))          # U35, U102
         kept = since_first_line(contract, botid)                  # R18
         if kept:
             head += f'<div class="pnl">{kept}</div>'
@@ -341,9 +366,9 @@ def card(idx, botid, b, contract, belief, full=False):
             f"<tr><td>bought</td><td>{b['bought']:,.4g}</td></tr>"
             f"<tr><td>sold</td><td>{b['sold']:,.4g}</td></tr>"
             + (f"<tr><td colspan='2' class='wide'><b>orders</b> — "
-               f"{orders_line((belief.get(botid) or {}).get('orders'))}"
+               f"{orders_line((belief.get(botid) or {}).get('orders'), (belief.get(botid) or {}).get('exits'), dca)}"
                '</td></tr>'
-               if (belief.get(botid) or {}).get('orders') else '')  # U35/U37
+               if (belief.get(botid) or {}).get('orders') or (belief.get(botid) or {}).get('exits') else '')  # U35/U37, U102
             + f'<tr><td>stop-now est.</td><td>{settle(b, floor)}</td></tr>'
             f'<tr><td>watcher</td><td>{limit}</td></tr>'
             + (f"<tr><td>in the coin itself</td><td>realized "

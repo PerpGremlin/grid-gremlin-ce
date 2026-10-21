@@ -241,3 +241,29 @@ def spec_U101_close_is_said_only_where_a_position_closes():
     assert hits == [], hits
     from panel.detail import page_pane
     assert 'data-pick href="/">back</a>' in page_pane('results', '')
+
+
+def spec_U102_a_dca_card_says_its_safeties_and_its_exits():
+    """The first-day check (2026-10-21): a full DCA round's card said
+    "nothing resting" while its take-profits sat on the exchange. The
+    engine now says where it keeps a round's exits and at what prices;
+    the card names its own orders as safety orders and the exits beside
+    them; a grid's words are unchanged. Sabotage: drop the engine's
+    exits_view and the round says nothing of its exit."""
+    from gridgremlin.bot import Bot
+    from panel.card import orders_line
+    from spec_round import ADAPTER, FakeVenue, _cfg
+    venue = FakeVenue()
+    bot = Bot(_cfg(), ADAPTER, venue, Notifier(sink=lambda ln: None), gen_seed=1)
+    assert bot.exits_view is None
+    bot.cycle()
+    bot.cycle()
+    assert venue.position and bot.exits_view and bot.exits_view['prices'], bot.exits_view
+    assert bot.exits_view['at'] in ('position', 'conditional', 'orders')
+    words = orders_line({'resting': {}, 'waiting': {}}, {'at': 'conditional', 'prices': [0.2755, 0.2782]},
+                        dca=True)
+    assert words == ("no safety order resting · take-profits at 0.2755 and 0.2782, "
+                     "held in the exchange's conditional book")
+    assert orders_line({'resting': {'buys': 2}}, {'at': 'position', 'prices': [0.09487]}, dca=True) == \
+        '2 safety orders resting · take-profit at 0.09487, held on the position'
+    assert orders_line({'resting': {}, 'waiting': {}}) == 'nothing resting'            # a grid: as before
