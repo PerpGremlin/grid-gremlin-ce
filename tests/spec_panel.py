@@ -1881,7 +1881,13 @@ def spec_U59_an_account_folds_to_its_heading_and_box_and_the_side_panel_folds_ev
     for i in (0, 1):
         assert f'bots <a href="#" data-foldin="{i}" class="tier">fold cards</a>' in html
     from panel.server import KEEP_JS
-    assert 'details.acct[data-k="acct:\'+i+\'"] details.fold' in KEEP_JS and 'window.ggFoldIn=function(i)' in KEEP_JS
+    # U59b (the owner, 2026-10-21: "the fold cards button … does not work on each account"):
+    # since U68 a slim card has nothing of its own to fold, and the link looked for
+    # `details.fold` inside the account — none, so it did nothing. It folds the
+    # account's cards itself; checked in a headless browser (fold one, open it,
+    # fold the other, the side switch opens both), the old selector doing nothing
+    assert 'details.acct[data-k="acct:\'+i+\'"]\');}' in KEEP_JS and 'window.ggFoldIn=function(i)' in KEEP_JS
+    assert '"] details.fold' not in KEEP_JS and '<details class="fold"' not in html
     assert "a.textContent=all?'fold cards':'open cards'" in KEEP_JS
     assert 'data-cls="acct"' not in render([('demo', c)], table=True)   # the table folds nothing
     out = render([('demo', c)], static='then')

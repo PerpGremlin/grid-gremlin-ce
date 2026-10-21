@@ -207,7 +207,7 @@ function wire(scope){
   if(d.dataset.k in open)d.open=!!open[d.dataset.k];
   d.addEventListener('toggle',function(){
    open[d.dataset.k]=d.open?1:0;S.setItem('gg-open',JSON.stringify(open));});});}
-function inAcct(i){return document.querySelectorAll('details.acct[data-k="acct:'+i+'"] details.fold');}
+function inAcct(i){return document.querySelectorAll('details.acct[data-k="acct:'+i+'"]');}
 function picks(){document.querySelectorAll('[data-fold]').forEach(function(a){
  a.classList.toggle('pick',a.dataset.fold===(S.getItem('gg-fold:'+a.dataset.cls)||'open'));});
  document.querySelectorAll('[data-foldin]').forEach(function(a){var all=true;
