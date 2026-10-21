@@ -1290,6 +1290,19 @@ stands unless the owner corrects it.
   RWA credit and yield-bearing stablecoins are left out for now. Should the
   legal line blur, the owner's fallback is an open-source collector
   application rather than a page of others' data.
+- **D148 — Carry runs at 1x; leverage stays a choice (2026-10-21).** The
+  stand-down study found no rule better than H4's cut-at-once at any loan
+  rate except not borrowing at all (STUDY.md, 2026-10-16). The owner: "run
+  at 1x, but allow the use of leverage if the individual wants to use the
+  setup as part of a wider strategy. similar to possibly a rebalancing bot
+  that one can use to basket assets etc. it could have more usecases than
+  just a carry bot." The carry row's weights now fill the stack once
+  (`margin.spot_leverage` 1, the loan block kept so the row counts what it
+  still owes until it is repaid, D143), applied live at its next tick. The
+  portfolio row keeps its margin, its spot leverage and its perps' leverage
+  as settings anyone may raise; the engine's guards (H4, the margin floor)
+  stand either way. Real money waits (the owner, the same day); the agent
+  experiment stays paused until the current load of work is done.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
