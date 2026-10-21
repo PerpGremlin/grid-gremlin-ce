@@ -65,9 +65,16 @@ def hl_info(network='testnet', fetch=get_json):
     return post
 
 
-def candles(venue, market_type, symbol, minutes, start_ms, end_ms, fetch=get_json, network='testnet', info=None):
+def candles(venue, market_type, symbol, minutes, start_ms, end_ms, fetch=get_json, network='testnet', info=None,
+            price='trade'):
     """The bars between start_ms and end_ms, paged forward. Hyperliquid's on
-    `network` (the fleet's own: testnet by the owner's directive)."""
+    `network` (the fleet's own: testnet by the owner's directive). `price`
+    'mark': Bybit's mark-price candles (T15b) — what a mark stop watches;
+    Hyperliquid serves none."""
+    if price not in ('trade', 'mark'):
+        raise ValueError(f'{price!r}: candles are of trade or mark prices')
+    if price == 'mark' and venue == 'hyperliquid':
+        raise ValueError('Hyperliquid serves no mark-price candles')
     if venue == 'hyperliquid':
         post = info or hl_info(network, fetch)
         interval, rows, cursor = hl_interval(minutes), [], int(start_ms)
@@ -79,7 +86,8 @@ def candles(venue, market_type, symbol, minutes, start_ms, end_ms, fetch=get_jso
         return parse_hl(rows)
     bars, cursor, step = [], int(start_ms), int(minutes) * 60_000 * BYBIT_LIMIT
     while cursor < end_ms:
-        d = fetch(f'{BYBIT}/v5/market/kline?category={market_type}&symbol={symbol}'
+        d = fetch(f'{BYBIT}/v5/market/{"mark-price-kline" if price == "mark" else "kline"}'
+                  f'?category={market_type}&symbol={symbol}'
                   f'&interval={bybit_interval(minutes)}&start={cursor}&end={min(cursor + step, end_ms)}&limit={BYBIT_LIMIT}')
         bars += parse_bybit((d.get('result') or {}).get('list') or [])
         cursor += step

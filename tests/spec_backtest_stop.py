@@ -162,3 +162,80 @@ def spec_T15_the_panel_and_the_cli_say_what_the_stop_did():
     assert stop_words(_cfg(), calm) is None                      # no stop, no line
     kept = backtest(_cfg(stop={'watch': 'position_sl'}), ADAPTER, BOUGHT, bar_hours=MINUTE)
     assert 'not modelled: the stop-loss you keep' in stop_words(_cfg(stop={'watch': 'position_sl'}), kept)
+
+
+# --- T15b: a mark stop on the mark's own candles ------------------------------
+
+def _timed(bars):
+    return [dict(b, t=i * 60_000) for i, b in enumerate(bars)]
+
+
+def spec_T15b_a_mark_stop_reads_the_marks_candles_not_the_trades():
+    """The mark dips through 49000 while the trades hold above it: it fires,
+    and the firing bar is never cut below the trades' own low. The trades dip
+    through while the mark holds: it does not. Sabotage: judge on `bar`
+    instead of the mark's bar, and both halves go red."""
+    trades = _timed(BOUGHT + [_bar(52000, 52100, 49500, 50000)])
+    marks = _timed(BOUGHT + [_bar(52000, 52100, 48800, 49900)])
+    cfg = _cfg(stop=STOP)
+    r = backtest(cfg, ADAPTER, trades, bar_hours=MINUTE, mark_bars=marks)
+    assert r['stopped'] and r['stopped']['price'] == 49000
+    assert r['stop_judged'] == {'on': 'mark', 'trade_bars': 0}
+    assert r['entry_fills'] == 3                    # 59000, 51000, 50000: not below 49500
+    calm = backtest(cfg, ADAPTER, _timed(BOUGHT + [_bar(52000, 52100, 48800, 49900)]),
+                    bar_hours=MINUTE, mark_bars=_timed(BOUGHT + [_bar(52000, 52100, 49500, 50000)]))
+    assert calm['stopped'] is None
+    assert backtest(cfg, ADAPTER, trades, bar_hours=MINUTE)['stopped'] is None   # on trades: no
+    # a rung every 250 puts 49250 between the stop and the trades' low: the
+    # cut bar fills what the trades reached, no deeper (sabotage: cut at the level)
+    fine = dict(lower=45000.0, rungs=101)
+    deep_t = _timed(BOUGHT + [_bar(51000, 51100, 49500, 50000)])
+    deep_m = _timed(BOUGHT + [_bar(51000, 51100, 48800, 49900)])
+    cut = backtest(_cfg(stop=STOP, **fine), ADAPTER, deep_t, bar_hours=MINUTE, mark_bars=deep_m)
+    free = backtest(_cfg(**fine), ADAPTER, deep_t, bar_hours=MINUTE)
+    assert cut['stopped'] and cut['entry_fills'] == free['entry_fills'] > 2
+    closes = backtest(_cfg(stop=dict(STOP, confirm_candle='1m')), ADAPTER, trades,
+                      bar_hours=MINUTE, mark_bars=marks)
+    assert closes['stopped'] is None                # the mark closed above it
+
+
+def spec_T15b_a_bar_with_no_mark_is_judged_on_trades_and_counted_and_said():
+    from gridgremlin.backtest_cli import stop_words
+    trades = _timed(BOUGHT + [_bar(52000, 52100, 48000, 48500)])
+    r = backtest(_cfg(stop=STOP), ADAPTER, trades, bar_hours=MINUTE, mark_bars=trades[:1])
+    assert r['stopped'] and r['stop_judged'] == {'on': 'mark', 'trade_bars': 1}
+    assert 'judged on the mark price; 1 candle without one on trade prices' in stop_words(_cfg(stop=STOP), r)
+    whole = backtest(_cfg(stop=STOP), ADAPTER, trades, bar_hours=MINUTE, mark_bars=trades)
+    assert 'judged on the mark price, as the bot watches it' in stop_words(_cfg(stop=STOP), whole)
+    plain = backtest(_cfg(stop=STOP), ADAPTER, trades, bar_hours=MINUTE)
+    assert plain['stop_judged'] == {'on': 'trade', 'trade_bars': 2}
+    assert "not the mark" in stop_words(_cfg(stop=STOP), plain)
+    assert _run(None, trades)['stop_judged'] is None
+
+
+def spec_T15b_mark_candles_are_fetched_only_for_a_bybit_grid_watching_the_mark():
+    from ggdata.candles import candles
+    from gridgremlin.backtest_cli import mark_bars_for
+    asked = []
+
+    def fetch(url):
+        asked.append(url)
+        return {'result': {'list': [['60000', '1', '2', '0.5', '1.5']]}}
+    got = candles('bybit', 'linear', 'BTCUSDT', 1, 0, 60_000, fetch=fetch, price='mark')
+    assert '/v5/market/mark-price-kline?' in asked[0] and got[0]['v'] == 0.0
+    for bad in (lambda: candles('hyperliquid', 'linear', 'BTC', 1, 0, 1, price='mark'),
+                lambda: candles('bybit', 'linear', 'BTCUSDT', 1, 0, 1, price='index')):
+        try:
+            bad()
+            raise AssertionError('accepted')
+        except ValueError:
+            pass
+    bars = _timed(BOUGHT)
+    assert mark_bars_for(_cfg(stop=STOP), bars, 1, fetch=fetch)
+    assert mark_bars_for(_cfg(), bars, 1, fetch=fetch) is None                      # no stop
+    assert mark_bars_for(_cfg(stop={'watch': 'account_equity', 'level': 1}), bars, 1, fetch=fetch) is None
+    assert mark_bars_for(dict(_cfg(stop=STOP), venue='hyperliquid'), bars, 1, fetch=fetch) is None
+
+    def down(url):
+        raise OSError('unreachable')
+    assert mark_bars_for(_cfg(stop=STOP), bars, 1, fetch=down) is None             # said, never fatal

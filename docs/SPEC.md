@@ -2768,6 +2768,17 @@ that pins it (T1).
   rehearsal, the grid-count comparison and the CLI say what the stop did, judged
   on the candles' prices, not the mark. *(the owner, 2026-10-20: the rehearsal
   ran a stopped grid on as if no stop were set)*
+- **T15b** A `mark_price` stop on a Bybit grid is judged on Bybit's own
+  mark-price candles over the same window (public, `price='mark'`), matched
+  to the trade candles by open time: its touch, its gap past the level, its
+  timeout's and its candle's closes. The firing bar is cut at the stop but
+  never past the trades' own low (high, for a short) — the mark may lead
+  them. A bar with no mark candle is judged on its trade prices and counted;
+  mark candles that cannot be read leave the whole replay on trade prices.
+  The verdict says which: "judged on the mark price, as the bot watches it",
+  with the count of candles without one, or "on these candles' prices, not
+  the mark". Hyperliquid serves no mark candles: its rows stay on trade
+  prices. Fills, the loss limit and the account stop stay on trade prices.
 - **T10** The grid's rehearsal charges the market's own funding: a Bybit
   futures grid's window reads the settlements (public), and each one the
   held position crosses is paid or received at its rate on the notional at

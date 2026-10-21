@@ -25,7 +25,8 @@
 # nearly every exit on 1-second bars (the rungs study, 2026-10-15).
 # T15: the row's stop and loss limit end the replay as they end the bot (X1,
 # X8, X9, X12, X13, X14), judged on the candles' prices — a mark stop on
-# trade prices, said so. A touch fires inside its bar at the level (the open
+# the mark's own candles when `mark_bars` are given (T15b), else on trade
+# prices, said so. A touch fires inside its bar at the level (the open
 # when it gapped past): that bar's entries fill down to it and its exits wait,
 # the order inside a bar being unknown. A cool-down is judged on closes, in
 # whole bars (ceil(confirm_seconds / bar), as G21), and the emergency level
@@ -45,7 +46,7 @@ MM_RATE = 0.005            # Bybit's base maintenance tier, linear and inverse
 
 def backtest(cfg, adapter, bars, fee_rate=BYBIT_MAKER, funding_rate_hourly=0.0,
              bar_hours=1.0, spread_bps=1.0, funding=None, mm_rate=MM_RATE,
-             account=None, entries=None, stop_fee=BYBIT_TAKER):
+             account=None, entries=None, stop_fee=BYBIT_TAKER, mark_bars=None):
     events = sorted(funding or [], key=lambda e: e['t'])      # before `funding` is the sum
     long = cfg['side'] == 'long'
     sign = 1.0 if long else -1.0
@@ -127,6 +128,11 @@ def backtest(cfg, adapter, bars, fee_rate=BYBIT_MAKER, funding_rate_hourly=0.0,
             return (bar['t'] + bar_ms) % width == 0
         return (n_bar + 1) % round(width / bar_ms) == 0
 
+    # T15b: a mark stop judged on the mark's own candles when given (by open
+    # time); a bar with none is judged on its trade prices, and counted
+    marks = ({b['t']: b for b in mark_bars} if mark_bars and watch == 'mark_price'
+             else None)
+    on_trade = 0
     paused_bars = 0
     resting = frozenset()      # T6b: exit rungs left resting by the last bar
     for n_bar, bar in enumerate(bars):
@@ -146,9 +152,14 @@ def backtest(cfg, adapter, bars, fee_rate=BYBIT_MAKER, funding_rate_hourly=0.0,
             # T15: a touch fires inside the bar (no cool-down, or the
             # emergency level past one); X8: the level after the slide
             level = stop_level_for(cfg, offset) if watch == 'mark_price' else None
+            jb = bar                                   # T15b: the bar the stop reads
+            if marks is not None:
+                jb = marks.get(bar.get('t'))
+                if jb is None:
+                    jb, on_trade = bar, on_trade + 1
             touch = None
             if level is not None:
-                worst = bar['l'] if long else bar['h']
+                worst = jb['l'] if long else jb['h']
                 e = stop.get('emergency_pct')
                 hard = None if e is None else level * (1.0 - e if long else 1.0 + e)
                 for lvl, said, armed in ((level, f'mark_price {level:.10g}',
@@ -156,13 +167,14 @@ def backtest(cfg, adapter, bars, fee_rate=BYBIT_MAKER, funding_rate_hourly=0.0,
                                          (hard, f'emergency level {hard:.10g}'
                                           if hard else '', hard is not None)):
                     if armed and touch is None and crossed(worst, lvl):
-                        touch = ((bar['o'] if crossed(bar['o'], lvl) else lvl),
+                        touch = ((jb['o'] if crossed(jb['o'], lvl) else lvl),
                                  said, False)
             # the firing bar is cut at the stop: entries fill down to it,
-            # exits wait (which came first inside the bar is unknown)
+            # exits wait (which came first inside the bar is unknown); never
+            # past the trades' own low or high (the mark may lead them)
             fb = (bar if touch is None else
-                  dict(bar, h=bar['o'], l=touch[0]) if long else
-                  dict(bar, l=bar['o'], h=touch[0]))
+                  dict(bar, h=bar['o'], l=max(bar['l'], touch[0])) if long else
+                  dict(bar, l=bar['o'], h=min(bar['h'], touch[0])))
             # a synthetic spread around the open feeds B3/B4: without bid/ask
             # the guard-band drops never happened and near-quote rungs filled
             # that live would skip — optimistic (audit 2026-08-07 LOW)
@@ -229,11 +241,11 @@ def backtest(cfg, adapter, bars, fee_rate=BYBIT_MAKER, funding_rate_hourly=0.0,
                     fired = max(found) if long else min(found)
             if fired is None and level is not None and (confirm or candle):
                 if candle:                                   # X12: at its close
-                    if at_candle_close(bar, n_bar) and crossed(bar['c'], level):
+                    if at_candle_close(bar, n_bar) and crossed(jb['c'], level):
                         fired = (bar['c'], f'mark_price {level:.10g}, at the '
                                            f'{candle} close', False)
                 else:                                        # X9: held, in bars
-                    closes_beyond = closes_beyond + 1 if crossed(bar['c'], level) else 0
+                    closes_beyond = closes_beyond + 1 if crossed(jb['c'], level) else 0
                     if closes_beyond >= need:
                         fired = (bar['c'], f'mark_price {level:.10g}, held '
                                            f'{confirm:.0f}s', False)
@@ -295,6 +307,10 @@ def backtest(cfg, adapter, bars, fee_rate=BYBIT_MAKER, funding_rate_hourly=0.0,
 
     return {'alone_liquidation': alone, 'paused_bars': paused_bars,
             'stopped': stopped, 'stop_not_modelled': not_modelled,
+            # T15b: what the mark stop read — None when the row has none
+            'stop_judged': (None if watch != 'mark_price' else
+                            {'on': 'mark' if marks is not None else 'trade',
+                             'trade_bars': on_trade if marks is not None else len(bars)}),
             'account_mmr': (None if not acct else
                             {'start': (acct.get('mm') or 0.0) / acct['equity'],
                              'peak': mmr_peak, 'reaches_100': mmr_cross,

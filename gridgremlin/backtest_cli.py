@@ -15,7 +15,7 @@ from .fees import BYBIT_MAKER
 
 
 def rehearse(draft, bars, adapter, fee=BYBIT_MAKER, bar_minutes=60, funding=None,
-             account=None):
+             account=None, mark_bars=None):
     """§9: a draft config replayed over real bars, returning the same
     vocabulary as the readout plus the hold benchmark — what the same
     capital did just sitting there. Pure: candles in, verdict out. T10:
@@ -27,7 +27,7 @@ def rehearse(draft, bars, adapter, fee=BYBIT_MAKER, bar_minutes=60, funding=None
     else:
         r = backtest(draft, adapter, bars, fee_rate=fee,
                      funding_rate_hourly=0.0, bar_hours=bar_minutes / 60.0,
-                     funding=funding, account=account)
+                     funding=funding, account=account, mark_bars=mark_bars)
     r['bar_minutes'] = bar_minutes
     first_o, last_c = bars[0]['o'], bars[-1]['c']
     sign = 1.0 if draft['side'] == 'long' else -1.0
@@ -56,7 +56,12 @@ def stop_words(draft, r, when=str):
     else:
         said = 'never fired in this window'
     gaps = r.get('stop_not_modelled') or []
-    return (said + ' (judged on these candles\' prices, not the mark)'
+    j = r.get('stop_judged') or {}
+    on = (' (judged on these candles\' prices, not the mark)' if j.get('on') != 'mark' else
+          ' (judged on the mark price, as the bot watches it)' if not j.get('trade_bars') else
+          f" (judged on the mark price; {j['trade_bars']} candle"
+          f"{'s' if j['trade_bars'] != 1 else ''} without one on trade prices)")
+    return (said + on
             + (f"; not modelled: {', '.join(gaps)}" if gaps else ''))
 
 
@@ -67,7 +72,7 @@ PLATEAU = 0.95          # within 5% of the best net is "as good"
 
 
 def sweep_rungs(raw, bars, adapter, fee=BYBIT_MAKER, bar_minutes=5,
-                candidates=None, progress=None):
+                candidates=None, progress=None, mark_bars=None):
     """T8 (D50): the step optimiser is the rehearsal, swept. The range is
     the owner's; only `rungs` moves. Each candidate is the real planner
     over the same bars (T3/T6), scored by net = grid profit - fees (+
@@ -109,7 +114,8 @@ def sweep_rungs(raw, bars, adapter, fee=BYBIT_MAKER, bar_minutes=5,
                                "venue's minimum — fewer levels or more "
                                'capital (F8)'}
         r = backtest(cfg, adapter, bars, fee_rate=fee,
-                     funding_rate_hourly=0.0, bar_hours=bar_minutes / 60.0)
+                     funding_rate_hourly=0.0, bar_hours=bar_minutes / 60.0,
+                     mark_bars=mark_bars)
         share = (r['fees'] / r['grid_profit']) if r['grid_profit'] > 0 \
             else None
         return {'rungs': n, 'gap_pct': gap * 100.0, 'net': r['net'],
@@ -167,7 +173,7 @@ def visited_pct(bars, lower, upper):
     return inside / len(bars) * 100.0
 
 
-def score_rungs(raw, n, bars, adapter, fee=BYBIT_MAKER, bar_minutes=5):
+def score_rungs(raw, n, bars, adapter, fee=BYBIT_MAKER, bar_minutes=5, mark_bars=None):
     """One replay of one rung count over one window: its net."""
     from .config import validate_config
     base = {k: v for k, v in raw.items()
@@ -175,11 +181,11 @@ def score_rungs(raw, n, bars, adapter, fee=BYBIT_MAKER, bar_minutes=5):
             and not k.startswith('_')}
     cfg = validate_config(dict(base, rungs=n))
     return backtest(cfg, adapter, bars, fee_rate=fee, funding_rate_hourly=0.0,
-                    bar_hours=bar_minutes / 60.0)['net']
+                    bar_hours=bar_minutes / 60.0, mark_bars=mark_bars)['net']
 
 
 def sweep_windows(raw, bars, adapter, fee=BYBIT_MAKER, bar_minutes=5,
-                  progress=None):
+                  progress=None, mark_bars=None):
     """T9: the sweep read on two windows and tested out of sample. `bars`
     is the whole window (14 days); the newer half is the last 7. Three
     sweeps: the whole, the newer half, the older half. The count chosen
@@ -197,7 +203,7 @@ def sweep_windows(raw, bars, adapter, fee=BYBIT_MAKER, bar_minutes=5,
                          (wi + (frac or 0.0)) / 3.0 * 0.97)
         out['windows'][name] = sweep_rungs(raw, part, adapter, fee=fee,
                                            bar_minutes=bar_minutes,
-                                           progress=say)
+                                           progress=say, mark_bars=mark_bars)
     lower, upper = float(raw['lower']), float(raw['upper'])
     out['visited'] = {'7d': visited_pct(newer, lower, upper),
                       '14d': visited_pct(bars, lower, upper)}
@@ -212,7 +218,7 @@ def sweep_windows(raw, bars, adapter, fee=BYBIT_MAKER, bar_minutes=5,
         rows = {r['rungs']: r for r in out['windows']['7d']['rows']}
         fit_net = (rows[fit]['net'] if fit in rows and 'net' in rows[fit]
                    else score_rungs(raw, fit, newer, adapter, fee,
-                                    bar_minutes))
+                                    bar_minutes, mark_bars=mark_bars))
         best_net = rows[newer_best]['net']
         oos.update(fit_net_newer=fit_net, newer_best_net=best_net,
                    holds=(best_net <= 0 and fit_net >= best_net)
@@ -263,6 +269,22 @@ def bars_and_adapter(cfg, bar_minutes, days):
     return candles('bybit', cfg['market_type'], cfg['symbol'], bar_minutes, since, now), adapter
 
 
+def mark_bars_for(cfg, bars, bar_minutes, fetch=None):
+    """T15b: the mark's own candles over the bars' window, for a grid whose
+    stop watches the mark on Bybit; None otherwise, or when they cannot be
+    read (the stop is then judged on trade prices, and the verdict says so)."""
+    if (cfg.get('strategy', 'grid') == 'martingale' or cfg.get('venue', 'bybit') != 'bybit'
+            or (cfg.get('stop') or {}).get('watch') != 'mark_price' or not bars):
+        return None
+    from ggdata.candles import candles
+    kw = {'fetch': fetch} if fetch else {}
+    try:
+        return candles('bybit', cfg['market_type'], cfg['symbol'], bar_minutes, bars[0]['t'],
+                       bars[-1]['t'] + bar_minutes * 60_000, price='mark', **kw) or None
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 def run_draft(raw, days, bar_minutes, fee, optimize=False, progress=None,
               windows=False, account=None):
     """--draft: validate a config that exists nowhere yet, fetch real
@@ -302,20 +324,22 @@ def run_draft(raw, days, bar_minutes, fee, optimize=False, progress=None,
                            'try again'}
     if not bars:
         return {'refused': 'no bars returned — check the symbol and window'}
+    marks = mark_bars_for(draft, bars, bar_minutes)         # T15b
     if optimize and windows:
         out = sweep_windows(row, bars, adapter, fee=fee,
-                            bar_minutes=bar_minutes, progress=progress)
+                            bar_minutes=bar_minutes, progress=progress, mark_bars=marks)
         out['draft_rungs'] = draft['rungs']
         return out
     if optimize:
         out = sweep_rungs(row, bars, adapter, fee=fee, bar_minutes=bar_minutes,
-                          progress=progress)
+                          progress=progress, mark_bars=marks)
         out['draft_rungs'] = draft['rungs']
         return out
     if progress:
         progress(f'replaying {len(bars)} candles', 0.5)
     return rehearse(draft, bars, adapter, fee=fee, bar_minutes=bar_minutes,
-                    funding=window_funding(draft, bars, bar_minutes), account=account)
+                    funding=window_funding(draft, bars, bar_minutes), account=account,
+                    mark_bars=marks)
 
 
 def window_funding(draft, bars, bar_minutes):
@@ -422,7 +446,8 @@ def main(argv):
                    if make_botid(b['market_type'], b['symbol'], b['side'])
                    == botid)
         raw = {k: v for k, v in raw.items() if not k.startswith('_')}
-        sw = sweep_rungs(raw, bars, adapter, fee=fee, bar_minutes=bar_minutes)
+        sw = sweep_rungs(raw, bars, adapter, fee=fee, bar_minutes=bar_minutes,
+                         mark_bars=mark_bars_for(cfg, bars, bar_minutes))
         print(f'{botid}: grid counts compared — {len(bars)} bars x {bar_minutes}m '
               f'over {days:g}d, range {cfg["lower"]:g}..{cfg["upper"]:g} as '
               f'set, score = net (T8/D50)')
@@ -452,7 +477,8 @@ def main(argv):
     else:
         r = backtest(cfg, adapter, bars, fee_rate=fee,
                      funding_rate_hourly=funding,
-                     bar_hours=bar_minutes / 60.0)
+                     bar_hours=bar_minutes / 60.0,
+                     mark_bars=mark_bars_for(cfg, bars, bar_minutes))
     print(f'{botid}: {len(bars)} bars x {bar_minutes}m over {days:g}d')
     if dca:
         print(f"  {r['rounds']} rounds;  {r['so_fills']} add-on fills, "
