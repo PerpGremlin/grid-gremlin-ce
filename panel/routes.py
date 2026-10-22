@@ -181,8 +181,36 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
     _history = {}                      # U91: per snapshot file, the hourly history
 
     def _labelled(self):
-        return [(lb, self._with_equity(f, self._contract(f)))
+        return [(lb, self._with_run_state(f, self._with_equity(f, self._contract(f))))
                 for lb, f in zip(self.labels, self.fleets)]
+
+    def _with_run_state(self, fleet, contract):
+        """U104: a stopped fleet's cards are not its engine's last picture
+        (the owner, 2026-10-22, after the flatten: "the demo accounts are
+        all still running"). `stopped` when the fleet's unit is known and
+        not active; `retired`, the rows its tombstones name. Unknown (no
+        units given, no systemctl) leaves the contract as it was."""
+        from .forms import unit_for_fleet
+        out = dict(contract)
+        unit = unit_for_fleet(fleet, self.units) if self.units else None
+        if unit:
+            try:
+                state = subprocess.run(['systemctl', '--user', 'is-active', unit],
+                                       capture_output=True, text=True, timeout=10).stdout.strip()
+            except (OSError, subprocess.SubprocessError):
+                state = ''
+            if state and state != 'active':
+                out['stopped'] = state
+        try:
+            from gridgremlin.tombstones import Tombstones, path_for
+            raw = json.loads(Path(fleet).read_text())
+            tombs = Tombstones(str(path_for(fleet, raw)))
+            gone = sorted(b for b in (contract.get('terms') or {}) if tombs.has(b))
+            if gone:
+                out['retired'] = gone
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+        return out
 
     def _with_equity(self, fleet, contract):
         """U63: the account's equity over the last day and week, from the

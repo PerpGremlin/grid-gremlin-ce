@@ -23,6 +23,10 @@ STATE_WORDS = {
     'HOLDING': 'running with a position; its exits rest or wait for the '
                'price to come within reach',
     'FLAT': 'running, holding nothing now, and it traded in this window',
+    'STOPPED': 'its fleet is not running: nothing is placed or watched, and the '
+               'card shows the exchange\'s fills, not the engine\'s last picture',
+    'RETIRED': 'retired: its orders cancelled and its position closed; it never '
+               'starts again unless revived on the tombstones page',
     'DEAD': 'stood down — a stop, a limit or a round count ended it; its '
             'reason is on the control page, and revival is deliberate',
 }

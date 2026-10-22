@@ -267,3 +267,54 @@ def spec_U102_a_dca_card_says_its_safeties_and_its_exits():
     assert orders_line({'resting': {'buys': 2}}, {'at': 'position', 'prices': [0.09487]}, dca=True) == \
         '2 safety orders resting · take-profit at 0.09487, held on the position'
     assert orders_line({'resting': {}, 'waiting': {}}) == 'nothing resting'            # a grid: as before
+
+
+def spec_U104_a_stopped_or_retired_bot_is_not_drawn_from_the_last_picture():
+    """The owner (2026-10-22), after the flatten: "the demo accounts are
+    all still running" — the fleets were stopped and every bot retired,
+    but the cards drew the engine's last snapshot (holding, orders
+    resting). A bot its tombstone names reads RETIRED, one in a fleet whose
+    unit is not active STOPPED; neither shows the snapshot's holding or
+    orders; the fleet's heading says stopped. The run state comes from
+    systemctl and the tombstone file; unknown leaves the card as it was.
+    Sabotage: ignoring `retired` draws the old holding again."""
+    import copy
+    import json
+    import subprocess
+    import tempfile
+    from pathlib import Path
+    from panel.card import card
+    from panel.render import cards_section
+    from panel.routes import Handler
+    c = {'window_hours': 24.0, 'generated_ms': 0, 'bots': {'linDOGEs': None}, 'unowned': {},
+         'terms': {'linDOGEs': {'strategy': 'grid'}},
+         'watchdog': {'belief': {'age_s': 3, 'bots': {'linDOGEs': {
+             'alive': True, 'position': 730.0, 'orders': {'entry': 2, 'exit': 1}}}}}}
+    belief = c['watchdog']['belief']['bots']
+    live = card(0, 'linDOGEs', None, c, belief)
+    assert 'holding 730 (belief)' in live and '>HOLDING<' in live
+    for key, val, word in (('retired', ['linDOGEs'], 'RETIRED'), ('stopped', 'inactive', 'STOPPED')):
+        html = card(0, 'linDOGEs', None, dict(c, **{key: val}), belief)
+        assert f'>{word}<' in html and '730' not in html and 'HOLDING' not in html, word
+        assert 'holding nothing' in html
+    assert '<span class="tier neg">stopped</span>' in cards_section(0, 'demo', dict(c, stopped='inactive'))
+    assert 'stopped</span>' not in cards_section(0, 'demo', c)
+    # the run state: the fleet's unit by systemctl, the rows by their tombstones
+    with tempfile.TemporaryDirectory() as d:
+        fleet = Path(d) / 'fleet.demo.json'
+        fleet.write_text(json.dumps({'bots': [{'symbol': 'DOGE'}]}))
+        from gridgremlin.tombstones import Tombstones, path_for
+        Tombstones(str(path_for(str(fleet), json.loads(fleet.read_text())))).add('linDOGEs', 'test')
+        h = Handler.__new__(Handler)
+        real = subprocess.run
+        try:
+            subprocess.run = lambda *a, **k: subprocess.CompletedProcess(a, 3, 'inactive\n', '')
+            h.units = ('grid-gremlin3-demo',)
+            out = h._with_run_state(str(fleet), copy.deepcopy(c))
+            assert out['stopped'] == 'inactive' and out['retired'] == ['linDOGEs']
+            subprocess.run = lambda *a, **k: subprocess.CompletedProcess(a, 0, 'active\n', '')
+            assert 'stopped' not in h._with_run_state(str(fleet), copy.deepcopy(c))
+            h.units = ()
+            assert 'stopped' not in h._with_run_state(str(fleet), copy.deepcopy(c))
+        finally:
+            subprocess.run = real

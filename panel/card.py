@@ -228,6 +228,19 @@ def unpriced(b):
 UNPRICED = ' <span class="neg">+ an open position not priced (its mark was not read)</span>'
 
 
+HALT_HEAD = {'RETIRED': 'retired: its orders cancelled, its position closed',
+             'STOPPED': 'its fleet is stopped: nothing placed, nothing watched'}
+
+
+def halt_of(contract, botid):
+    """U104: RETIRED (a tombstone names it) or STOPPED (its fleet's unit is
+    not running), else None. Either way the card does not draw the
+    engine's last snapshot as if it were now."""
+    if botid in (contract.get('retired') or ()):
+        return 'RETIRED'
+    return 'STOPPED' if contract.get('stopped') else None
+
+
 SNAP_STALE_S = 600          # the engine snapshots about once a minute
 
 
@@ -268,6 +281,9 @@ def card(idx, botid, b, contract, belief, full=False):
     # L8: a trade is not a fleet row — edit, copy and remove answered "not in
     # this fleet" (the owner, 2026-10-11, on tilt's ended BTC trade); a trade
     # ends by its own exit, close trade, or clear
+    halted = halt_of(contract, botid)                    # U104
+    if halted:
+        belief = {}          # the engine's last picture is not now
     if b is not None and b.get('realized') is None:
         b = None             # an inverse book with no mark has no dollars (the second
                              # audit, 2026-10-13): shown as the engine's belief, never a crash
@@ -279,7 +295,8 @@ def card(idx, botid, b, contract, belief, full=False):
         state = ('DEAD' if bl.get('alive') is False else
                  'HOLDING' if abs(pos) > 1e-12 else
                  'NOT STARTED' if botid not in belief else 'RESTING')  # U34
-        head = ('<span class="big dim">waits for the fleet\'s restart</span>'
+        head = (f'<span class="big dim">{HALT_HEAD[halted]}</span>' if halted else
+                '<span class="big dim">waits for the fleet\'s restart</span>'
                 if botid not in belief else
                 '<span class="big dim">no fills</span>'
                 + (f' <span class="dim">— {orders_line(bl.get("orders"), bl.get("exits"), dca)}'
@@ -497,6 +514,7 @@ def card(idx, botid, b, contract, belief, full=False):
         held += (f'</div><div class="{"neg" if used >= 0.75 else "dim"}">'
                  f"loss limit: down {down:,.2f} of {loss['limit']:,.6g} "
                  f'{money_coin} ({used:.0%} used)')
+    state = halted or state                                  # U104
     cls = 'neg' if state == 'DEAD' else 'dim'
     side = 'short' if botid.endswith('s') else 'long'
     flat = (abs(pos) <= 1e-12 if b is not None else
@@ -633,6 +651,9 @@ def portfolio_card(idx, botid, contract, belief, full=False):
     that never mix: carry, tilt, basis & shape."""
     import html as _h
     terms = (contract.get('terms') or {}).get(botid) or {}
+    halted = halt_of(contract, botid)                    # U104
+    if halted:
+        belief = {}
     bl = belief.get(botid) or {}
     v = bl.get('portfolio') or {}
     q = esc(terms.get('quote') or 'USDT')
@@ -641,6 +662,7 @@ def portfolio_card(idx, botid, contract, belief, full=False):
              f"<a href='/edit?fleet={idx}&amp;bot={qarg(botid)}&amp;mode=remove'>remove</a>")
     state = ('DEAD' if bl.get('alive') is False else 'NOT STARTED' if botid not in belief
              else 'HOLDING' if (v.get('stack_value') or 0) > 0 else 'RESTING')
+    state = halted or state                                  # U104
     name = f"{botid[3:]} portfolio"
     kind = (f"{len(terms.get('assets') or [])} assets · hedged on "
             + ', '.join(sorted({h['product'] for h in (terms.get('hedges') or {}).values()}) or ['nothing'])

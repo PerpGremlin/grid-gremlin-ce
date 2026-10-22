@@ -1623,6 +1623,12 @@ eventually pin (T1).
   30 d → all time → 24 h, only the windows that have a line. Radios and
   CSS, no script, so an export does the same; the panel keeps each
   account's pick across its refresh. A single window draws no switch.
+- **U104** A card is not drawn from a stopped fleet's last snapshot (the
+  owner, 2026-10-22, after the flatten: "the demo accounts are all still
+  running"). A bot its tombstone names reads RETIRED; a bot whose fleet's
+  unit is known and not active reads STOPPED, and the fleet's heading says
+  stopped. Neither shows the snapshot's holding, orders or valuation; the
+  exchange's fills still show. With no units given the card is unchanged.
 - **U67** *(retired by D96, 2026-10-12: the front page's right half is
   U78's)* The fleet page is
   two halves on a wide screen — the bots, and the

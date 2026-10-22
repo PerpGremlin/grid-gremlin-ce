@@ -47,6 +47,7 @@ def cards_section(idx, label, contract, view='all', scripted=True):
             + (f'<a href="#" data-foldin="{idx}" class="tier">fold cards</a> '
                if scripted else '')               # an export has no script to run it
             # U87: the heading is the name; how fresh it is, a quiet line under it
+            + ('<span class="tier neg">stopped</span> ' if contract.get('stopped') else '')   # U104
             + f'<span class="meta">{sweep_note(contract)} <span class="dim">(read {age}s ago; '
             f'refreshes every {REFRESH_S}s)</span></span></h1>'
             + (f'<div class="refusal"><b>readout unavailable</b> — the engine\'s '
