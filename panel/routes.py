@@ -144,9 +144,14 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             # a just-initialised world: nothing to report on yet, and the
             # engine's own report would (rightly) refuse an empty fleet —
             # an agent's fleet has no bots by design and is read (J5)
-            return {'window_hours': self.hours,
-                    'generated_ms': int(time.time() * 1000),
-                    'bots': {}, 'unowned': {}}
+            # D149: cached like any read — uncached, a fleet cleared while
+            # the panel ran kept serving its last readout's cards for ever
+            # (the owner, 2026-10-22: "how do i get rid of the cards")
+            empty = {'window_hours': self.hours,
+                     'generated_ms': int(time.time() * 1000),
+                     'bots': {}, 'unowned': {}}
+            Handler._cache[fleet] = (time.time(), empty)
+            return empty
         from gridgremlin.archive import shared_readout
         shared = shared_readout(fleet, self.hours)        # U47b: the phone's, when fresh
         if shared is not None:

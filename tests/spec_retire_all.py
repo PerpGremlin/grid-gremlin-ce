@@ -165,3 +165,29 @@ def spec_D149_the_panel_retires_all_after_a_dry_run_and_the_typed_name():
     assert calls[-1] == (0, False, False, True) and 'flat on the exchange' in page
     empty = {'window_hours': 24.0, 'generated_ms': 0, 'bots': {}, 'unowned': {}}
     assert 'no bots in this fleet' in cards_section(0, 'demo', empty)
+
+
+def spec_D149_a_fleet_cleared_while_the_panel_runs_leaves_the_page():
+    """The owner (2026-10-22), after the clear: the cards stayed. The panel
+    served a stale readout while one refresh ran, and the refresh of an
+    empty fleet returned nothing but never cached it, so the old cards were
+    served for ever. The empty read is cached like any read. Sabotage: not
+    caching it brings the old cards back."""
+    import time
+    from panel.routes import CACHE_TTL_S, Handler
+    with tempfile.TemporaryDirectory() as d:
+        f = str(Path(d) / 'fleet.x.json')
+        Path(f).write_text(json.dumps({'bots': []}))
+        h = Handler.__new__(Handler)
+        h.hours = 24
+        old = {'window_hours': 24, 'generated_ms': 0, 'bots': {'linBTCUSDTl': None}, 'unowned': {}}
+        Handler._cache[f] = (time.time() - CACHE_TTL_S - 1, old)       # stale, from before the clear
+        try:
+            assert h._contract(f) is old                                # served at once while it refreshes
+            for _ in range(100):
+                if Handler._cache[f][1] is not old:
+                    break
+                time.sleep(0.02)
+            assert h._contract(f)['bots'] == {}
+        finally:
+            Handler._cache.pop(f, None)
