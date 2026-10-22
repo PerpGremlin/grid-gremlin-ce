@@ -289,6 +289,39 @@ MARTINGALE = {
 SCHEMAS = {'grid': GRID, 'martingale': MARTINGALE}
 OPEN_GROUPS = ('The basics', 'The range', 'The orders', 'Taking profit')
 
+# U105 (the owner, 2026-10-22: "the most basic things needed to make a bot
+# are mandatory, and everything else is an advanced setting in a dropdown
+# box"): what a bot needs, first and in this order; the rest folds into one
+# Advanced box whose blanks take the engine's defaults
+ESSENTIAL = {
+    'grid': ('symbol', 'side', 'market_type', 'capital', 'leverage',
+             'lower', 'upper', 'rungs'),
+    'martingale': ('symbol', 'side', 'market_type', 'capital', 'leverage',
+                   'base_order_size', 'safety_order_size', 'max_averaging_orders',
+                   'deviation_pct', 'take_profit_avg_pct'),
+}
+# what the engine refuses a row without — each a set of alternatives
+REQUIRED = {
+    'grid': (('symbol',), ('side',), ('capital',), ('lower',), ('upper',),
+             ('rungs', 'spacing_pct')),
+    'martingale': (('symbol',), ('side',), ('capital',), ('base_order_size',),
+                   ('safety_order_size',), ('max_averaging_orders',),
+                   ('deviation_pct',), ('take_profit_avg_pct', 'take_profit_tranches')),
+}
+
+
+def missing_required(strategy, form):
+    """U105: every required setting left blank, by its label, all at once —
+    the engine refused them one at a time ("'base_order_size' is required")."""
+    labels = {r[0]: r[3] for rows in SCHEMAS[strategy].values() for r in rows}
+    out = []
+    for alts in REQUIRED.get(strategy, ()):
+        if not any(str(form.get(a) or '').strip() for a in alts):
+            words = [labels.get(a, a) for a in alts]
+            out.append(' or '.join([words[0]] + [w[3:] if w.lower().startswith('or ') else w
+                                                   for w in words[1:]]))
+    return out
+
 PRESETS = {      # the quick setup: name -> (label, what it is for)
     'sideways': ('Sideways market',
                  'a grid around today\'s price: buys dips, sells rises'),
@@ -1068,20 +1101,41 @@ def advanced_page(strategy, values, fleets, chosen=0, note='', edit=None,
     of an existing bot, its identity fixed."""
     groups = []
     dflts = engine_defaults(strategy)                      # U33
+    essential = ESSENTIAL.get(strategy, ())
+    needed = {a for alts in REQUIRED.get(strategy, ()) for a in alts[:1]}
+    every = {r[0]: r for rows in SCHEMAS[strategy].values() for r in rows}
+
+    def field(r, mark=False):
+        n, p, k, lb, h = r
+        return _field(n, k, lb + (' *' if mark else ''), h, values.get(n),
+                      fixed=bool(edit) and n in IDENTITY,
+                      unit=values.get('size_unit'),
+                      default=dflts.get(p, ...))
+    # U105: what the bot needs, open and first; required ones starred
+    first = ''.join(field(every[n], mark=n in needed) for n in essential if n in every)
+    groups.append('<details open><summary>What the bot needs</summary>'
+                  f'<table>{first}</table><p class="dim">* required. Everything '
+                  'else is under Advanced, and a blank there takes the engine\'s '
+                  'default.</p></details>')
+    advanced, any_set = [], False
     for title, rows in SCHEMAS[strategy].items():
         if edit and values.get('market_type') != 'spot':
             # U76: a perpetual's edit page has no spot rows — its market
             # type is fixed, so they could never apply
             rows = [r for r in rows if r[0] not in SPOT_ONLY]
-        body = ''.join(_field(n, k, lb, h, values.get(n),
-                              fixed=bool(edit) and n in IDENTITY,
-                              unit=values.get('size_unit'),
-                              default=dflts.get(p, ...))
-                       for n, p, k, lb, h in rows)
-        opened = ' open' if title in OPEN_GROUPS or any(
-            values.get(n) for n, *_ in rows) else ''
-        groups.append(f'<details{opened}><summary>{html.escape(title)}'
-                      f'</summary><table>{body}</table></details>')
+        rows = [r for r in rows if r[0] not in essential]
+        if not rows:
+            continue
+        body = ''.join(field(r) for r in rows)
+        set_here = any(values.get(n) for n, *_ in rows)
+        any_set = any_set or set_here
+        opened = ' open' if set_here else ''
+        title = 'Other basics' if title == 'The basics' else title
+        advanced.append(f'<details{opened}><summary>{html.escape(title)}'
+                        f'</summary><table>{body}</table></details>')
+    groups.append(f'<details class="adv"{" open" if any_set else ""}><summary>Advanced '
+                  '<span class="dim">— optional; a blank takes the default</span></summary>'
+                  + ''.join(advanced) + '</details>')
     name = 'grid' if strategy == 'grid' else 'buy-the-dips (DCA)'
     if edit:
         title = (f'<h1>edit {html.escape(edit)} <span class="dim">— every '

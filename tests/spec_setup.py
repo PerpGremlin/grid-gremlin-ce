@@ -2286,3 +2286,35 @@ def spec_U84_the_apply_writes_onto_the_file_it_reviewed_or_not_at_all():
         assert 'linBTCUSDTl: written' in done
     finally:
         close()
+
+
+def spec_U105_a_bot_asks_first_for_what_it_needs_and_folds_the_rest():
+    """The owner (2026-10-22), stopped at a DCA he could not get through:
+    "the most basic things needed to make a bot are mandatory, and
+    everything else is an advanced setting in a dropdown box". Each form
+    opens with what the bot needs, the required ones starred; every other
+    setting sits in one closed Advanced box (open when a value in it is
+    set, as on an edit). A setup missing required settings is refused
+    with all of them named at once, never one at a time; an alternative
+    (the gap for the grid count, steps for the take profit) satisfies it.
+    Sabotage: dropping a required setting from the check is caught."""
+    import re
+    from panel.setup import ESSENTIAL, advanced_page, missing_required
+    page = advanced_page('martingale', {}, ['Bybit demo'], 0)
+    head, _, rest = page.partition('class="adv"')
+    for label in ('First order size *', 'First add-on order size *', 'How many add-on orders *',
+                  'First add-on after a move of (%) *', 'Take profit at (%) from the average price *'):
+        assert label in head, label
+    assert '<details class="adv">' in page and 'Trailing stop (%)' in rest and 'Trailing stop' not in head
+    for name in ESSENTIAL['martingale']:
+        assert len(re.findall(rf'name="{name}"', page)) == 1, name            # once, never twice
+    assert missing_required('martingale', {'symbol': 'ETHUSDT', 'side': 'long', 'capital': '5000'}) == [
+        'First order size', 'First add-on order size', 'How many add-on orders',
+        'First add-on after a move of (%)',
+        'Take profit at (%) from the average price or take profit in steps']
+    grid = {'symbol': 'BTCUSDT', 'side': 'long', 'capital': '100', 'lower': '1', 'upper': '2'}
+    assert missing_required('grid', grid) == ['Number of grids or Gap between grids (%)']
+    assert missing_required('grid', dict(grid, spacing_pct='1')) == []
+    edit = advanced_page('grid', {'symbol': 'BTCUSDT', 'side': 'long', 'trailing': '', 'max_loss': '50'},
+                         ['Bybit demo'], 0, edit='linBTCUSDTl')
+    assert '<details class="adv" open>' in edit                          # a set value shows itself

@@ -1626,6 +1626,14 @@ eventually pin (T1).
   30 d → all time → 24 h, only the windows that have a line. Radios and
   CSS, no script, so an export does the same; the panel keeps each
   account's pick across its refresh. A single window draws no switch.
+- **U105** Setup asks first for what a bot needs (the owner, 2026-10-22:
+  "the most basic things needed to make a bot are mandatory, and everything
+  else is an advanced setting in a dropdown box"): coin, direction, market,
+  investment, leverage, then the grid's range and count or the DCA's first
+  order, add-on order, add-on count, gap and take profit, the required ones
+  starred. Every other setting folds into one Advanced box, open only when a
+  value in it is set. A setup missing required settings names all of them
+  at once; an alternative (the gap, the take-profit steps) satisfies it.
 - **U104** A card is not drawn from a stopped fleet's last snapshot (the
   owner, 2026-10-22, after the flatten: "the demo accounts are all still
   running"). A bot its tombstone names reads RETIRED; a bot whose fleet's

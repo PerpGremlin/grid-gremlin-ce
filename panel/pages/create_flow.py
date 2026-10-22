@@ -521,7 +521,10 @@ class CreateFlowPages:
                                 'its own bot, made the same way (D54).'
                                 if pair else '') + '</p>'))
             else:
-                from panel.setup import resolve_size
+                from panel.setup import missing_required, resolve_size
+                miss = missing_required(form.get('strategy', 'grid'), form)   # U105
+                if miss:
+                    raise ValueError('still needed: ' + '; '.join(miss))
                 form = resolve_size(form, lambda: public_mark({   # U24
                     'venue': venue, 'market_type': 'linear',
                     'symbol': (form.get('symbol') or '').strip().upper()}))
