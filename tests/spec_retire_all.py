@@ -224,3 +224,90 @@ def spec_D149_leftover_tombstones_clear_from_the_dash():
         left = json.loads(Path(tp).read_text())
         assert list(left) == ['linBTCUSDTl']                          # the stand-down stays
         assert "action='/clear-tombstones'" not in h._tombs_html()
+
+
+def spec_D149_a_cleared_or_new_bot_starts_its_window_at_home():
+    """The owner's hand-built grids (2026-10-22): BTC, ETH and SOL took the
+    names of bots cleared that morning and inherited their slide offsets,
+    so each window sat far below its range and placed nothing. Clearing a
+    row forgets its offset; so does the panel's create or remove of a row.
+    Sabotage: clearing without forgetting is caught."""
+    import inspect
+    import gridgremlin.main as gm
+    import gridgremlin.retire as rt
+    from gridgremlin.durable import state_path
+    from gridgremlin.retire_all import retire_fleet
+    from gridgremlin.slide_state import SlideState, forget
+    with tempfile.TemporaryDirectory() as d:
+        conf = Path(d) / 'configs'
+        conf.mkdir()
+        (Path(d) / 'logs').mkdir()
+        f = conf / 'fleet.x.json'
+        f.write_text(json.dumps({'bots': [
+            {'venue': 'bybit', 'market_type': 'spot', 'symbol': 'BTCUSDT', 'side': 'long',
+             'capital': 100, 'lower': 50000, 'upper': 60000, 'rungs': 5}]}))
+        sp = state_path(str(f), json.loads(f.read_text()), 'slide_state')
+        SlideState(str(sp)).set('spoBTCUSDTl', -21)
+        SlideState(str(sp)).set('linETHUSDTl', -3)
+        assert forget(sp, 'linETHUSDTl') == -3 and forget(sp, 'linETHUSDTl') is None
+        venue = _Spot()
+        real_open, real_running = rt.open_venue, gm.fleet_running
+        try:
+            rt.open_venue = lambda cfg, clients=None: (clients.setdefault('bybit', venue), None)
+            gm.fleet_running = lambda *a, **k: False
+            retire_fleet(f, clear=True)
+        finally:
+            rt.open_venue, gm.fleet_running = real_open, real_running
+        assert SlideState(str(sp)).get('spoBTCUSDTl') == 0
+    import panel.pages.create_flow as cf
+    src = inspect.getsource(cf)
+    assert "if mode in ('create', 'remove'):" in src and "forget(state_path(str(fleet_p), fleet_raw, 'slide_state'), botid)" in src
+
+
+def spec_control_names_each_unit_by_its_account():
+    """The owner (2026-10-22), reading control: "can we make the accounts
+    match their names in the UI?" Each unit's line leads with the account's
+    name as the cards show it, the unit to type beside it; retire all's
+    choice names the account too. Without labels, the unit alone."""
+    import subprocess
+    from panel.routes import Handler
+    h = Handler.__new__(Handler)
+    h.fleets = ['configs/fleet.demo.json', 'configs/fleet.carry.json']
+    h.labels = ('Bybit demo', 'Bybit demo subaccount 1')
+    h.units, h.supervise = ('grid-gremlin3-demo', 'grid-gremlin3-carry'), False
+    h._page = lambda body: body
+    h._tombs_html = lambda: ''
+    real = subprocess.run
+    try:
+        subprocess.run = lambda *a, **k: subprocess.CompletedProcess(a, 3, 'inactive\n', '')
+        page = h._control_page()
+    finally:
+        subprocess.run = real
+    assert '<b>Bybit demo subaccount 1</b> <span class="dim">unit grid-gremlin3-carry</span>' in page
+    assert '<b>Bybit demo</b> <span class="dim">unit grid-gremlin3-demo</span>' in page
+    assert '>Bybit demo subaccount 1 — fleet.carry.json</option>' in h._retire_all_form()
+    h.labels = ()
+    assert '>fleet.carry.json</option>' in h._retire_all_form()
+
+
+def spec_E2b_a_spot_exit_is_judged_as_an_exit_not_to_half_a_step():
+    """The owner's spot grid on a borrow (2026-10-22) amended its four
+    sells every cycle, ~3,000 an hour: spot exits carry no reduce-only
+    flag, so they were judged as entries, to half a qty step, and every
+    drift of the sellable by a step re-sized them. An exit now says so
+    (`exit`) and is judged to the exit's band; a spot entry keeps D88's
+    half step. Sabotage: dropping the exit's band brings the churn back."""
+    from gridgremlin.apply import diff, matches
+    step = 0.000001
+    resting = {'side': 'Sell', 'reduce_only': False, 'price': 85031.6, 'qty': 0.174969,
+               'link_id': 'spoBTCUSDTl-7-1', 'order_id': 'x'}
+    exit_ = {'rung': 7, 'side': 'Sell', 'reduce_only': False, 'exit': True,
+             'price': 85031.6, 'qty': 0.174917}
+    assert matches(exit_, resting, qty_step=step)
+    assert diff([exit_], [resting], 'spoBTCUSDTl', qty_step=step) == ([], [])
+    entry = dict(exit_, exit=False, side='Sell')
+    assert not matches(entry, resting, qty_step=step)                   # D88 stands for entries
+    assert not matches(dict(exit_, qty=0.3), resting, qty_step=step)    # a grown holding still re-sizes
+    import inspect
+    from gridgremlin.ladder import plan_grid
+    assert "'reduce_only': exits_ro, 'exit': True" in inspect.getsource(plan_grid)   # the grid marks its exits

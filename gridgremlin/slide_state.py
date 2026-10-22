@@ -53,3 +53,20 @@ class SlideState:
             rows[botid] = int(offset)
             write_json(self.path, rows)
         self._rows = rows
+
+
+def forget(path, botid):
+    """D149: a bot's window back home — when its row is cleared or a new
+    row takes its name, the old bot's offset must not carry over (the
+    owner's hand-built BTC, ETH and SOL grids, 2026-10-22, started 21, 20
+    and 14 rungs below their ranges and placed nothing). Under the lock;
+    the removed offset, or None when there was none."""
+    path = Path(path)
+    if not path.exists():
+        return None
+    with locked(path):
+        rows = _read(path)
+        gone = rows.pop(botid, None)
+        if gone is not None:
+            write_json(path, rows)
+    return gone

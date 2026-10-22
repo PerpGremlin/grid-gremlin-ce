@@ -183,8 +183,12 @@ def retire_fleet(fleet_path, dry=False, sell=False, clear=False):
             write_atomic(fleet_path, dump(new_fleet))
             if new_wd is not None:
                 write_atomic(wd_path, dump(new_wd))
+            from .durable import state_path
+            from .slide_state import forget
+            slide = state_path(str(fleet_path), fleet, 'slide_state')
             for botid in gone:
                 remove(tombs.path, botid)
+                forget(slide, botid)                         # its window, home
     return out
 
 

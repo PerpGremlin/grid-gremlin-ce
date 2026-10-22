@@ -489,7 +489,7 @@ def plan_grid(cfg, adapter, split_ref, held_base=0.0, basis=None,
               else exit_ladder(parts['exits'], sellable, lot_qty, adapter))
     for i, price, qty in ladder:
         orders.append({'rung': i, 'side': exit_side, 'price': price, 'qty': qty,
-                       'reduce_only': exits_ro})
+                       'reduce_only': exits_ro, 'exit': True})
 
     free = lots_free(position_cap(cfg, adapter, rungs), held_base, lot_qty, adapter)   # D87
     if held_set is not None:                     # G7 by identity (G23)

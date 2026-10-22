@@ -103,6 +103,12 @@ class CreateFlowPages:
                     '(§11). Go back and type it in the box.'))
             atomic_write(fleet_p, new_fleet)
             atomic_write(wd_p, new_wd)
+            if mode in ('create', 'remove'):
+                # D149: a new or removed bot owns no old window — a slide
+                # offset left under its name would shift the new grid
+                from gridgremlin.durable import state_path
+                from gridgremlin.slide_state import forget
+                forget(state_path(str(fleet_p), fleet_raw, 'slide_state'), botid)
             return self._page(
                 f'<h1>{html.escape(botid)}: written</h1><p>bot and watcher landed '
                 'together in the fleet file; a backup is kept beside each '

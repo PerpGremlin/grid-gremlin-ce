@@ -19,7 +19,10 @@ eventually pin (T1).
   *(DESIGN §0; what makes backtest parity and every golden test possible)*
 - **E2** `apply()` is the only writer; cancels run before creates. A resting
   entry matches its plan within half the venue's step (D88) — a step off is
-  amended — while an exit keeps its truncation band (75%–105%).
+  amended — while an exit keeps its truncation band (75%–105%). A spot
+  exit, which has no reduce-only flag, says it is an exit and keeps the
+  band too (2026-10-22: judged to half a step, a spot sell on a borrow was
+  amended every cycle).
 - **E3** The exchange is the only durable state: every in-memory quantity is either
   derivable from venue + config or explicitly documented as reset-on-restart. Two
   narrow local facts are the stated exceptions, each because the exchange cannot

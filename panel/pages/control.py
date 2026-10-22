@@ -62,7 +62,14 @@ nothing to it. stop PARKS, never flattens (E3). no auto-restart, ever
                 if parts:
                     waits = (' <span class="dim">— waiting for a restart: '
                              + '; '.join(parts) + '</span>')
-            rows.append(f'<p>unit <b>{html.escape(u)}</b>: <span class="{cls}">{state}'
+            # the account's name as the cards show it, the unit to type
+            # beside it (the owner, 2026-10-22: "make the accounts match
+            # their names in the UI")
+            label = (self.labels[self.fleets.index(fleet)]
+                     if fleet in self.fleets and len(self.labels) == len(self.fleets) else None)
+            name = (f'<b>{html.escape(str(label))}</b> <span class="dim">unit '
+                    f'{html.escape(u)}</span>' if label else f'unit <b>{html.escape(u)}</b>')
+            rows.append(f'<p>{name}: <span class="{cls}">{state}'
                         f'</span>{waits}</p>')
         return self._page(f"""<h1>control <span class="dim">— processes and
 files, never the venue (§12)</span></h1>
@@ -88,8 +95,10 @@ written config (§11).</p>
         """D149: retire a whole stopped fleet, and clear it to nothing — a
         dry run first; the act on its own page, with the fleet file's name
         typed."""
-        opts = ''.join(f'<option value="{i}">{html.escape(Path(f).name)}</option>'
-                       for i, f in enumerate(self.fleets))
+        labels = self.labels if len(self.labels) == len(self.fleets) else [None] * len(self.fleets)
+        opts = ''.join(f'<option value="{i}">{html.escape(str(lb) + " — " if lb else "")}'
+                       f'{html.escape(Path(f).name)}</option>'
+                       for i, (f, lb) in enumerate(zip(self.fleets, labels)))
         return (f'<h2>retire all <span class="dim">— a whole fleet, stopped first (D149)</span></h2>'
                 f'<form method="post" action="/retire-all"><input type="hidden" name="gg" value="1">'
                 f'<select name="fleet">{opts}</select> '

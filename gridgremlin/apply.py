@@ -129,7 +129,11 @@ def matches(desired, order, qty_rtol=QTY_RTOL, qty_step=None):
     filled = order.get('cum_exec_qty') or 0.0
     sizes = (order['qty'],) + ((order['qty'] - filled,) if filled > 0 else ())
     for oq in sizes:
-        if desired['reduce_only']:
+        # a spot exit is an exit with no reduce-only flag to say so: judged
+        # to the exit's band, never to half a step — at half a step a spot
+        # sell on a borrow was amended every cycle as the sellable moved by
+        # a few steps (the owner's carry grid, 2026-10-22: ~3,000 amends an hour)
+        if desired['reduce_only'] or desired.get('exit'):
             # truncation-tolerant DOWN TO A POINT: the venue shrinks an exit to
             # the position, but a resting order far below the desire is not
             # truncation, it is a grown position with a stale cover — matching
