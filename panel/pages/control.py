@@ -77,11 +77,91 @@ type a unit name to confirm — or several, separated by spaces or commas:
 <p class="dim">one exception to "never the venue": a STOPPED bot's card
 offers <b>close position</b>, which asks the engine to close what that bot
 left open (X15).</p>
+{self._retire_all_form()}
 <p class="dim">stop PARKS, never flattens: positions and their
 venue-resting orders survive a stopped engine (E3) — but stops go
 unevaluated and nothing replenishes until start. restart enacts any
 written config (§11).</p>
 {self._tombs_html()}<p><a href="/">&larr; fleet</a></p>""")
+
+    def _retire_all_form(self):
+        """D149: retire a whole stopped fleet, and clear it to nothing — a
+        dry run first; the act on its own page, with the fleet file's name
+        typed."""
+        opts = ''.join(f'<option value="{i}">{html.escape(Path(f).name)}</option>'
+                       for i, f in enumerate(self.fleets))
+        return (f'<h2>retire all <span class="dim">— a whole fleet, stopped first (D149)</span></h2>'
+                f'<form method="post" action="/retire-all"><input type="hidden" name="gg" value="1">'
+                f'<select name="fleet">{opts}</select> '
+                '<label><input type="checkbox" name="sell" value="1"> and sell every coin for USDT</label> '
+                '<label><input type="checkbox" name="clear" value="1"> and clear the fleet to nothing</label> '
+                '<button>dry run</button></form>'
+                '<p class="dim">every bot retired as one is: its orders cancelled, its position '
+                'closed, a portfolio row flattened leg by leg; then the exchange read back. '
+                '"clear" takes every bot, its watchdog line and its tombstone out of the file, '
+                'so its cards leave the page; an empty fleet will not start until a bot is '
+                'added. The dry run sends nothing.</p>')
+
+    def _run_retire_all(self, fi, dry, sell, clear):
+        """D149: the engine's own retire_all, as a subprocess with the
+        fleet's own keys (the close command's arrangement)."""
+        fleet = self.fleets[min(fi, len(self.fleets) - 1)]
+        try:
+            from gridgremlin.retire_all import command
+            from gridgremlin.durable import fleet_env, fleet_home
+            out = subprocess.run(command(Path(fleet).resolve(), dry=dry, sell=sell, clear=clear),
+                                 capture_output=True, text=True, timeout=600,
+                                 cwd=str(fleet_home(fleet)), env=fleet_env(fleet))
+            last = (out.stderr.strip().splitlines() or ['no reason given'])[-1]
+            return (json.loads(out.stdout.strip().splitlines()[-1]) if out.stdout.strip()
+                    else {'refused': f'retire all stopped: {last}'})
+        except subprocess.TimeoutExpired:
+            return {'refused': 'the exchange did not answer within ten minutes '
+                               '— look at it directly before trying again'}
+        except ValueError:
+            return {'refused': 'retire all answered something unreadable '
+                               '— look at the exchange directly'}
+
+    def _retire_all_act(self, form):
+        if not self.units and not self.supervise:
+            return self._deny(404, 'control is not armed on this panel')
+        fi = int(_f(form.get('fleet')) or 0)
+        name = Path(self.fleets[min(fi, len(self.fleets) - 1)]).name
+        sell, clear = form.get('sell') == '1', form.get('clear') == '1'
+        go = form.get('go') == '1'
+        if go and form.get('confirm', '').strip() != name:
+            return self._page(refusal_box('not done', f'type the fleet file name exactly: {name} '
+                                          '— a click is not a decision (§11)'))
+        got = self._run_retire_all(fi, dry=not go, sell=sell, clear=clear)
+        if 'refused' in got:
+            return self._page(refusal_box('not done', got['refused']))
+        lines = []
+        for r in got.get('rows') or []:
+            what = ('would retire' if not go else 'retired') + f" ({r.get('kind')})"
+            bits = [f"{k} {r[k]}" for k in ('orders', 'cancelled', 'held', 'closed', 'held_left')
+                    if r.get(k) not in (None, 0, 0.0, [])]
+            lines.append(f'<li><b>{html.escape(str(r.get("botid")))}</b>: {what}'
+                         + (f' — {html.escape(", ".join(bits))}' if bits else '') + '</li>')
+        for r in got.get('sold') or []:
+            lines.append('<li>' + html.escape(', '.join(f'{k} {v}' for k, v in r.items())) + '</li>')
+        if got.get('cleared'):
+            lines.append(f"<li>{'would clear' if not go else 'cleared'}: "
+                         f"{html.escape(', '.join(got['cleared']))}</li>")
+        head = (f'<h1>{html.escape(name)}: '
+                + ('dry run</h1>' if not go else
+                   ('flat on the exchange</h1>' if got.get('flat') else
+                    '<span class="neg">NOT all flat</span></h1>')))
+        left = ('' if not got.get('left') else
+                '<p class="neg">still open: ' + html.escape(json.dumps(got['left'])) + '</p>')
+        again = ('' if go else
+                 f'<form method="post" action="/retire-all"><input type="hidden" name="gg" value="1">'
+                 f'<input type="hidden" name="fleet" value="{fi}"><input type="hidden" name="go" value="1">'
+                 + ('<input type="hidden" name="sell" value="1">' if sell else '')
+                 + ('<input type="hidden" name="clear" value="1">' if clear else '')
+                 + f'type <b>{html.escape(name)}</b> to do it: <input name="confirm" size="24"> '
+                   '<button>retire all</button></form>')
+        return self._page(head + f'<ul>{"".join(lines) or "<li>nothing in this fleet</li>"}</ul>'
+                          + left + again + '<p><a href="/control">control</a> · <a href="/">fleet</a></p>')
 
     def _run_close(self, fi, botid, dry, expect=None):
         """X15: the engine's own close command, as a subprocess — the keys

@@ -1036,12 +1036,13 @@ def validate_fleet(data, where='fleet'):
     _reject_unknown(data, FLEET_KEYS, where)
     bots = data.get('bots')
     # J3 (D80): an agent's fleet may start with no bot of its own — its trades
-    # arrive through the door; every other fleet needs at least one row
+    # arrive through the door. D149: any fleet file may hold no bots (an
+    # account cleared to nothing); the engine refuses to RUN one (build_fleet)
     agent_fleet = data.get('agent') is not None
     if agent_fleet and bots is None:
         bots = []
-    if not isinstance(bots, list) or (not bots and not agent_fleet):
-        _refuse(f"{where}: 'bots' must be a non-empty list")
+    if not isinstance(bots, list):
+        _refuse(f"{where}: 'bots' must be a list")
     fleet = {
         'watchdog': data.get('watchdog'),
         'poll_seconds': _num(data, 'poll_seconds', where, least=0.0,
@@ -1079,7 +1080,7 @@ def validate_fleet(data, where='fleet'):
                      if isinstance(row, dict) else 'not an object')
             refused.append((f'{where}.bots[{i}]', label, str(e)))
     listed = '; '.join(f'{w} ({lab}): {r}' for w, lab, r in refused)
-    if not rows and (refused or not agent_fleet):
+    if not rows and refused:
         _refuse(f'{where}: every row refused — nothing would run: {listed}')
     tol = fleet['preflight']['max_failed_bots']
     if tol is not None and len(refused) > tol:

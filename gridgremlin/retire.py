@@ -158,6 +158,31 @@ class RetireWatch:
                                     + ' this cycle (D145)')
 
 
+def open_venue(cfg, clients=None):
+    """The row's venue client (never mainnet) and its instrument adapter.
+    `clients` caches one client per venue for a caller retiring many rows."""
+    from .main import refuse_mainnet
+    clients = {} if clients is None else clients
+    if cfg['venue'] == 'hyperliquid':
+        from .exchange.hyperliquid.adapters import HLPerpAdapter
+        from .exchange.hyperliquid.truth import parse_instrument as hl_pi
+        from .exchange.hyperliquid.venue import HLVenueClient
+        if 'hyperliquid' not in clients:
+            clients['hyperliquid'] = HLVenueClient(allow_mainnet=False)
+            refuse_mainnet(clients['hyperliquid'], False, False)
+        client = clients['hyperliquid']
+        return client, HLPerpAdapter(hl_pi(client._entry(cfg['symbol'])[1]))
+    from .adapters import adapter_for
+    from .exchange.bybit.client import WriteClient
+    from .exchange.bybit.truth import parse_instrument
+    if 'bybit' not in clients:
+        clients['bybit'] = WriteClient()
+        refuse_mainnet(clients['bybit'], False, False)
+    client = clients['bybit']
+    return client, adapter_for(cfg['market_type'], parse_instrument(
+        cfg['market_type'], client.instruments_info(cfg['market_type'], cfg['symbol'])))
+
+
 def main(argv):
     dry = '--dry' in argv
     argv = [a for a in argv if a != '--dry']
@@ -180,21 +205,7 @@ def main(argv):
                               'the running bot would place its orders back')
         from .tombstones import Tombstones, path_for
         tombs = Tombstones(str(path_for(fleet_path, fleet)))
-        if cfg['venue'] == 'hyperliquid':
-            from .exchange.hyperliquid.adapters import HLPerpAdapter
-            from .exchange.hyperliquid.truth import parse_instrument as hl_pi
-            from .exchange.hyperliquid.venue import HLVenueClient
-            client = HLVenueClient(allow_mainnet=False)
-            refuse_mainnet(client, False, False)
-            adapter = HLPerpAdapter(hl_pi(client._entry(cfg['symbol'])[1]))
-        else:
-            from .adapters import adapter_for
-            from .exchange.bybit.client import WriteClient
-            from .exchange.bybit.truth import parse_instrument
-            client = WriteClient()
-            refuse_mainnet(client, False, False)
-            adapter = adapter_for(cfg['market_type'], parse_instrument(
-                cfg['market_type'], client.instruments_info(cfg['market_type'], cfg['symbol'])))
+        client, adapter = open_venue(cfg)
         out = retire_bot(cfg, client, adapter, tombs, 'retired by the owner (D92)', dry=dry)
     except Exception as e:                                   # noqa: BLE001
         out = {'refused': f'{type(e).__name__}: {e}'}

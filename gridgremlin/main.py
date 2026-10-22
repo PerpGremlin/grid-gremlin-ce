@@ -597,6 +597,10 @@ def build_live_trade(cfg, fleet, clients, bots, notifier):
 def build_fleet(fleet_path, notifier, allow_mainnet=False):
     load_env()
     fleet = validate_fleet(json.loads(Path(fleet_path).read_text()))
+    if not fleet['bots'] and fleet.get('agent') is None:
+        # D149: a cleared fleet is a file, not a process — nothing to run
+        raise ConfigError(f'{Path(fleet_path).name} has no bots: nothing to run '
+                          '— add one from the panel\'s setup first (D149)')
     from .exchange.env import select_account
     select_account(fleet['account'])                  # H5: whose keys this process reads
     for where, label, reason in fleet.get('refused', ()):

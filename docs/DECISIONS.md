@@ -1303,6 +1303,19 @@ stands unless the owner corrects it.
   as settings anyone may raise; the engine's guards (H4, the margin floor)
   stand either way. Real money waits (the owner, the same day); the agent
   experiment stays paused until the current load of work is done.
+- **D149 — Retire all, and clear a fleet to nothing (2026-10-22).** After
+  flattening every fleet by hand, bot by bot, the owner: "how do i clear the
+  bot from the page as well. we should set up an all clear/retire so we can
+  wipe the UI with nothing." One command per fleet (`gridgremlin.retire_all`,
+  and the same on the panel's control page): with the fleet stopped, every
+  row is retired as one is (X15c), a portfolio row flattened leg by leg
+  (H4), and the venue read back; `--sell` sells every coin on the Bybit
+  account but USDT; `--clear` takes every row, its watchdog line and its
+  tombstone out of the file. A dry run comes first and the act needs the
+  fleet file's name typed. A fleet file may now hold no bots (J3's rule
+  that only an agent fleet may be empty is widened), so its cards leave the
+  page; the engine refuses to RUN an empty fleet, before any account
+  write. Never mainnet, never beside a running fleet.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

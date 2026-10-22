@@ -71,7 +71,10 @@ def cards_section(idx, label, contract, view='all', scripted=True):
             # panel folds or opens every account at once
             f'<details class="acct" data-k="acct:{idx}" open><summary>'
             f"{len(contract['bots'])} bots</summary>"
-            f'<div class="cards">{cards}</div></details></section>')
+            + (f'<div class="cards">{cards}</div>' if contract['bots'] else
+               '<p class="dim">no bots in this fleet — <a href="/setup">set one up</a>; '
+               'it starts with the fleet (D149)</p>')
+            + '</details></section>')
 
 
 # the panel on a phone (audit 2026-10-16); the showcase drops it, the site adds its own

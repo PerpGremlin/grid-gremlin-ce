@@ -789,7 +789,12 @@ def spec_X15c_retire_waits_for_its_fleet_and_has_no_way_to_mainnet():
     finally:
         held.close()
     src = inspect.getsource(rt)
-    assert src.count('refuse_mainnet(client, False, False)') == 2 and 'allow_mainnet=True' not in src
+    # both venues' clients are opened shut, in open_venue (D149 shares it)
+    assert src.count("refuse_mainnet(clients['") == 2 and 'allow_mainnet=True' not in src
+    import gridgremlin.retire_all as ra
+    src = inspect.getsource(ra)
+    assert 'open_venue' in src and src.count("refuse_mainnet(clients['bybit'], False, False)") == 1
+    assert 'allow_mainnet=True' not in src and '--allow-mainnet' not in src
 
 
 def spec_X15_on_hyperliquid_the_close_command_has_no_way_to_mainnet():

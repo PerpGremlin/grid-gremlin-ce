@@ -39,7 +39,8 @@ def spec_J3_the_owners_limits_are_all_stated_paper_is_the_default():
     assert _refused(validate_agent, dict(LIMITS, withdraw=True))            # unknown keys refused
     f = validate_fleet({'account': 'agent', 'agent': dict(LIMITS)})          # an agent fleet may start botless
     assert f['bots'] == [] and f['agent']['max_leverage'] == 5
-    assert 'non-empty' in _refused(validate_fleet, {'bots': []})            # any other fleet may not
+    assert validate_fleet({'bots': []})['bots'] == []                      # D149: any fleet file may be empty;
+    assert 'every row refused' in _refused(validate_fleet, {'bots': [{'symbol': 'X'}]})   # all-bad still refuses
 
 
 def spec_J3_every_limit_refuses_by_name_sabotage():
