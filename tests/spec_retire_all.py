@@ -191,3 +191,36 @@ def spec_D149_a_fleet_cleared_while_the_panel_runs_leaves_the_page():
             assert h._contract(f)['bots'] == {}
         finally:
             Handler._cache.pop(f, None)
+
+
+def spec_D149_leftover_tombstones_clear_from_the_dash():
+    """The owner (2026-10-22): old tombstones of bots long gone from the
+    file "need to be something we can do from the dash". Control lists, per
+    fleet, the tombstones whose bot is no longer in its file, and clears
+    them at once with the fleet file's name typed; a tombstone whose bot is
+    still in the file is a stand-down and stays. Sabotage: clearing every
+    tombstone is caught."""
+    from gridgremlin.tombstones import Tombstones, path_for
+    from panel.routes import Handler
+    with tempfile.TemporaryDirectory() as d:
+        conf = Path(d) / 'configs'
+        conf.mkdir()
+        (Path(d) / 'logs').mkdir()
+        f = conf / 'fleet.demo.json'
+        f.write_text(json.dumps({'bots': [{'market_type': 'linear', 'symbol': 'BTCUSDT', 'side': 'long'}]}))
+        tp = path_for(str(f), json.loads(f.read_text()))
+        t = Tombstones(str(tp))
+        for b in ('linBTCUSDTl', 'linFARTCOINUSDTl', 'invBTCUSDl'):
+            t.add(b, 'test')
+        h = Handler.__new__(Handler)
+        h.fleets, h.labels, h.units, h.supervise = [str(f)], ['demo'], ('grid-gremlin3-demo',), False
+        h._page = lambda body: body
+        page = h._tombs_html()
+        assert "action='/clear-tombstones'" in page and '2 left from bots no longer in the fleet' in page
+        assert page.count('no longer in the fleet</i>') == 2
+        assert 'not cleared' in h._clear_orphans_act({'fleet': '0', 'confirm': 'demo'})
+        done = h._clear_orphans_act({'fleet': '0', 'confirm': 'fleet.demo.json'})
+        assert '2 tombstones cleared' in done
+        left = json.loads(Path(tp).read_text())
+        assert list(left) == ['linBTCUSDTl']                          # the stand-down stays
+        assert "action='/clear-tombstones'" not in h._tombs_html()

@@ -1315,7 +1315,10 @@ stands unless the owner corrects it.
   fleet file's name typed. A fleet file may now hold no bots (J3's rule
   that only an agent fleet may be empty is widened), so its cards leave the
   page; the engine refuses to RUN an empty fleet, before any account
-  write. Never mainnet, never beside a running fleet.
+  write. Never mainnet, never beside a running fleet. The same day: control
+  clears a fleet's leftover tombstones (bots no longer in its file) at once,
+  the fleet file's name typed ("that needs to be something we can do from
+  the dash").
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

@@ -448,6 +448,8 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             return self._retire_act(form)                     # D145
         if self.path == '/retire-all':
             return self._retire_all_act(form)                 # D149
+        if self.path == '/clear-tombstones':
+            return self._clear_orphans_act(form)              # D149
         if self.path == '/trade':
             return self._trade_post(form)
         if self.path == '/lever':                            # D143
