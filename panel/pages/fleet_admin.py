@@ -49,11 +49,15 @@ class FleetAdminPages:
         if bot is None:
             return None
         if bot.get('strategy') == 'portfolio' and mode != 'remove':
+            from panel.carry_setup import carry_page, form_from_row
             from panel.lever import lever_form                      # D143
-            return (lever_form(fi, botid, bot)
-                    + '<p class="dim">its coins, hedges, clock and risk: the fleet file, by hand (D78). '
-                    f'<a href="/edit?fleet={fi}&amp;bot={qarg(botid)}&amp;mode=remove">remove</a> is '
-                    'here.</p>')
+            try:                                                    # U111: the carry form, filled
+                form = carry_page(form_from_row(bot), self._fleet_labels(), fi, edit=botid)
+            except ValueError as e:
+                form = f'<p class="dim">its coins, hedges, clock and risk: the fleet file, by hand — {html.escape(str(e))}.</p>'
+            return (lever_form(fi, botid, bot) + form
+                    + f'<p class="dim"><a href="/edit?fleet={fi}&amp;bot={qarg(botid)}&amp;mode=remove">remove</a> '
+                    'is here.</p>')
         if mode == 'remove':
             return (f'<h1>remove {html.escape(botid)}</h1><p class="dim">the bot and its '
                     'watchdog line leave together; the remaining fleet must '

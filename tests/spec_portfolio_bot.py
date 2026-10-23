@@ -1326,3 +1326,32 @@ def spec_H13_a_levered_rows_cash_is_its_own_loan_never_the_accounts_balance():
     again.cycle()
     assert abs(again.row['outside_cash'] - 200000.0) < 1.0 and abs(again.portfolio_view['value'] - 100000.0) < 1.0
     assert any("account's other 200,000.00 USDT kept apart" in ln and '(H13)' in ln for ln in lines)
+
+
+def spec_H3c_a_drift_read_trades_between_ticks_and_leaves_the_clock_alone():
+    """H3c on the live bot: with the trigger 'either', a coin that runs past
+    the drift between ticks is traded back at that read, and the clock
+    still counts from the last tick; with 'clock' the same move waits for
+    the clock. (Unhedged: a full hedge keeps the weights where they were —
+    the short's loss in the coin is the coin's gain.)"""
+    for trigger, trades in (('either', True), ('clock', False)):
+        venue, lines, clock = _venue(), [], Clock()
+        venue.t_ms = int(clock.t * 1000)
+        bot, _ = _bot(venue, lines, clock=clock,
+                      row={'hedge': {'product': 'inverse', 'ratio': 0.0},
+                           'rebalance': {'cash_reserve': 0, 'trigger': trigger, 'drift_pct': 0.05}})
+        bot.cycle()
+        first = bot.row['last_tick_ms']
+        clock.t += 61; venue.t_ms = int(clock.t * 1000)
+        bot.cycle()
+        n = len(venue.orders)
+        for s in ('BTCUSDT', 'BTCUSD'):
+            venue.marks[s] = 78000.0                  # BTC +30%: 56.5% of the stack, past 5%
+        clock.t += 3600; venue.t_ms = int(clock.t * 1000)
+        bot.cycle()
+        moved = venue.orders[n:]
+        assert bool(moved) == trades, (trigger, moved)
+        assert bot.row['last_tick_ms'] == first, trigger                     # the clock is the clock's
+        if trades:
+            assert ('spot', 'BTCUSDT', 'Sell') in {o[:3] for o in moved}
+            assert ('spot', 'ETHUSDT', 'Buy') in {o[:3] for o in moved}

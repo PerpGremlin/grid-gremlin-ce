@@ -135,6 +135,8 @@ table.fills td,table.fills th{padding:.15em .5em;text-align:right;white-space:no
 table.fills td:nth-child(-n+3),table.fills th:nth-child(-n+3){text-align:left}
 table.fills td:nth-child(3){white-space:normal}
 .pane{container-type:inline-size}.pane table.fills:not(.trades){font-size:clamp(.68rem,2.05cqi,.9em)}
+.pane table.fund{font-size:clamp(.68rem,2.05cqi,.9em)}.pane table.fund :is(td,th){padding:.15em .35em;white-space:nowrap;text-align:right}
+.pane table.fund th[colspan]{text-align:center}.pane table.fund td:first-child{min-width:0;text-align:left}
 table.fills:is(.trades,.bot) td{vertical-align:top}.pane table.fills:is(.trades,.bot) :is(td,th){padding:.15em .3em}table.fills.bot td:nth-child(2){white-space:nowrap}table.fills.bot td:nth-child(3){text-align:right}table.fills.bot th:nth-child(3){text-align:right}table.fills.trades td:nth-child(2){white-space:normal}table.fills.trades td:nth-child(3){white-space:nowrap}
 .pane table:not(.fills) td,.pane table:not(.fills) th{white-space:normal;overflow-wrap:break-word}.pane table:not(.fills) td:first-child{min-width:7em}.pane form input,.pane form select{max-width:16em;box-sizing:border-box}.pane details td:first-child{width:auto}.pane details td.dim{min-width:0}
 .cwtab td,.cwtab th{padding:.2em .7em;text-align:right;white-space:nowrap}.cwtab td:first-child,.cwtab th:first-child{text-align:left}.carryform{display:flex;flex-wrap:wrap;gap:.6em 1.2em;align-items:end;margin:.8em 0}.carryform label{display:grid;gap:.2em}

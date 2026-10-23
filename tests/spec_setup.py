@@ -2494,3 +2494,86 @@ def spec_U108_a_carry_bot_is_set_up_reviewed_and_written_from_the_panel():
 def html_unescape(s):
     import html
     return html.unescape(s)
+
+
+def spec_U111_a_carry_bots_hedge_per_coin_trigger_and_funding_survive_the_form():
+    """The owner (2026-10-23): each coin hedged on an inverse or a linear
+    perpetual, the funding of each shown to choose by, and the rebalance on
+    the clock, the drift or either. A per-coin hedge round-trips the form
+    (the common product above, the others named); the funding table sums
+    each market's settlements over 7 and 30 days to a year, a market that
+    cannot be read a dash."""
+    from gridgremlin.portfolio import validate_portfolio
+    from panel.carry_setup import form_from_row, funding_apr, funding_html, row_from_form, sentence
+    row = row_from_form({'name': 'mix', 'capital': '1000', 'assets': 'BTC 2, ETH 1, SOL 1',
+                         'hedge_ratio': '50', 'hedge_product': 'inverse', 'hedge_each': 'SOL usdt, eth usdc',
+                         'trigger': 'either', 'every_hours': '168', 'drift_pct': '3'})
+    assert row['hedge'] == {'BTC': {'product': 'inverse', 'ratio': 0.5}, 'ETH': {'product': 'usdc', 'ratio': 0.5},
+                            'SOL': {'product': 'usdt', 'ratio': 0.5}}
+    cfg = validate_portfolio(json.loads(json.dumps(row)))
+    assert cfg['rebalance']['trigger'] == 'either'
+    vals = form_from_row(row)
+    assert vals['hedge_product'] == 'inverse' and vals['hedge_each'] in ('ETH usdc, SOL usdt', 'SOL usdt, ETH usdc')
+    assert validate_portfolio(json.loads(json.dumps(row_from_form(vals)))) == cfg
+    words = sentence(cfg)
+    assert 'every 168 h, and between whenever a weight or hedge drifts 3%' in words
+    assert '50% (inverse: BTC)' in words and '50% (usdt: SOL)' in words
+    assert 'checked at every read' in sentence(validate_portfolio(dict(json.loads(json.dumps(row)),
+                                                                       rebalance={'trigger': 'drift'})))
+    for bad, said in (('DOGE usdt', 'not a coin the basket holds'), ('SOL perp', 'inverse, usdt or usdc')):
+        try:
+            row_from_form({'name': 'b', 'capital': '1', 'assets': 'BTC 1, SOL 1', 'hedge_each': bad})
+        except ValueError as e:
+            assert said in str(e), str(e)
+        else:
+            raise AssertionError(bad)
+    day, now = 86_400_000, 100 * 86_400_000
+    eight = [(now - i * day // 3, 0.0001) for i in range(90)]             # 0.01% every 8 h, 30 days
+    assert abs(funding_apr(eight, now, 7) - 0.1095) < 1e-9 and abs(funding_apr(eight, now, 30) - 0.1095) < 1e-9
+    hourly = [(now - i * day // 24, 0.0001 / 8) for i in range(24 * 30)]  # the same, settled hourly
+    assert abs(funding_apr(hourly, now, 7) - 0.1095) < 1e-9
+    assert funding_apr([], now, 7) is None
+    seen = []
+
+    def read(mt, sym):
+        seen.append((mt, sym))
+        return eight if sym == 'BTCUSD' else None
+    table = funding_html(['BTC'], read, now)
+    assert seen == [('inverse', 'BTCUSD'), ('linear', 'BTCUSDT'), ('linear', 'BTCPERP')]
+    assert table.count('+10.95%') == 2 and table.count('<td class="dim">—</td>') == 4
+
+
+def spec_U111_a_running_carry_bot_is_edited_from_its_edit_tab():
+    """The carry bot's edit tab is the carry form, filled from its row, its
+    fleet and name fixed; a change goes through the same gates, review and
+    typed name, and replaces the row. A change that would leave coins or a
+    short unmanaged is refused in words: a coin taken out, a long turned
+    short, a hedged coin moved to another perpetual."""
+    import re
+    base, d, close = _served_fleet()
+    form = {'fleet': '0', 'name': 'basket', 'capital': '1000',
+            'assets': 'BTC 50, SOL 50', 'hedge_ratio': '100', 'hedge_product': 'inverse'}
+    try:
+        page = _call(base, '/setup-carry', form)
+        seen = html_unescape(re.search(r'name="seen" value="([^"]+)"', page).group(1))
+        assert 'pfobasket: written' in _call(base, '/setup-carry', dict(form, step='apply', seen=seen,
+                                                                         confirm='pfobasket'))
+        door = _call(base, '/edit?fleet=0&bot=pfobasket')
+        assert 'edit pfobasket' in door and 'name="edit" value="pfobasket"' in door
+        assert re.search(r'name="name"[^>]*value="basket" readonly', door) and 'BTC 50, SOL 50' in door
+        edit = dict(form, edit='pfobasket', capital='2000', trigger='drift', drift_pct='4')
+        page = _call(base, '/setup-carry', edit)
+        assert 'edit: gates passed' in page and 'save the change' in page, page[:800]
+        seen = html_unescape(re.search(r'name="seen" value="([^"]+)"', page).group(1))
+        done = _call(base, '/setup-carry', dict(edit, step='apply', seen=seen, confirm='pfobasket'))
+        assert 'pfobasket: written' in done and 'new terms at the fleet' in done, done[:600]
+        rows = [r for r in json.loads((d / 'f.json').read_text())['bots'] if r.get('strategy') == 'portfolio']
+        assert len(rows) == 1 and rows[0]['capital'] == 2000 and rows[0]['rebalance']['trigger'] == 'drift'
+        for change, said in ((dict(edit, assets='BTC 100', max_weight='100'), 'SOL is taken out'),
+                             (dict(edit, assets='BTC 50, SOL -50'), 'SOL turns from long'),
+                             (dict(edit, hedge_each='SOL usdt'), 'SOL moves from its inverse perpetual to usdt')):
+            refused = _call(base, '/setup-carry', change)
+            assert 'class="refusal"' in refused and said in refused, (said, refused[:600])
+        assert 'name="edit" value="pfobasket"' in refused                     # the refusal keeps the edit
+    finally:
+        close()

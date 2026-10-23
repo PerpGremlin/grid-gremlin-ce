@@ -156,8 +156,9 @@ def rehearse(cfg, bars1h, funding, regimes=None, start_cash=None):
             if y is not None:
                 trail[c] = y
         plan = plan_portfolio(cfg, book, px, t, last_tick, regimes=reg, funding_trailing=trail)
-        if plan['tick']:
-            last_tick = t
+        if plan['tick'] or plan['orders']:              # H3c: a drift read trades, the clock stays
+            if plan['tick']:
+                last_tick = t
             moved = False
             for o in plan['orders']:
                 kind, c = o['leg']

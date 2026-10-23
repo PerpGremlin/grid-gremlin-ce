@@ -34,7 +34,7 @@ def spec_H1_the_row_is_its_assets_hedges_clock_and_risk_with_stated_defaults():
     assert cfg['venue'] == 'bybit' and cfg['account'] is None      # the fleet's, once in one
     assert [a['coin'] for a in cfg['assets']] == ['BTC', 'ETH', 'SOL']
     assert cfg['hedges'] == {c: {'product': 'inverse', 'ratio': 1.0} for c in ('BTC', 'ETH', 'SOL')}
-    assert cfg['rebalance'] == {'every_hours': 24.0, 'drift_pct': 0.05, 'min_notional': 0.0, 'cash_reserve': 0.0}
+    assert cfg['rebalance'] == {'trigger': 'clock', 'every_hours': 24.0, 'drift_pct': 0.05, 'min_notional': 0.0, 'cash_reserve': 0.0}
     assert validate_config({k: v for k, v in _row().items() if k != 'rebalance'})['rebalance']['cash_reserve'] == 0.003
     assert cfg['funding_rule'] == {'stand_down_below': 0.0, 'trailing_days': 7.0}
     assert cfg['risk'] == {'margin_floor_pct': 0.4, 'basis_stop_pct': 0.01, 'max_weight': 0.5}
@@ -202,3 +202,30 @@ def spec_H1c_an_outright_short_is_usd_margined_never_inverse():
     # a long's hedge may still be inverse: its coin is the spot leg it hedges
     assert validate_config(_row(assets=two, hedge={'BTC': {'product': 'inverse'}}))['hedges']['BTC']['product'] == 'inverse'
 
+
+
+def spec_H3c_a_rebalance_starts_on_the_clock_the_drift_or_either():
+    """The owner (2026-10-23): "we should be able to set threshold and time
+    based rebalancing". `rebalance.trigger`: 'clock' (the default, as
+    before — between ticks nothing), 'drift' (every read, only what has
+    drifted past the drift moves, the clock unused), 'either' (both).
+    A drift read says tick False, so the clock is not reset by it; spare
+    cash waits until it is past the drift of the stack."""
+    _refused(_row(rebalance={'trigger': 'sometimes'}), "'trigger'")
+    off = {'coins': {'BTC': 1.0, 'ETH': 10.0}, 'hedged': {}, 'cash': 0.0}      # BTC 27% over
+    near = {'coins': {'BTC': 0.6, 'ETH': 9.0, 'SOL': 180.0},
+            'hedged': {'BTC': 0.6, 'ETH': 9.0, 'SOL': 180.0}, 'cash': 1000.0}    # cash 1.1% of the stack
+    hour = DAY - 3_600_000
+    clock = validate_config(_row())
+    assert clock['rebalance']['trigger'] == 'clock'
+    assert plan_portfolio(clock, off, PX, DAY, hour) == {'tick': False, 'orders': [], 'targets': {}}
+    for trigger in ('drift', 'either'):
+        cfg = validate_config(_row(rebalance={'cash_reserve': 0, 'trigger': trigger}))
+        plan = plan_portfolio(cfg, off, PX, DAY, hour)
+        assert not plan['tick'] and plan['orders'], trigger                  # traded, clock untouched
+        assert {o['leg'] for o in plan['orders'] if o['why'] == 'weight'} == {('spot', 'BTC'), ('spot', 'SOL')}
+        assert plan_portfolio(cfg, near, PX, DAY, hour)['orders'] == []      # dust cash waits
+        assert plan_portfolio(cfg, dict(near, cash=9000.0), PX, DAY, hour)['orders']   # 9% of the stack buys
+    assert plan_portfolio(validate_config(_row(rebalance={'trigger': 'either'})), off, PX, DAY, 0)['tick']
+    assert not plan_portfolio(validate_config(_row(rebalance={'trigger': 'drift'})), off, PX, 10 * DAY, 0)['tick']
+    assert plan_portfolio(validate_config(_row(rebalance={'trigger': 'drift'})), off, PX, DAY, None)['tick']

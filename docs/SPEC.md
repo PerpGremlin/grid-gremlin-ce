@@ -1669,6 +1669,18 @@ eventually pin (T1).
   columns (the account under the bot, the side with its role, the size at
   its price), a bot's fills in six (the date over the time), their text
   scaled to the pane's width down to a floor; float dust is +0.
+- **U111** A carry bot's hedge may differ by coin — inverse, usdt or usdc,
+  the common one above and the others named ("SOL usdt") — and the form
+  shows each coin's three perpetuals side by side: what a short was paid
+  a year over 7 and 30 days, summed from the venue's public record of
+  settlements (an hourly and an 8-hourly market alike), a dash where a
+  market cannot be read. The rebalance trigger is on the form (H3c). A
+  running carry bot's edit tab is the same form filled from its row, its
+  fleet and name fixed, through the same gates, review and typed name,
+  replacing the row; its adopted holdings stay. Refused in words: a coin
+  taken out, a long turned short or back, a hedged coin moved to another
+  perpetual — each would leave coins or a short with nothing managing
+  them. *(owner, 2026-10-23)*
 - **U110** The right half scrolls on its own: the page's refresh keeps each
   half where it was scrolled to (a pick opens at its top), and a wheel at
   the half's end stays in it. *(owner, 2026-10-23: the carry bot's numbers
@@ -2355,6 +2367,13 @@ that pins it (T1).
   basket_carry.py`) within 1.5 points of equity over 120 synthetic days,
   with the same drawdown and funding; the CLI fetches two years through
   the research's own fetchers (Hyperliquid's funding for an HL row).
+- **H3c** What starts a rebalance is the row's `rebalance.trigger`: `clock`
+  (the default — every `every_hours`, moving only what has drifted past
+  `drift_pct`), `drift` (every read, the same rule, no clock) or `either`.
+  A drift read trades and says no tick, so the clock counts on from its
+  own last tick; spare cash buys only once it is past the drift of the
+  stack. The rehearsal plans the same way. *(owner, 2026-10-23: "threshold
+  and time based rebalancing")*
 - **H3b** The funding rule judges the MARKET's funding, never the row's own
   payments: the sum of the hedge contract's funding rates over
   `trailing_days`, as a yearly rate (`trailing_yield`), judged only after a

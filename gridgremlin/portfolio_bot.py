@@ -987,7 +987,7 @@ class PortfolioBot:
                     'cash': row['cash'] + lin_open + realised}
             plan = plan_portfolio(eff, book, prices, now_ms, row['last_tick_ms'],
                                   regimes=regimes, funding_trailing=trailing)
-        if plan['tick']:
+        if plan['tick'] or plan['orders']:          # H3c: a drift read trades, the clock stays
             spent, refused = 0.0, False
             # spot sells first, so a buy is paid from the sale beside it. H10: a
             # buy never stands without its hedge — a coin's added hedge goes
@@ -1048,7 +1048,7 @@ class PortfolioBot:
             row['cash'] = (row['cash'] - spent if cfg.get('margin')      # a loan stays negative
                            else max(row['cash'] - spent, 0.0))
             row['spent'] += spent
-            if not refused:
+            if not refused and plan['tick']:
                 row['last_tick_ms'] = now_ms         # a refused leg keeps the tick open
         self.portfolio_view = {
             'stack': {c: {'coins': coins[c], 'value': coins[c] * prices[c]} for c in coins},

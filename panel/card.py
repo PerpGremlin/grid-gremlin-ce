@@ -644,6 +644,14 @@ def since_first_line(contract, botid):
             f' {shown}{star} · {rounds}</div>')
 
 
+def _rebalanced(reb):
+    """H3c: what starts the row's rebalance, in the card's words."""
+    every, drift = reb.get('every_hours', 24), reb.get('drift_pct', 0.05)
+    return {'drift': f' · rebalanced at a {drift:.0%} drift',
+            'either': f' · rebalanced every {every:g} h or at a {drift:.0%} drift'}.get(
+        reb.get('trigger', 'clock'), f' · rebalanced every {every:g} h')
+
+
 def portfolio_card(idx, botid, contract, belief, full=False):
     """H6: the portfolio's card — the stack's value and coins, one line per
     asset (weight target → actual, hedge ratio target → actual, coins
@@ -666,7 +674,7 @@ def portfolio_card(idx, botid, contract, belief, full=False):
     name = f"{botid[3:]} portfolio"
     kind = (f"{len(terms.get('assets') or [])} assets · hedged on "
             + ', '.join(sorted({h['product'] for h in (terms.get('hedges') or {}).values()}) or ['nothing'])
-            + f" · rebalanced every {(terms.get('rebalance') or {}).get('every_hours', 24):g} h"
+            + _rebalanced(terms.get('rebalance') or {})
             + (f" · tilt {terms['regime']['tilt']:.0%} with the regime" if terms.get('regime') else ' · neutral'))
     # the owner (2026-10-11): a borrowing row on a shared account says so,
     # and what its siblings' cash came to — kept out of its own
@@ -717,7 +725,7 @@ def portfolio_card(idx, botid, contract, belief, full=False):
                      + f"<td class='dim'>{_h.escape(note)}</td></tr>")
         nxt = v.get('next_tick_ms')
         due = ''
-        if nxt:
+        if nxt and (terms.get('rebalance') or {}).get('trigger', 'clock') != 'drift':
             left = (nxt - contract['generated_ms']) / 3.6e6
             due = f"next tick in {left:.1f} h" if left > 0 else 'tick due'
         facts = (f"<div class=\"dim\">stack <b>{v.get('stack_value') or 0:,.2f}</b> {q}"

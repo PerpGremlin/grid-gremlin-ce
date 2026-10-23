@@ -15,6 +15,7 @@ PORTFOLIO_KEYS = ('strategy', 'name', 'venue', 'account', 'capital', 'assets',
                   'margin', 'spot_borrow', 'spot_quote', 'perp_leverage')
 PERP_LEVERAGE_MOST = 125.0   # the gate's ceiling; the venue's own (leverageFilter) is checked at the build
 PRODUCTS = ('usdt', 'usdc', 'inverse')
+TRIGGERS = ('clock', 'drift', 'either')
 H = 3_600_000
 CASH_RESERVE = 0.003         # of the cash a tick spends, kept for the buys' fees (three refusals by a hair, 2026-10-08)
 
@@ -178,7 +179,10 @@ def validate_portfolio(row, where='row'):
     w = f'{where}.rebalance'
     if not isinstance(reb, dict):
         _refuse(f'{w}: an object {{every_hours, drift_pct, min_notional}}')
-    _reject_unknown(reb, ('every_hours', 'drift_pct', 'min_notional', 'cash_reserve'), w)
+    _reject_unknown(reb, ('every_hours', 'drift_pct', 'min_notional', 'cash_reserve', 'trigger'), w)
+    # H3c: what starts a rebalance — the clock (every_hours), a weight past
+    # the drift at any read, or either
+    reb['trigger'] = _enum(reb, 'trigger', w, TRIGGERS, default='clock')
     reb['every_hours'] = _num(reb, 'every_hours', w, least=1.0) or 24.0
     reb['drift_pct'] = _fraction(reb, 'drift_pct', w) or 0.05
     reb['min_notional'] = _num(reb, 'min_notional', w, least=0.0) or 0.0
@@ -303,9 +307,14 @@ def plan_portfolio(cfg, book, prices, now_ms, last_tick_ms, regimes=None,
     (4) a hedge past the drift is resized to its ratio. Each want is an
     order {'leg': ('spot'|'short'|'hedge', coin), 'side', 'coins',
     'why'}; a want under min_notional is left. Returns {'tick', 'orders',
-    'targets'}."""
+    'targets'}. H3c: with the trigger 'drift' or 'either', every read
+    between ticks is planned the same way — only a leg past the drift
+    moves, and cash buys only once it is past the drift of the stack — and
+    says 'tick': False, so the clock is not reset by it."""
     reb = cfg['rebalance']
-    if last_tick_ms is not None and now_ms - last_tick_ms < reb['every_hours'] * H:
+    trigger = reb.get('trigger', 'clock')
+    due = last_tick_ms is None or (trigger != 'drift' and now_ms - last_tick_ms >= reb['every_hours'] * H)
+    if not due and trigger == 'clock':
         return {'tick': False, 'orders': [], 'targets': {}}
     regimes, funding_trailing = regimes or {}, funding_trailing or {}
     coins = dict(book.get('coins') or {})
@@ -327,7 +336,7 @@ def plan_portfolio(cfg, book, prices, now_ms, last_tick_ms, regimes=None,
             return
         orders.append({'leg': leg, 'side': side, 'coins': qty, 'why': why})
 
-    if cash > 0 and pos_total > 0:                                 # (1)
+    if cash > 0 and pos_total > 0 and (due or cash > reb['drift_pct'] * max(stack, 1e-9)):   # (1)
         # toward the weights: each long's shortfall from its target share of
         # the stack (cash included), by shortfall — at the weights that is
         # pro rata (each shortfall is its weight's share of the cash); off
@@ -380,4 +389,4 @@ def plan_portfolio(cfg, book, prices, now_ms, last_tick_ms, regimes=None,
             why = ('funding stood the hedge down' if ratio == 0 and cfg['hedges'][c]['ratio'] > 0
                    else 'hedge')
             want(('hedge', c), 'sell' if want_q > have_q else 'buy', abs(want_q - have_q), p, why)
-    return {'tick': True, 'orders': orders, 'targets': targets}
+    return {'tick': due, 'orders': orders, 'targets': targets}
