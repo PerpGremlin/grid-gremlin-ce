@@ -215,6 +215,8 @@ class RetirePages:
         drop(requests_path(f), botid)
         if dead:
             tomb_remove(path_for(f, fleet_raw), botid)
+        from gridgremlin.kept_fills import cut
+        cut(f, [botid], time.time() * 1000)          # R18c: a new bot on this coin starts clean
         held = self._snapshot_held(fi, botid)
         return self._page(
             f'<h1>{html.escape(botid)}: retired and removed</h1><p>its row and watchdog line left the '

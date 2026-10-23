@@ -489,12 +489,12 @@ def kept_books(fleet_path, fresh, venue_of, key_of, since_ms, inverse_ids,
                    if venue_of.get((f['market_type'], f['symbol']))
                    == 'hyperliquid' else 'bybit') for f in fresh]
     merged = merge(kept['fills'], tagged)
-    anchors = kept.get('anchors') or {}
+    from .kept_fills import anchor_of, since_cut
     books = {}
     for b in key_of:
-        own = bot_fills(merged, b, closers, entry_sides)
+        own = since_cut(kept, b, bot_fills(merged, b, closers, entry_sides))
         live = first_flat_ms(own, entry_sides[b], held.get(b))
-        anchor = anchors.get(b)
+        anchor = anchor_of(kept, b)
         if not own and not anchor:
             continue
         # the stored anchor rules (the collector's, fixed); a live clean

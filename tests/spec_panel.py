@@ -1907,7 +1907,7 @@ def spec_U61_the_live_page_refreshes_in_place_and_never_reloads_whole():
     assert live.count('http-equiv="refresh"') == 1
     assert f'<noscript><meta http-equiv="refresh" content="{REFRESH_S}"></noscript>' in live
     assert "fetch(url,{credentials:'same-origin',cache:'no-store'})" in KEEP_JS
-    assert "swap(location.href).catch(function(){});},every*1000);" in KEEP_JS
+    assert "swap(location.href,1).catch(function(){});},every*1000);" in KEEP_JS   # U110: keeps its scroll
     # U78c: a form open in the right half is never swapped out from under the typing
     # (U82: …while it is being typed in — an untouched one refreshes)
     assert "setInterval(function(){if(busy||dirty())return;" in KEEP_JS

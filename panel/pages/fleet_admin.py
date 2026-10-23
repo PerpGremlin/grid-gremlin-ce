@@ -5,6 +5,7 @@ from ..html_bits import qarg
 from pathlib import Path
 import html
 import json
+import time
 import urllib.parse
 
 
@@ -106,6 +107,8 @@ class FleetAdminPages:
         except (OSError, ValueError):
             tombs = {}
         gone = [b for b in self._orphans(fi, tombs) if remove(tp, b) is not None]
+        from gridgremlin.kept_fills import cut
+        cut(self.fleets[min(fi, len(self.fleets) - 1)], gone, time.time() * 1000)    # R18c
         return self._page(f'<h1>{html.escape(name)}: {len(gone)} tombstone'
                           f'{"" if len(gone) == 1 else "s"} cleared</h1>'
                           + (f'<p>{html.escape(", ".join(gone))}</p>' if gone else

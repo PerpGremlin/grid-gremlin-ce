@@ -250,14 +250,17 @@ if(y)window.scrollTo(0,Number(y));
 window.addEventListener('pagehide',function(){
  S.setItem('gg-y:'+location.pathname,String(window.scrollY));});
 var seq=0,busy=0;
-function swap(url){var my=++seq;busy++;
+function swap(url,keep){var my=++seq;busy++;
  return fetch(url,{credentials:'same-origin',cache:'no-store'})
  .then(function(r){return r.ok?r.text():'';}).then(function(t){
   if(my!==seq)return null;
   if(!t)return false;
   var doc=new DOMParser().parseFromString(t,'text/html');
+  // U110: the refresh keeps each half where it was scrolled to; a pick opens at its top
+  var at={};if(keep)['.pane','nav.side'].forEach(function(q){var e=document.querySelector(q);if(e)at[q]=e.scrollTop;});
   ['.hero','main'].forEach(function(q){var a=document.querySelector(q),b=doc.querySelector(q);
    if(a&&b)a.innerHTML=b.innerHTML;});
+  Object.keys(at).forEach(function(q){var e=document.querySelector(q);if(e)e.scrollTop=at[q];});
   document.querySelectorAll('main .pane script').forEach(function(old){
    var s=document.createElement('script');s.nonce=N;s.text=old.text;old.replaceWith(s);});
   wire(document.querySelector('main')||document);picks();eqs(document);top();return true;})
@@ -288,5 +291,5 @@ document.addEventListener('click',function(e){
 window.addEventListener('popstate',function(){swap(location.href).catch(function(){});});
 var m=document.querySelector('meta[name="gg-refresh"]'),every=m?Number(m.content):0;
 if(every>0)setInterval(function(){if(busy||dirty())return;
- swap(location.href).catch(function(){});},every*1000);
+ swap(location.href,1).catch(function(){});},every*1000);
 })();</script>"""

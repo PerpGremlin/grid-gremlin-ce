@@ -256,6 +256,26 @@ class PortfolioBot:
                                   f'{coin}: the stated holding fell by {before - h:.10g} — the row '
                                   'does not sell what it was told it owns; sell by hand (H2)')
 
+    def _outside(self, wq):
+        """H13: the account's quote the row was not given — the wallet beyond
+        the row's cash when it is first read — kept apart for good, so a
+        levered row's cash is its own loan and never the account's balance
+        (the owner's basket on a larger subaccount read the rest as profit,
+        and its next tick would have sized the stack from all of it,
+        2026-10-23).
+        A row that levered before this was kept: its cash rebuilt as what it
+        was given less what it spent and the interest it paid, said."""
+        row = self.row
+        own = row['cash']
+        if row.get('spent'):
+            own = ((row.get('anchor_value') or 0.0) + row.get('contributed', 0.0)
+                   - row['spent'] - row.get('interest_total', 0.0))
+            self.notify.event('info', self.botid,
+                              f"the account's other {max(wq - own, 0.0):,.2f} {self.cfg.get('spot_quote', 'USDT')} "
+                              f'kept apart from the row: its cash is {own:,.2f}, what it was given less '
+                              'what it spent and the interest it paid (H13)')
+        return max(wq - own, 0.0)
+
     def _learn_terms(self, prices, wallet=None):
         """H2: the row's terms changed under it (a restart on an edited
         file): a raised capital is cash to spend, a lowered one is said and
@@ -283,6 +303,7 @@ class PortfolioBot:
                 # the debt's coin on the venue): the new quote's balance IS the
                 # loan — the row's cash, nothing contributed
                 row['cash'] = bal
+                row['outside_cash'] = 0.0             # H13: the new quote's balance is the loan, whole
                 self.notify.event('info', self.botid,
                                   f"spot quote {seen['spot_quote']} → {now['spot_quote']}: the loan is "
                                   f"{-bal:,.2f} {now['spot_quote']}, the row's cash (H2)")
@@ -296,6 +317,8 @@ class PortfolioBot:
                                   f"{now['capital']:,.2f} {now['spot_quote']} (H2)")
         elif now['capital'] > seen['capital']:
             row['cash'] += now['capital'] - seen['capital']
+            if 'outside_cash' in row:                 # H13: the raise comes from the account's own
+                row['outside_cash'] = max(row['outside_cash'] - (now['capital'] - seen['capital']), 0.0)
             self._contribute(now['capital'] - seen['capital'])
             self.notify.event('info', self.botid,
                               f"capital raised by {now['capital'] - seen['capital']:,.2f} — "
@@ -784,6 +807,9 @@ class PortfolioBot:
             # the balance, less what the siblings and the row's linear books
             # put there (the owner, 2026-10-11)
             wq -= row.get('others_cash', 0.0) + row.get('linear_cash', 0.0)
+            if 'outside_cash' not in row:
+                row['outside_cash'] = self._outside(wq)
+            wq -= row['outside_cash']
         if row['cash'] > wq + 1e-9:
             if wq >= 0 or not cfg.get('margin'):
                 self._say_once('cash', 'info', f"cash {row['cash']:,.2f} beyond the wallet's {wq:,.2f} {quote} "

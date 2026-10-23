@@ -17,6 +17,7 @@
 # --dry says what it would do and does nothing. Prints one JSON object;
 # a refusal is {"refused": "..."}.
 import json
+import time
 import sys
 from decimal import Decimal
 from pathlib import Path
@@ -189,6 +190,8 @@ def retire_fleet(fleet_path, dry=False, sell=False, clear=False):
             for botid in gone:
                 remove(tombs.path, botid)
                 forget(slide, botid)                         # its window, home
+            from .kept_fills import cut
+            cut(fleet_path, gone, time.time() * 1000)        # R18c: their records end here
     return out
 
 

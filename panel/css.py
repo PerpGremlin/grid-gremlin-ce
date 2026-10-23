@@ -124,7 +124,7 @@ border:1px solid var(--edge);border-radius:3px;font:inherit;padding:.15em .3em}
 .split>.bots{min-width:0}
 /* U86: pinned where it starts — its top is the strip's height plus the gap
 under it, so it never slides as the left half scrolls */
-.pane{position:sticky;top:calc(var(--hero) + var(--gap));align-self:start;max-height:calc(100vh - var(--hero) - 2*var(--gap));overflow:auto;min-width:0;
+.pane{position:sticky;top:calc(var(--hero) + var(--gap));align-self:start;max-height:calc(100vh - var(--hero) - 2*var(--gap));overflow:auto;overscroll-behavior:contain;min-width:0;
 padding:.2em 1em .8em;border:var(--bw) solid var(--edge);border-radius:8px}
 .pane h2{font-size:1.1em;margin:0 0 var(--gap-s)}
 .pane a.plain{font-size:.8em;font-weight:normal;margin-left:.6em}

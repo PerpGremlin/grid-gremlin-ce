@@ -1283,3 +1283,46 @@ def spec_H12_a_refusal_part_way_puts_back_the_legs_already_changed():
                        ('inverse', 'BTCUSD', 10.0), ('inverse', 'ETHUSD', 20.0)], cat.set
     assert 'SOLUSD: retCode 110013' in why and 'put back: BTCUSD 10×, ETHUSD 20×' in why, why
     assert cat.now == {'BTCUSD': 10.0, 'ETHUSD': 20.0, 'SOLUSD': 10}
+
+
+def spec_H13_a_levered_rows_cash_is_its_own_loan_never_the_accounts_balance():
+    """The owner's levered basket on a larger subaccount (2026-10-23): it
+    bought its stack, the wallet went under, and the row took that balance
+    as its cash — the rest of the account read as profit, and its next
+    tick would have sized the stack from the whole account. The wallet beyond the
+    row's cash at its first read is the account's, kept apart; a row that
+    levered before this was kept rebuilds its cash from what it was given,
+    spent and paid, and says so."""
+    def levered(lines, clock, tmp=None):
+        venue = _venue()
+        venue.coins['USDT'] = 300000.0
+        venue.t_ms = int(clock.t * 1000)
+        bot, tmp = _bot(venue, lines, clock=clock, tmp=tmp,
+                        row={'capital': 100000, 'spot_borrow': True, 'margin': {'spot_leverage': 5.0},
+                             'assets': [{'coin': 'BTC', 'weight': 2.5}, {'coin': 'ETH', 'weight': 2.5}],
+                             'risk': {'max_weight': 2.5}})
+        return venue, bot, tmp
+    lines, clock = [], Clock()
+    venue, bot, tmp = levered(lines, clock)
+    bot.cycle()
+    assert abs(venue.coins['USDT'] + 200000.0) < 1.0                       # 500k bought on a 300k wallet
+    assert abs(bot.row['outside_cash'] - 200000.0) < 1.0
+    for _ in range(2):
+        clock.t += 25 * 3600; venue.t_ms = int(clock.t * 1000)             # past the clock: a tick
+        n = len(venue.orders)
+        bot.cycle()
+        v = bot.portfolio_view
+        assert abs(bot.row['cash'] + 400000.0) < 1.0 and abs(v['value'] - 100000.0) < 1.0
+        assert abs(v['leverage'] - 5.0) < 0.01 and len(venue.orders) == n  # at its weights: nothing bought
+    # a row levered before H13: its cash was the wallet's, no account kept apart
+    del bot.row['outside_cash']
+    bot.row['cash'] = venue.coins['USDT']
+    bot.state.set(bot.botid, bot.row)
+    again, _ = _bot(venue, lines, tmp=tmp, clock=clock,
+                    row={'capital': 100000, 'spot_borrow': True, 'margin': {'spot_leverage': 5.0},
+                         'assets': [{'coin': 'BTC', 'weight': 2.5}, {'coin': 'ETH', 'weight': 2.5}],
+                         'risk': {'max_weight': 2.5}})
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    again.cycle()
+    assert abs(again.row['outside_cash'] - 200000.0) < 1.0 and abs(again.portfolio_view['value'] - 100000.0) < 1.0
+    assert any("account's other 200,000.00 USDT kept apart" in ln and '(H13)' in ln for ln in lines)

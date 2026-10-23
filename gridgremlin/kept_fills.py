@@ -121,6 +121,43 @@ def collect(fleet, kept, now_ms, bybit=None, hl=None,
     return kept, errors
 
 
+def since_cut(kept, botid, own):
+    """R18c: a bot's own fills from where its record begins — a row taken
+    out of its fleet ends its bot's record (`cut`), and a new row with the
+    same coin and side is a new bot, never heir to the old one's fills."""
+    at = (kept.get('cuts') or {}).get(botid)
+    return own if at is None else [f for f in own if f['time_ms'] >= at]
+
+
+def anchor_of(kept, botid):
+    """R18c: the stored anchor, unless the record was cut after it."""
+    a = (kept.get('anchors') or {}).get(botid)
+    at = (kept.get('cuts') or {}).get(botid)
+    return None if a is None or (at is not None and a['time_ms'] < at) else a
+
+
+def cut(fleet_path, botids, at_ms, root=None):
+    """R18c: end these bots' records at `at_ms` — their anchors go, so the
+    collector settles a new start from the fills after the cut (a clean
+    flat, or fresh). Written under the ledger's lock; the fills stay kept.
+    Returns the ledger's path, or None when the fleet keeps none yet."""
+    from .durable import fleet_tag, logs_dir
+    path = (Path(root) / f'{fleet_tag(fleet_path)}.json' if root
+            else logs_dir(fleet_path) / 'fills' / f'{fleet_tag(fleet_path)}.json')
+    if not path.exists():
+        return None
+    with locked(path):
+        kept = load(path)
+        cuts, anchors = dict(kept.get('cuts') or {}), dict(kept.get('anchors') or {})
+        misses = dict(kept.get('misses') or {})
+        for b in botids:
+            cuts[b] = int(at_ms)
+            anchors.pop(b, None)
+            misses.pop(b, None)
+        write_json(path, dict(kept, cuts=cuts, anchors=anchors, misses=misses), indent=None)
+    return path
+
+
 FRESH_AFTER_MISSES = 3     # hourly runs in a row with no clean start: the
                            # busiest pair lags its fills (G26) — 3 h of margin
 
@@ -136,13 +173,13 @@ def settle_anchors(fleet, kept, now_ms, held, mark_of):
     No holding figure, or a holding with no price, waits — never guessed."""
     from .report import bot_fills, first_flat_ms, fleet_maps, make_botid
     _, entry_sides, closers, _ = fleet_maps(fleet)
-    anchors = dict(kept.get('anchors') or {})
+    anchors = {b: a for b in (kept.get('anchors') or {}) if (a := anchor_of(kept, b))}
     misses = dict(kept.get('misses') or {})
     for cfg in market_rows(fleet):
         b = make_botid(cfg['market_type'], cfg['symbol'], cfg['side'])
         if b in anchors:
             continue                          # once: an anchor never moves
-        own = bot_fills(kept['fills'], b, closers, entry_sides)
+        own = since_cut(kept, b, bot_fills(kept['fills'], b, closers, entry_sides))
         size = held.get(b)
         if not own and not size:
             continue                          # flat and unseen: starts clean
@@ -225,6 +262,8 @@ def main(argv):
         print('usage: python3 -m gridgremlin.kept_fills <fleet.json> ... '
               '[--out logs/fills] [--backfill-days 90]')
         return 2
+    if argv and argv[0] == '--cut':
+        return cut_main(argv[1:])
     out, days = 'logs/fills', BACKFILL_DAYS
     for flag in ('--out', '--backfill-days'):
         if flag in argv:
@@ -247,6 +286,26 @@ def main(argv):
             failed += 1                   # one fleet's trouble never costs
             print(f'[warn] {fleet}: {e}', file=sys.stderr)   # the others
     return 1 if failed else 0
+
+
+def cut_main(argv):
+    """R18c by hand: `--cut 'YYYY-MM-DD HH:MM' <fleet.json> ...` ends the
+    record of every bot in each fleet's kept ledger at that UTC moment —
+    for fleets cleared before the clear cut their records (D149, 10-22)."""
+    from .config import _utc_ms
+    if len(argv) < 2:
+        print("usage: python3 -m gridgremlin.kept_fills --cut 'YYYY-MM-DD HH:MM' <fleet.json> ...")
+        return 2
+    at = _utc_ms(argv[0], 'the cut')
+    for fleet in argv[1:]:
+        from .durable import fleet_tag, logs_dir
+        path = logs_dir(fleet) / 'fills' / f'{fleet_tag(fleet)}.json'
+        kept = load(path) if path.exists() else {}
+        bots = sorted(set(kept.get('anchors') or {}) | {k for f in kept.get('fills') or []
+                                                         for k in [str(f.get('link_id') or '').split('-')[0]] if k})
+        got = cut(fleet, bots, at)
+        print(f'{fleet}: ' + (f'{len(bots)} records cut at {argv[0]} UTC' if got else 'no kept ledger'))
+    return 0
 
 
 if __name__ == '__main__':

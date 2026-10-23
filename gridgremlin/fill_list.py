@@ -5,6 +5,7 @@
 # same walk (R2, R13) — so the list's total is the card's kept history.
 from .report import EPS, bot_fills, counted_fills, first_flat_ms, fleet_maps, ledger
 from .config import market_rows
+from .kept_fills import anchor_of, since_cut
 
 
 def fill_list(kept, fleet, botid, held=None):
@@ -24,8 +25,8 @@ def fill_list(kept, fleet, botid, held=None):
                 and entry_sides[botid] == ('buy' if c['side'] == 'long' else 'sell')), {})
     grids = {botid: cfg} if cfg.get('lower') and cfg.get('upper') else {}
     rounders = {botid} if cfg.get('strategy') == 'martingale' else set()
-    own = bot_fills(kept.get('fills') or [], botid, closers, entry_sides)
-    got = counted_fills(botid, own, entry, (kept.get('anchors') or {}).get(botid),
+    own = since_cut(kept, botid, bot_fills(kept.get('fills') or [], botid, closers, entry_sides))
+    got = counted_fills(botid, own, entry, anchor_of(kept, botid),
                         first_flat_ms(own, entry, held))
     if got is None:
         return {'whole': False, 'realized': None, 'fees': sum(f['fee'] for f in own),

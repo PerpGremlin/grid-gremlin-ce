@@ -41,11 +41,11 @@ def day_books(fleet, kept, day_start_ms, now_ms):
                for c in market_rows(fleet) if c['market_type'] == 'inverse'}
     rounders = {make_botid(c['market_type'], c['symbol'], c['side'])
                 for c in market_rows(fleet) if c.get('strategy') == 'martingale'}
-    anchors = kept.get('anchors') or {}
+    from .kept_fills import anchor_of, since_cut
     out = {}
     for b in key_of:
-        own = bot_fills(kept['fills'], b, closers, entry_sides)
-        got = counted_fills(b, own, entry_sides[b], anchors.get(b), None)
+        own = since_cut(kept, b, bot_fills(kept['fills'], b, closers, entry_sides))
+        got = counted_fills(b, own, entry_sides[b], anchor_of(kept, b), None)
         if got is None:
             continue
         counted, _ = got

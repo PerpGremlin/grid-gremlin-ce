@@ -281,6 +281,7 @@ def bot_fills(ledger_path, botid, since_ms):
         kept = json.loads(Path(ledger_path).read_text())
     except (OSError, ValueError):
         return []
+    since_ms = max(since_ms, (kept.get('cuts') or {}).get(botid) or 0)    # R18c
     out = []
     for f in kept.get('fills') or []:
         if (f.get('link_id') or '').startswith(botid + '-') and (f.get('time_ms') or 0) >= since_ms:

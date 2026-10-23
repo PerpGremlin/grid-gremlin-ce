@@ -193,3 +193,52 @@ def spec_U109_the_right_halfs_tables_fit_the_half():
     assert '<br>' in pane[pane.index('<td>', pane.index('fills bot')):][:40]   # date over time
     assert '+1.455e-11' not in _signed(1.455e-11) and '+0' in _signed(1.455e-11)
     assert '.pane{container-type:inline-size}' in CSS and 'cqi' in CSS
+
+
+def spec_R18c_a_bot_removed_from_its_fleet_ends_its_record_and_a_new_one_starts_clean():
+    """The owner (2026-10-23): a hand-built BTC grid read the soak bot's
+    fills and realised — retired and cleared the day before under the same
+    name. A row taken out of its fleet ends its bot's record
+    (`cut`: the remove, the clear, the orphans' clear, or by hand); the
+    fills stay kept, the anchor goes, and a new bot on that coin and side
+    counts from its own first fill — the list, the card and the collector's
+    new anchor alike."""
+    from gridgremlin.kept_fills import cut, settle_anchors
+    old = [_kf(DAY, 'o1', price=100.0), _kf(DAY + 5, 'o2', side='sell', price=200.0)]   # +100, flat
+    new = [_kf(3 * DAY, 'n1', price=150.0, link=f'{B}-9-a')]
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d, 'demo.json')
+        p.write_text(json.dumps({'version': 1, 'collected': {'bybit:linear:BTCUSDT': 4 * DAY},
+                                 'fills': old + new, 'anchors': {B: {'kind': 'clean', 'time_ms': DAY}}}))
+        before = fill_list(json.loads(p.read_text()), FLEET, B, held=1.0)
+        assert len(before['rows']) == 3 and abs(before['realized'] - 100.0) < 1e-9   # heir to the old bot
+        assert cut('fleet.demo.json', [B], 2 * DAY, root=d) == p
+        kept = json.loads(p.read_text())
+        assert kept['cuts'] == {B: 2 * DAY} and B not in kept['anchors'] and len(kept['fills']) == 3
+        got = fill_list(kept, FLEET, B, held=1.0)
+        assert got['whole'] and [r['time_ms'] for r in got['rows']] == [3 * DAY] and got['realized'] == 0.0
+        books, _ = kept_books('fleet.demo.json', [], {('linear', 'BTCUSDT'): 'bybit'},
+                              {B: ('linear', 'BTCUSDT')}, 0, set(), {B: 'buy'},
+                              {('linear', 'BTCUSDT', 'sell'): B}, {}, set(), {B: 1.0}, root=d)
+        assert books[B]['fills'] == 1 and books[B]['realized'] == 0.0
+        settled = settle_anchors(FLEET, kept, 4 * DAY, {B: 1.0}, lambda c: 150.0)
+        assert settled['anchors'][B] == {'kind': 'clean', 'time_ms': 3 * DAY}
+        # an anchor older than the cut is not the new bot's, even if a writer kept it
+        stale = dict(kept, anchors={B: {'kind': 'clean', 'time_ms': DAY}})
+        assert len(fill_list(stale, FLEET, B, held=1.0)['rows']) == 1
+
+
+def spec_U110_the_right_half_scrolls_on_its_own_and_the_refresh_keeps_its_place():
+    """The owner (2026-10-23): the carry bot's numbers could not be
+    scrolled — the page's refresh redraws the half every few seconds, which
+    put it back at its top, and a wheel at its end ran on into the left.
+    The refresh keeps each half's scroll (a pick still opens at its top),
+    and the half keeps its wheel to itself."""
+    from panel.css import CSS
+    from panel.reference import KEEP_JS
+    assert 'swap(location.href,1)' in KEEP_JS and 'function swap(url,keep)' in KEEP_JS
+    assert "if(keep)['.pane','nav.side']" in KEEP_JS and 'e.scrollTop=at[q]' in KEEP_JS
+    assert 'swap(u.href)' in KEEP_JS                                        # a pick: no keep, its top
+    i = CSS.index('.pane{position:sticky')
+    pane = CSS[i:CSS.index('}', i)]
+    assert 'overscroll-behavior:contain' in pane and 'overflow:auto' in pane

@@ -1224,6 +1224,15 @@ eventually pin (T1).
   no number is shown; the exchange's sum names the bots it leaves out.
   *(owner, 2026-10-05: per-bot and per-exchange P&L that survives round
   ends and the venues forgetting)*
+- **R18c** A row taken out of its fleet ends its bot's kept record (`cut`):
+  the panel's remove, the fleet's clear (D149) and the orphans' clear write
+  the moment into the ledger, its anchor goes, the fills stay kept. A new
+  bot on that coin and side counts from its own first fill — the list, the
+  card, the digest, the chart and the collector's next anchor. Fleets
+  cleared before this are cut by hand:
+  `python3 -m gridgremlin.kept_fills --cut 'YYYY-MM-DD HH:MM' <fleet.json> ...`.
+  *(owner, 2026-10-23: a new BTC grid read the soak bot's fills and
+  profit, under the same name)*
 - **R18b** A book with no dollars — an inverse book whose mark was not read —
   is unread everywhere, never a crash: `card_total` is None, the card shows
   the bot's belief, the totals leave it out; one kept rule (`kept_total`)
@@ -1660,6 +1669,10 @@ eventually pin (T1).
   columns (the account under the bot, the side with its role, the size at
   its price), a bot's fills in six (the date over the time), their text
   scaled to the pane's width down to a floor; float dust is +0.
+- **U110** The right half scrolls on its own: the page's refresh keeps each
+  half where it was scrolled to (a pick opens at its top), and a wheel at
+  the half's end stays in it. *(owner, 2026-10-23: the carry bot's numbers
+  could not be scrolled)*
 - **U104** A card is not drawn from a stopped fleet's last snapshot (the
   owner, 2026-10-22, after the flatten: "the demo accounts are all still
   running"). A bot its tombstone names reads RETIRED; a bot whose fleet's
@@ -2306,6 +2319,14 @@ that pins it (T1).
   futurees individually. spot is one leverage for all". The first live use
   set 50× on all three: BTCUSD and ETHUSD took it, SOLUSD refused it at its
   size (110013, 40× the most), and the two were not put back)*
+- **H13** A levered row's cash is its own loan, never the account's
+  balance. The wallet's quote beyond the row's cash at its first read is
+  the account's (`outside_cash`), kept apart for good; a capital raise
+  takes from it. A row levered before this was kept rebuilds its cash as
+  what it was given less what it spent and the interest it paid, and says
+  so once. *(owner, 2026-10-23: a levered basket on a larger subaccount
+  read the rest of the account as profit, and its next tick would have
+  sized the stack from all of it)*
 - **H6** The card says the three truths. A portfolio's card shows the
   stack's value and coins, one line per asset (weight target → actual,
   hedge ratio target → actual, coins hedged, the regime word when the tilt
