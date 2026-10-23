@@ -1656,6 +1656,10 @@ eventually pin (T1).
   scaled to fill the stack, spot leverage included; spot leverage turns
   borrowing on; the most in one coin is a share of the basket, scaled
   the same way.
+- **U109** The right half's tables fit the half: latest trades in four
+  columns (the account under the bot, the side with its role, the size at
+  its price), a bot's fills in six (the date over the time), their text
+  scaled to the pane's width down to a floor; float dust is +0.
 - **U104** A card is not drawn from a stopped fleet's last snapshot (the
   owner, 2026-10-22, after the flatten: "the demo accounts are all still
   running"). A bot its tombstone names reads RETIRED; a bot whose fleet's

@@ -60,7 +60,7 @@ vertical-align:middle}.side.long{background:var(--pos)}
 .card.short{border-left:5px solid var(--neg)}
 .cards{display:grid;gap:var(--gap);
 grid-template-columns:repeat(auto-fill,minmax(21em,1fr))}
-.card{border:var(--bw) solid var(--edge);border-radius:8px;padding:.8em 1em;display:flex;flex-direction:column}
+.card{border:var(--bw) solid var(--edge);border-radius:8px;padding:.65em .8em;display:flex;flex-direction:column}
 .cards.one{grid-template-columns:minmax(0,1fr);max-width:calc(63em + 2*var(--gap))}
 .numbers h3,.xch+h3{margin:.5em 0 .2em}table.xch{width:100%;max-width:calc(63em + 2*var(--gap));font-size:.95em}table.xch th{text-align:left;color:var(--dim);font-weight:normal;padding:.1em .5em}table.xch td{padding:.1em .5em;white-space:nowrap}
 .card .foot{margin-top:auto;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.3em var(--gap-s)}
@@ -134,6 +134,8 @@ table.fills{border-collapse:collapse;font-size:.9em;width:100%}
 table.fills td,table.fills th{padding:.15em .5em;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
 table.fills td:nth-child(-n+3),table.fills th:nth-child(-n+3){text-align:left}
 table.fills td:nth-child(3){white-space:normal}
+.pane{container-type:inline-size}.pane table.fills:not(.trades){font-size:clamp(.68rem,2.05cqi,.9em)}
+table.fills:is(.trades,.bot) td{vertical-align:top}.pane table.fills:is(.trades,.bot) :is(td,th){padding:.15em .3em}table.fills.bot td:nth-child(2){white-space:nowrap}table.fills.bot td:nth-child(3){text-align:right}table.fills.bot th:nth-child(3){text-align:right}table.fills.trades td:nth-child(2){white-space:normal}table.fills.trades td:nth-child(3){white-space:nowrap}
 .pane table:not(.fills) td,.pane table:not(.fills) th{white-space:normal;overflow-wrap:break-word}.pane table:not(.fills) td:first-child{min-width:7em}.pane form input,.pane form select{max-width:16em;box-sizing:border-box}.pane details td:first-child{width:auto}.pane details td.dim{min-width:0}
 .cwtab td,.cwtab th{padding:.2em .7em;text-align:right;white-space:nowrap}.cwtab td:first-child,.cwtab th:first-child{text-align:left}.carryform{display:flex;flex-wrap:wrap;gap:.6em 1.2em;align-items:end;margin:.8em 0}.carryform label{display:grid;gap:.2em}
 .pane h3{font-size:.95em;margin:1.2em 0 .4em;color:var(--accent)}

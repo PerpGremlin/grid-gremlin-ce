@@ -33,6 +33,8 @@ def _n(v, f=',.6g'):
 def _signed(v):
     if v is None:
         return '<td class="dim">—</td>'
+    if abs(v) < 5e-5:              # float dust (+1.455e-11) is nothing made
+        v = 0.0
     return f'<td class="{_num_cls(v)}">{v:+,.4g}</td>' if abs(v) < 1 else \
         f'<td class="{_num_cls(v)}">{v:+,.2f}</td>'
 
@@ -81,12 +83,15 @@ def detail_pane(idx, label, botid, contract, listing, show='fills', numbers='', 
     for r in reversed(rows[-shown:]):
         what = ('opening balance' if r['kind'] == 'opening'
                 else ('entry' if r['entry'] else 'exit') + (f' · {esc(r["kind"])}' if r['kind'] else ''))
-        body.append(f'<tr><td>{time.strftime("%m-%d %H:%M", time.gmtime(r["time_ms"] / 1000))}</td>'
-                    f'<td class="{"pos" if r["side"] == "buy" else "neg"}">{r["side"]}</td><td>{what}</td>'
-                    f'<td>{_n(r["price"])}</td><td>{_n(r["qty"])}</td><td>{_n(r["fee"], ",.4g")}</td>'
+        body.append(f'<tr><td>{time.strftime("%m-%d<br>%H:%M", time.gmtime(r["time_ms"] / 1000))}</td>'
+                    f'<td><span class="{"pos" if r["side"] == "buy" else "neg"}">{r["side"]}</span> {what}</td>'
+                    f'<td>{_n(r["qty"])}<br><span class="dim">@ {_n(r["price"])}</span></td>'
+                    f'<td>{_n(r["fee"], ",.4g")}</td>'
                     f'{_signed(r["realized"])}{_signed(r["net"])}</tr>')
     older = (f'<p class="dim">{len(rows) - shown} older fills not drawn.</p>'
              if len(rows) > shown else '')
-    return (f'<aside class="pane">{head}{summary}<table class="fills"><tr><th>UTC</th><th>side</th>'
-            '<th></th><th>price</th><th>qty</th><th>fee</th><th>made</th><th>total</th></tr>'
+    # U109: six columns that fit the half — the side with its role, the
+    # size at its price
+    return (f'<aside class="pane">{head}{summary}<table class="fills bot"><tr><th>UTC</th><th>side</th>'
+            '<th>qty @ price</th><th>fee</th><th>made</th><th>total</th></tr>'
             f'{"".join(body)}</table>{older}</aside>')

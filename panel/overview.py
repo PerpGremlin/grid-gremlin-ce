@@ -183,15 +183,18 @@ def trades_html(tails, labelled):
         c = labelled[idx][1]
         entry = {'l': 'buy', 's': 'sell'}.get(botid[-1:]) if not _is_portfolio(c, botid) else None
         role = '' if entry is None else ('entry' if f.get('side') == entry else 'exit')
+        # U109: four columns that fit the half — the account under the
+        # bot, the side with its role, the size at its price
         body.append(f'<tr><td>{time.strftime("%m-%d %H:%M", time.gmtime(t / 1000))}</td>'
                     f'<td><a class="bname" data-pick href="/?fleet={idx}&amp;bot={qarg(botid)}">'
                     f'{esc(_plain_name(botid, c, (c.get("bots") or {}).get(botid)))}</a>'
-                    f' <span class="dim">{esc(label)}</span></td>'
-                    f'<td class="{"pos" if f.get("side") == "buy" else "neg"}">{esc(f.get("side") or "")}</td>'
-                    f'<td>{role}</td><td>{float(f.get("price") or 0):,.6g}</td>'
-                    f'<td>{float(f.get("qty") or 0):,.6g}</td></tr>')
-    return ('<h3>latest trades</h3><table class="fills"><tr><th>UTC</th><th>bot</th>'
-            '<th>side</th><th></th><th>price</th><th>qty</th></tr>' + ''.join(body) + '</table>')
+                    f'<br><span class="dim">{esc(label)}</span></td>'
+                    f'<td><span class="{"pos" if f.get("side") == "buy" else "neg"}">'
+                    f'{esc(f.get("side") or "")}</span> {role}</td>'
+                    f'<td>{float(f.get("qty") or 0):,.6g}<br><span class="dim">@ '
+                    f'{float(f.get("price") or 0):,.6g}</span></td></tr>')
+    return ('<h3>latest trades</h3><table class="fills trades"><tr><th>UTC</th><th>bot</th>'
+            '<th>side</th><th>qty @ price</th></tr>' + ''.join(body) + '</table>')
 
 
 def overview_pane(labelled, tails=None):

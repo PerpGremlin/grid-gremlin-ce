@@ -76,7 +76,7 @@ def spec_U78_the_front_pages_right_half_is_what_was_picked():
     assert '<aside class="pane">' not in render([], table=True)
     contract = {'bots': {B: None}, 'terms': {B: {'quote': 'USDT'}}}
     pane = detail_pane(0, 'demo', B, contract, fill_list({'fills': FILLS}, FLEET, B, held=0.0))
-    assert pane.index('liquidation') < pane.index('<td>entry</td>')            # newest first
+    assert pane.index('liquidation') < pane.index('</span> entry</td>')        # newest first
     assert '4 fills since its record began' in pane and '<b class="on">fills</b>' in pane
     assert 'data-pick href="/?fleet=0&amp;bot=linBTCUSDTl&amp;show=numbers">numbers</a>' in pane
     assert 'X<script>' not in detail_pane(0, 'X<script>', B, contract, None)   # names escaped
@@ -168,3 +168,28 @@ def spec_D96_the_market_pages_stay_gone():
             assert '<title>grid-gremlin</title>' in page and 'Pick a bot by its name' in page, path
     finally:
         srv.shutdown()
+
+
+def spec_U109_the_right_halfs_tables_fit_the_half():
+    """The owner: "make the tiles and data that isnt cards fit the half of
+    the screen it is in". Latest trades ran past its box (price and size
+    behind a sideways scroll) and a bot's fills lost their totals at 1100
+    wide: four columns and six now, two lines a row, the fills' text
+    scaled to the pane; float dust reads +0, not +1.455e-11."""
+    import re
+    from panel.css import CSS
+    from panel.detail import _signed, detail_pane
+    from panel.overview import trades_html
+    contract = {'bots': {B: None}, 'terms': {B: {'quote': 'USDT'}}}
+    tails = {0: [{'link_id': f'{B}-1', 'time_ms': DAY, 'side': 'buy', 'price': 94.0, 'qty': 2.0}]}
+    trades = trades_html(tails, [('Bybit demo subaccount 1', contract)])
+    assert len(re.findall(r'<th>', trades)) == 4, trades
+    assert '<br><span class="dim">Bybit demo subaccount 1</span>' in trades
+    assert 'buy</span> entry' in trades and '2<br><span class="dim">@ 94' in trades
+    pane = detail_pane(0, 'demo', B, contract, fill_list({'fills': FILLS}, FLEET, B, held=0.0))
+    head = pane[pane.index('<table class="fills bot">'):]
+    head = head[:head.index('</tr>')]
+    assert head.count('<th>') == 6, head
+    assert '<br>' in pane[pane.index('<td>', pane.index('fills bot')):][:40]   # date over time
+    assert '+1.455e-11' not in _signed(1.455e-11) and '+0' in _signed(1.455e-11)
+    assert '.pane{container-type:inline-size}' in CSS and 'cqi' in CSS
