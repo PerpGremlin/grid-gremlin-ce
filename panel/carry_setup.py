@@ -10,8 +10,9 @@ from decimal import Decimal, InvalidOperation
 # (form name, the row's path, kind, label, help, required)
 ESSENTIAL = (
     ('name', ('name',), 'text', 'Name',
-     'one to twelve lower-case letters or digits; the bot is pfo<name> '
-     'everywhere', True),
+     'yours, one to twelve lower-case letters or digits, like basket. The '
+     'panel adds pfo (portfolio) in front: basket becomes pfobasket, the '
+     'name you type to save it and see on its card', True),
     ('capital', ('capital',), 'num', 'Investment',
      'the money the basket is built from, in USDT', True),
     ('assets', ('assets',), 'assets', 'Coins and weights',
