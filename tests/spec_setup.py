@@ -18,8 +18,11 @@ CONFIGS = os.path.join(os.path.dirname(__file__), '..', 'configs')
 
 def _shipped_rows():
     """Every shipped row the form knows — one market at a time. A
-    portfolio row (D78) is edited in the fleet file and has no form."""
-    for path in sorted(glob.glob(os.path.join(CONFIGS, 'fleet*.json'))):
+    portfolio row (D78) is edited in the fleet file and has no form. The
+    examples too: live fleets cleared to a few bots (D149) still prove the
+    form on every kind of row (the public tree has no examples/)."""
+    for path in sorted(glob.glob(os.path.join(CONFIGS, 'fleet*.json'))
+                       + glob.glob(os.path.join(CONFIGS, 'examples', 'fleet*.json'))):
         for row in json.load(open(path))['bots']:
             if row.get('strategy') != 'portfolio':
                 yield row
@@ -2318,3 +2321,40 @@ def spec_U105_a_bot_asks_first_for_what_it_needs_and_folds_the_rest():
     edit = advanced_page('grid', {'symbol': 'BTCUSDT', 'side': 'long', 'trailing': '', 'max_loss': '50'},
                          ['Bybit demo'], 0, edit='linBTCUSDTl')
     assert '<details class="adv" open>' in edit                          # a set value shows itself
+
+
+def spec_U106_an_empty_fleet_is_set_up_on_the_venue_it_names(tmp=None):
+    """A fleet cleared to no bots (D149) told setup its venue by its first
+    row — none, so a Hyperliquid fleet was set up as Bybit and its bot
+    never placed. The fleet file names its venue; setup reads it when no
+    row does, and the engine refuses a row of another venue."""
+    import tempfile
+    from pathlib import Path
+    from gridgremlin.config import ConfigError, validate_fleet
+    from panel.pages.create_flow import CreateFlowPages
+
+    class Stub:
+        pass
+    d = Path(tempfile.mkdtemp())
+    stub = Stub()
+    stub.fleets = [str(d / 'hl.json'), str(d / 'bare.json'), str(d / 'rows.json')]
+    (d / 'hl.json').write_text(json.dumps({'venue': 'hyperliquid', 'bots': []}))
+    (d / 'bare.json').write_text(json.dumps({'bots': []}))
+    (d / 'rows.json').write_text(json.dumps({'bots': [{'venue': 'hyperliquid'}]}))
+    venue = [CreateFlowPages._fleet_venue(stub, i) for i in range(3)]
+    assert venue == ['hyperliquid', 'bybit', 'hyperliquid'], venue
+
+    assert validate_fleet({'venue': 'hyperliquid', 'bots': []})['venue'] == 'hyperliquid'
+    shipped = json.load(open(os.path.join(CONFIGS, 'fleet.hl.testnet.json')))
+    assert shipped.get('venue') == 'hyperliquid'      # the box's empty HL fleet
+    row = {'market_type': 'linear', 'symbol': 'BTCUSDT', 'side': 'long', 'capital': 100,
+           'lower': 50000, 'upper': 100000, 'rungs': 10}
+    validate_fleet({'bots': [row]})                   # no venue named: as before
+    for bad in ({'venue': 'hyperliquid', 'bots': [row]},       # a Bybit row
+                {'venue': 'kraken', 'bots': []}):
+        try:
+            validate_fleet(bad)
+        except ConfigError as e:
+            assert 'venue' in str(e)
+        else:
+            raise AssertionError(f'accepted {bad}')

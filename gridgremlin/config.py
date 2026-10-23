@@ -60,7 +60,7 @@ SLIDE_KEYS = ('trigger_rungs', 'max_rungs', 'ref_position', 'confirm_seconds',
 SLIDE_DIRECTIONS = ('favourable', 'both')   # D28 default; D34 opt-in
 START_ORDER_TYPES = ('market', 'maker')       # D37: the base order's entry
 FLEET_KEYS = ('bots', 'poll_seconds', 'allow_mainnet', 'preflight', 'account_caps',
-              'risk_profiles', 'account', 'label',
+              'risk_profiles', 'account', 'label', 'venue',
               'tombstones', 'slide_state', 'portfolio_state', 'trades', 'agent',
               'notify_orders', 'watchdog')
 
@@ -1058,6 +1058,9 @@ def validate_fleet(data, where='fleet'):
         'trades': data.get('trades'),                    # D81 path (default logs/)
         'account': _account_name(data.get('account'), where),   # H5: whose keys
         'label': _fleet_label(data.get('label'), where),         # U55: the dash's name for it
+        # U106: the venue the fleet trades, so an empty one still has one
+        'venue': (_enum(data, 'venue', where, VENUES) if data.get('venue') is not None
+                  else None),
         # J3 (D80): the agent's limits — only the owner's merged main changes them
         'agent': (__import__('gridgremlin.agent', fromlist=['validate_agent']).validate_agent(
             data['agent'], f'{where}.agent') if data.get('agent') is not None else None),
@@ -1091,6 +1094,10 @@ def validate_fleet(data, where='fleet'):
             _refuse(f"{where}: row {cfg.get('botid') or cfg.get('symbol')} names account "
                     f"'{cfg['account']}' but the fleet trades '{fleet['account']}' — one "
                     'account per fleet process (F3); give that row a fleet file of its own')
+        if fleet['venue'] and cfg.get('venue', 'bybit') != fleet['venue']:
+            _refuse(f"{where}: row {cfg.get('botid') or cfg.get('symbol')} trades "
+                    f"'{cfg.get('venue', 'bybit')}' but the fleet names '{fleet['venue']}' — a fleet "
+                    'file trades one venue (U106)')
         if cfg.get('strategy') == 'portfolio':
             cfg['account'] = fleet['account']          # a row that names none is the fleet's
     fleet['bots'] = rows

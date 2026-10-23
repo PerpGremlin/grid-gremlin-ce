@@ -2,6 +2,7 @@
   "_note": "Example fleet for Hyperliquid Testnet (D68): small sizes. Testnet USDC comes from the faucet at app.hyperliquid-testnet.xyz. Books are thin outside BTC and ETH.",
   "watchdog": "configs/watchdog.hl.testnet.json",
   "poll_seconds": 2,
+  "venue": "hyperliquid",
   "bots": [
     {
       "_note": "a long grid that slides; the stop three rungs beyond the window is engine-watched on Hyperliquid (no hosted stop)",

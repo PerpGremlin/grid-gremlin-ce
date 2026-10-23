@@ -311,12 +311,17 @@ class CreateFlowPages:
         return public_symbols(self._fleet_venue(fi))
 
     def _fleet_venue(self, fi):
-        """A fleet file trades one venue: its first row says which."""
+        """A fleet file trades one venue: its first row says which, or, with
+        no rows, its own 'venue' (U106: a cleared HL fleet was set up as Bybit)."""
         try:
-            bots = json.loads(Path(self.fleets[fi]).read_text()).get('bots')
+            raw = json.loads(Path(self.fleets[fi]).read_text())
         except (OSError, ValueError):
-            bots = None
-        return (bots[0].get('venue', 'bybit') if bots else 'bybit')
+            raw = {}
+        raw = {'bots': raw} if isinstance(raw, list) else raw
+        bots = raw.get('bots')
+        if bots:
+            return bots[0].get('venue', 'bybit')
+        return raw.get('venue') or 'bybit'
 
     def _refused(self, form, title, why):
         """A refusal returns to the form it came from, values intact."""

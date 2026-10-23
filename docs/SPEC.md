@@ -1634,6 +1634,11 @@ eventually pin (T1).
   starred. Every other setting folds into one Advanced box, open only when a
   value in it is set. A setup missing required settings names all of them
   at once; an alternative (the gap, the take-profit steps) satisfies it.
+- **U106** A fleet file may name its `venue` (bybit or hyperliquid). Setup
+  sets a new bot up on the venue of the fleet's first row, or, with none,
+  on the venue the file names (Bybit when it names none); the engine
+  refuses a row of another venue. A cleared Hyperliquid fleet was set up
+  as Bybit.
 - **U104** A card is not drawn from a stopped fleet's last snapshot (the
   owner, 2026-10-22, after the flatten: "the demo accounts are all still
   running"). A bot its tombstone names reads RETIRED; a bot whose fleet's
