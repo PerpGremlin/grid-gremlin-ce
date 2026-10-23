@@ -23,6 +23,7 @@ from .render import render
 from .forms import BACK, FORM, next_step_html, other_half_html, other_side_html, rehearse_bot_form, unit_for_fleet, unit_refusal, verdict, waiting_for_restart
 from gridgremlin.apply import row_botid
 from .pages.rehearse import RehearsePages
+from .pages.carry_flow import CarryFlowPages
 from .pages.create_flow import CreateFlowPages
 from .pages.fleet_admin import FleetAdminPages
 from .pages.control import ControlPages
@@ -55,7 +56,7 @@ def form_token(token):
     return hmac.new(token.encode(), b'gg-form', hashlib.sha256).hexdigest()[:32]
 
 
-class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, PositionPages, TradePages, LeverPages, RetirePages, http.server.BaseHTTPRequestHandler):
+class Handler(RehearsePages, CarryFlowPages, CreateFlowPages, FleetAdminPages, ControlPages, PositionPages, TradePages, LeverPages, RetirePages, http.server.BaseHTTPRequestHandler):
     server_version = 'gg-panel'
     token = ''
     fleets = ()            # venue sections: one per fleet file
@@ -436,6 +437,8 @@ class Handler(RehearsePages, CreateFlowPages, FleetAdminPages, ControlPages, Pos
             return self._create_flow(form, apply=self.path == '/apply')
         if self.path == '/setup':
             return self._setup_post(form)
+        if self.path == '/setup-carry':
+            return self._carry_post(form)                     # U108
         if self.path == '/chart':
             return self._chart_post(form)
         if self.path == '/whatif':

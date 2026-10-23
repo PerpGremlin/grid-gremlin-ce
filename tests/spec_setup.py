@@ -781,7 +781,7 @@ def spec_U6_a_first_order_below_the_venue_minimum_is_refused_at_the_form():
             'how': 'quick', 'then': 'gates', 'fleet': '0',
             'preset': 'dca_long', 'caution': 'careful', 'symbol': 'SOLUSDT',
             'capital': '40'})
-        assert 'minimum order' in page and 'raise the investment' in page
+        assert 'smallest order' in page and 'raise the investment' in page
         assert 'advanced setup' in page and 'value="40"' in page
         ok = _call(base, '/setup', {
             'how': 'quick', 'then': 'gates', 'fleet': '0',
@@ -2358,3 +2358,127 @@ def spec_U106_an_empty_fleet_is_set_up_on_the_venue_it_names(tmp=None):
             assert 'venue' in str(e)
         else:
             raise AssertionError(f'accepted {bad}')
+
+
+def spec_U107_a_dca_under_the_smallest_order_names_it_in_money():
+    """The owner's DCA was refused with 'the first order (50) is smaller
+    than this market's minimum order (5, or 0.001 coins) — … raise the
+    leverage': on BTC the coin minimum binds (0.001 at 84,905 ≈ 84.9), and
+    leverage moves nothing (a size is the order's whole value). The refusal
+    names the smallest order in money, for the add-on order too."""
+    import re
+    base, d, close = _served_fleet()
+    form = {'fleet': '0', 'how': 'advanced', 'strategy': 'martingale',
+            'symbol': 'BTCUSDT', 'side': 'long', 'market_type': 'linear',
+            'capital': '1000', 'size_unit': 'collateral', 'leverage': '5',
+            'base_order_size': '50', 'safety_order_size': '100',
+            'max_averaging_orders': '5', 'deviation_pct': '2',
+            'take_profit_avg_pct': '1.5'}
+    try:
+        for base_sz, safety, words in (('50', '100', 'the first order (50)'),
+                                       ('100', '60', 'the add-on order (60)'),
+                                       ('100', '100', None)):
+            page = _call(base, '/setup', dict(form, base_order_size=base_sz,
+                                              safety_order_size=safety))
+            box = ' '.join(re.findall(r'class="refusal".*?</div>', page, re.S))
+            if words is None:
+                assert not box and 'action="/apply"' in page, box
+                continue
+            assert words in box and 'about 84.91' in box, box
+            assert 'leverage included' in box and 'raise the leverage' not in box
+    finally:
+        close()
+
+
+_CARRY_ROWS = (    # the carry and tilt rows as they ran (10-08 to 10-21), and the example
+    {'strategy': 'portfolio', 'name': 'carry', 'venue': 'bybit', 'capital': 175000,
+     'assets': [{'coin': 'BTC', 'weight': 0.3334}, {'coin': 'ETH', 'weight': 0.3333},
+                {'coin': 'SOL', 'weight': 0.3333}],
+     'hedge': {'product': 'inverse', 'ratio': 1.0},
+     'rebalance': {'every_hours': 24.0, 'drift_pct': 0.05, 'min_notional': 20.0,
+                   'cash_reserve': 0.003},
+     'funding_rule': {'stand_down_below': -1.0, 'trailing_days': 7.0},
+     'risk': {'margin_floor_pct': 0.01, 'basis_stop_pct': 0.01, 'max_weight': 0.4},
+     'spot_quote': 'USDT', 'spot_borrow': True,
+     'margin': {'spot_leverage': 1.0, 'borrow_apr_max': 0.1},
+     'perp_leverage': {'BTC': 50.0, 'ETH': 50.0, 'SOL': 50.0}},
+    {'strategy': 'portfolio', 'name': 'tilt', 'venue': 'bybit', 'capital': 50000,
+     'assets': [{'coin': 'BTC', 'weight': 0.3334}, {'coin': 'ETH', 'weight': 0.3333},
+                {'coin': 'SOL', 'weight': 0.3333}],
+     'hedge': {'product': 'inverse', 'ratio': 1.0},
+     'rebalance': {'every_hours': 24, 'drift_pct': 0.05, 'min_notional': 20},
+     'regime': {'tilt': 0.3, 'hold_hours': 24, 'source': 'structure'},
+     'funding_rule': {'stand_down_below': -1.0, 'trailing_days': 7},
+     'risk': {'margin_floor_pct': 0.25, 'basis_stop_pct': 0.01, 'max_weight': 0.4},
+     'spot_quote': 'USDT'},
+)
+
+
+def spec_U108_a_carry_row_survives_the_carry_form_unchanged():
+    """The carry bot's form (U108) loses nothing: row -> form -> row is the
+    same row to the engine, for the rows that ran and the shipped example;
+    a weight of 33.34 % is 0.3334 exactly. A row the one-number form cannot
+    hold (perp leverage that differs by coin) is said, never flattened."""
+    from gridgremlin.portfolio import validate_portfolio
+    from panel.carry_setup import form_from_row, row_from_form
+    ex = json.load(open(os.path.join(CONFIGS, 'examples', 'fleet.portfolio.json'))
+                   if os.path.isdir(os.path.join(CONFIGS, 'examples'))
+                   else open(os.path.join(CONFIGS, 'fleet.portfolio.json')))['bots']
+    rows = list(_CARRY_ROWS) + [r for r in ex if r.get('strategy') == 'portfolio']
+    assert len(rows) >= 3
+    for row in rows:
+        back = row_from_form(form_from_row(json.loads(json.dumps(row))))
+        assert validate_portfolio(json.loads(json.dumps(back))) == \
+            validate_portfolio(json.loads(json.dumps(row))), row['name']
+    odd = dict(_CARRY_ROWS[0], perp_leverage={'BTC': 50.0, 'ETH': 50.0, 'SOL': 40.0})
+    try:
+        form_from_row(odd)
+    except ValueError as e:
+        assert 'differs by coin' in str(e)
+    else:
+        raise AssertionError('a per-coin leverage was flattened to one number')
+    try:
+        row_from_form({'capital': '100'})
+    except ValueError as e:
+        assert 'Name' in str(e) and 'Coins and weights' in str(e)
+    else:
+        raise AssertionError('a carry bot with no name or coins passed')
+
+
+def spec_U108_a_carry_bot_is_set_up_reviewed_and_written_from_the_panel():
+    """The carry bot from the panel, end to end over a served panel: the
+    form, the review (the engine's loaders over the merged fleet, the bot
+    in plain words), the typed name, the write. A coin whose market another
+    bot of the fleet trades is refused at the form, as the build would."""
+    import re
+    base, d, close = _served_fleet()
+    form = {'fleet': '0', 'name': 'basket', 'capital': '1000',
+            'assets': 'BTC 50, SOL 50', 'hedge_ratio': '100', 'hedge_product': 'inverse'}
+    try:
+        page = _call(base, '/setup?adv=carry')
+        assert 'set up a carry bot' in page and 'name="assets"' in page
+        assert 'adv=carry' in _call(base, '/setup')
+        page = _call(base, '/setup-carry', form)
+        assert 'gates passed' in page and 'pfobasket' in page, page[:600]
+        assert 'Buys BTC 50%, SOL 50%' in page and 'BTCUSD' in page
+        before = (d / 'f.json').read_text()
+        seen = html_unescape(re.search(r'name="seen" value="([^"]+)"', page).group(1))
+        wrong = _call(base, '/setup-carry', dict(form, step='apply', seen=seen, confirm='x'))
+        assert 'class="refusal"' in wrong and (d / 'f.json').read_text() == before
+        done = _call(base, '/setup-carry', dict(form, step='apply', seen=seen,
+                                                confirm='pfobasket'))
+        assert 'pfobasket: written' in done, done[:600]
+        rows = json.loads((d / 'f.json').read_text())['bots']
+        assert [r.get('name') for r in rows if r.get('strategy') == 'portfolio'] == ['basket']
+        clash = _call(base, '/setup-carry', dict(form, name='other', assets='ETH 50, SUI 50',
+                                                 hedge_product='usdt'))
+        assert 'class="refusal"' in clash and 'ETHUSDT' in clash and 'one bot per market' in clash
+        again = _call(base, '/setup-carry', dict(form, assets='SUI 50, DOGE 50'))
+        assert 'already in this fleet' in again
+    finally:
+        close()
+
+
+def html_unescape(s):
+    import html
+    return html.unescape(s)

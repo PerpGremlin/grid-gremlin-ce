@@ -60,15 +60,25 @@ class CreateFlowPages:
                     # ("base order below minimum") — say it at the form
                     from gridgremlin.config import ConfigError as _CE
                     m0 = public_mark(vbot)
-                    q0 = adapter.round_qty(vbot['base_order_size'] / m0)
-                    if q0 <= 0 or not adapter.meets_minimum(q0, m0):
-                        raise _CE(
-                            f"the first order ({vbot['base_order_size']:g}) "
-                            "is smaller than this market's minimum order "
-                            f"({adapter.min_notional:g}, or "
-                            f"{adapter.min_qty:g} coins) — raise the "
-                            'investment, use fewer add-on orders, or raise the '
-                            'leverage')
+                    # U107: the smallest order in money at today's price —
+                    # the coin minimum binds on a dear coin (0.001 BTC ≈ 82)
+                    least = max(adapter.min_notional or 0.0, adapter.min_qty * m0)
+                    for what, key in (('first order', 'base_order_size'),
+                                      ('add-on order', 'safety_order_size')):
+                        size = vbot.get(key)
+                        if not size:
+                            continue
+                        coins = vbot.get('size_in') == 'coin'     # D89
+                        q0 = adapter.round_qty(size if coins else size / m0)
+                        if q0 <= 0 or not adapter.meets_minimum(q0, m0):
+                            raise _CE(
+                                f"the {what} ({size:g}{' coins' if coins else ''}) "
+                                "is under this market's "
+                                f"smallest order: about {least:.4g} at today's "
+                                f"price ({adapter.min_qty:g} coins at {m0:g}) — "
+                                f'raise the {what} size to at least that (it is '
+                                "the order's whole value, leverage included), or "
+                                'raise the investment the quick setup draws it from')
                 if mode == 'edit':
                     botid, fleet, wd = edit_proposal(
                         fleet_raw, wd_raw, proposal['orig'],
@@ -359,12 +369,10 @@ class CreateFlowPages:
         fi = min(int(_f(q.get('fleet')) or 0), len(self.fleets) - 1)
         labels = self._fleet_labels()
         if q.get('copy'):
-            from gridgremlin.apply import make_botid as _mb
             bots = json.loads(Path(self.fleets[fi]).read_text()).get(
                 'bots', [])
-            src = next((b for b in bots if _mb(
-                b['market_type'], b['symbol'], b['side']) == q['copy']),
-                None)
+            src = next((b for b in bots if row_botid(b) == q['copy']
+                        and b.get('strategy') != 'portfolio'), None)
             if src is None:
                 return self._deny(404, f"{q['copy']}: not in this fleet")
             vals = form_from_bot(src)
@@ -374,6 +382,8 @@ class CreateFlowPages:
                 note=f'<p class="dim">copied from {q["copy"]}: every '
                      'setting is carried over — choose the coin, and '
                      'check the prices, which belong to the old one.</p>'))
+        if q.get('adv') == 'carry':                              # U108
+            return self._carry_page(fi)
         if q.get('adv') in ('grid', 'martingale'):
             return self._page(advanced_page(q['adv'], {}, labels, fi,
                                             symbols=self._symbols(fi)))

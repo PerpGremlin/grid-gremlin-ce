@@ -1,0 +1,114 @@
+"""U108: a carry bot (the portfolio row, D78) set up from the panel — its
+form, its review and its write, beside the grid and DCA flow and through
+the same gates: the engine's own loaders over the merged fleet, no market
+shared with another bot of the fleet (the build's I2 collision, said at
+the form), the change as a diff, the bot in plain words, its name typed.
+"""
+import html
+import json
+from pathlib import Path
+
+from common.fmt import float_or as _f
+from panel.html_bits import named, refusal_box
+
+
+class CarryFlowPages:
+
+    def _carry_page(self, fi, values=None, alert=''):
+        from panel.carry_setup import carry_page
+        return self._page(carry_page(values or {}, self._fleet_labels(), fi, alert=alert))
+
+    def _carry_post(self, form):
+        from gridgremlin.apply import row_botid
+        from gridgremlin.config import ConfigError, market_rows, validate_fleet
+        from gridgremlin.portfolio import leg_markets, validate_portfolio
+        from panel.carry_setup import row_from_form, sentence
+        from panel.create import (atomic_write, dump_config, public_adapter,
+                                  unified_diff, validate_whole)
+        from panel.forms import next_step_html, unit_for_fleet
+        fi = min(int(_f(form.get('fleet')) or 0), len(self.fleets) - 1)
+        fleet_p = Path(self.fleets[fi])
+        fleet_text = fleet_p.read_text()
+        fleet_raw = json.loads(fleet_text)
+        fleet_raw = {'bots': fleet_raw} if isinstance(fleet_raw, list) else fleet_raw
+        wd_p = Path(fleet_raw['watchdog']) if fleet_raw.get('watchdog') else None
+        wd_text = wd_p.read_text() if wd_p else '{}'
+        seen = self._seen(fleet_text, wd_text)
+        if form.get('step') == 'change':
+            return self._carry_page(fi, form)
+        try:
+            if self._mainnet(fleet_p, 'bybit'):
+                raise ValueError('a carry bot on a Mainnet fleet is written in the '
+                                 'fleet file, not here (D64)')
+            if self._fleet_venue(fi) != 'bybit':
+                raise ValueError('a carry bot trades Bybit — this fleet trades '
+                                 f'{self._fleet_venue(fi)} (D78)')
+            row = row_from_form(form)
+            cfg = validate_portfolio(json.loads(json.dumps(row)), 'the carry bot')
+            botid = row_botid(row)
+            if any(row_botid(b) == botid for b in fleet_raw.get('bots') or []):
+                raise ValueError(f'{botid}: already in this fleet — pick another name')
+            fleet = json.loads(json.dumps(fleet_raw))
+            fleet.setdefault('bots', []).append(row)
+            vfleet = validate_fleet(json.loads(json.dumps(fleet)))
+            taken = {(c['market_type'], c['symbol']): row_botid(c)
+                     for c in market_rows(vfleet)}
+            for b in vfleet['bots']:
+                if b.get('strategy') == 'portfolio' and b['botid'] != botid:
+                    for _, _, mt, sym, _ in leg_markets(b):
+                        taken[(mt, sym)] = b['botid']
+            for _, coin, mt, sym, _ in leg_markets(cfg):
+                if (mt, sym) in taken:
+                    raise ValueError(f'{sym} ({mt}) is already traded by {taken[(mt, sym)]} '
+                                     'in this fleet — one bot per market; the fleet would '
+                                     'refuse to start (I2)')
+            wd = json.loads(wd_text)
+            refusal = validate_whole(fleet, wd, public_adapter) if wd_p else None
+            if refusal:
+                raise ValueError(refusal)
+        except (ValueError, ConfigError) as e:
+            return self._carry_page(fi, form, refusal_box('not yet', e))
+        new_fleet = dump_config(fleet)
+        if form.get('step') == 'apply':
+            if form.get('seen') != json.dumps(seen):
+                return self._carry_page(fi, form, refusal_box(
+                    'not applied', 'the fleet file changed since you reviewed it — review again'))
+            if not named(form.get('confirm'), botid):
+                return self._carry_page(fi, form, refusal_box(
+                    'not applied', f'the name typed must be {botid} (capitals do not '
+                    'matter) — a click is not a decision (§11)'))
+            atomic_write(fleet_p, new_fleet)
+            return self._page(
+                f'<h1>{html.escape(botid)}: written</h1><p>the carry bot is in the '
+                'fleet file; a backup is kept beside it.</p>'
+                + next_step_html('create', unit_for_fleet(fleet_p, self.units), self.units)
+                + '<p><a href="/">back to your bots</a></p>')
+        hidden = ''.join(f'<input type="hidden" name="{html.escape(k, quote=True)}" '
+                         f'value="{html.escape(str(v), quote=True)}">'
+                         for k, v in form.items() if k not in ('step', 'confirm', 'seen'))
+        legs = ''.join(f'<tr><td>{kind}</td><td>{html.escape(sym)}</td><td>{mt}</td>'
+                       f'<td>{put:,.2f}</td></tr>'
+                       for kind, _, mt, sym, put in leg_markets(cfg))
+        return self._page(
+            f'<h1>{html.escape(botid)} — create: gates passed</h1>'
+            '<div class="fsec"><h1 class="dim">in plain words</h1>'
+            f'<p class="say">{html.escape(sentence(cfg))}</p>'
+            '<table><tr><th>leg</th><th>market</th><th>kind</th><th>USDT at its weight</th></tr>'
+            f'{legs}</table></div>'
+            '<div class="fsec"><form method="post" action="/setup-carry">'
+            '<input type="hidden" name="gg" value="1">' + hidden +
+            '<input type="hidden" name="step" value="change">'
+            '<button class="quiet">change something</button></form></div>'
+            '<div class="fsec go"><form method="post" action="/setup-carry" class="apply">'
+            '<input type="hidden" name="gg" value="1">' + hidden +
+            '<input type="hidden" name="step" value="apply">'
+            f'<input type="hidden" name="seen" value="{html.escape(json.dumps(seen), quote=True)}">'
+            f'<b>To create this bot</b>, type its name <code>{html.escape(botid)}</code> here: '
+            f'<input name="confirm" size="16" placeholder="{html.escape(botid)}"> '
+            '<button>create this bot</button></form>'
+            '<p class="dim">this writes the fleet file. A new bot waits for the '
+            'fleet\'s restart (F12); at its start it buys its spot and opens its '
+            'hedges.</p></div>'
+            '<details><summary>the change to the file</summary>'
+            f'<pre class="dim">{html.escape(unified_diff(fleet_text, new_fleet, fleet_p.name))}</pre>'
+            '</details>')

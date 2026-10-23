@@ -1639,6 +1639,19 @@ eventually pin (T1).
   on the venue the file names (Bybit when it names none); the engine
   refuses a row of another venue. A cleared Hyperliquid fleet was set up
   as Bybit.
+- **U107** A DCA whose first or add-on order is under the market's smallest
+  order is refused at the form with that smallest order in money at
+  today's price (the coin minimum binds on a dear coin: 0.001 BTC), never
+  the dollar minimum alone, and never "raise the leverage" (a size is the
+  order's whole value).
+- **U108** A carry bot (the portfolio row, D78) is set up from the panel:
+  name, investment, coins and weights and the hedge first, every other key
+  of the row under Advanced. A row survives the form unchanged; one the
+  form cannot hold (leverage or hedge differing by coin, another quote,
+  venue or account) is said, never flattened. The review runs the engine's
+  loaders over the merged fleet and refuses a coin whose market another
+  bot of the fleet trades (the build's I2 collision); the name is typed to
+  write. Bybit, not Mainnet, from the panel.
 - **U104** A card is not drawn from a stopped fleet's last snapshot (the
   owner, 2026-10-22, after the flatten: "the demo accounts are all still
   running"). A bot its tombstone names reads RETIRED; a bot whose fleet's

@@ -1089,7 +1089,9 @@ def quick_page(fleets, chosen=0, symbols=()):
         '<p class="dim">or start from a blank advanced form: '
         '<a href="/setup?adv=grid">grid</a> · '
         '<a href="/setup?adv=martingale">buy-the-dips (DCA)</a> — every '
-        'setting the config file accepts.</p>')
+        'setting the config file accepts — or '
+        '<a href="/setup?adv=carry">a carry bot</a> (coins on spot, hedged '
+        'on their perps, the funding collected).</p>')
 
 
 SPOT_ONLY = ('assumed_avg_entry', 'holding', 'holding_since', 'spot_borrow', 'spot_leverage')
