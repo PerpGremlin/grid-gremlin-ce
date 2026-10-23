@@ -2430,6 +2430,18 @@ def spec_U108_a_carry_row_survives_the_carry_form_unchanged():
         back = row_from_form(form_from_row(json.loads(json.dumps(row))))
         assert validate_portfolio(json.loads(json.dumps(back))) == \
             validate_portfolio(json.loads(json.dumps(row))), row['name']
+    # U108b, the owner's form: shares typed as fractions, spot leverage 5 —
+    # refused with "the weights' sizes sum to 0.01, not 5"
+    row = row_from_form({'name': 'basket', 'capital': '1000',
+                         'assets': 'BTC 0.5, ETH 0.5', 'spot_leverage': '5'})
+    cfg = validate_portfolio(json.loads(json.dumps(row)))
+    assert [a['weight'] for a in cfg['assets']] == [2.5, 2.5]
+    assert cfg['spot_borrow'] and cfg['risk']['max_weight'] == 2.5
+    assert form_from_row(row)['assets'] == 'BTC 50, ETH 50'
+    assert form_from_row(row)['max_weight'] == '50'
+    for same in ('BTC 50, ETH 50', 'BTC 1, ETH 1', 'BTC 50%, ETH 50%'):
+        assert row_from_form({'name': 'b', 'capital': '1', 'assets': same})['assets'] == \
+            [{'coin': 'BTC', 'weight': 0.5}, {'coin': 'ETH', 'weight': 0.5}]
     odd = dict(_CARRY_ROWS[0], perp_leverage={'BTC': 50.0, 'ETH': 50.0, 'SOL': 40.0})
     try:
         form_from_row(odd)

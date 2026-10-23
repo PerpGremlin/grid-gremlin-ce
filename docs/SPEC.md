@@ -1652,6 +1652,10 @@ eventually pin (T1).
   loaders over the merged fleet and refuses a coin whose market another
   bot of the fleet trades (the build's I2 collision); the name is typed to
   write. Bybit, not Mainnet, from the panel.
+- **U108b** The carry form's weights are shares in any units (BTC 1, ETH 1 is half each),
+  scaled to fill the stack, spot leverage included; spot leverage turns
+  borrowing on; the most in one coin is a share of the basket, scaled
+  the same way.
 - **U104** A card is not drawn from a stopped fleet's last snapshot (the
   owner, 2026-10-22, after the flatten: "the demo accounts are all still
   running"). A bot its tombstone names reads RETIRED; a bot whose fleet's

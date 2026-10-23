@@ -16,9 +16,9 @@ ESSENTIAL = (
     ('capital', ('capital',), 'num', 'Investment',
      'the money the basket is built from, in USDT', True),
     ('assets', ('assets',), 'assets', 'Coins and weights',
-     'percent of the investment each, like BTC 50, ETH 50 — they add up to '
-     '100 (with spot leverage, to the leverage times 100); a minus is an '
-     'outright short of that share', True),
+     'each coin\'s share of the basket, like BTC 50, ETH 50 (or BTC 1, ETH 1: '
+     'the same); the panel scales them to the whole basket, spot leverage '
+     'included. A minus is an outright short of that share', True),
     ('hedge_ratio', ('hedge', 'ratio'), 'pct', 'Hedged',
      'percent of each coin held short on its perpetual: 100 = market '
      'neutral (the carry), 0 = no hedge. Blank = 100', False),
@@ -30,9 +30,10 @@ ESSENTIAL = (
 )
 ADVANCED = (
     ('spot_borrow', ('spot_borrow',), 'flag', 'Borrow on spot',
-     'lets the basket borrow USDT on spot (needed for spot leverage)', False),
+     'lets the basket borrow USDT on spot (spot leverage turns it on)', False),
     ('spot_leverage', ('margin', 'spot_leverage'), 'num', 'Spot leverage',
-     'the spot stack on a loan, 1 to 3x; needs borrow on spot. Blank = none', False),
+     'the spot stack on a loan, 1 to 10x: 5 buys five times the investment '
+     'in coins. Blank = none', False),
     ('borrow_apr_max', ('margin', 'borrow_apr_max'), 'pct', 'Most borrow rate',
      'yearly percent; above it the loan is cut back to 1x. Blank = 8', False),
     ('every_hours', ('rebalance', 'every_hours'), 'num', 'Rebalance every (h)',
@@ -61,7 +62,7 @@ ADVANCED = (
      'percent gap between a coin\'s perp and spot that flattens that coin. '
      'Blank = 1', False),
     ('max_weight', ('risk', 'max_weight'), 'pct', 'Most in one coin',
-     'percent of the stack. Blank = 50', False),
+     'percent of the basket. Blank = 50', False),
     ('max_loss', ('risk', 'max_loss'), 'num', 'Most it may lose',
      'in USDT, counted from the moment below; then the basket closes. Blank '
      '= no limit', False),
@@ -86,14 +87,15 @@ def _number(d):
 
 
 def _assets(text):
+    """[(coin, share as Decimal)] — shares in any units; row_from_form
+    scales them to the stack (U108b: BTC 0.5, ETH 0.5 was read as 1 %)."""
     out = []
     for part in [p for p in str(text).replace(';', ',').split(',') if p.strip()]:
         bits = part.split()
         if len(bits) != 2:
             raise ValueError(f'Coins and weights: "{part.strip()}" is not a coin and '
                              'a percent, like BTC 50')
-        out.append({'coin': bits[0].upper(),
-                    'weight': float(_dec(bits[1].rstrip('%'), bits[0]) / 100)})
+        out.append((bits[0].upper(), _dec(bits[1].rstrip('%'), bits[0])))
     if not out:
         raise ValueError('Coins and weights: name at least one, like BTC 50, ETH 50')
     return out
@@ -133,6 +135,20 @@ def row_from_form(form):
             row[path[0]] = v
         else:
             row.setdefault(path[0], {})[path[1]] = v
+    # U108b: the shares fill the stack — the investment times the spot
+    # leverage — whatever units they were typed in; the most in one coin
+    # is a share of the basket, scaled the same way
+    lev = Decimal(str((row.get('margin') or {}).get('spot_leverage', 1)))
+    if 'margin' in row:
+        row['spot_borrow'] = True                    # a loan needs the right (D24)
+    shares = row.get('assets') or []
+    total = sum(abs(sh) for _, sh in shares)
+    if not total:
+        raise ValueError('Coins and weights: the shares add up to nothing')
+    row['assets'] = [{'coin': c, 'weight': float(sh / total * lev)} for c, sh in shares]
+    if lev != 1:
+        mw = (row.get('risk') or {}).get('max_weight', 0.5)
+        row.setdefault('risk', {})['max_weight'] = float(Decimal(str(mw)) * lev)
     if 'regime' in row:
         row['regime'].setdefault('source', 'structure')
     if 'hedge' in row:
@@ -148,6 +164,7 @@ def form_from_row(row):
         raise ValueError('the hedge differs by coin — edit it in the fleet file')
     if row.get('spot_quote', 'USDT') != 'USDT' or row.get('account') or row.get('venue', 'bybit') != 'bybit':
         raise ValueError('a basket on another quote, account or venue is edited in the fleet file')
+    lev = Decimal(str((row.get('margin') or {}).get('spot_leverage', 1)))
     vals = {}
     for n, path, kind, _, _, _ in FIELDS:
         v = row.get(path[0])
@@ -156,7 +173,9 @@ def form_from_row(row):
         if v is None:
             continue
         if kind == 'assets':
-            vals[n] = ', '.join(f"{a['coin']} {_pct(a['weight'])}" for a in v)
+            vals[n] = ', '.join(f"{a['coin']} {_pct(Decimal(str(a['weight'])) / lev)}" for a in v)
+        elif n == 'max_weight':
+            vals[n] = _pct(Decimal(str(v)) / lev)
         elif kind == 'pct':
             vals[n] = _pct(v)
         elif kind == 'flag':
@@ -173,7 +192,8 @@ def form_from_row(row):
 
 
 def _pct(x):
-    return format((Decimal(str(x)) * 100).normalize(), 'f')
+    d = (Decimal(str(x)) * 100).quantize(Decimal('1e-8')).normalize()
+    return format(d, 'f')
 
 
 def sentence(cfg):
