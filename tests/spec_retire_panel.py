@@ -328,3 +328,37 @@ def spec_U104_a_stopped_or_retired_bot_is_not_drawn_from_the_last_picture():
             assert 'stopped' not in h._with_run_state(str(fleet), copy.deepcopy(c))
         finally:
             subprocess.run = real
+
+
+def spec_U104b_a_halted_portfolio_card_says_stopped_and_its_last_seen_book():
+    """The portfolio card of a stopped fleet said it "waits for the
+    fleet's restart", as if a restart were coming, when the fleet was
+    stopped by choice. It says stopped (or retired), as the market card
+    does, and what the row held as last seen, the exchange having the
+    word; "nothing" only when the last snapshot read flat. Sabotage:
+    without the halt the card draws the snapshot's money as now."""
+    from panel.card import card
+    pv = {'stack_value': 500.0, 'cash': 10.0, 'total': 3.0,
+          'stack': {'BTC': {'coins': 0.005, 'value': 400.0}, 'ETH': {'coins': 0.0, 'value': 0.0}},
+          'legs': [{'kind': 'hedge', 'coin': 'BTC', 'symbol': 'BTCUSDT', 'size': 0.005, 'inverse': False},
+                   {'kind': 'hedge', 'coin': 'ETH', 'symbol': 'ETHUSDT', 'size': 0.0, 'inverse': False}],
+          'assets': [{'coin': 'BTC', 'weight': 1.0}]}
+    c = {'window_hours': 24.0, 'generated_ms': 0, 'bots': {}, 'unowned': {},
+         'terms': {'pfocarry': {'strategy': 'portfolio', 'assets': [{'coin': 'BTC'}], 'hedges': {}}}}
+    belief = {'pfocarry': {'alive': True, 'portfolio': pv}}
+    live = card(0, 'pfocarry', None, c, belief)
+    assert 'since its anchor' in live and 'last seen' not in live      # running: as before
+    for key, val, word in (('stopped', 'inactive', 'STOPPED'), ('retired', ['pfocarry'], 'RETIRED')):
+        cc = dict(c, **{key: val})
+        for full in (False, True):
+            html = card(0, 'pfocarry', None, cc, belief, full=full)
+            assert f'>{word}<' in html and 'restart' not in html, (word, full)
+            assert 'since its anchor' not in html, (word, full)       # not the snapshot's money
+            assert 'last seen holding BTC 0.005, hedge BTCUSDT 0.005' in html, (word, html)
+            assert 'ETH 0' not in html and 'the exchange has the word' in html
+        flat = {'pfocarry': {'portfolio': dict(pv, stack={}, legs=[])}}
+        assert 'last seen holding nothing' in card(0, 'pfocarry', None, cc, flat)
+        unseen = card(0, 'pfocarry', None, cc, {})
+        assert 'not known here' in unseen and 'holding nothing' not in unseen
+        assert 'restart' not in unseen
+    assert 'its fleet is stopped' in card(0, 'pfocarry', None, dict(c, stopped='inactive'), belief)

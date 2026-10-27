@@ -919,6 +919,16 @@ eventually pin (T1).
   the answer says what is left. A row the engine refuses (D52) is never
   retired, so a clear is refused naming it, before anything is touched.
   *(the review of 2026-10-27)*
+- **X15g** What the tools close carries the bot's own link: close's
+  market order (X15, and retire's through it, X15c/X15f) is linked as the
+  stop-flatten's is (I5), rung 0 at a generation from the clock, through
+  the venue's own `make_link` (Hyperliquid's 16 bytes; rung 0 prints one
+  character, so I3's build check has sized it). The readout books its fill
+  to the bot by I1, whatever its window shows — unlinked, it was the bot's
+  only under R16, while the window showed the bot holding. It is a market
+  order and never rests, so the engine has nothing to adopt or replace;
+  its fill reads to the engine as the bot's own exit (M14), never an
+  outside hand. *(the backlog, 2026-10-27)*
 - **X16** A bot removed leaves nothing under its name. A bot's name is its
   coin, side and kind, so a new bot of the same name read every fact the
   old one left. One helper (`gridgremlin.forget.forget_bot`) forgets them
@@ -1737,6 +1747,13 @@ eventually pin (T1).
   read flat. With no units given the card is unchanged. *(corrected
   2026-10-27: the halted card had said "holding nothing" and "position
   closed" over positions nobody had read)*
+- **U104b** A halted portfolio card says the same: STOPPED or RETIRED
+  under its heading, never that it waits for a restart (a fleet stopped
+  by choice is not coming back by itself), and its book as last seen —
+  each coin of the stack and each hedge or short leg the engine's last
+  snapshot held, the exchange having the word; "nothing" only when that
+  snapshot read flat, and not known without one. *(the backlog,
+  2026-10-27)*
 - **U67** *(retired by D96, 2026-10-12: the front page's right half is
   U78's)* The fleet page is
   two halves on a wide screen — the bots, and the

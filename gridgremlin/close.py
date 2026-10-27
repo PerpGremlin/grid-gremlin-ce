@@ -19,13 +19,18 @@
 #   unless the venue holds exactly the size the operator read.
 # - not spot: a spot "position" is the wallet's coins, the operator's own
 #   stack included.
+# - the order carries the bot's own link (X15g): the stop-flatten's, rung 0
+#   at a fresh generation, so the readout books its fill to the bot by I1
+#   whatever its window shows — unlinked, it was the bot's only under R16,
+#   while the window showed the bot holding.
 # Prints one JSON object; a refusal is {"refused": "..."}.
 import json
 import sys
+import time
 from pathlib import Path
 
 from .adapters import adapter_for
-from .apply import make_botid
+from .apply import make_botid, make_link
 from .config import market_rows, ConfigError, validate_fleet
 from common.env import load_env
 from .exchange.errors import VenueError
@@ -38,6 +43,17 @@ def command(fleet_path, botid, dry=False, expect=None, real_money=False):
             + (['--dry'] if dry else [])
             + (['--expect', f'{expect:.10g}'] if expect is not None else [])
             + (['--allow-mainnet'] if real_money else []))
+
+
+def close_link(client, botid, now=None):
+    """X15g: the link a close from outside carries — the bot's own, rung 0
+    as its stop-flatten's (I5), at a generation from the clock (the engine
+    seeds its own from the clock at start, so a later close is a new link).
+    Rung 0 prints one character, so I3's build check already sized it; on
+    Hyperliquid the venue's own make_link checks the 16 bytes again."""
+    gen = int(time.time() if now is None else now)
+    mk = getattr(client, 'make_link', None)
+    return mk(botid, 0, gen) if mk else make_link(botid, 0, gen)
 
 
 def close_position(cfg, client, adapter, tombstoned, dry=False, expect=None):
@@ -78,7 +94,7 @@ def close_position(cfg, client, adapter, tombstoned, dry=False, expect=None):
     client.place_market(cfg['market_type'], cfg['symbol'], exit_,
                         adapter.fmt_qty(size),
                         adapter.position_idx(exit_, True) or 0,
-                        reduce_only=True)
+                        reduce_only=True, link_id=close_link(client, botid))   # X15g
     left, mark, _ = held()                 # X4: re-read, never assume
     return dict(out, closed=size - left, left=left, mark=mark)
 

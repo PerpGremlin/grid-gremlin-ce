@@ -664,6 +664,21 @@ def _rebalanced(reb):
         reb.get('trigger', 'clock'), f' · rebalanced every {every:g} h')
 
 
+def last_seen_book(v):
+    """U104b: a halted portfolio row's book as last seen — each coin of its
+    stack and each hedge or short leg open in the engine's last snapshot,
+    the exchange having the word. "Nothing" only when that snapshot read
+    flat; no snapshot, not known."""
+    if not v:
+        return 'what it holds is not known here — the exchange has the word'
+    held = ([f"{c} {(s or {}).get('coins') or 0.0:.6g}" for c, s in sorted((v.get('stack') or {}).items())
+             if abs((s or {}).get('coins') or 0.0) > 1e-12]
+            + [f"{g.get('kind')} {g.get('symbol')} {g.get('size') or 0.0:.6g}" for g in v.get('legs') or []
+               if abs(g.get('size') or 0.0) > 1e-12])
+    return (f"last seen holding {', '.join(held) if held else 'nothing'} "
+            "(the engine's last snapshot) — the exchange has the word")
+
+
 def portfolio_card(idx, botid, contract, belief, full=False):
     """H6: the portfolio's card — the stack's value and coins, one line per
     asset (weight target → actual, hedge ratio target → actual, coins
@@ -672,7 +687,11 @@ def portfolio_card(idx, botid, contract, belief, full=False):
     import html as _h
     terms = (contract.get('terms') or {}).get(botid) or {}
     halted = halt_of(contract, botid)                    # U104
+    last_seen = None
     if halted:
+        # a stopped row parks and never flattens: its last book is the last
+        # word the page has, said as last seen (U104b)
+        last_seen = ((belief.get(botid) or {}).get('portfolio') or {}) if botid in belief else None
         belief = {}
     bl = belief.get(botid) or {}
     v = bl.get('portfolio') or {}
@@ -694,7 +713,11 @@ def portfolio_card(idx, botid, contract, belief, full=False):
               f" (their cash {v.get('others_cash') or 0.0:+,.2f} {q}, not this row's)"
               if v.get('siblings') else '')
     facts = ''
-    if not v:
+    if halted:                                                     # U104b
+        head = (f'<span class="big dim">{HALT_HEAD[halted]}</span>'
+                f'<div class="dim">{esc(last_seen_book(last_seen))}</div>')
+        body = ''
+    elif not v:
         head = ('<span class="big dim">waits for the fleet\'s restart</span>' if botid not in belief
                 else '<span class="big dim">not yet valued</span>')
         body = ''

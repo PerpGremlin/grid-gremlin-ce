@@ -614,7 +614,7 @@ class _CloseVenue:
     """Just what the close command touches: truth and one market order."""
 
     def __init__(self, positions, mark=11.1):
-        self.positions, self.mark, self.orders = positions, mark, []
+        self.positions, self.mark, self.orders, self.links = positions, mark, [], []
 
     def read_symbol_truth(self, market_type, symbol, funding_interval=480.0):
         return {'mark': self.mark, 'positions': {
@@ -623,6 +623,7 @@ class _CloseVenue:
     def place_market(self, market_type, symbol, side, qty, position_idx=0,
                      reduce_only=False, link_id=None, borrow=False):
         self.orders.append((side, qty, position_idx, reduce_only))
+        self.links.append(link_id)
         left = self.positions[position_idx]['size'] - float(qty)
         if left <= 1e-12:
             del self.positions[position_idx]
@@ -661,6 +662,81 @@ def spec_X15_a_running_bot_and_a_spot_holding_are_refused():
                           venue, ADAPTER, True)
     assert 'spot holding' in spot['refused']
     assert venue.orders == []
+
+
+def _close_fills(link):
+    """The window after a close: the bot's entries older than it, so all it
+    shows of the bot is the close — a 0.021 buy on the short's exit side."""
+    return [{'time_ms': 5, 'side': 'buy', 'price': 11.1, 'qty': 0.021, 'fee': 0.0,
+             'link_id': link, 'symbol': 'BTCUSDT', 'exec_id': 'e5',
+             'market_type': 'linear', 'venue_closed': False}]
+
+
+_CLOSERS = {('linear', 'BTCUSDT', 'sell'): 'linBTCUSDTl',
+            ('linear', 'BTCUSDT', 'buy'): 'linBTCUSDTs'}
+
+
+def spec_X15g_the_close_carries_the_bots_own_link_and_is_booked_to_it():
+    """The command-line close sent its order unlinked, so the readout booked
+    the fill to the bot only under R16, while the window showed the bot
+    holding — after a month's turn of the window, nobody's. It carries the
+    bot's own link now, the stop-flatten's (rung 0), and I1 books it."""
+    from gridgremlin.apply import rung_of
+    from gridgremlin.close import close_link, close_position
+    from gridgremlin.report import ledger, owner_of
+    venue = _CloseVenue({2: {'side': 'Sell', 'size': 0.021, 'avg_entry': 11.2}})
+    close_position(_short_row(), venue, ADAPTER, True)
+    [link] = venue.links
+    assert rung_of(link, 'linBTCUSDTs') == 0 and rung_of(link, 'linBTCUSDTl') is None
+    assert owner_of(link, ['linBTCUSDTl', 'linBTCUSDTs']) == 'linBTCUSDTs'
+    books = ledger(_close_fills(link), ['linBTCUSDTl', 'linBTCUSDTs'],
+                   entry_sides={'linBTCUSDTl': 'buy', 'linBTCUSDTs': 'sell'},
+                   closers=_CLOSERS)
+    assert books['linBTCUSDTs']['bought'] == 0.021
+    assert ('unowned', 'BTCUSDT') not in books
+    # a later close is a new link (R12b counts an order by its link)
+    assert close_link(venue, 'linBTCUSDTs', now=100) != close_link(venue, 'linBTCUSDTs', now=101)
+
+
+def spec_X15g_sabotage_unlinked_the_close_is_nobodys_once_the_window_turns():
+    """The sabotage half: the same fill without the link is R16's only
+    while the window shows the bot holding — here it shows it flat."""
+    from gridgremlin.report import ledger
+    books = ledger(_close_fills(''), ['linBTCUSDTl', 'linBTCUSDTs'],
+                   entry_sides={'linBTCUSDTl': 'buy', 'linBTCUSDTs': 'sell'},
+                   closers=_CLOSERS)
+    assert 'linBTCUSDTs' not in books and ('unowned', 'BTCUSDT') in books
+
+
+def spec_X15g_on_hyperliquid_the_close_link_fits_sixteen_bytes():
+    """I3: rung 0 prints one character, so a row whose links fit fits its
+    close; the venue's own make_link (base-36 generation) checks again."""
+    from gridgremlin.apply import rung_of
+    from gridgremlin.close import close_link
+    from gridgremlin.exchange.hyperliquid.venue import HLVenueClient
+
+    class _HL:
+        make_link = HLVenueClient.make_link
+    from gridgremlin.apply import check_link_fits
+    check_link_fits('linDOGEl', 9, 16, gen_chars=4)       # the build's I3 passes
+    link = close_link(_HL(), 'linDOGEl', now=1_761_500_000)
+    assert len(link.encode()) <= 16 and rung_of(link, 'linDOGEl') == 0
+
+
+def spec_X15g_the_engine_reads_the_close_as_its_own_exit_never_an_outside_hand():
+    """The engine never mistakes the close for one of its rung orders: it is
+    a market order, it never rests, so nothing is adopted or replaced. Its
+    fill reads as the bot's own exit (M14) — a revived bot is not killed for
+    an outside close the tools made."""
+    from gridgremlin.close import close_link
+    entry = {'time_ms': 1, 'side': 'sell', 'price': 11.2, 'qty': 0.021,
+             'link_id': 'linBTCUSDTs-3-1', 'symbol': 'BTCUSDT'}
+    for link, kind in ((close_link(None, 'linBTCUSDTs', now=7), 'exit'),
+                       ('', 'an outside close')):
+        bot = _bot(FakeVenue(mark=11.1), [], side='short')
+        closing = dict(entry, time_ms=5, side='buy', price=11.1, link_id=link)
+        bot._own_fills_all = lambda: [entry, closing]
+        assert bot._how_round_ended() == kind, (link, kind)
 
 
 class _RetireVenue(_CloseVenue):
@@ -708,6 +784,7 @@ def spec_X15c_retiring_a_bot_tombstones_cancels_what_it_owns_and_closes():
     assert tombs.d == {'linBTCUSDTs': 'retired (D92)'}
     assert venue.cancelled == ['o1', 'o2'] and done['orders_left'] == []
     assert venue.orders == [('Buy', '0.021', 2, True)] and done['held_left'] == 0.0
+    assert [lk.rsplit('-', 1)[0] for lk in venue.links] == ['linBTCUSDTs-0']    # X15g
     assert [o['order_id'] for o in venue.resting] == ['o3', 'o4'] and venue.positions[1]['size'] == 0.05
     assert 'refused' in retire_bot(_short_row(market_type='spot', side='long'), venue, ADAPTER, tombs, 'x')
 
