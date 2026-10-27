@@ -18,6 +18,7 @@ PRODUCTS = ('usdt', 'usdc', 'inverse')
 TRIGGERS = ('clock', 'drift', 'either')
 H = 3_600_000
 CASH_RESERVE = 0.003         # of the cash a tick spends, kept for the buys' fees (three refusals by a hair, 2026-10-08)
+MOVE_SLICE = 5000.0          # H17: the most one market order of a hedge's move to another perpetual carries, in quote
 
 
 def validate_portfolio(row, where='row'):
@@ -179,7 +180,8 @@ def validate_portfolio(row, where='row'):
     w = f'{where}.rebalance'
     if not isinstance(reb, dict):
         _refuse(f'{w}: an object {{every_hours, drift_pct, min_notional}}')
-    _reject_unknown(reb, ('every_hours', 'drift_pct', 'min_notional', 'cash_reserve', 'trigger'), w)
+    _reject_unknown(reb, ('every_hours', 'drift_pct', 'min_notional', 'cash_reserve', 'trigger',
+                          'move_slice'), w)
     # H3c: what starts a rebalance — the clock (every_hours), a weight past
     # the drift at any read, or either
     reb['trigger'] = _enum(reb, 'trigger', w, TRIGGERS, default='clock')
@@ -188,6 +190,9 @@ def validate_portfolio(row, where='row'):
     reb['min_notional'] = _num(reb, 'min_notional', w, least=0.0) or 0.0
     cr = _fraction(reb, 'cash_reserve', w, zero_means_off=True, most=0.05)
     reb['cash_reserve'] = CASH_RESERVE if cr is None else cr
+    # H17: a hedge moved to another perpetual goes over in slices of at most
+    # this much quote a read, new market first — one order stays small on a thin book
+    reb['move_slice'] = _num(reb, 'move_slice', w, least=0.0, least_open=True) or MOVE_SLICE
     cfg['rebalance'] = reb
 
     # --- the regime tilt (opt-in) ---------------------------------------------------
@@ -310,13 +315,20 @@ def plan_portfolio(cfg, book, prices, now_ms, last_tick_ms, regimes=None,
     'targets'}. H3c: with the trigger 'drift' or 'either', every read
     between ticks is planned the same way — only a leg past the drift
     moves, and cash buys only once it is past the drift of the stack — and
-    says 'tick': False, so the clock is not reset by it."""
+    says 'tick': False, so the clock is not reset by it. H16: on the clock
+    between ticks the plan still hedges what it holds — a hedge short of
+    its ratio past the drift is sold up to it, every read; nothing else
+    moves, and nothing is bought back until the tick."""
     reb = cfg['rebalance']
     trigger = reb.get('trigger', 'clock')
     due = last_tick_ms is None or (trigger != 'drift' and now_ms - last_tick_ms >= reb['every_hours'] * H)
-    if not due and trigger == 'clock':
-        return {'tick': False, 'orders': [], 'targets': {}}
     regimes, funding_trailing = regimes or {}, funding_trailing or {}
+    if not due and trigger == 'clock':
+        orders, targets = [], {}
+        _hedges(cfg, [a for a in cfg['assets'] if a['weight'] > 0], dict(book.get('coins') or {}),
+                dict(book.get('hedged') or {}), prices, regimes, funding_trailing, orders, targets,
+                grow_only=True)
+        return {'tick': False, 'orders': orders, 'targets': targets}
     coins = dict(book.get('coins') or {})
     hedged, shorts = dict(book.get('hedged') or {}), dict(book.get('shorts') or {})
     cash = float(book.get('cash') or 0.0)
@@ -377,16 +389,33 @@ def plan_portfolio(cfg, book, prices, now_ms, last_tick_ms, regimes=None,
         if abs(target_q - have_q) * p / max(stack, 1e-9) > reb['drift_pct']:
             want(('short', c), 'sell' if target_q > have_q else 'buy', abs(target_q - have_q), p,
                  'outright short')
-    for a in longs:                                                 # (4)
+    _hedges(cfg, longs, coins, hedged, prices, regimes, funding_trailing, orders, targets)   # (4)
+    return {'tick': due, 'orders': orders, 'targets': targets}
+
+
+def _hedges(cfg, longs, coins, hedged, prices, regimes, funding_trailing, orders, targets,
+            grow_only=False):
+    """H3 (4): each long's hedge past the drift of its holding, resized to
+    its ratio. `grow_only` (H16, the clock between ticks): only a hedge
+    short of its ratio is sold up to it — a coin held unhedged is never
+    left so until the tick."""
+    reb = cfg['rebalance']
+    for a in longs:
         c, p = a['coin'], prices[a['coin']]
         ratio = hedge_ratio(cfg, c, regimes.get(c), funding_trailing.get(c))
         want_q = ratio * coins.get(c, 0.0)
         have_q = hedged.get(c, 0.0)
-        targets[c]['ratio'] = ratio
-        targets[c]['hedge_coins'] = want_q
+        t = targets.setdefault(c, {})
+        t['ratio'] = ratio
+        t['hedge_coins'] = want_q
         held_v = coins.get(c, 0.0) * p
+        if grow_only and want_q <= have_q:
+            continue
         if held_v > 0 and abs(want_q - have_q) * p / held_v > reb['drift_pct']:
+            q = abs(want_q - have_q)
+            if q <= 0 or q * p < reb['min_notional']:
+                continue
             why = ('funding stood the hedge down' if ratio == 0 and cfg['hedges'][c]['ratio'] > 0
-                   else 'hedge')
-            want(('hedge', c), 'sell' if want_q > have_q else 'buy', abs(want_q - have_q), p, why)
-    return {'tick': due, 'orders': orders, 'targets': targets}
+                   else 'hedge what it holds' if grow_only else 'hedge')
+            orders.append({'leg': ('hedge', c), 'side': 'sell' if want_q > have_q else 'buy',
+                           'coins': q, 'why': why})

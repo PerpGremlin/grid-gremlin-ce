@@ -105,11 +105,10 @@ def portfolio_legs(cfg, client):
     <COIN>USDT, usdc → linear <COIN>PERP, inverse → <COIN>USD), and the
     outright shorts the same way. Refuses by name what the venue lacks."""
     from .portfolio import leg_markets
+    from .portfolio_bot import resolve_leg
     legs = {'spot': {}, 'hedge': {}, 'short': {}}
     for kind, coin, market_type, symbol, _ in leg_markets(cfg):
-        spec = parse_instrument(market_type, client.instruments_info(market_type, symbol))
-        legs[kind][coin] = {'market_type': market_type, 'symbol': symbol,
-                            'adapter': adapter_for(market_type, spec), 'spec': spec}
+        legs[kind][coin] = resolve_leg(client, market_type, symbol)
     return legs
 
 

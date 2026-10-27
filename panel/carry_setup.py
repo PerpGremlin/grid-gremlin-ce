@@ -53,6 +53,9 @@ ADVANCED = (
      'in USDT: a rebalance smaller than this is left. Blank = 0', False),
     ('cash_reserve', ('rebalance', 'cash_reserve'), 'pct', 'Cash kept for fees',
      'percent of each buy. Blank = 0.3', False),
+    ('move_slice', ('rebalance', 'move_slice'), 'num', 'Hedge move slice',
+     'in USDT: a coin\'s hedge moved to another perpetual goes over in market '
+     'orders of at most this, the new short first, a slice a read. Blank = 5000', False),
     ('regime_tilt', ('regime', 'tilt'), 'pct', 'Regime tilt',
      'percent the hedge leans with the market reading (the tilt fleet ran '
      '30). Blank = no tilt', False),

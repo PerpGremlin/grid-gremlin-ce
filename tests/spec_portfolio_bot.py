@@ -39,6 +39,7 @@ class FakeCarryVenue:
         self.n = 0
 
     im = None
+    settles_coin = False
 
     def read_wallet(self):
         eq = sum(q * self.marks.get(f'{c}USDT', 1.0) for c, q in self.coins.items())
@@ -54,12 +55,12 @@ class FakeCarryVenue:
                 pos = {0: {'side': 'Buy', 'size': q, 'avg_entry': None}}
         else:
             pos = {i: dict(p) for i, p in (self.positions.get(symbol) or {}).items()}
-        return {'mark': self.marks[symbol], 'positions': pos, 'orders': []}
+        return {'mark': self.marks.get((mt, symbol), self.marks[symbol]), 'positions': pos, 'orders': []}
 
     def place_market(self, mt, symbol, side, qty, position_idx=0, reduce_only=False,
                      link_id=None, borrow=False, quote_qty=None):
         self.n += 1
-        q, px = float(qty), self.marks[symbol]
+        q, px = float(qty), self.marks.get((mt, symbol), self.marks[symbol])
         if quote_qty is not None:                       # H2: a cash buy says the quote
             assert mt == 'spot' and side == 'Buy'
             self.quote_buys = getattr(self, 'quote_buys', 0) + 1
@@ -83,6 +84,9 @@ class FakeCarryVenue:
                 p['size'] = tot
             else:
                 assert reduce_only and p['size'] + 1e-9 >= q, f'buying back {q} of {p["size"]}'
+                if mt == 'inverse' and self.settles_coin:   # the venue settles the realised coin
+                    base = symbol[:-3]
+                    self.coins[base] = self.coins.get(base, 0.0) + q * (1.0 / px - 1.0 / p['avg_entry'])
                 p['size'] -= q
             if p['size'] <= 1e-12:
                 book.pop(position_idx, None)
@@ -94,7 +98,8 @@ class FakeCarryVenue:
         return {'orderId': str(self.n)}
 
     def fills_history(self, mt, symbol, since_ms, now_ms):
-        return [f for f in self.fills if f['symbol'] == symbol and since_ms <= f['time_ms'] <= now_ms]
+        return [f for f in self.fills if f['symbol'] == symbol and f['market_type'] == mt
+                and since_ms <= f['time_ms'] <= now_ms]
 
     def funding_history(self, mt, symbol, since_ms, now_ms):
         return [f for f in self.funding if f['symbol'] == symbol and since_ms < f['time_ms'] <= now_ms]
@@ -112,13 +117,22 @@ def _legs(hedge='inverse'):
     return legs
 
 
+def _leg_for(mt, symbol):
+    """The suite's catalogue (H17: a market the row moves off, built on demand)."""
+    coin = symbol[:3]
+    ad = {'inverse': INV, 'linear': LIN}[mt].get(coin)
+    if ad is None or ad.symbol != symbol:
+        raise KeyError(f'{symbol}: no such market')
+    return {'market_type': mt, 'symbol': symbol, 'adapter': ad}
+
+
 def _bot(venue, lines, row=None, legs=None, tmp=None, clock=None):
     tmp = tmp or Path(tempfile.mkdtemp())
     state = PortfolioState(tmp / 'portfolio_state.json')
     tombs = Tombstones(tmp / 'tombstones.json')
     cfg = validate_config(dict(ROW, **(row or {})))
     bot = PortfolioBot(cfg, legs or _legs(), venue, Notifier(sink=lines.append), state,
-                       tombstones=tombs, clock=clock)
+                       tombstones=tombs, clock=clock, leg_builder=_leg_for)
     return bot, tmp
 
 
@@ -168,7 +182,7 @@ def spec_H2_the_first_tick_buys_the_stack_from_capital_and_hedges_it_then_nothin
     assert len(venue.orders) == 4                                            # no second stack bought
 
 
-def spec_H3_inverse_funding_joins_the_book_as_coins_and_the_hedge_grows_over_them_at_the_tick():
+def spec_H3_inverse_funding_joins_the_book_as_coins_and_the_hedge_grows_over_them_at_once():
     venue, lines, clock = _venue(), [], Clock()
     venue.t_ms = int(clock.t * 1000)
     bot, _ = _bot(venue, lines, clock=clock)
@@ -180,12 +194,14 @@ def spec_H3_inverse_funding_joins_the_book_as_coins_and_the_hedge_grows_over_the
     bot.cycle()
     assert bot.row['cash'] == 0.0 and bot.row['funding_total'] == 6000.0     # coins in the book; the carry line in quote
     assert abs(bot.row['coins']['BTC'] - 0.8) < 1e-9 and abs(bot.row['coins']['ETH'] - 16.0) < 1e-9
-    assert len(venue.orders) == 4                                            # not a tick yet
-    clock.t += DAY; venue.t_ms = int(clock.t * 1000)
-    bot.cycle()
+    # not a tick, but the hedge grows over them on this read (H16): 6.7% > 5%
     assert [o for o in venue.orders[4:] if o[0] == 'spot'] == []            # nothing to buy: the coins are here
     hedge = [(o[1], o[2], o[3]) for o in venue.orders[4:] if o[0] == 'inverse']
-    assert hedge == [('BTCUSD', 'Sell', 3000.0), ('ETHUSD', 'Sell', 3000.0)]  # the hedge grows over them: 6.7% > 5%
+    assert hedge == [('BTCUSD', 'Sell', 3000.0), ('ETHUSD', 'Sell', 3000.0)]
+    assert bot.row['last_tick_ms'] == 1_000_000_000                         # the clock stays
+    clock.t += DAY; venue.t_ms = int(clock.t * 1000)
+    bot.cycle()
+    assert len(venue.orders) == 6                                            # the tick finds it hedged
     assert bot.portfolio_view['carry']['total'] == 6000.0
 
 
@@ -1574,3 +1590,378 @@ def spec_H13b_money_moved_in_or_out_of_the_account_is_the_accounts_never_the_row
     assert bot.row['outside_cash'] == 0.0 and abs(bot.row['contributed'] + 49000.0) < 1.0
     assert abs(v['value'] - 51000.0) < 1.0 and abs(v['total']) < 1.0 and bot.alive
     assert any("49,000.00 USDT moved out beyond the account's own" in ln for ln in lines)
+
+
+def spec_H16_the_basis_stops_re_entry_brings_the_hedge_back_and_a_second_stop_unwinds_both_legs():
+    """A demo basket's HYPE pair (2026-10-26): the basis stop unwound the
+    pair; the basis closed between weekly ticks and the parked cash bought
+    the coin back — but the plan, on the clock, wanted nothing until the
+    tick, so the coin stood unhedged, and every later stop sold the spot
+    alone. Now the pair re-enters as a pair, its hedge first."""
+    venue, lines, clock = _venue(), [], Clock()
+    venue.t_ms = int(clock.t * 1000)
+    bot, _ = _bot(venue, lines, row={'rebalance': {'cash_reserve': 0, 'every_hours': 168}}, clock=clock)
+    bot.cycle()
+    venue.marks['ETHUSD'] = 3060.0                                           # 2% over spot: the stop
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    bot.cycle()
+    assert 'ETH' in bot.row['unwound'] and not venue.positions.get('ETHUSD')
+    venue.marks['ETHUSD'] = 3000.0                                           # back, between ticks
+    clock.t += 3600; venue.t_ms = int(clock.t * 1000)
+    n = len(venue.orders)
+    out = bot.cycle()
+    back = [(o[1], o[2], o[3], o[5]) for o in venue.orders[n:]]
+    assert back == [('ETHUSD', 'Sell', 45000.0, False), ('ETHUSDT', 'Buy', 15.0, False)], back   # hedge first
+    assert out['tick'] is False and bot.row['unwound'] == {}
+    assert venue.positions['ETHUSD'][0]['size'] == 45000.0                   # hedged at its ratio, at once
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    n = len(venue.orders)
+    bot.cycle()
+    assert len(venue.orders) == n                                            # and nothing doubled
+    assert not any('(H16)' in ln and ' warn ' in ln for ln in lines)
+    # the second stop sees the pair whole and unwinds both legs again
+    venue.marks['ETHUSD'] = 3060.0
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    n = len(venue.orders)
+    bot.cycle()
+    two = [(o[1], o[2], o[3]) for o in venue.orders[n:]]
+    lost = 45000.0 * (1 / 3000.0 - 1 / 3060.0)                                # the first stop's hedge loss, paid in ETH (H8)
+    assert [t[:2] for t in two] == [('ETHUSD', 'Buy'), ('ETHUSDT', 'Sell')] and two[0][2] == 45000.0
+    assert abs(two[1][2] - (15.0 - lost)) < 1e-4
+
+
+def spec_H16_a_refused_re_entry_hedge_keeps_the_coin_parked():
+    from gridgremlin.exchange.errors import VenueError
+    venue, lines, clock = _venue(), [], Clock()
+    venue.t_ms = int(clock.t * 1000)
+    bot, _ = _bot(venue, lines, row={'rebalance': {'cash_reserve': 0, 'every_hours': 168}}, clock=clock)
+    bot.cycle()
+    venue.marks['ETHUSD'] = 3060.0
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    bot.cycle()
+    real = venue.place_market
+
+    def margin(mt, symbol, side, *a, **k):
+        if (symbol, side) == ('ETHUSD', 'Sell'):
+            raise VenueError('retCode 110007: ab not enough for new order', kind='other')
+        return real(mt, symbol, side, *a, **k)
+    venue.place_market = margin
+    venue.marks['ETHUSD'] = 3000.0
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    n = len(venue.orders)
+    bot.cycle()
+    assert len(venue.orders) == n and venue.coins.get('ETH', 0.0) == 0.0     # no buy without its hedge
+    assert 'ETH' in bot.row['unwound'] and bot.row['parked'] == {'ETH': 45000.0}
+    assert any('re-entry hedge refused' in ln for ln in lines)
+    venue.place_market = real
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    bot.cycle()
+    assert [(o[1], o[2]) for o in venue.orders[n:]] == [('ETHUSD', 'Sell'), ('ETHUSDT', 'Buy')]
+
+
+def spec_H16_a_restart_onto_a_held_coin_without_its_hedge_hedges_it_on_the_first_read():
+    venue, lines, clock = _venue(), [], Clock()
+    venue.t_ms = int(clock.t * 1000)
+    row = {'rebalance': {'cash_reserve': 0, 'every_hours': 168}}
+    bot, tmp = _bot(venue, lines, row=row, clock=clock)
+    bot.cycle()
+    venue.positions['ETHUSD'] = {}                                           # the hedge gone, the coins held
+    clock.t += 3600; venue.t_ms = int(clock.t * 1000)
+    again, _ = _bot(venue, lines, row=row, tmp=tmp, clock=clock)
+    out = again.cycle()
+    assert [(o[1], o[2], o[3], o[5]) for o in venue.orders[4:]] == [('ETHUSD', 'Sell', 45000.0, False)]
+    assert out == {'placed': 1, 'tick': False} and again.row['last_tick_ms'] == 1_000_000_000
+    # over-hedged between ticks is left for the tick: nothing is bought back
+    venue.positions['BTCUSD'][0]['size'] = 60000.0
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    again.cycle()
+    assert len(venue.orders) == 5
+
+
+def _phone(bot, lines, clock):
+    """The bot's notifier swapped for the phone's, past the fleet's start (D60)."""
+    from gridgremlin.events import TelegramNotifier
+    sent = []
+    n = TelegramNotifier('t', 'c', transport=sent.append, clock=lambda: clock.t, sink=lines.append)
+    n.startup = False
+    bot.notify = n
+    return sent, n
+
+
+def spec_H16_the_funding_rules_stand_down_is_said_every_read_as_info_never_paged():
+    """The stand-down is the row's own choice: an info line every read and
+    on the card, never the phone's (D60) — an hourly page for days is noise."""
+    from gridgremlin.events import PERSIST_COUNT
+    venue, lines, clock = _venue(), [], Clock()
+    venue.t_ms = int(clock.t * 1000)
+    bot, _ = _bot(venue, lines, row={'rebalance': {'cash_reserve': 0, 'every_hours': 168}}, clock=clock)
+    bot.cycle()
+    venue.positions['ETHUSD'] = {}
+    t0 = venue.t_ms
+    venue.market_funding_rates = lambda mt, symbol, since, now: (
+        [(t0 - 2 * 86_400_000, -0.001)] if symbol == 'ETHUSD' else [])        # ETH's market pays the long
+    sent, phone = _phone(bot, lines, clock)
+    for _ in range(PERSIST_COUNT + 2):
+        clock.t += 61; venue.t_ms = int(clock.t * 1000)
+        bot.cycle()
+    assert len(venue.orders) == 4                                            # the rule holds it unhedged
+    said = [ln for ln in lines if 'ETH: held unhedged' in ln]
+    assert len(said) == PERSIST_COUNT + 2
+    assert all(' info ' in ln and 'funding rule stood its hedge down' in ln for ln in said)
+    assert not any('held unhedged' in t for t in sent + phone._buffer)       # never paged
+    assert not any('BTC: held unhedged' in ln for ln in lines)               # BTC is hedged
+    eth = next(a for a in bot.portfolio_view['assets'] if a['coin'] == 'ETH')
+    assert eth['unhedged'] == 'the funding rule stood its hedge down (H3b)'  # the card says why
+
+
+def spec_H16_a_refused_hedge_on_a_held_coin_warns_every_read_and_reaches_the_phone():
+    from gridgremlin.events import PERSIST_COUNT
+    from gridgremlin.exchange.errors import VenueError
+    venue, lines, clock = _venue(), [], Clock()
+    venue.t_ms = int(clock.t * 1000)
+    bot, _ = _bot(venue, lines, row={'rebalance': {'cash_reserve': 0, 'every_hours': 168}}, clock=clock)
+    bot.cycle()
+    venue.positions['ETHUSD'] = {}
+    real = venue.place_market
+
+    def margin(mt, symbol, side, *a, **k):
+        if (symbol, side) == ('ETHUSD', 'Sell'):
+            raise VenueError('retCode 110007: ab not enough for new order', kind='other')
+        return real(mt, symbol, side, *a, **k)
+    venue.place_market = margin
+    sent, phone = _phone(bot, lines, clock)
+    for _ in range(PERSIST_COUNT + 2):
+        clock.t += 61; venue.t_ms = int(clock.t * 1000)
+        bot.cycle()
+    said = [ln for ln in lines if 'ETH: held unhedged' in ln]
+    assert len(said) == PERSIST_COUNT + 2
+    assert all(' warn ' in ln and 'its hedge was refused' in ln for ln in said)
+    assert any('held unhedged' in t for t in sent + phone._buffer)           # persisting: the phone hears
+
+
+# --- H17: a coin's hedge moves to another perpetual -------------------------------
+
+def _usdt_legs():
+    legs = _legs()
+    legs['hedge']['ETH'] = {'market_type': 'linear', 'symbol': 'ETHUSDT', 'adapter': LIN['ETH']}
+    return legs
+
+
+def _moved(cap=None, legacy=True, before=None):
+    """A basket hedged on inverse for both coins, then restarted on a file
+    that names usdt for ETH. `legacy`: the state as a build before H17
+    wrote it, with no market kept beside the hedge's book."""
+    venue, lines, clock = _venue(), [], Clock()
+    venue.t_ms = int(clock.t * 1000)
+    reb = {'cash_reserve': 0, 'every_hours': 168}
+    bot, tmp = _bot(venue, lines, row={'rebalance': reb}, clock=clock)
+    bot.cycle()
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    bot.cycle()                                    # its fills in its books, as a live row's are
+    if before:
+        before(venue, bot, clock)
+    if legacy:
+        r = bot.state.get(bot.botid)
+        r.pop('hedge_markets', None)
+        bot.state.set(bot.botid, r)
+    row = {'rebalance': dict(reb, **({'move_slice': cap} if cap else {})),
+           'hedge': {'ETH': {'product': 'usdt', 'ratio': 1.0}}}
+    clock.t += 3600; venue.t_ms = int(clock.t * 1000)
+    again, _ = _bot(venue, lines, row=row, legs=_usdt_legs(), tmp=tmp, clock=clock)
+    return venue, lines, clock, again, row, tmp
+
+
+def _exposure(venue):
+    """ETH short across both markets, in coins (the inverse at its mark)."""
+    lin = sum(p['size'] for p in (venue.positions.get('ETHUSDT') or {}).values())
+    inv = sum(p['size'] for p in (venue.positions.get('ETHUSD') or {}).values())
+    return lin + inv / venue.marks['ETHUSD']
+
+
+def _refusing(venue, mt, symbol, side, err=None):
+    from gridgremlin.exchange.errors import VenueError
+    real = venue.place_market
+
+    def place(m, sym, sd, *a, **k):
+        if (m, sym, sd) == (mt, symbol, side):
+            raise err or VenueError('retCode 110007: ab not enough for new order', kind='other')
+        return real(m, sym, sd, *a, **k)
+    venue.place_market = place
+    return real
+
+
+def spec_H17_a_held_inverse_hedge_switched_to_usdt_moves_on_one_read_new_first_then_old():
+    """A demo basket's HYPE hedge (2026-10-27): the file names usdt for a
+    coin hedged on inverse. On its first read the row opens the new short
+    at the coin's ratio, then closes the old with a reduce-only order of
+    its own link — the coin's exposure the same within a lot — and the old
+    market's book is kept beside the new one, so the money lines hold. A
+    state from before H17, with no market kept, is read from the venue."""
+    def fall(venue, bot, clock):                   # the old short has made money before the move
+        venue.settles_coin = True
+        for k in ('ETHUSDT', 'ETHUSD'):
+            venue.marks[k] = 2900.0
+        clock.t += 61; venue.t_ms = int(clock.t * 1000)
+        bot.cycle()
+        fall.total = bot.portfolio_view['total']
+    venue, lines, clock, bot, row, _ = _moved(cap=100000, before=fall)
+    n = len(venue.orders)
+    bot.cycle()
+    went = [(o[0], o[1], o[2], o[5]) for o in venue.orders[n:]]
+    assert went == [('linear', 'ETHUSDT', 'Sell', False), ('inverse', 'ETHUSD', 'Buy', True)], went
+    assert venue.orders[n + 1][3] == 45000.0                                 # the old closed whole
+    assert all(o[6].startswith('pfocarry-hETH-') for o in venue.orders[n:])  # the row's own link
+    opened = venue.orders[n][3]
+    coins = 15.0 + 45000.0 * (1 / 2900.0 - 1 / 3000.0)                       # H8: its open coin P&L counted
+    assert abs(opened - coins) < 0.01, opened                                # at the coin's ratio (H16 sizing)
+    assert not venue.positions.get('ETHUSD') and venue.positions['BTCUSD'][0]['size'] == 45000.0
+    assert sum(1 for ln in lines if 'hedge (move ETH hedge ETHUSD → ETHUSDT' in ln) == 2
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    n = len(venue.orders)
+    bot.cycle()
+    assert len(venue.orders) == n                                            # moved: nothing more
+    books = bot.row['books']
+    assert abs(books['hedge:ETH']['position'] - opened) < 1e-9
+    old = books['hedge:ETH:ETHUSD']
+    assert old['position'] == 0.0 and old['market_type'] == 'inverse' and old['realized'] > 0
+    assert bot.row['hedge_markets']['ETH'] == ['linear', 'ETHUSDT']
+    assert any("ETH's hedge moved" in ln for ln in lines)
+    v = bot.portfolio_view
+    assert abs(v['total'] - fall.total) < 1.0, (v['total'], fall.total)      # the move made and lost nothing
+    old_leg = [g for g in v['legs'] if g['symbol'] == 'ETHUSD']
+    assert len(old_leg) == 1 and old_leg[0]['size'] == 0.0 and old_leg[0]['realized'] > 0   # on the card
+
+
+def spec_H17_a_refused_new_short_closes_nothing_and_warns_every_read():
+    venue, lines, clock, bot, row, _ = _moved(cap=100000)
+    real = _refusing(venue, 'linear', 'ETHUSDT', 'Sell')
+    n = len(venue.orders)
+    for _ in range(3):
+        bot.cycle()
+        clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    assert venue.orders[n:] == [] and venue.positions['ETHUSD'][0]['size'] == 45000.0
+    said = [ln for ln in lines if 'the ETHUSDT short was refused' in ln]
+    assert len(said) == 3 and all(' warn ' in ln for ln in said), said
+    assert not any('ETH: held unhedged' in ln for ln in lines)               # the old short still hedges it
+    venue.place_market = real
+    bot.cycle()
+    assert [(o[1], o[2]) for o in venue.orders[n:]] == [('ETHUSDT', 'Sell'), ('ETHUSD', 'Buy')]
+
+
+def spec_H17_a_refused_close_pages_retries_every_read_and_never_opens_more():
+    venue, lines, clock, bot, row, _ = _moved(cap=100000)
+    real = _refusing(venue, 'inverse', 'ETHUSD', 'Buy')
+    sent, phone = _phone(bot, lines, clock)
+    n = len(venue.orders)
+    for _ in range(3):
+        bot.cycle()
+        clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    assert [(o[1], o[2], o[3]) for o in venue.orders[n:]] == [('ETHUSDT', 'Sell', 15.0)]   # once
+    assert venue.positions['ETHUSD'][0]['size'] == 45000.0
+    tried = [ln for ln in lines if 'closing 45000 ETHUSD was refused' in ln]
+    assert len(tried) == 3, tried                                            # every read
+    assert any('ETHUSD was refused' in t for t in sent + phone._buffer)      # paged
+    venue.place_market = real
+    bot.cycle()
+    assert [(o[1], o[2], o[3]) for o in venue.orders[n:]][1:] == [('ETHUSD', 'Buy', 45000.0)]
+    assert abs(_exposure(venue) - 15.0) < 1e-9
+    # in slices: a refused close holds the move at its first slice, every read
+    venue, lines, clock, bot, row, _ = _moved()
+    real = _refusing(venue, 'inverse', 'ETHUSD', 'Buy')
+    n = len(venue.orders)
+    for _ in range(4):
+        bot.cycle()
+        clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    assert [(o[1], o[2], o[3]) for o in venue.orders[n:]] == [('ETHUSDT', 'Sell', 1.67)]
+    venue.place_market = real
+    bot.cycle()
+    assert [(o[1], o[2], o[3]) for o in venue.orders[n:]][1:] == [('ETHUSD', 'Buy', 5010.0)]   # the slice's own close
+    assert abs(_exposure(venue) - 15.0) < 1e-9
+
+
+def spec_H17_after_the_move_the_basis_is_read_from_the_new_market():
+    venue, lines, clock, bot, row, _ = _moved(cap=100000)
+    bot.cycle()
+    venue.marks['ETHUSD'] = 3100.0                                           # the old market is not the row's now
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    n = len(venue.orders)
+    bot.cycle()
+    assert len(venue.orders) == n and 'ETH' not in bot.row['unwound']
+    venue.marks[('linear', 'ETHUSDT')] = 3060.0                              # the new one's basis past the stop
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    bot.cycle()
+    assert 'ETH' in bot.row['unwound']
+    assert [(o[0], o[1], o[2]) for o in venue.orders[n:]] == [('linear', 'ETHUSDT', 'Buy'), ('spot', 'ETHUSDT', 'Sell')]
+    venue.marks[('linear', 'ETHUSDT')] = 3000.0                              # back under half the stop
+    clock.t += 3600; venue.t_ms = int(clock.t * 1000)
+    n = len(venue.orders)
+    bot.cycle()
+    assert [(o[0], o[1], o[2]) for o in venue.orders[n:]] == [('linear', 'ETHUSDT', 'Sell'), ('spot', 'ETHUSDT', 'Buy')]
+
+
+def spec_H17_a_restart_mid_move_finishes_the_close_without_opening_again():
+    # the box goes down between the two legs: the new short is open, the
+    # old still open, and the read never finished
+    venue, lines, clock, bot, row, tmp = _moved(cap=100000)
+    real = _refusing(venue, 'inverse', 'ETHUSD', 'Buy', err=RuntimeError('the box lost power'))
+    try:
+        bot.cycle()
+        raise AssertionError('the read was meant to die')
+    except RuntimeError:
+        pass
+    venue.place_market = real
+    assert venue.positions['ETHUSDT'][2]['size'] == 15.0 and venue.positions['ETHUSD'][0]['size'] == 45000.0
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    again, _ = _bot(venue, lines, row=row, legs=_usdt_legs(), tmp=tmp, clock=clock)
+    n = len(venue.orders)
+    again.cycle()
+    assert [(o[1], o[2], o[3]) for o in venue.orders[n:]] == [('ETHUSD', 'Buy', 45000.0)]
+    assert abs(_exposure(venue) - 15.0) < 1e-9
+
+
+def _slices(venue, clock, bot, cap, reads_most=30, restart=None):
+    """Reads until the old short is gone; each read must be one slice, new
+    first, at most `cap` a leg, the exposure matched after it."""
+    reads = 0
+    while venue.positions.get('ETHUSD') and reads < reads_most:
+        if restart and reads == restart[0]:
+            bot = restart[1]()
+        n = len(venue.orders)
+        bot.cycle()
+        reads += 1
+        went = venue.orders[n:]
+        assert [(o[1], o[2]) for o in went] == [('ETHUSDT', 'Sell'), ('ETHUSD', 'Buy')], went
+        assert went[0][3] * 3000.0 <= cap + 30.0 and went[1][3] <= cap + 30.0
+        assert abs(_exposure(venue) - 15.0) < 1e-9, _exposure(venue)
+        if venue.positions.get('ETHUSD'):
+            moving = next(a for a in bot.portfolio_view['assets'] if a['coin'] == 'ETH')['moving']
+            assert moving.startswith(f"moving ETH's hedge: {reads} of "), moving
+        clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    return reads, bot
+
+
+def spec_H17_a_move_bigger_than_its_slice_goes_slice_by_slice_matched_at_every_read():
+    """The owner (2026-10-27): on a thin book the move scales out of one
+    market while scaling into the other — each read a slice on the new
+    market, then the same exposure closed on the old."""
+    venue, lines, clock, bot, row, _ = _moved(legacy=False)                  # the default slice: 5,000
+    reads, bot = _slices(venue, clock, bot, 5000.0)
+    assert reads == 9
+    assert any("moving ETH's hedge: 1 of 9 slices" in ln for ln in lines)
+    assert abs(venue.positions['ETHUSDT'][2]['size'] - 15.0) < 1e-9
+    n = len(venue.orders)
+    bot.cycle()
+    assert len(venue.orders) == n                                            # done
+    venue2, _, clock2, bot2, _, _ = _moved(cap=15000.0)
+    assert _slices(venue2, clock2, bot2, 15000.0)[0] == 3                    # the cap sets the count
+
+
+def spec_H17_a_restart_mid_slices_carries_on_from_the_books():
+    venue, lines, clock, bot, row, tmp = _moved()
+
+    def restart():
+        return _bot(venue, lines, row=row, legs=_usdt_legs(), tmp=tmp, clock=clock)[0]
+    reads, _ = _slices(venue, clock, bot, 5000.0, restart=(4, restart))
+    assert reads == 9
+    sold = sum(o[3] for o in venue.orders if o[1] == 'ETHUSDT' and o[0] == 'linear' and o[2] == 'Sell')
+    assert abs(sold - 15.0) < 1e-9                                           # never doubled

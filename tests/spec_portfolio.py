@@ -34,7 +34,8 @@ def spec_H1_the_row_is_its_assets_hedges_clock_and_risk_with_stated_defaults():
     assert cfg['venue'] == 'bybit' and cfg['account'] is None      # the fleet's, once in one
     assert [a['coin'] for a in cfg['assets']] == ['BTC', 'ETH', 'SOL']
     assert cfg['hedges'] == {c: {'product': 'inverse', 'ratio': 1.0} for c in ('BTC', 'ETH', 'SOL')}
-    assert cfg['rebalance'] == {'trigger': 'clock', 'every_hours': 24.0, 'drift_pct': 0.05, 'min_notional': 0.0, 'cash_reserve': 0.0}
+    assert cfg['rebalance'] == {'trigger': 'clock', 'every_hours': 24.0, 'drift_pct': 0.05, 'min_notional': 0.0, 'cash_reserve': 0.0,
+                               'move_slice': 5000.0}
     assert validate_config({k: v for k, v in _row().items() if k != 'rebalance'})['rebalance']['cash_reserve'] == 0.003
     assert cfg['funding_rule'] == {'stand_down_below': 0.0, 'trailing_days': 7.0}
     assert cfg['risk'] == {'margin_floor_pct': 0.4, 'basis_stop_pct': 0.01, 'max_weight': 0.5}
@@ -82,8 +83,9 @@ def spec_H1_every_shape_the_design_refuses_is_refused_by_name():
 def spec_H3_between_ticks_nothing_is_wanted_and_at_a_tick_the_weights_then_the_hedges():
     cfg = validate_config(_row())
     book = {'coins': {'BTC': 1.0, 'ETH': 10.0}, 'hedged': {}, 'cash': 0.0}
-    quiet = plan_portfolio(cfg, book, PX, now_ms=DAY, last_tick_ms=DAY - 3_600_000)
-    assert quiet == {'tick': False, 'orders': [], 'targets': {}}
+    hedged = dict(book, hedged={'BTC': 1.0, 'ETH': 10.0})
+    quiet = plan_portfolio(cfg, hedged, PX, now_ms=DAY, last_tick_ms=DAY - 3_600_000)
+    assert not quiet['tick'] and quiet['orders'] == []
     plan = plan_portfolio(cfg, book, PX, now_ms=DAY, last_tick_ms=0)
     assert plan['tick']
     # the stack is 60,000 + 30,000 = 90,000: BTC wants 36,000 (has 60,000, 27% out),
@@ -218,7 +220,8 @@ def spec_H3c_a_rebalance_starts_on_the_clock_the_drift_or_either():
     hour = DAY - 3_600_000
     clock = validate_config(_row())
     assert clock['rebalance']['trigger'] == 'clock'
-    assert plan_portfolio(clock, off, PX, DAY, hour) == {'tick': False, 'orders': [], 'targets': {}}
+    held = dict(off, hedged={'BTC': 1.0, 'ETH': 10.0})
+    assert plan_portfolio(clock, held, PX, DAY, hour)['orders'] == []         # drifted, hedged: waits
     for trigger in ('drift', 'either'):
         cfg = validate_config(_row(rebalance={'cash_reserve': 0, 'trigger': trigger}))
         plan = plan_portfolio(cfg, off, PX, DAY, hour)
@@ -229,3 +232,15 @@ def spec_H3c_a_rebalance_starts_on_the_clock_the_drift_or_either():
     assert plan_portfolio(validate_config(_row(rebalance={'trigger': 'either'})), off, PX, DAY, 0)['tick']
     assert not plan_portfolio(validate_config(_row(rebalance={'trigger': 'drift'})), off, PX, 10 * DAY, 0)['tick']
     assert plan_portfolio(validate_config(_row(rebalance={'trigger': 'drift'})), off, PX, DAY, None)['tick']
+
+
+def spec_H16_between_ticks_on_the_clock_a_hedge_short_of_its_ratio_is_sold_up_and_nothing_else_moves():
+    cfg = validate_config(_row())
+    hour = DAY - 3_600_000
+    off = {'coins': {'BTC': 1.0, 'ETH': 10.0}, 'hedged': {'BTC': 1.0}, 'cash': 0.0}   # BTC drifted, ETH unhedged
+    plan = plan_portfolio(cfg, off, PX, DAY, hour)
+    assert not plan['tick']
+    assert [(o['leg'], o['side'], o['coins'], o['why']) for o in plan['orders']] == [
+        (('hedge', 'ETH'), 'sell', 10.0, 'hedge what it holds')]
+    over = dict(off, hedged={'BTC': 2.0, 'ETH': 10.0})                       # over-hedged: the tick's
+    assert plan_portfolio(cfg, over, PX, DAY, hour)['orders'] == []

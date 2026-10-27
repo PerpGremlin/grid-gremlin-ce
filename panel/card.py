@@ -750,7 +750,9 @@ def portfolio_card(idx, botid, contract, belief, full=False):
             w, act = a.get('weight') or 0.0, a.get('actual') or 0.0
             hedged, coins = a.get('hedged') or 0.0, (v.get('stack') or {}).get(a['coin'], {}).get('coins') or 0.0
             ratio_act = (hedged / coins) if coins else 0.0
-            note = ('unwound (basis)' if a.get('unwound') else
+            note = (a['moving'] if a.get('moving') else                       # H17
+                    'unwound (basis)' if a.get('unwound') else
+                    f"unhedged: {a['unhedged']}" if a.get('unhedged') else       # H16
                     f"regime {a['regime']}" if a.get('regime') else '')
             rows += (f"<tr><td>{a['coin']}</td>"
                      + (f"<td>{w:.0%} → {act:.0%}</td>" if w > 0 else f"<td>short {abs(w):.0%}</td>")
@@ -827,7 +829,8 @@ def holdings_table(v, q, now_ms):
     for g in v.get('legs') or []:
         what = f"{esc(g['symbol'])} {'hedge' if g['kind'] == 'hedge' else 'short'}"
         size = (f"{n(g['size'], ',.0f')} USD" if g['inverse'] else f"{n(g['size'])} {esc(g['coin'])}")
-        rows += (f"<tr><td>{what}</td><td>−{size}</td><td>{n(g['avg'])}</td><td>{n(g['mark'])}</td>"
+        size = 'closed (H17)' if g.get('closed') else f'−{size}'       # a hedge's old market, moved off
+        rows += (f"<tr><td>{what}</td><td>{size}</td><td>{n(g['avg'])}</td><td>{n(g['mark'])}</td>"
                  f"<td></td>{money(g['unreal'])}{money(g['realized'])}</tr>")
     # H9b: each coin with its hedge, the pair's result — a short of the coin
     # gains what the coins lose; the inverse contract's convexity is the rest

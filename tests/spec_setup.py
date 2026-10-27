@@ -2570,13 +2570,51 @@ def spec_U111_a_running_carry_bot_is_edited_from_its_edit_tab():
         rows = [r for r in json.loads((d / 'f.json').read_text())['bots'] if r.get('strategy') == 'portfolio']
         assert len(rows) == 1 and rows[0]['capital'] == 2000 and rows[0]['rebalance']['trigger'] == 'drift'
         for change, said in ((dict(edit, assets='BTC 100', max_weight='100'), 'SOL is taken out'),
-                             (dict(edit, assets='BTC 50, SOL -50'), 'SOL turns from long'),
-                             (dict(edit, hedge_each='SOL usdt'), 'SOL moves from its inverse perpetual to usdt')):
+                             (dict(edit, assets='BTC 50, SOL -50'), 'SOL turns from long')):
             refused = _call(base, '/setup-carry', change)
             assert 'class="refusal"' in refused and said in refused, (said, refused[:600])
         assert 'name="edit" value="pfobasket"' in refused                     # the refusal keeps the edit
+        # H17: a hedged coin moved to another perpetual is the engine's to carry over, said
+        moved = _call(base, '/setup-carry', dict(edit, hedge_each='SOL usdt'))
+        assert 'edit: gates passed' in moved and 'class="refusal"' not in moved, moved[:800]
+        assert ("SOL&#x27;s hedge moves from inverse to usdt on the next read: the new short opens, "
+                'then the old one closes') in moved, moved[:1200]
     finally:
         close()
+
+
+def spec_U111c_a_hedges_move_to_another_perpetual_is_allowed_and_said_the_rest_still_refused():
+    """H17: the engine carries a hedge over to another perpetual, so the
+    edit allows it and says what will happen; a coin taken out, a side
+    turned, an outright short's market changed are still refused."""
+    from gridgremlin.portfolio import validate_portfolio
+    from panel.pages.carry_flow import stranded
+
+    def row(**k):
+        return validate_portfolio(dict({'strategy': 'portfolio', 'name': 'basket', 'capital': 1000,
+                                        'assets': [{'coin': 'BTC', 'weight': 0.5}, {'coin': 'HYPE', 'weight': 0.5}],
+                                        'hedge': {'product': 'inverse', 'ratio': 1.0}}, **k))
+    was = row()
+    said = stranded(was, row(hedge={'HYPE': {'product': 'usdt', 'ratio': 1.0},
+                                    'BTC': {'product': 'inverse', 'ratio': 1.0}}))
+    assert said == ["HYPE's hedge moves from inverse to usdt on the next read: the new short opens, then "
+                    'the old one closes, a slice of at most 5,000 USDT a read (H17)'], said
+    assert stranded(was, row()) == []
+    for now, words in ((row(assets=[{'coin': 'BTC', 'weight': 1.0}], risk={'max_weight': 1.0}), 'HYPE is taken out'),
+                       (row(assets=[{'coin': 'BTC', 'weight': 0.5}, {'coin': 'HYPE', 'weight': -0.5}]),
+                        'HYPE turns from long')):
+        try:
+            stranded(was, now)
+            raise AssertionError(f'not refused: {words}')
+        except ValueError as e:
+            assert words in str(e), e
+    short = row(assets=[{'coin': 'BTC', 'weight': 0.5}, {'coin': 'HYPE', 'weight': -0.5}])
+    try:
+        stranded(short, row(assets=[{'coin': 'BTC', 'weight': 0.5}, {'coin': 'HYPE', 'weight': -0.5}],
+                            hedge={'HYPE': {'product': 'usdc'}}))
+        raise AssertionError('an outright short moved was not refused')
+    except ValueError as e:
+        assert 'HYPE moves from its usdt perpetual to usdc' in str(e), e
 
 
 def spec_U108c_the_carry_form_reads_a_row_whole_or_says_why_not():

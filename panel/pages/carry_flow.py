@@ -15,8 +15,10 @@ from panel.html_bits import named, refusal_box
 def stranded(was, now):
     """U111: an edit that would leave a running bot's coins or shorts with
     nothing managing them is refused in words — a coin taken out, a long
-    turned short or back, a coin's perpetual changed (the old short would
-    stay open on the old market)."""
+    turned short or back, an outright short's perpetual changed (the old
+    short would stay open on the old market). A hedged coin moved to
+    another perpetual is the engine's to carry over (H17): allowed, and
+    what will happen is returned in words, one line a coin."""
     sign = {a['coin']: a['weight'] > 0 for a in now['assets']}
     for a in was['assets']:
         c = a['coin']
@@ -26,6 +28,7 @@ def stranded(was, now):
         if sign[c] != (a['weight'] > 0):
             raise ValueError(f'{c} turns from {"long" if a["weight"] > 0 else "short"} to the other '
                              'side: flatten the bot first, or set up a new one')
+    said = []
     for kind in ('hedges', 'short_products'):
         for c, h in (was.get(kind) or {}).items():
             if isinstance(h, dict) and not h.get('ratio'):
@@ -33,10 +36,17 @@ def stranded(was, now):
             p0 = h['product'] if isinstance(h, dict) else h
             n = (now.get(kind) or {}).get(c)
             p1 = n['product'] if isinstance(n, dict) else n
-            if p1 is not None and p1 != p0:
-                raise ValueError(f'{c} moves from its {p0} perpetual to {p1}: the {p0} short would '
-                                 'stay open with nothing managing it — flatten the bot first, or '
-                                 'set up a new one')
+            if p1 is None or p1 == p0:
+                continue
+            if kind == 'hedges' and n.get('ratio'):
+                said.append(f"{c}'s hedge moves from {p0} to {p1} on the next read: the new short "
+                            'opens, then the old one closes, a slice of at most '
+                            f"{now['rebalance']['move_slice']:,.0f} USDT a read (H17)")
+                continue
+            raise ValueError(f'{c} moves from its {p0} perpetual to {p1}: the {p0} short would '
+                             'stay open with nothing managing it — flatten the bot first, or '
+                             'set up a new one')
+    return said
 
 
 FUNDING_TTL_S = 1800        # a market's funding record, kept this long by the panel
@@ -130,6 +140,7 @@ class CarryFlowPages:
                                  f'{self._fleet_venue(fi)} (D78)')
             row = row_from_form(form)
             cfg = validate_portfolio(json.loads(json.dumps(row)), 'the carry bot')
+            moves = []
             botid = row_botid(row)
             fleet = json.loads(json.dumps(fleet_raw))
             edit = form.get('edit')
@@ -138,7 +149,7 @@ class CarryFlowPages:
                 if at is None or botid != edit:
                     raise ValueError(f'{edit}: not in this fleet any more — reload its edit tab')
                 old = fleet['bots'][at]
-                stranded(validate_portfolio(json.loads(json.dumps(old)), 'its row now'), cfg)
+                moves = stranded(validate_portfolio(json.loads(json.dumps(old)), 'its row now'), cfg)
                 kept = {a['coin']: a['holding'] for a in old.get('assets') or [] if a.get('holding')}
                 for a in row['assets']:
                     if a['coin'] in kept:
@@ -204,6 +215,7 @@ class CarryFlowPages:
             f'<h1>{html.escape(botid)} — {"edit" if form.get("edit") else "create"}: gates passed</h1>'
             '<div class="fsec"><h1 class="dim">in plain words</h1>'
             f'<p class="say">{html.escape(sentence(cfg))}</p>'
+            + ''.join(f'<p class="say">{html.escape(m)}</p>' for m in moves) +
             '<table><tr><th>leg</th><th>market</th><th>kind</th><th>USDT at its weight</th></tr>'
             f'{legs}</table></div>' + self._funding(form) +
             '<div class="fsec"><form method="post" action="/setup-carry">'

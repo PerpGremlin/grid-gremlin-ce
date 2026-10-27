@@ -316,3 +316,14 @@ def spec_H11_each_coin_shows_its_spot_and_hedge_leverage_up_to_the_venues():
     v.update(borrowed=120.0, leverage=None, spot_leverage_most=3.0)        # the engine's None: equity gone
     html = position_page(0, 'demo', 'pfocarry', c, c['watchdog']['belief']['bots'])
     assert "spot: loan exceeds equity" in html and "spot 1.00×" not in html   # never the calmest number (audit 10-16)
+
+
+def spec_H16_the_card_says_why_a_held_coin_is_unhedged():
+    import copy
+    from panel.position_view import position_page
+    contract = copy.deepcopy(CONTRACT)
+    view = contract['watchdog']['belief']['bots']['pfocarry']['portfolio']
+    btc = next(a for a in view['assets'] if a['coin'] == 'BTC')
+    btc.update(regime=None, unwound=False, unhedged='the funding rule stood its hedge down (H3b)')
+    html = position_page(0, 'demo', 'pfocarry', contract, contract['watchdog']['belief']['bots'])
+    assert 'unhedged: the funding rule stood its hedge down (H3b)' in html

@@ -7,11 +7,12 @@ place. Orders are market orders at the tick (the research's fees): the
 engine's post-only law (G13) is the grid's, whose orders rest; a
 rebalance once a day is a taker act by design.
 """
+import math
 import time
 
 from .config import SPOT_LEVERAGE_MOST
 from .exchange.errors import VenueError
-from .portfolio import plan_portfolio, regime_word
+from .portfolio import hedge_ratio, plan_portfolio, regime_word
 
 READ_EVERY_S = 60.0          # the risk rules want a read a minute; the plan is daily
 OVERLAP_MS = 10 * 60 * 1000  # fills are re-read this far back and deduped by id
@@ -186,13 +187,30 @@ def set_perp_leverage(client, legs, want):
     return None
 
 
+def resolve_leg(client, market_type, symbol):
+    """A perp leg from the venue's catalogue (A1): its market, symbol,
+    adapter and spec — the build's legs, and (H17) a market a hedge moves
+    off, built when the move needs it."""
+    from .adapters import adapter_for
+    from .exchange.bybit.truth import parse_instrument
+    spec = parse_instrument(market_type, client.instruments_info(market_type, symbol))
+    return {'market_type': market_type, 'symbol': symbol,
+            'adapter': adapter_for(market_type, spec), 'spec': spec}
+
+
+def _same_size(a, b):
+    """H17: two short sizes are one position within 2% (a book of the
+    row's own fills against the venue's position)."""
+    return abs(a - b) <= max(0.02 * abs(b), 1e-9)
+
+
 class PortfolioBot:
     """`legs`: {'spot': {coin: {symbol, adapter}}, 'hedge': {coin:
     {market_type, symbol, adapter}}, 'short': {coin: {...}}} — resolved by
     the build from the venue's catalogue (A1), never from config."""
 
     def __init__(self, cfg, legs, client, notifier, state, tombstones=None,
-                 clock=None, regime_reader=None):
+                 clock=None, regime_reader=None, leg_builder=None):
         from .config import VENUE_ICONS
         from .events import VenueNotifier
         self.cfg, self.legs, self.client = cfg, legs, client
@@ -214,6 +232,10 @@ class PortfolioBot:
         self._next_read = 0.0
         self._warned = {}
         self._seq = 0
+        self._leg_for = leg_builder or (lambda mt, sym: resolve_leg(client, mt, sym))
+        self._old_legs = {}            # H17: the markets hedges move off, built once
+        self._moving_now = {}          # H17: {coin: (old leg, its size)} this read, for a flatten
+        self._old_left = {}            # H17: {coin: the old short's coins left after this read's slice}
         self.row = state.get(self.botid)
 
     # --- the state row ---------------------------------------------------------
@@ -396,6 +418,195 @@ class PortfolioBot:
 
     # --- reads --------------------------------------------------------------------
 
+    def _old_leg(self, mt, symbol):
+        """H17: a market a hedge moves off, from the catalogue — None while
+        it cannot be read (asked again at the next read)."""
+        key = (mt, symbol)
+        if key not in self._old_legs:
+            try:
+                self._old_legs[key] = self._leg_for(mt, symbol)
+            except (VenueError, OSError, KeyError, ValueError, TypeError, IndexError):
+                return None
+        return self._old_legs[key]
+
+    def _perp_legs(self):
+        """Every perp the row keeps a book on: [(kind, coin, leg, book key)]
+        — its hedges and shorts, and (H17) a hedge's old market while its move
+        is open and for an hour after, so the close's fills and the old
+        market's last funding still reach the old book."""
+        out = [(k, c, leg, f'{k}:{c}') for k in ('hedge', 'short') for c, leg in self.legs[k].items()]
+        for c, m in ((self.row or {}).get('moves') or {}).items():
+            leg = self._old_leg(*m['from'])
+            if leg is not None:
+                out.append(('hedge', c, leg, f"hedge:{c}:{m['from'][1]}"))
+        return out
+
+    def _infer_market(self, c, leg, truth):
+        """H17: the market a hedge's book is on, for a state from before
+        H17 kept it — the current leg's when the venue's short there is the
+        book's, else the coin's other perpetual whose short is; None while
+        a market cannot be read (asked again at the next read)."""
+        from .portfolio import PRODUCTS, leg_market
+        cur = [leg['market_type'], leg['symbol']]
+        book = self.row['books'].get(f'hedge:{c}')
+        if not book or book['position'] <= 0:
+            return cur
+        if truth is not None and _same_size(self._short_size(truth, leg)[0], book['position']):
+            return cur
+        for p in PRODUCTS:
+            mt, sym = leg_market(c, p)
+            if sym == leg['symbol'] and mt == leg['market_type']:
+                continue
+            old = self._old_leg(mt, sym)
+            if old is None:
+                continue                              # no such market on the venue
+            try:
+                size, _ = self._short_size(self.client.read_symbol_truth(mt, sym), old)
+            except (VenueError, OSError):
+                return None
+            if size > 0 and _same_size(size, book['position']):
+                return [mt, sym]
+        self._say_once(f'infer:{c}', 'warn', f"{c}: its hedge's book matches no market's short — "
+                                              f"taken as on {leg['symbol']} (H17)")
+        return cur
+
+    def _find_moves(self, perps, now_ms):
+        """H17: a coin whose file names another perpetual than the one its
+        hedge's book is on starts a move: the old market's book is kept apart
+        (`hedge:<coin>:<symbol>`, its own market type, its realised and fees
+        as they were), the coin's book starts on the new market, and the
+        move is kept in the state until the old short is gone."""
+        row = self.row
+        stamps = row.setdefault('hedge_markets', {})
+        moves = row.setdefault('moves', {})
+        for c, leg in self.legs['hedge'].items():
+            cur = [leg['market_type'], leg['symbol']]
+            st = stamps.get(c)
+            if st is None:
+                st = self._infer_market(c, leg, perps.get(('hedge', c)))
+                if st is None:
+                    continue
+                stamps[c] = st
+            if st == cur:
+                continue
+            m = moves.get(c)
+            if m and m.get('closed_ms') is None:
+                self._say_once(f'move2:{c}', 'warn',
+                               f"{c}: its hedge is still moving from {m['from'][1]} to {m['to'][1]} — "
+                               f"the move to {leg['symbol']} waits until it is done (H17)")
+                continue
+            key = f'hedge:{c}'
+            old = row['books'].pop(key, None) or {'position': 0.0, 'avg': 0.0, 'realized': 0.0, 'fees': 0.0}
+            kept = row['books'].get(f'{key}:{st[1]}')
+            if kept:                                  # moved off this market before: one book for it
+                old = dict(old, realized=old['realized'] + kept['realized'], fees=old['fees'] + kept['fees'])
+            row['books'][f'{key}:{st[1]}'] = dict(old, market_type=st[0], symbol=st[1])
+            moves[c] = {'from': st, 'to': cur, 'since_ms': now_ms, 'done': 0, 'slices': None,
+                        'closed_ms': None}
+            stamps[c] = cur
+            self.notify.event('info', self.botid,
+                              f"{c}'s hedge moves from {st[1]} to {leg['symbol']}: the new short opens, "
+                              'then the old one closes, a slice a read (H17)')
+        for c in [c for c, m in moves.items()
+                  if m.get('closed_ms') is not None and now_ms - m['closed_ms'] > 6 * OVERLAP_MS]:
+            del moves[c]                              # its last fills and funding are in its book
+
+    def _read_moving(self):
+        """H17: each open move's old leg and the venue's truth on it."""
+        out = {}
+        for c, m in ((self.row or {}).get('moves') or {}).items():
+            if m.get('closed_ms') is not None:
+                continue
+            leg = self._old_leg(*m['from'])
+            if leg is None:
+                self._say_once(f'moveleg:{c}', 'warn', f"{c}: moving its hedge, {m['from'][1]} cannot be "
+                                                       'read from the catalogue — asked again at the next read (H17)')
+                continue
+            out[c] = (leg, self.client.read_symbol_truth(*m['from']))
+        return out
+
+    def _move_slice(self, c, old, truth, plan_coins, held, prices, ratio, now_ms):
+        """H17: one read of a coin's hedge moving to another perpetual. A
+        slice of at most `move_slice` quote opens on the new market toward
+        the coin's ratio (H16's sizing), then the old market's short is cut by
+        what the two together carry past that ratio — reduce-only, the row's
+        own link — so the coin stays hedged within a slice throughout. A
+        refused new slice closes nothing (a warn, every read); a refused close
+        pages and is asked again every read, and nothing more opens while
+        the two together are past the ratio. Returns (orders placed, still
+        moving)."""
+        row, cfg = self.row, self.cfg
+        m = row['moves'][c]
+        new = self.legs['hedge'][c]
+        if m['to'] != [new['market_type'], new['symbol']]:
+            return 0, True                            # a second change: said by _find_moves
+        px = prices[c]
+        size, _ = self._short_size(truth, old)
+        if size <= 0 or not px:
+            if size <= 0:
+                m['closed_ms'] = now_ms
+                self.notify.event('info', self.botid, f"{c}'s hedge moved: {m['from'][1]} closed, "
+                                                      f"{new['symbol']} holds it (H17)")
+            return 0, size > 0
+        inv = old['market_type'] == 'inverse'
+        old_c = size / px if inv else size
+        self._old_left[c] = old_c
+        have = held['hedge'].get(c, 0.0)
+        target = 0.0 if c in row['unwound'] else ratio * plan_coins.get(c, 0.0)
+        cap = cfg['rebalance']['move_slice']
+        slice_c = cap / px
+        tol = 0.02 * slice_c
+        why = f"move {c} hedge {m['from'][1]} → {new['symbol']}"
+        placed, opened, asked = 0, 0.0, 0.0
+        if have + old_c <= target + tol:              # not past the ratio: a new slice first
+            asked = min(slice_c, max(target - have, 0.0))
+            if asked > 0:
+                try:
+                    opened = self._place('hedge', c, 'Sell', asked, px, f'{why}: the new short opens')
+                except (VenueError, OSError) as e:
+                    self.notify.event('warn', self.botid,
+                                      f"{c}: moving its hedge, the {new['symbol']} short was refused: {e} — "
+                                      f"nothing closed on {m['from'][1]}, asked again at the next read (H17)")
+                    return 0, True
+                if opened:
+                    placed += 1
+                    held['hedge'][c] = have = have + opened
+                    self.state.set(self.botid, row)  # durable before the close: a restart never opens it twice
+        over = have + old_c - target
+        cut = min(old_c, max(over, 0.0), slice_c + tol)
+        if asked > 0 and not opened:
+            cut = min(old_c, asked)                   # a new slice under the venue's minimum: a lot apart
+        ad = old['adapter']
+        if old_c - cut <= tol or not ad.meets_minimum(size, px):
+            units = size                              # the rest, whole
+        else:
+            units = min(ad.nearest_qty(cut * px if inv else cut), size)
+            if units <= 0 or not ad.meets_minimum(units, px):
+                self._note_slices(m, old_c, px, cap)
+                return placed, True
+        try:
+            self.client.place_market(old['market_type'], old['symbol'], 'Buy', ad.fmt_qty(units),
+                                     ad.position_idx('Buy', True) or 0, reduce_only=True,
+                                     link_id=self._link('hedge', c))
+        except (VenueError, OSError) as e:
+            self.notify.event('margin', self.botid,                 # the phone (D60)
+                              f"{c}: moving its hedge, closing {ad.fmt_qty(units)} {old['symbol']} was "
+                              f"refused: {e} — the old short stands beside the new one; asked again every "
+                              'read, nothing more opened (H17)', urgent=True)
+            self._note_slices(m, old_c, px, cap)
+            return placed, True
+        self.notify.event('order', self.botid,
+                          f"buy {ad.fmt_qty(units)} {old['symbol']} hedge ({why}: the old short closes)")
+        m['done'] += 1
+        left = old_c - (units / px if inv else units)
+        self._old_left[c] = left
+        self._note_slices(m, left, px, cap)
+        return placed + 1, True
+
+    @staticmethod
+    def _note_slices(m, left_c, px, cap):
+        m['slices'] = m['done'] + max(math.ceil(left_c * px / cap - 1e-9), 0)
+
     def _own_fills(self, mt, symbol, since_ms, now_ms):
         hist = getattr(self.client, 'fills_history', None)
         if hist is None:
@@ -438,17 +649,15 @@ class PortfolioBot:
                 if book is not None and f.get('price'):
                     spot_fill(book, f['side'], q, float(f['price']), float(f.get('fee') or 0.0))
                 fresh.append(f['exec_id'])
-        for kind in ('hedge', 'short'):
-            for coin, leg in self.legs[kind].items():
-                book = row['books'].setdefault(f'{kind}:{coin}',
-                                               {'position': 0.0, 'avg': 0.0, 'realized': 0.0, 'fees': 0.0})
-                for f in self._own_fills(leg['market_type'], leg['symbol'], since, now_ms):
-                    if f['exec_id'] in seen:
-                        continue
-                    seen.add(f['exec_id'])
-                    _apply(book, f['side'], float(f['price']), float(f['qty']),
-                           float(f.get('fee') or 0.0), leg['market_type'] == 'inverse')
-                    fresh.append(f['exec_id'])
+        for kind, coin, leg, key in self._perp_legs():
+            book = row['books'].setdefault(key, {'position': 0.0, 'avg': 0.0, 'realized': 0.0, 'fees': 0.0})
+            for f in self._own_fills(leg['market_type'], leg['symbol'], since, now_ms):
+                if f['exec_id'] in seen:
+                    continue
+                seen.add(f['exec_id'])
+                _apply(book, f['side'], float(f['price']), float(f['qty']),
+                       float(f.get('fee') or 0.0), leg['market_type'] == 'inverse')
+                fresh.append(f['exec_id'])
         row['seen'] = (row['seen'] + fresh)[-400:]
         row['fills_to_ms'] = now_ms
 
@@ -468,27 +677,26 @@ class PortfolioBot:
         since = row['funding_to_ms'] - (OVERLAP_MS if 'funding_seen' in row else 0)
         seen = set(row.setdefault('funding_seen', []))
         fresh = []
-        for kind in ('hedge', 'short'):
-            for coin, leg in self.legs[kind].items():
-                inverse = leg['market_type'] == 'inverse'
-                for f in self._funding_rows(leg['market_type'], leg['symbol'],
-                                            since, now_ms):
-                    key = f.get('exec_id') or f"{f.get('symbol')}:{f['time_ms']}"
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    fresh.append(key)
-                    amt = float(f['amount'])
-                    if inverse:
-                        if kind == 'hedge':
-                            row['coins'][coin] = max(row['coins'].get(coin, 0.0) + amt, 0.0)
-                        amt = amt * prices.get(coin, 0.0)      # the carry line, in quote
-                        quote = 0.0
-                    else:
-                        quote = amt
-                    got += quote
-                    row['funding_total'] += amt - quote      # the inverse part, in quote
-                    row['funding'].append([int(f['time_ms']), coin, amt])
+        for kind, coin, leg, _ in self._perp_legs():
+            inverse = leg['market_type'] == 'inverse'
+            for f in self._funding_rows(leg['market_type'], leg['symbol'],
+                                        since, now_ms):
+                key = f.get('exec_id') or f"{f.get('symbol')}:{f['time_ms']}"
+                if key in seen:
+                    continue
+                seen.add(key)
+                fresh.append(key)
+                amt = float(f['amount'])
+                if inverse:
+                    if kind == 'hedge':
+                        row['coins'][coin] = max(row['coins'].get(coin, 0.0) + amt, 0.0)
+                    amt = amt * prices.get(coin, 0.0)      # the carry line, in quote
+                    quote = 0.0
+                else:
+                    quote = amt
+                got += quote
+                row['funding_total'] += amt - quote      # the inverse part, in quote
+                row['funding'].append([int(f['time_ms']), coin, amt])
         keep = now_ms - self.cfg['funding_rule']['trailing_days'] * 86_400_000
         row['funding'] = [x for x in row['funding'] if x[0] >= keep]
         row['funding_total'] += got
@@ -542,11 +750,10 @@ class PortfolioBot:
             return
         own = {('spot', leg['symbol']) for leg in self.legs['spot'].values()}
         linear = set()
-        for kind in ('hedge', 'short'):
-            for leg in self.legs[kind].values():
-                own.add((leg['market_type'], leg['symbol']))
-                if leg['market_type'] == 'linear':
-                    linear.add(leg['symbol'])
+        for _, _, leg, _ in self._perp_legs():
+            own.add((leg['market_type'], leg['symbol']))
+            if leg['market_type'] == 'linear':
+                linear.add(leg['symbol'])
         seen, fresh = set(row['cash_log_seen']), []
         moved = 0.0
         for r in rows:
@@ -712,6 +919,18 @@ class PortfolioBot:
                     self._place(kind, coin, 'Buy', size, prices[coin], f'flatten: {reason}')
                 except (VenueError, OSError) as e:
                     left.append(f'{kind} {coin}: {e}')
+        for coin, (leg, size) in self._moving_now.items():      # H17: a move's old short
+            if size <= 0:
+                continue
+            ad = leg['adapter']
+            try:
+                self.client.place_market(leg['market_type'], leg['symbol'], 'Buy', ad.fmt_qty(size),
+                                         ad.position_idx('Buy', True) or 0, reduce_only=True,
+                                         link_id=self._link('hedge', coin))
+                self.notify.event('order', self.botid,
+                                  f"buy {ad.fmt_qty(size)} {leg['symbol']} hedge (flatten: {reason})")
+            except (VenueError, OSError) as e:
+                left.append(f"hedge {coin} {leg['symbol']}: {e}")
         for coin, q in coins.items():
             if q <= 0:
                 continue
@@ -774,6 +993,85 @@ class PortfolioBot:
                           f"{self.cfg['risk']['basis_stop_pct']:.2%} — its pair unwound, "
                           'the rest held (H4)')
 
+    def _say_unhedged(self, active, plan_coins, held, prices, moved, held_back, regimes, trailing):
+        """H16: a coin the row holds, whose file hedges it, left short of its
+        hedge past the drift after this read's orders is said on every read,
+        with why — never silent. The funding rule's stand-down is the row's
+        own choice: an info line, the log's and the card's, never the
+        phone's (D60). The rest are not chosen and are warns. Returns
+        {coin: why} for the card."""
+        cfg = self.cfg
+        out = {}
+        drift = cfg['rebalance']['drift_pct']
+        for a in active:
+            c = a['coin']
+            if a['weight'] <= 0 or c not in self.legs['hedge'] or cfg['hedges'][c]['ratio'] <= 0:
+                continue
+            p = prices[c]
+            have = plan_coins.get(c, 0.0) + moved.get(('spot', c), 0.0)
+            if not p or have <= 0 or not self.legs['spot'][c]['adapter'].meets_minimum(have, p):
+                continue                              # dust is not a holding
+            hedge = held['hedge'].get(c, 0.0) + moved.get(('hedge', c), 0.0)
+            ratio = hedge_ratio(cfg, c, regimes.get(c), trailing.get(c))
+            if ratio == 0:
+                if hedge > 1e-9 * have:
+                    continue                          # still hedged: the tick lifts it
+                kind, why = 'info', 'the funding rule stood its hedge down (H3b)'
+            elif (ratio * have - hedge) / have > drift:
+                kind, why = held_back.get(c, ('warn', 'its hedge order was under the venue minimum'))
+            else:
+                continue
+            out[c] = why
+            self.notify.event(kind, self.botid,
+                              f'{c}: held unhedged — its hedge covers {hedge / have:.0%} of the coins '
+                              f'against a ratio of {ratio:g}: {why} (H16)')
+        return out
+
+    def _reenter(self, coin, back, coins, plan_coins, held, prices, ratio):
+        """H4/H16: the basis back under half the stop, the pair re-enters as
+        a pair — its hedge first, to its ratio of the coins it will hold,
+        then the parked cash buys the coin back (H10's order). A refused
+        hedge keeps the coin parked, asked again at the next read; a refused
+        buy closes the hedge just opened and leaves the parked cash to the
+        next tick. Returns whether the coin is back in the book."""
+        row, px = self.row, prices[coin]
+        parked = row['parked'].get(coin, 0.0)
+        q = parked / px
+        why = f'basis back to {back:.2%}: re-entering'
+        want_h = (max(ratio * (plan_coins.get(coin, 0.0) + q) - held['hedge'].get(coin, 0.0), 0.0)
+                  if coin in self.legs['hedge'] else 0.0)
+        hedged = 0.0
+        if want_h > 0:
+            try:
+                hedged = self._place('hedge', coin, 'Sell', want_h, px, why)
+            except (VenueError, OSError) as e:
+                self._say_once(f'reenter:{coin}', 'warn',
+                               f'{coin}: re-entry hedge refused: {e} — the coin stays parked, '
+                               'asked again at the next read (H16)')
+                return False
+        row['parked'].pop(coin, None)
+        del row['unwound'][coin]
+        held['hedge'][coin] = held['hedge'].get(coin, 0.0) + hedged
+        try:
+            got = self._place('spot', coin, 'Buy', q, px, why)
+        except (VenueError, OSError) as e:
+            row['cash'] += parked          # the next tick spends it instead
+            self._say_once(f'reenter:{coin}', 'warn', f'{coin}: re-entry refused: {e}')
+            got = 0.0
+            if hedged:
+                try:
+                    self._place('hedge', coin, 'Buy', hedged, px, 'undo: its re-entry buy was refused')
+                    held['hedge'][coin] -= hedged
+                except (VenueError, OSError) as e2:
+                    self.notify.event('margin', self.botid,                 # the phone
+                                      f'{coin}: re-entry buy refused ({e}) and closing its new hedge '
+                                      f'failed too ({e2}) — the hedge stands alone (H16)')
+            return True
+        coins[coin] = coins.get(coin, 0.0) + got
+        plan_coins[coin] = plan_coins.get(coin, 0.0) + got
+        row['cash'] += parked - got * px
+        return True
+
     def flatten_now(self, reason, tombstone=True):
         """The owner's flatten: the cycle's reads, then every leg together
         (H4's act, by hand). Returns what the venue holds after."""
@@ -794,6 +1092,7 @@ class PortfolioBot:
             size, _ = self._short_size(t, self.legs[k][c])
             px = prices[c]
             held[k][c] = size / px if self.legs[k][c]['market_type'] == 'inverse' and px else size
+        self._moving_now = {c: (leg, self._short_size(t, leg)[0]) for c, (leg, t) in self._read_moving().items()}
         tombs, self.tombs = self.tombs, (self.tombs if tombstone else None)
         try:
             self._flatten(reason, coins, held, prices)
@@ -829,6 +1128,8 @@ class PortfolioBot:
             self._adopt({}, prices)                  # a stated holding starts the book
             row['contributed'] = 0.0                 # the anchor is the first value: nothing contributed since
         self._learn_terms(prices, wallet)
+        self._find_moves(perps, now_ms)                # H17: before the fills, so each finds its book
+        moving = self._read_moving()
         self._settle_fills(now_ms)
         self._settle_funding(now_ms, prices)
         self._settle_interest(now_ms)
@@ -861,15 +1162,34 @@ class PortfolioBot:
         open_coin = {}                 # H8: an inverse hedge's open P&L, in its coin
         lin_open = 0.0
         legs_view = []
-        for (k, c), t in perps.items():
-            leg = self.legs[k][c]
+        old_coins = {}                 # H17: a moving hedge's old short, in coins
+        self._moving_now = {}
+        # H17: a move's old market first, so the coin's own leg is the card's
+        # leverage; a book kept from a finished move is a closed leg on the card
+        entries = ([('hedge', c, leg, t, f"hedge:{c}:{row['moves'][c]['from'][1]}", True)
+                    for c, (leg, t) in moving.items()]
+                   + [(k, c, self.legs[k][c], t, f'{k}:{c}', False) for (k, c), t in perps.items()])
+        for key, book in row['books'].items():
+            parts = key.split(':')
+            if len(parts) == 3 and not (parts[1] in moving and row['moves'][parts[1]]['from'][1] == parts[2]):
+                inv = book.get('market_type') == 'inverse'
+                px = prices.get(parts[1], 0.0)
+                legs_view.append({'kind': parts[0], 'coin': parts[1], 'symbol': parts[2], 'inverse': inv,
+                                  'size': 0.0, 'avg': None, 'mark': px, 'unreal': 0.0, 'leverage': None,
+                                  'max_leverage': None, 'closed': True,
+                                  'realized': (book['realized'] - book['fees']) * (px if inv else 1.0)})
+        for k, c, leg, t, bkey, is_old in entries:
             size, avg = self._short_size(t, leg)
             px = prices[c]
             inv = leg['market_type'] == 'inverse'
-            held[k][c] = (size / px if inv and px else size)
+            if is_old:
+                old_coins[c] = size / px if inv and px else size
+                self._moving_now[c] = (leg, size)
+            else:
+                held[k][c] = (size / px if inv and px else size)
             u = _unreal(leg['market_type'], size, avg, px)
             unreal += u
-            book = row['books'].get(f'{k}:{c}') or {}
+            book = row['books'].get(bkey) or {}
             pos = t['positions'].get(leg['adapter'].position_idx('Sell', False) or 0) or {}
             legs_view.append({'kind': k, 'coin': c, 'symbol': leg['symbol'], 'inverse': inv,
                               'size': size, 'avg': avg, 'mark': px, 'unreal': u,
@@ -878,9 +1198,9 @@ class PortfolioBot:
                               'leverage': pos.get('leverage'),
                               'max_leverage': (leg.get('spec') or {}).get('max_leverage'),
                               'realized': (book.get('realized', 0.0) - book.get('fees', 0.0))
-                              * (px if inv else 1.0)})
+                              * (px if inv else 1.0), **({'moving': True} if is_old else {})})
             if inv and k == 'hedge' and px:
-                open_coin[c] = u / px
+                open_coin[c] = open_coin.get(c, 0.0) + u / px
             elif not inv:
                 lin_open += u
         # H8: an inverse leg realises and pays its fees in the coin, and the
@@ -890,8 +1210,9 @@ class PortfolioBot:
         # audit's double count). A linear leg's realised stays quote.
         realised, inv_real = 0.0, {}
         for key, book in row['books'].items():
-            kind, c = key.split(':')
-            if self.legs[kind][c]['market_type'] == 'inverse':
+            kind, c = key.split(':')[:2]
+            # H17: a book kept from a hedge's old market says its own market type
+            if (book.get('market_type') or self.legs[kind][c]['market_type']) == 'inverse':
                 if kind == 'hedge':
                     inv_real[c] = inv_real.get(c, 0.0) + book['realized'] - book['fees']
                 else:
@@ -913,9 +1234,13 @@ class PortfolioBot:
                 costs[c] = {'coins': coins[c], 'cost': coins[c] * prices[c], 'realized': 0.0,
                             'fees': 0.0, 'since_ms': now_ms}
             spot_sync(costs[c], coins[c], prices[c])
-        self._judge_borrow_rate(held, prices, now_ms)
+        # H17: a moving hedge's old short is the coin's hedge as much as its new
+        # one — the tilt, the yield and the notional count both
+        held_all = {'hedge': {c: held['hedge'].get(c, 0.0) + old_coins.get(c, 0.0)
+                              for c in set(held['hedge']) | set(old_coins)}, 'short': held['short']}
+        self._judge_borrow_rate(held_all, prices, now_ms)
         stack = sum(coins[c] * prices[c] for c in coins)
-        self._mark_tilt(plan_coins, held, prices)
+        self._mark_tilt(plan_coins, held_all, prices)
         value = stack + row['cash'] + sum(row['parked'].values()) + unreal + realised
         if row['anchor_value'] is None:
             row['anchor_value'] = value
@@ -930,7 +1255,7 @@ class PortfolioBot:
         basis_value = row['anchor_value'] + row['contributed']    # what the book was given
         loss = basis_value - value
         self._last_pos = stack
-        self.notional_now = sum(held[k][c] * prices[c] for k in held for c in held[k])
+        self.notional_now = sum(held_all[k][c] * prices[c] for k in held_all for c in held_all[k])
         risk = cfg['risk']
         self._loss_now = loss if risk.get('max_loss') is not None else None
         placed = 0
@@ -966,6 +1291,16 @@ class PortfolioBot:
                 held['hedge'][c] = 0.0
                 placed += 1
         # --- H3 on the clock ----------------------------------------------------
+        trailing = self._trailing_funding(now_ms)
+        regimes = {c: self._regime_now(c, now_ms) for c in self.legs['hedge']}
+        # --- H17: a hedge moving to another perpetual, a slice a read ---------
+        blocked, self._old_left = set(), {}
+        for c, (leg, t) in moving.items():
+            n, still = self._move_slice(c, leg, t, plan_coins, held, prices,
+                                        hedge_ratio(cfg, c, regimes.get(c), trailing.get(c)), now_ms)
+            placed += n
+            if still:
+                blocked.add(c)                         # the move owns the coin's orders this read
         active = []
         for a in cfg['assets']:
             c = a['coin']
@@ -974,20 +1309,9 @@ class PortfolioBot:
                 pm = float(t['mark'] or 0.0) if t else prices[c]
                 back = abs(pm - prices[c]) / prices[c] if prices[c] else 1.0
                 if back < risk['basis_stop_pct'] / 2 and prices[c]:
-                    # the parked cash buys its own coin back; the plan then
-                    # hedges what it sees (the fill books next cycle)
-                    parked = row['parked'].pop(c, 0.0)
-                    del row['unwound'][c]
-                    try:
-                        got = self._place('spot', c, 'Buy', parked / prices[c], prices[c],
-                                          f'basis back to {back:.2%}: re-entering')
-                    except (VenueError, OSError) as e:
-                        row['cash'] += parked          # the next tick spends it instead
-                        self._say_once(f'reenter:{c}', 'warn', f'{c}: re-entry refused: {e}')
-                        got = 0.0
-                    coins[c] = coins.get(c, 0.0) + got
-                    plan_coins[c] = plan_coins.get(c, 0.0) + got
-                    row['cash'] += parked - got * prices[c]
+                    if not self._reenter(c, back, coins, plan_coins, held, prices,
+                                         hedge_ratio(cfg, c, regimes.get(c), trailing.get(c))):
+                        continue
                     placed += 1
                 else:
                     continue
@@ -1028,16 +1352,17 @@ class PortfolioBot:
                     f = row['lever_cap'] / L
                     active = [dict(a, weight=a['weight'] * f) if a['weight'] > 0 else a for a in active]
             eff = dict(cfg, assets=active)
-            trailing = self._trailing_funding(now_ms)
-            regimes = {c: self._regime_now(c, now_ms) for c in self.legs['hedge']}
             # H8: the planner's equity is the row's: every coin with its hedge's
             # coin P&L, and the cash with the linear legs' P&L and realised
             book = {'coins': plan_coins, 'hedged': held['hedge'], 'shorts': held['short'],
                     'cash': row['cash'] + lin_open + realised}
             plan = plan_portfolio(eff, book, prices, now_ms, row['last_tick_ms'],
                                   regimes=regimes, funding_trailing=trailing)
+        moved, held_back = {}, {}                   # H16: what this read placed, and why a hedge was not
+        kept_back = [o for o in plan['orders'] if o['leg'][1] in blocked]
+        plan['orders'] = [o for o in plan['orders'] if o['leg'][1] not in blocked]
         if plan['tick'] or plan['orders']:          # H3c: a drift read trades, the clock stays
-            spent, sold, refused = 0.0, 0.0, False
+            spent, sold, refused = 0.0, 0.0, bool(kept_back)   # H17: a moving coin keeps the tick open
             # spot sells first, so a buy is paid from the sale beside it. H10: a
             # buy never stands without its hedge — a coin's added hedge goes
             # before its buy, a refused hedge skips the buy, and a refused buy
@@ -1061,11 +1386,14 @@ class PortfolioBot:
                     if now_ms < backoff.get(c, 0):
                         refused = True
                         skip.add(c)
+                        held_back[c] = ('warn', 'its pair waits after a refused buy (H10)')
                         continue
                 try:
                     done = self._place(kind, c, side, o['coins'], prices[c], o['why'])
                 except (VenueError, OSError) as e:
                     refused = True
+                    if kind == 'hedge':
+                        held_back[c] = ('warn', f'its hedge was refused: {e}')
                     if c in paired and (kind, side) == ('hedge', 'Sell'):
                         skip.add(c)
                         self._say_once(f'place:{kind}:{c}', 'warn',
@@ -1076,6 +1404,10 @@ class PortfolioBot:
                         backoff[c] = now_ms + int(PAIR_BACKOFF_S * 1000)
                         try:
                             self._place('hedge', c, 'Buy', opened[c], prices[c], 'undo: its buy was refused')
+                            moved[('hedge', c)] = moved.get(('hedge', c), 0.0) - opened[c]
+                            # H16: this read's refusal is said by its own warn;
+                            # the wait after it is the next reads' warn
+                            held_back[c] = ('info', 'its buy was refused and its new hedge closed (H10)')
                             self._say_once(f'place:{kind}:{c}', 'warn',
                                            f'spot {c}: buy refused: {e} — the hedge opened for it '
                                            f'is closed again; asked again in {PAIR_BACKOFF_S / 3600:g} h (H10)')
@@ -1090,6 +1422,8 @@ class PortfolioBot:
                     continue
                 if done:
                     placed += 1
+                    moved[(kind, c)] = moved.get((kind, c), 0.0) + (
+                        done if (kind == 'spot') == (side == 'Buy') else -done)
                     if kind == 'hedge' and side == 'Sell' and c in paired:
                         opened[c] = done
                     if kind == 'spot' and side == 'Buy':
@@ -1101,6 +1435,21 @@ class PortfolioBot:
             row['spent'] += spent - sold
             if not refused and plan['tick']:
                 row['last_tick_ms'] = now_ms         # a refused leg keeps the tick open
+        # H17: the old short of a move still hedges the coin until it is closed
+        still = {'hedge': dict(held['hedge']), 'short': held['short']}
+        for c in blocked:
+            still['hedge'][c] = still['hedge'].get(c, 0.0) + self._old_left.get(c, old_coins.get(c, 0.0))
+        unhedged = self._say_unhedged(active, plan_coins, still, prices, moved, held_back, regimes, trailing)
+        moves_view = {}
+        for c in blocked:
+            m = row['moves'][c]
+            if m.get('slices'):
+                moves_view[c] = f"moving {c}'s hedge: {m['done']} of {m['slices']} slices"
+            else:
+                moves_view[c] = f"moving {c}'s hedge: {m['from'][1]} → {m['to'][1]}"
+        if moves_view:
+            for c, text in moves_view.items():
+                self.notify.event('info', self.botid, f'{text} (H17)')
         self.portfolio_view = {
             'stack': {c: {'coins': coins[c], 'value': coins[c] * prices[c]} for c in coins},
             'spot': {c: {'coins': coins[c], 'price': prices[c], 'value': coins[c] * prices[c],
@@ -1124,7 +1473,9 @@ class PortfolioBot:
                         'hedged': held['hedge'].get(a['coin'], 0.0),
                         'short': held['short'].get(a['coin'], 0.0),
                         'regime': ((row.get('regime_seen') or {}).get(a['coin']) or [None, 0, None])[2],
-                        'unwound': a['coin'] in row['unwound']} for a in cfg['assets']],
+                        'unwound': a['coin'] in row['unwound'],
+                        'unhedged': unhedged.get(a['coin']),
+                        'moving': moves_view.get(a['coin'])} for a in cfg['assets']],
             'carry': {'total': row['funding_total'],
                       'trailing': sum(x[2] for x in row['funding'])},
             # H6: the three money lines that never mix — and the loan's cost, its own

@@ -1727,9 +1727,13 @@ eventually pin (T1).
   running carry bot's edit tab is the same form filled from its row, its
   fleet and name fixed, through the same gates, review and typed name,
   replacing the row; its adopted holdings stay. Refused in words: a coin
-  taken out, a long turned short or back, a hedged coin moved to another
-  perpetual — each would leave coins or a short with nothing managing
-  them. *(owner, 2026-10-23)*
+  taken out, a long turned short or back, an outright short moved to
+  another perpetual — each would leave coins or a short with nothing
+  managing them. *(owner, 2026-10-23)*
+- **U111c** A hedged coin moved to another perpetual on the edit is the
+  engine's to carry over (H17): allowed, and the review says what will
+  happen ("HYPE's hedge moves from inverse to usdt on the next read: the
+  new short opens, then the old one closes"). *(owner, 2026-10-27)*
 - **U111b** A carry edit keeps the row's own notes (keys starting `_`, the
   operator's), as the grid and DCA edit does.
 - **U110** The right half scrolls on its own: the page's refresh keeps each
@@ -2246,7 +2250,7 @@ that pins it (T1).
   at once, not at the next tick. A Hyperliquid portfolio row is refused
   by name until its leg is built.
 - **H3** The plan at a tick is pure. Between ticks (`every_hours` since the
-  last) nothing is wanted. The stack is the row's equity: its coins at
+  last) nothing is wanted but a missing hedge (H16). The stack is the row's equity: its coins at
   mark plus its cash, which is negative when the venue has lent it quote;
   each target is weight × equity, so with `margin` (weights summing to
   `spot_leverage`) the coins held are `spot_leverage` × equity, the
@@ -2306,7 +2310,7 @@ that pins it (T1).
   `basis_stop_pct` between an asset's perp and spot marks, that asset's
   pair alone is unwound — hedge bought back, coins sold, the quote parked
   — and the rest held; it re-enters from its parked cash when the basis is
-  back under half the stop. The funding rule's stand-down lifts a hedge
+  back under half the stop, as a pair (H16). The funding rule's stand-down lifts a hedge
   and keeps the stack (H3).
 - **H8** An inverse hedge is counted in its own coin. A short of N $1
   contracts opened at E has a constant coin exposure of N / E; its open P&L,
@@ -2361,8 +2365,7 @@ that pins it (T1).
   next read); a refused buy closes the hedge just opened and the coin
   waits an hour before trying again, so a refusal can't churn fees every
   minute; a close that fails too reaches the phone. The other perps go
-  last. It doesn't hedge coins already held unhedged; the next ticks'
-  hedges do. *(the carry sub's 10x tick, 2026-10-16: the buys landed on the
+  last. Coins already held unhedged are hedged by the next read (H16). *(the carry sub's 10x tick, 2026-10-16: the buys landed on the
   loan, then every hedge was refused for margin)*
 - **H11** Each coin's leverage on the card. A portfolio row's assets show
   the spot's leverage (the row's loan on its equity, 1× without one) of
@@ -2428,6 +2431,48 @@ that pins it (T1).
   shows no next tick. *(the review, 2026-10-27: under `drift` the easing
   ran every read once a day had passed, back to the file's leverage in
   two minutes)*
+- **H16** A coin the row holds is never left unhedged by the clock. Every
+  read, between ticks as at them, a long's hedge short of its ratio past
+  the drift of its holding is sold up to it (named "hedge what it holds");
+  nothing else moves between ticks and an over-hedge waits for the tick,
+  so a restart onto a coin held without its hedge hedges it on its first
+  read. The basis stop's re-entry is a pair: its hedge first, to its ratio
+  of the coins it will hold, then the parked cash buys the coin back — a
+  refused hedge keeps the coin parked, asked again at the next read; a
+  refused buy closes the hedge just opened (H10). A coin left short of its
+  hedge past the drift after a read's orders is said on every read, naming
+  why, and the card shows it beside the coin: the funding rule's
+  stand-down, the row's own choice, as an info line, never the phone's
+  (D60); the unexpected — a refused hedge, a pair waiting after a refused
+  buy past the read that refused it, an order under the venue's minimum —
+  as a warn, which reaches the phone once it persists. *(a demo basket's HYPE pair, 2026-10-26: the stop unwound the pair,
+  the basis closed between weekly ticks and the parked cash bought the coin
+  back, but the plan on the clock wanted nothing until the tick — the coin
+  stood unhedged through a restart, and each later stop sold the spot
+  alone)*
+- **H17** A coin's hedge moves to another perpetual as a pair, in slices.
+  When the file names a different product for a held hedge (inverse,
+  usdt, usdc), the next read starts a move: the old market's book is kept
+  apart as `hedge:<coin>:<symbol>` with its own market type (its realised
+  and fees stay in the money lines and on the card as a closed leg), the
+  coin's book starts on the new market, and the move lives in the state
+  until the old short is gone. Each read, between ticks too, a slice of at
+  most `rebalance.move_slice` quote (default 5,000) opens on the new market
+  toward the coin's ratio (H16's sizing), then the old short is cut,
+  reduce-only with the row's own link, by what the two together carry past
+  that ratio — so the coin stays hedged within one slice throughout, and a
+  move under the slice goes in one read. A refused new slice closes
+  nothing and warns every read; a refused close pages (D60) and is asked
+  again every read, and nothing more opens while the two together are past
+  the ratio, so a restart mid-move carries on from the books without
+  opening again. While a coin moves, the plan places nothing for it (the
+  tick stays open); the basis stop and the re-entry read the new market;
+  a flatten closes the old short too; the card says "moving HYPE's hedge:
+  n of m slices". A state from before H17 kept no market beside the book:
+  the market is the one whose short the book matches within 2%, said when
+  none does. *(a demo basket's HYPE hedge, owner 2026-10-27: the inverse
+  book is thin and its basis flaps; "start scaling out of one instrument
+  incrementally while doing the same for the other")*
 - **H6** The card says the three truths. A portfolio's card shows the
   stack's value and coins, one line per asset (weight target → actual,
   hedge ratio target → actual, coins hedged, the regime word when the tilt
