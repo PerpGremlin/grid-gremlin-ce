@@ -6,7 +6,10 @@ percentages travel as Decimal text, so 33.34 % is 0.3334 exactly.
 """
 import html
 import json
+import re
 from decimal import Decimal, InvalidOperation
+
+from gridgremlin.portfolio import LOT_COINS, lot_refusal
 
 # (form name, the row's path, kind, label, help, required)
 ESSENTIAL = (
@@ -27,8 +30,8 @@ ESSENTIAL = (
      'Hedge on', 'inverse = BTCUSD, margined in the coin (the default); '
      'usdt = BTCUSDT; usdc = BTCPERP', False),
     ('hedge_each', ('hedge', '*'), 'products', 'Hedge some coins on',
-     'a coin on another perpetual than the one above, like SOL usdt, SUI '
-     'usdc — the funding table below the form compares them. Blank = every '
+     'a coin on another perpetual than the one above, like HYPE usdt or '
+     'HYPEUSDT, SUI usdc or SUIPERP (the market as Bybit names it) — the funding table below the form compares them. Blank = every '
      'coin on the one above. An outright short is on usdt unless named here', False),
     ('perp_leverage', ('perp_leverage',), 'num', 'Perp leverage',
      'set on every hedge at each start; blank = whatever the venue holds', False),
@@ -136,7 +139,7 @@ def row_from_form(form):
         if kind == 'assets':
             v = _assets(raw)
         elif kind == 'products':
-            v = _products(raw)
+            v = _products(raw, [c for c, _ in row.get('assets') or []])
         elif kind == 'pct':
             v = float(_dec(raw.rstrip('%'), label) / 100)
         elif kind == 'num':
@@ -184,16 +187,110 @@ def row_from_form(form):
     return {k: row[k] for k in _ORDER if k in row}
 
 
-def _products(text):
-    """{coin: product} from "SOL usdt, SUI usdc"."""
-    out = {}
-    for part in [p for p in str(text).replace(';', ',').split(',') if p.strip()]:
-        bits = part.split()
-        if len(bits) != 2 or bits[1].lower() not in ('inverse', 'usdt', 'usdc'):
-            raise ValueError(f'Hedge some coins on: "{part.strip()}" is not a coin and '
-                             'inverse, usdt or usdc, like SOL usdt')
-        out[bits[0].upper()] = bits[1].lower()
+PRODUCTS = ('inverse', 'usdt', 'usdc')
+# U111d: a market as Bybit names it — the suffix says the perpetual (the
+# engine's own names, leg_market); USDT before USD, the longer first
+SUFFIXES = (('USDT', 'usdt'), ('PERP', 'usdc'), ('USD', 'inverse'))
+_FORMS = ('write a coin and inverse, usdt or usdc (HYPE usdt), or the market as '
+          'Bybit names it: HYPEUSDT (usdt), HYPEPERP (usdc), HYPEUSD (inverse)')
+
+
+class _LotRefused(ValueError):
+    """A 1000-lot coin's hedge, refused in its own sentence (the engine's,
+    gridgremlin.portfolio.lot_refusal; its list is LOT_COINS there)."""
+
+
+def _lot_refused(coin, lot):
+    return _LotRefused(lot_refusal(coin, lot))
+
+
+def _lot_name(base):
+    """(coin, lot name) when `base` is a lot name — 1000PEPE, 10000SATS,
+    SHIB1000 — else None."""
+    m = re.fullmatch(r'10{3,}([A-Z][A-Z0-9]*)', base) or re.fullmatch(r'([A-Z][A-Z0-9]*?)10{3,}', base)
+    return (m.group(1), base) if m else None
+
+
+def _read_symbol(word, known):
+    """(coin, product) for one market name, read against the basket's coins
+    first; ValueError in words when unknown or ambiguous."""
+    s = word.upper()
+    found = []
+    for suffix, product in SUFFIXES:
+        if s.endswith(suffix) and len(s) > len(suffix):
+            base = s[:-len(suffix)]
+            lot = None if base in known else _lot_name(base)
+            if lot:
+                raise _lot_refused(*lot)
+            if base in known:
+                found.append((base, product))
+    if s in known:
+        if found:
+            c, p = found[0]
+            raise ValueError(f'"{word}" reads both as the coin {s} and as {c} on {p} — '
+                             f'name it with its perpetual, like {s} usdt')
+        raise ValueError(f'"{word}" names a coin without its perpetual')
+    if len(found) == 1:
+        return found[0]
+    if found:
+        raise ValueError(f'"{word}" reads as ' + ' or '.join(f'{c} {p}' for c, p in found))
+    if s.endswith('USDC'):
+        raise ValueError(f'"{word}": Bybit names its USDC perpetual {s[:-4]}PERP')
+    plain = next((s[:-len(x)] for x, _ in SUFFIXES if s.endswith(x) and len(s) > len(x)), None)
+    if plain:
+        raise ValueError(f'"{word}" reads as {plain}, not a coin the basket holds')
+    raise ValueError(f'"{word}" is not a market of a coin the basket holds')
+
+
+def read_products(text, coins=()):
+    """[(as typed, coin, product)] from "SOL usdt, SUI usdc" or the markets
+    as Bybit names them, "SOLUSDT SUIPERP" (U111d) — comma- or space-
+    separated, any case, each name read against the basket's `coins`; a 1000-lot
+    coin refused (its market is not the one the engine would build)."""
+    known = {str(c).upper() for c in coins}
+    words = str(text).replace(';', ',').replace(',', ' ').split()
+    out, seen, i = [], {}, 0
+    try:
+        while i < len(words):
+            w = words[i]
+            if i + 1 < len(words) and words[i + 1].lower() in PRODUCTS:
+                typed, coin, product = f'{w} {words[i + 1]}', w.upper(), words[i + 1].lower()
+                i += 2
+            elif w.lower() in PRODUCTS:
+                raise ValueError(f'"{w}" has no coin before it')
+            else:
+                typed, (coin, product) = w, _read_symbol(w, known)
+                i += 1
+            if coin in LOT_COINS:
+                raise _lot_refused(coin, LOT_COINS[coin])
+            if seen.get(coin, product) != product:
+                raise ValueError(f'{coin} is named twice, on {seen[coin]} and {product}')
+            seen[coin] = product
+            out.append((typed, coin, product))
+    except _LotRefused as e:
+        raise ValueError(f'Hedge some coins on: {e}') from None
+    except ValueError as e:
+        raise ValueError(f'Hedge some coins on: {e} — {_FORMS}') from None
     return out
+
+
+def _products(text, coins=()):
+    """{coin: product} from "SOL usdt, SUI usdc" or "SOLUSDT SUIPERP"."""
+    return {c: p for _, c, p in read_products(text, coins)}
+
+
+def hedge_readings(form):
+    """U111d: how each "Hedge some coins on" entry was read, for the review
+    — "HYPEUSDT → HYPE on its USDT perpetual (HYPEUSDT)", the market the
+    engine will trade in brackets."""
+    from gridgremlin.portfolio import leg_market
+    raw = str(form.get('hedge_each') or '').strip()
+    if not raw:
+        return []
+    coins = [c for c, _ in _assets(form.get('assets') or '')]
+    name = {'usdt': 'USDT', 'usdc': 'USDC', 'inverse': 'inverse'}
+    return [f'{typed} → {c} on its {name[p]} perpetual ({leg_market(c, p)[1]})'
+            for typed, c, p in read_products(raw, coins)]
 
 
 def form_from_row(row):

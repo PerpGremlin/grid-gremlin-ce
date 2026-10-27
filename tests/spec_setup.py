@@ -2710,6 +2710,73 @@ def spec_U111b_a_carry_edit_keeps_the_rows_notes():
         close()
 
 
+def spec_U111d_a_carry_hedge_is_named_as_the_exchange_names_its_market():
+    """The owner (2026-10-27), having typed "HYPE usdt": why not HYPEUSDT,
+    as Bybit shows it? "Hedge some coins on" takes either, any case, comma-
+    or space-separated: COINUSDT (usdt), COINPERP (usdc), COINUSD (inverse),
+    each read against the basket's own coins first, a 1000-lot coin refused
+    (the engine would build PEPEUSDT, not 1000PEPEUSDT); an unknown or ambiguous entry is refused naming the forms.
+    The form still writes "COIN product", and the review says each reading."""
+    import re
+    from panel.carry_setup import _products, form_from_row, hedge_readings, row_from_form
+    coins = ['BTC', 'ETH', 'SOL', 'HYPE', 'PEPE']
+    assert _products('HYPEUSDT, solperp ethusd', coins) == {'HYPE': 'usdt', 'SOL': 'usdc', 'ETH': 'inverse'}
+    assert _products('HYPE usdt SOLPERP, eth inverse', coins) == {'HYPE': 'usdt', 'SOL': 'usdc',
+                                                                 'ETH': 'inverse'}
+    # a 1000-lot coin: the engine would build PEPEUSDT, not Bybit's 1000PEPEUSDT
+    for lot in ('1000PEPEUSDT', '1000pepeperp', 'PEPE usdt', 'PEPEUSDT', '10000SATSUSDT', 'SHIB1000USDT'):
+        try:
+            _products(lot, coins + ['SATS'])
+        except ValueError as e:
+            assert "can't be hedged by a carry row yet" in str(e), str(e)
+            assert 'not Bybit' in str(e) and 'inverse, usdt or usdc' not in str(e), str(e)
+        else:
+            raise AssertionError(lot)
+    try:
+        _products('1000PEPEUSDT', coins)
+    except ValueError as e:
+        assert str(e) == ("Hedge some coins on: 1000-lot coins like PEPE can't be hedged by a carry "
+                          "row yet: the engine would build PEPEUSDT, not Bybit's 1000PEPEUSDT"), str(e)
+    # a coin whose name ends in a suffix: the basket's coins decide
+    assert _products('SUSDUSDT', ['SUSD', 'BTC']) == {'SUSD': 'usdt'}
+    assert _products('SUSDUSD', ['SUSD', 'S']) == {'SUSD': 'inverse'}
+    for bad, said in (('SUSD', 'both'), ('HYPE', 'without its perpetual'), ('DOGEUSDT', 'not a coin the basket'),
+                      ('HYPEUSDC', 'Bybit names'), ('HYPE perp', 'HYPEUSDT'), ('HYPEUSDT, HYPEPERP', 'twice')):
+        try:
+            _products(bad, ['SUSD', 'S', 'HYPE', 'BTC'])
+        except ValueError as e:
+            assert said in str(e) and 'inverse, usdt or usdc' in str(e), str(e)
+        else:
+            raise AssertionError(bad)
+    form = {'name': 'mix', 'capital': '1000', 'assets': 'BTC 1, HYPE 1, SOL 1', 'hedge_product': 'inverse',
+            'hedge_each': 'hypeusdt solPERP'}
+    row = row_from_form(form)
+    assert row['hedge']['HYPE']['product'] == 'usdt' and row['hedge']['SOL']['product'] == 'usdc', row
+    assert row_from_form(dict(form, hedge_each='HYPE usdt, SOL usdc')) == row
+    vals = form_from_row(row)
+    assert vals['hedge_each'] in ('HYPE usdt, SOL usdc', 'SOL usdc, HYPE usdt'), vals
+    assert row_from_form(vals) == row
+    said = hedge_readings(form)
+    assert said == ['hypeusdt → HYPE on its USDT perpetual (HYPEUSDT)',
+                    'solPERP → SOL on its USDC perpetual (SOLPERP)'], said
+    # the review page echoes it
+    base, d, close = _served_fleet()
+    try:
+        page = _call(base, '/setup-carry', {'fleet': '0', 'name': 'basket', 'capital': '1000',
+                                            'assets': 'BTC 50, SOL 50', 'hedge_product': 'inverse',
+                                            'hedge_each': 'SOLUSDT'})
+        assert 'gates passed' in page, page[:800]
+        assert 'SOLUSDT → SOL on its USDT perpetual (SOLUSDT)' in html_unescape(page), page[:2000]
+        # a lot coin hedged on the common product, none named: the engine's gate says it
+        page = html_unescape(_call(base, '/setup-carry', {'fleet': '0', 'name': 'frog', 'capital': '1000',
+                                                          'assets': 'BTC 50, PEPE 50'}))
+        assert "PEPE can't be hedged by a carry row yet" in page and 'gates passed' not in page, page[:2000]
+        assert re.search(r'HYPE usdt or HYPEUSDT', html_unescape(_call(base, '/setup-carry',
+                                                                       {'fleet': '0', 'step': 'change'})))
+    finally:
+        close()
+
+
 def spec_U107b_a_dca_sized_in_coins_is_told_its_smallest_order_in_coins():
     """A DCA sized in coins (D89) was told to raise its first order to
     "about 84.91" while its size was typed in coins. The smallest order is

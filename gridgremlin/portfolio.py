@@ -228,7 +228,32 @@ def validate_portfolio(row, where='row'):
     if cfg['venue'] == 'hyperliquid':
         _refuse(f"{where}: the portfolio row trades Bybit — its Hyperliquid leg is "
                 'the design\'s step 5, not built (D78)')
+    # U111d: a coin Bybit trades only in lots has no <COIN>USDT perpetual —
+    # every perp the row would trade (a hedged long, an outright short)
+    for c in [c for c, h in hedges.items() if h['ratio'] > 0] + list(shorts):
+        if c in LOT_COINS:
+            _refuse(f'{where}.hedge.{c}: {lot_refusal(c, LOT_COINS[c])}')
     return cfg
+
+
+# Bybit's linear perpetuals that trade a lot of the coin, not one: the
+# market is 1000PEPEUSDT, never PEPEUSDT. A fixed list, as Bybit listed
+# them (2026-10, from memory: check it against Bybit's instruments before
+# relying on it); the panel also catches an unlisted lot name as typed.
+# leg_market builds <COIN>USDT, so a perp on one would trade the wrong
+# market — refused until the engine knows lot names (BACKLOG §1).
+LOT_COINS = {c: f'1000{c}' for c in (
+    'PEPE', 'BONK', 'FLOKI', 'LUNC', 'XEC', 'RATS', 'BTT', 'TURBO', 'CAT',
+    'APU', 'NEIROCTO', 'MUMU', 'TOSHI', 'CATS', 'X')}
+LOT_COINS.update({c: f'10000{c}' for c in ('SATS', 'LADYS', 'WEN', 'COQ')})
+LOT_COINS.update({c: f'1000000{c}' for c in ('MOG', 'BABYDOGE', 'CHEEMS', 'PEIPEI')})
+LOT_COINS['SHIB'] = 'SHIB1000'
+
+
+def lot_refusal(coin, lot):
+    """The one sentence a lot coin's perp is refused in (U111d)."""
+    return (f"1000-lot coins like {coin} can't be hedged by a carry row yet: "
+            f"the engine would build {coin}USDT, not Bybit's {lot}USDT")
 
 
 def leg_market(coin, product):

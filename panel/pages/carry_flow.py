@@ -117,7 +117,7 @@ class CarryFlowPages:
         from gridgremlin.apply import row_botid
         from gridgremlin.config import ConfigError, market_rows, validate_fleet
         from gridgremlin.portfolio import leg_markets, validate_portfolio
-        from panel.carry_setup import row_from_form, sentence
+        from panel.carry_setup import hedge_readings, row_from_form, sentence
         from panel.create import (atomic_write, dump_config, public_adapter,
                                   unified_diff, validate_whole)
         from panel.forms import next_step_html, unit_for_fleet
@@ -139,6 +139,7 @@ class CarryFlowPages:
                 raise ValueError('a carry bot trades Bybit — this fleet trades '
                                  f'{self._fleet_venue(fi)} (D78)')
             row = row_from_form(form)
+            read_as = hedge_readings(form)               # U111d: each entry as read
             cfg = validate_portfolio(json.loads(json.dumps(row)), 'the carry bot')
             moves = []
             botid = row_botid(row)
@@ -215,7 +216,9 @@ class CarryFlowPages:
             f'<h1>{html.escape(botid)} — {"edit" if form.get("edit") else "create"}: gates passed</h1>'
             '<div class="fsec"><h1 class="dim">in plain words</h1>'
             f'<p class="say">{html.escape(sentence(cfg))}</p>'
-            + ''.join(f'<p class="say">{html.escape(m)}</p>' for m in moves) +
+            + ''.join(f'<p class="say">{html.escape(m)}</p>' for m in moves)
+            + (f'<p class="say">Hedges read as: {html.escape("; ".join(read_as))}.</p>'
+               if read_as else '') +
             '<table><tr><th>leg</th><th>market</th><th>kind</th><th>USDT at its weight</th></tr>'
             f'{legs}</table></div>' + self._funding(form) +
             '<div class="fsec"><form method="post" action="/setup-carry">'

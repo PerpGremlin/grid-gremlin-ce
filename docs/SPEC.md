@@ -1734,6 +1734,19 @@ eventually pin (T1).
   engine's to carry over (H17): allowed, and the review says what will
   happen ("HYPE's hedge moves from inverse to usdt on the next read: the
   new short opens, then the old one closes"). *(owner, 2026-10-27)*
+- **U111d** "Hedge some coins on" takes a market as Bybit names it as well
+  as "COIN product": COINUSDT (usdt), COINPERP (usdc), COINUSD (inverse),
+  any case, comma- or space-separated; each name is read against the
+  basket's own coins first, so a coin whose name ends in a suffix resolves
+  by the coins held. A 1000-lot coin (1000PEPEUSDT, or PEPE on a fixed list
+  of Bybit's lot coins) is refused in its own sentence: the engine would
+  build PEPEUSDT, not Bybit's 1000PEPEUSDT. The engine's gate refuses the
+  same for any perp a row would trade on a listed coin (a hedged long, an
+  outright short), so a hand-edited fleet file is refused too; the list is
+  `LOT_COINS` in `gridgremlin/portfolio.py`, one for both. An unknown or
+  ambiguous entry is refused in words naming both forms. The form writes "COIN
+  product" back, and the review says how each entry was read ("HYPEUSDT →
+  HYPE on its USDT perpetual (HYPEUSDT)"). *(owner, 2026-10-27)*
 - **U111b** A carry edit keeps the row's own notes (keys starting `_`, the
   operator's), as the grid and DCA edit does.
 - **U110** The right half scrolls on its own: the page's refresh keeps each

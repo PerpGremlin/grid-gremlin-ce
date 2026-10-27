@@ -244,3 +244,40 @@ def spec_H16_between_ticks_on_the_clock_a_hedge_short_of_its_ratio_is_sold_up_an
         (('hedge', 'ETH'), 'sell', 10.0, 'hedge what it holds')]
     over = dict(off, hedged={'BTC': 2.0, 'ETH': 10.0})                       # over-hedged: the tick's
     assert plan_portfolio(cfg, over, PX, DAY, hour)['orders'] == []
+
+
+def spec_U111d_a_perp_on_a_lot_coin_is_refused_by_the_engine():
+    """Bybit trades PEPE's perpetual as 1000PEPEUSDT; leg_market would build
+    PEPEUSDT. The gate refuses every perp the row would trade on a coin of
+    the lot list — a hedged long, an outright short — in the panel's own
+    sentence, so a hand-edited fleet file is refused too. An unhedged lot
+    coin trades no perp and stands; every shipped fleet file still passes."""
+    import glob
+    import json
+    import os
+    from gridgremlin.config import validate_fleet
+    from gridgremlin.portfolio import LOT_COINS, lot_refusal
+    pepe = [{'coin': 'BTC', 'weight': 0.5}, {'coin': 'PEPE', 'weight': 0.5}]
+    said = _refused(_row(assets=pepe), 'hedge.PEPE',
+                    "1000-lot coins like PEPE can't be hedged by a carry row yet: the engine "
+                    "would build PEPEUSDT, not Bybit's 1000PEPEUSDT")
+    assert lot_refusal('PEPE', LOT_COINS['PEPE']) in said
+    _refused(_row(assets=pepe, hedge={'BTC': {'product': 'inverse', 'ratio': 1.0},
+                                      'PEPE': {'product': 'usdc', 'ratio': 0.5}}), 'like PEPE')
+    _refused(_row(assets=[{'coin': 'BTC', 'weight': 0.5}, {'coin': 'BONK', 'weight': -0.5}]),
+             'hedge.BONK', "Bybit's 1000BONKUSDT")
+    _refused(_row(assets=[{'coin': 'BTC', 'weight': 0.5}, {'coin': 'SATS', 'weight': 0.5}]),
+             "Bybit's 10000SATSUSDT")
+    held = validate_config(_row(assets=pepe, hedge={'BTC': {'product': 'inverse', 'ratio': 1.0},
+                                                   'PEPE': {'product': 'usdt', 'ratio': 0}}))
+    assert held['hedges']['PEPE']['ratio'] == 0
+    slow = [{'coin': c, 'weight': 0.2} for c in ('BTC', 'ETH', 'SOL', 'SUI', 'HYPE')]
+    assert set(validate_config(_row(assets=slow))['hedges']) == {'BTC', 'ETH', 'SOL', 'SUI', 'HYPE'}
+    here = os.path.join(os.path.dirname(__file__), '..', 'configs')
+    files = sorted(glob.glob(os.path.join(here, 'fleet.*.json')) +
+                   glob.glob(os.path.join(here, 'examples', 'fleet.*.json')))
+    assert files
+    for f in files:
+        with open(f) as fh:
+            raw = json.load(fh)
+        validate_fleet({'bots': raw} if isinstance(raw, list) else raw)
