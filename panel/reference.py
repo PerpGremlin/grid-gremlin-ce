@@ -24,8 +24,10 @@ STATE_WORDS = {
                'price to come within reach',
     'FLAT': 'running, holding nothing now, and it traded in this window',
     'STOPPED': 'its fleet is not running: nothing is placed or watched, and the '
-               'card shows the exchange\'s fills, not the engine\'s last picture',
-    'RETIRED': 'retired: its orders cancelled and its position closed; it never '
+               'card shows the exchange\'s fills and the holding last seen, not the '
+               'engine\'s last picture as if it were now',
+    'RETIRED': 'retired: its orders cancelled and its position closed or kept, as '
+               'its retire chose (the card says what was last seen); it never '
                'starts again unless revived on the tombstones page',
     'DEAD': 'stood down — a stop, a limit or a round count ended it; its '
             'reason is on the control page, and revival is deliberate',

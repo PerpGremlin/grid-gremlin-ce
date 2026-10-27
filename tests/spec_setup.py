@@ -2577,3 +2577,117 @@ def spec_U111_a_running_carry_bot_is_edited_from_its_edit_tab():
         assert 'name="edit" value="pfobasket"' in refused                     # the refusal keeps the edit
     finally:
         close()
+
+
+def spec_U108c_the_carry_form_reads_a_row_whole_or_says_why_not():
+    """An unchanged carry edit must not change what the engine reads. The
+    leverage form (D143) sets some coins' perps only: {'BTC': 3} on BTC and
+    ETH read 3x on ETH after the edit. A per-coin hedge naming some longs
+    had its ratio taken over those alone: ETH's 100 % became BTC's 50 %. An
+    outright short on usdc came back on usdt. Each is read whole now, or
+    said, never flattened."""
+    from gridgremlin.portfolio import validate_portfolio
+    from panel.carry_setup import form_from_row, row_from_form
+    from panel.lever import lever_row
+
+    def same(row):
+        back = row_from_form(form_from_row(json.loads(json.dumps(row))))
+        assert validate_portfolio(json.loads(json.dumps(back))) == \
+            validate_portfolio(json.loads(json.dumps(row))), (row, back)
+        return back
+    row = row_from_form({'name': 'basket', 'capital': '1000', 'assets': 'BTC 1, ETH 1'})
+    for some in (lever_row(row, 1.0, {'BTC': 3.0}), dict(row, perp_leverage={'ETH': 2.0})):
+        try:
+            form_from_row(some)
+        except ValueError as e:
+            assert 'perp leverage' in str(e) and 'fleet file' in str(e), str(e)
+        else:
+            raise AssertionError('a leverage on some perps was spread to them all')
+    same(lever_row(row, 1.0, {'BTC': 3.0, 'ETH': 3.0}))               # every perp, one number: held
+    base = {'strategy': 'portfolio', 'name': 'x', 'capital': 1000,
+            'assets': [{'coin': 'BTC', 'weight': 0.5}, {'coin': 'ETH', 'weight': 0.5}]}
+    try:
+        form_from_row(dict(base, hedge={'BTC': {'product': 'inverse', 'ratio': 0.5}}))
+    except ValueError as e:
+        assert 'differs by coin' in str(e), str(e)                     # ETH unnamed: 100 %
+    else:
+        raise AssertionError("a coin the hedge leaves out took the named coin's ratio")
+    same(dict(base, hedge={'BTC': {'product': 'usdt', 'ratio': 0.5}, 'ETH': {'ratio': 0.5}}))
+    short = dict(base, assets=[{'coin': 'BTC', 'weight': 0.5}, {'coin': 'SOL', 'weight': -0.5}])
+    for hedge in ({'BTC': {'product': 'usdc', 'ratio': 1.0}, 'SOL': {'product': 'usdc'}},
+                  {'BTC': {'product': 'inverse', 'ratio': 1.0}, 'SOL': {'product': 'usdc'}},
+                  {'product': 'usdc', 'ratio': 1.0}):
+        same(dict(short, hedge=hedge))
+    back = row_from_form({'name': 'b', 'capital': '1', 'assets': 'BTC 1, SOL -1',
+                          'hedge_each': 'SOL usdc'})
+    assert validate_portfolio(back)['short_products'] == {'SOL': 'usdc'}
+
+
+def spec_U108d_a_carry_edit_never_loosens_the_cap_on_one_coin():
+    """A levered row with no cap of its own is held to the engine's 50 % of
+    the stack (H1); the form read its blank as 50 % of the basket and an
+    unchanged edit wrote five times the cap at 5x. The edit says the cap the
+    engine holds; a new row's blank is still a share of the basket (U108b)."""
+    from gridgremlin.portfolio import validate_portfolio
+    from panel.carry_setup import form_from_row, row_from_form
+    from panel.lever import lever_row
+    coins = 'BTC ETH SOL XRP DOGE ADA LINK AVAX DOT SUI'.split()
+    rows = (lever_row(row_from_form({'name': 'four', 'capital': '1000',
+                                     'assets': 'BTC 1, ETH 1, SOL 1, XRP 1'}), 2.0, {}),
+            {'strategy': 'portfolio', 'name': 'ten', 'capital': 1000, 'spot_borrow': True,
+             'margin': {'spot_leverage': 5}, 'assets': [{'coin': c, 'weight': 0.5} for c in coins]})
+    for row in rows:
+        assert 'max_weight' not in (row.get('risk') or {})
+        back = row_from_form(form_from_row(json.loads(json.dumps(row))))
+        assert validate_portfolio(json.loads(json.dumps(back)))['risk']['max_weight'] == 0.5, back
+    assert form_from_row(rows[1])['max_weight'] == '10'
+    fresh = row_from_form({'name': 'b', 'capital': '1', 'assets': 'BTC 1, ETH 1', 'spot_leverage': '2'})
+    assert fresh['risk']['max_weight'] == 1.0
+
+
+def spec_U111b_a_carry_edit_keeps_the_rows_notes():
+    """The grid and DCA edit keep a row's own notes (keys starting '_', the
+    operator's); the carry edit dropped them. A note rides along."""
+    import re
+    base, d, close = _served_fleet()
+    form = {'fleet': '0', 'name': 'basket', 'capital': '1000',
+            'assets': 'BTC 50, SOL 50', 'hedge_ratio': '100', 'hedge_product': 'inverse'}
+    try:
+        page = _call(base, '/setup-carry', form)
+        seen = html_unescape(re.search(r'name="seen" value="([^"]+)"', page).group(1))
+        assert 'pfobasket: written' in _call(base, '/setup-carry', dict(form, step='apply', seen=seen,
+                                                                         confirm='pfobasket'))
+        fleet = json.loads((d / 'f.json').read_text())
+        next(b for b in fleet['bots'] if b.get('name') == 'basket')['_note'] = 'kept by hand'
+        (d / 'f.json').write_text(json.dumps(fleet))
+        edit = dict(form, edit='pfobasket', capital='2000')
+        page = _call(base, '/setup-carry', edit)
+        assert 'edit: gates passed' in page, page[:800]
+        seen = html_unescape(re.search(r'name="seen" value="([^"]+)"', page).group(1))
+        assert 'pfobasket: written' in _call(base, '/setup-carry', dict(edit, step='apply', seen=seen,
+                                                                         confirm='pfobasket'))
+        row = next(b for b in json.loads((d / 'f.json').read_text())['bots'] if b.get('name') == 'basket')
+        assert row['capital'] == 2000 and row['_note'] == 'kept by hand', row
+    finally:
+        close()
+
+
+def spec_U107b_a_dca_sized_in_coins_is_told_its_smallest_order_in_coins():
+    """A DCA sized in coins (D89) was told to raise its first order to
+    "about 84.91" while its size was typed in coins. The smallest order is
+    said in the unit the size is typed in, its money beside it."""
+    import re
+    base, d, close = _served_fleet()
+    form = {'fleet': '0', 'how': 'advanced', 'strategy': 'martingale',
+            'symbol': 'BTCUSDT', 'side': 'long', 'market_type': 'linear',
+            'capital': '1000', 'size_unit': 'collateral', 'leverage': '5', 'size_in': 'coin',
+            'base_order_size': '0.0005', 'safety_order_size': '0.002',
+            'max_averaging_orders': '5', 'deviation_pct': '2',
+            'take_profit_avg_pct': '1.5'}
+    try:
+        page = _call(base, '/setup', form)
+        box = ' '.join(re.findall(r'class="refusal".*?</div>', page, re.S))
+        assert 'the first order (0.0005 coins)' in box, box or page[:1500]
+        assert 'about 0.001 coins' in box and '84.91' in box, box
+    finally:
+        close()

@@ -162,6 +162,11 @@ written config (§11).</p>
                     '<span class="neg">NOT all flat</span></h1>')))
         left = ('' if not got.get('left') else
                 '<p class="neg">still open: ' + html.escape(json.dumps(got['left'])) + '</p>')
+        for key in ('not_cleared', 'not_retired'):                # D149: a clear waits for flat
+            if got.get(key):
+                left += (f'<p class="neg">{key.replace("_", " ")}: '
+                         + html.escape(got[key] if isinstance(got[key], str) else '; '.join(got[key]))
+                         + '</p>')
         again = ('' if go else
                  f'<form method="post" action="/retire-all"><input type="hidden" name="gg" value="1">'
                  f'<input type="hidden" name="fleet" value="{fi}"><input type="hidden" name="go" value="1">'

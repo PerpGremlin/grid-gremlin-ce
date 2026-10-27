@@ -6,14 +6,18 @@
 # the way one is (X15c): a grid or DCA row by retire_bot (tombstone, its
 # orders cancelled, its position closed); a spot row tombstoned and its
 # orders cancelled (its coins are the wallet's, see --sell); a portfolio
-# row flattened, every leg together (H4). Then the venue is read back,
-# row by row. --sell sells every coin on the Bybit account but USDT
+# row flattened, every leg together (H4); each open trade (D81) as the
+# row it is. Then the venue is read back, row by row and a portfolio's
+# perps leg by leg. --sell sells every coin on the Bybit account but USDT
 # (dust under the venue's minimum stays; Hyperliquid's USDC is its cash).
-# --clear takes every tombstoned row out of the fleet file, with its
-# watchdog line and its tombstone, so the page shows nothing; an empty
-# fleet is a file the engine refuses to run until a bot is added.
+# --clear, once the read-back is flat, takes every row out of the fleet
+# file with its watchdog line, and every row and trade's local state with
+# it (X16), so the page shows nothing; an empty fleet is a file the engine
+# refuses to run until a bot is added. Not flat, nothing is cleared; a row
+# the engine refuses (D52) is never retired, so it refuses the clear.
 #
-# Narrow like retire: never mainnet, never beside its running fleet.
+# Narrow like retire: never mainnet, never beside its running fleet, and
+# the fleet's prelock held throughout so it cannot start meanwhile (F3).
 # --dry says what it would do and does nothing. Prints one JSON object;
 # a refusal is {"refused": "..."}.
 import json
@@ -103,13 +107,27 @@ def sell_down(client, dry=False, quote='USDT'):
     return out
 
 
+def portfolio_left(bot):
+    """X4 for a portfolio row: each hedge and short leg's position read
+    back. Its flatten answers with the wallet's balances, which say nothing
+    of a perp left open, so a clean wallet over an open short read flat.
+    [{leg, symbol, held}] for each leg still open."""
+    left = []
+    for kind in ('hedge', 'short'):
+        for coin, leg in (bot.legs.get(kind) or {}).items():
+            size, _ = bot._short_size(bot.client.read_symbol_truth(leg['market_type'], leg['symbol']), leg)
+            if size > 1e-12:
+                left.append({'leg': f'{kind} {coin}', 'symbol': leg['symbol'], 'held': size})
+    return left
+
+
 def retire_fleet(fleet_path, dry=False, sell=False, clear=False):
     """The whole act on one fleet file; the JSON-able answer."""
     from common.env import load_env
+    from .durable import logs_dir, state_path
     from .exchange.env import select_account
-    from .main import build_portfolio, fleet_running
-    from .retire import open_venue, retire_bot
-    from .tombstones import Tombstones, path_for, remove
+    from .main import acquire_fleet_lock, fleet_running
+    from .trades import load_trades
     load_env()
     fleet_path = Path(fleet_path)
     raw = json.loads(fleet_path.read_text())
@@ -118,9 +136,42 @@ def retire_fleet(fleet_path, dry=False, sell=False, clear=False):
     if fleet_running(str(fleet_path), {c['venue'] for c in fleet['bots']}, fleet['account']):
         return {'refused': 'the fleet is running on this file — stop it first: '
                            'its running bots would place their orders back'}
+    # D81: the fleet's open trades are bots of it too, retired with it
+    trades, trade_refused = load_trades(state_path(str(fleet_path), fleet, 'trades'))
+    trades = [dict(t, account=fleet['account']) for t in trades]
+    refused = ([f'{where} ({label}): {why}' for where, label, why in fleet.get('refused', ())]
+               + [f'trades[{i}]: {why}' for i, why in trade_refused])
+    if clear and refused:
+        # a row the engine refuses (D52) is not retired, so clearing it would
+        # leave whatever it holds with nothing to manage it
+        return {'refused': 'rows the engine refuses are not retired, so the fleet cannot be '
+                           'cleared — fix or remove them first: ' + '; '.join(refused)}
+    if dry:
+        return _retire(fleet_path, raw, fleet, trades, refused, dry, sell, clear)
+    # F3: the fleet's own prelock held for the whole retire, so the engine
+    # cannot start on this file while its orders are being cancelled
+    lockdir = logs_dir(fleet_path)
+    lockdir.mkdir(parents=True, exist_ok=True)
+    try:
+        prelock = acquire_fleet_lock(str(lockdir / f'{fleet_path.resolve().name}.prelock'))
+    except ConfigError:
+        return {'refused': 'the fleet is starting on this file — let it start and stop it, '
+                           'or wait, then retire'}
+    try:
+        return _retire(fleet_path, raw, fleet, trades, refused, dry, sell, clear)
+    finally:
+        prelock.close()
+
+
+def _retire(fleet_path, raw, fleet, trades, refused, dry, sell, clear):
+    from .durable import state_path
+    from .main import build_portfolio
+    from .retire import open_venue, retire_bot
+    from .tombstones import Tombstones, path_for
     tombs = Tombstones(str(path_for(str(fleet_path), fleet)))
     clients, rows = {}, []
-    for cfg in market_rows(fleet):
+    markets = market_rows(fleet) + trades
+    for cfg in markets:
         botid = row_botid(cfg)
         client, adapter = open_venue(cfg, clients)
         if kind_of(cfg) == 'spot':
@@ -135,13 +186,13 @@ def retire_fleet(fleet_path, dry=False, sell=False, clear=False):
                          'note': 'its coins are the wallet\'s: --sell sells them'})
             continue
         rows.append(dict(retire_bot(cfg, client, adapter, tombs, REASON, dry=dry), kind='perp'))
+    open_legs = []
     for cfg in [c for c in fleet['bots'] if kind_of(c) == 'portfolio']:
         botid = row_botid(cfg)
         if dry:
             rows.append({'botid': botid, 'kind': 'portfolio', 'dry': True,
                          'would': 'flatten every leg together (H4)'})
             continue
-        from .durable import state_path
         from .events import Notifier
         from .portfolio_state import PortfolioState
         if 'bybit' not in clients:
@@ -152,13 +203,16 @@ def retire_fleet(fleet_path, dry=False, sell=False, clear=False):
         state = PortfolioState(str(state_path(str(fleet_path), fleet, 'portfolio_state')))
         bot, _ = build_portfolio(cfg, clients['bybit'], Notifier(sink=lambda *_: None), state, tombs)
         after = bot.flatten_now(REASON, tombstone=True)
-        if clear:
-            state.forget(bot.botid)
+        legs = portfolio_left(bot)                           # X4: the perps read back too
+        if legs:
+            open_legs.append({'botid': botid, 'legs': legs})
         rows.append({'botid': botid, 'kind': 'portfolio', 'after': after})
     out = {'fleet': fleet_path.name, 'dry': dry, 'rows': rows}
+    if refused:
+        out['not_retired'] = refused                         # D52: said, never silent
     if not dry:                                              # X4: read back, never assume
         left = []
-        for cfg in market_rows(fleet):
+        for cfg in markets:
             t = clients[cfg['venue']].read_symbol_truth(cfg['market_type'], cfg['symbol'])
             botid = row_botid(cfg)
             held = (0.0 if cfg['market_type'] == 'spot' else
@@ -166,6 +220,7 @@ def retire_fleet(fleet_path, dry=False, sell=False, clear=False):
             mine = [o['link_id'] for o in t['orders'] if rung_of(o['link_id'], botid) is not None]
             if held > 1e-12 or mine:
                 left.append({'botid': botid, 'held': held, 'orders': mine})
+        left += open_legs
         out['flat'] = not left
         if left:
             out['left'] = left
@@ -174,24 +229,26 @@ def retire_fleet(fleet_path, dry=False, sell=False, clear=False):
         out['sold'] = (sell_down(clients['bybit'], dry=dry) if 'bybit' in clients
                        else [{'left': 'no Bybit row in this fleet: nothing sold'}])
     if clear:
-        # every row was just retired, so every row leaves (a dry run says which)
-        gone = {row_botid(b) for b in raw.get('bots') or [] if isinstance(b, dict)}
-        out['cleared'] = sorted(gone)
-        if not dry and gone:
+        # every row and trade was just retired, so every one leaves (a dry
+        # run says which) — but only once the venue read back flat: a row
+        # cleared over what it left lets a new bot of its name adopt it
+        gone = sorted({row_botid(b) for b in raw.get('bots') or [] if isinstance(b, dict)}
+                      | {row_botid(t) for t in trades})
+        out['cleared'] = gone if dry or out['flat'] else []
+        if not dry and not out['flat']:
+            out['not_cleared'] = ('the venue is not flat (see left): every row, tombstone and '
+                                  'record stays — retire what is left, then clear again')
+        elif not dry and gone:
             wd_path = raw.get('watchdog')
             wd_raw = json.loads(Path(wd_path).read_text()) if wd_path and Path(wd_path).exists() else None
-            new_fleet, new_wd = clear_rows(raw, wd_raw, gone)
+            new_fleet, new_wd = clear_rows(raw, wd_raw, set(gone))
             write_atomic(fleet_path, dump(new_fleet))
             if new_wd is not None:
                 write_atomic(wd_path, dump(new_wd))
-            from .durable import state_path
-            from .slide_state import forget
-            slide = state_path(str(fleet_path), fleet, 'slide_state')
+            from .forget import forget_bot
+            at = time.time() * 1000
             for botid in gone:
-                remove(tombs.path, botid)
-                forget(slide, botid)                         # its window, home
-            from .kept_fills import cut
-            cut(fleet_path, gone, time.time() * 1000)        # R18c: their records end here
+                forget_bot(fleet_path, raw, botid, at)       # X16: everything under its name
     return out
 
 

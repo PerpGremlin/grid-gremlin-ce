@@ -190,11 +190,10 @@ class RetirePages:
     def _retire_remove(self, fi, botid, back):
         """The row and its watchdog line out of the files — only for a bot
         that has stood down or never started, so nothing it owns is left
-        running unmanaged; its request and tombstone go with it (nothing is
-        left to revive, and a new bot on that coin and side starts clean)."""
+        running unmanaged; everything kept under its name goes with it (X16:
+        nothing is left to revive, and a new bot on that coin and side
+        starts clean)."""
         from panel.create import atomic_write, dump_config, public_adapter, remove_proposal, validate_whole
-        from gridgremlin.retire import drop, requests_path
-        from gridgremlin.tombstones import path_for, remove as tomb_remove
         req, dead, seen = self._retire_state(fi, botid)
         if seen and not dead:
             return self._page(refusal_box('not removed', f'{botid} is still running — retire it first: '
@@ -212,11 +211,8 @@ class RetirePages:
             return self._page(refusal_box('the engine refuses this fleet', refusal))
         atomic_write(f, dump_config(fleet))
         atomic_write(wd_p, dump_config(wd))
-        drop(requests_path(f), botid)
-        if dead:
-            tomb_remove(path_for(f, fleet_raw), botid)
-        from gridgremlin.kept_fills import cut
-        cut(f, [botid], time.time() * 1000)          # R18c: a new bot on this coin starts clean
+        from gridgremlin.forget import forget_bot
+        forget_bot(f, fleet_raw, botid)              # X16: a new bot on this coin starts clean
         held = self._snapshot_held(fi, botid)
         return self._page(
             f'<h1>{html.escape(botid)}: retired and removed</h1><p>its row and watchdog line left the '

@@ -275,9 +275,12 @@ def spec_U104_a_stopped_or_retired_bot_is_not_drawn_from_the_last_picture():
     but the cards drew the engine's last snapshot (holding, orders
     resting). A bot its tombstone names reads RETIRED, one in a fleet whose
     unit is not active STOPPED; neither shows the snapshot's holding or
-    orders; the fleet's heading says stopped. The run state comes from
-    systemctl and the tombstone file; unknown leaves the card as it was.
-    Sabotage: ignoring `retired` draws the old holding again."""
+    orders; the fleet's heading says stopped. What it held is said as last
+    seen, the exchange having the word — never "holding nothing" unless the
+    last snapshot read flat. The run state comes from systemctl and the
+    tombstone file; unknown leaves the card as it was. Sabotage: ignoring
+    `retired` draws the old holding again; wiping the last holding says
+    "holding nothing"."""
     import copy
     import json
     import subprocess
@@ -295,8 +298,15 @@ def spec_U104_a_stopped_or_retired_bot_is_not_drawn_from_the_last_picture():
     assert 'holding 730 (belief)' in live and '>HOLDING<' in live
     for key, val, word in (('retired', ['linDOGEs'], 'RETIRED'), ('stopped', 'inactive', 'STOPPED')):
         html = card(0, 'linDOGEs', None, dict(c, **{key: val}), belief)
-        assert f'>{word}<' in html and '730' not in html and 'HOLDING' not in html, word
-        assert 'holding nothing' in html
+        assert f'>{word}<' in html and 'HOLDING' not in html and '(belief)' not in html, word
+        # the reviewer (2026-10-27): a stop parks and never flattens, a hold
+        # keeps its position — "holding nothing" claimed what nobody read
+        assert 'last seen holding 730' in html and 'the exchange has the word' in html, word
+        assert 'holding nothing' not in html and 'cancelled, its position closed' not in html, word
+        flat = {'linDOGEs': dict(belief['linDOGEs'], position=0.0)}
+        assert 'last seen holding nothing' in card(0, 'linDOGEs', None, dict(c, **{key: val}), flat)
+        unseen = card(0, 'linDOGEs', None, dict(c, **{key: val}), {})
+        assert 'not known here' in unseen and 'holding nothing' not in unseen, word
     assert '<span class="tier neg">stopped</span>' in cards_section(0, 'demo', dict(c, stopped='inactive'))
     assert 'stopped</span>' not in cards_section(0, 'demo', c)
     # the run state: the fleet's unit by systemctl, the rows by their tombstones

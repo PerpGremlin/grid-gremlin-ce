@@ -5,6 +5,7 @@ out, and back (a row survives the form unchanged, as U2 for a grid);
 percentages travel as Decimal text, so 33.34 % is 0.3334 exactly.
 """
 import html
+import json
 from decimal import Decimal, InvalidOperation
 
 # (form name, the row's path, kind, label, help, required)
@@ -28,7 +29,7 @@ ESSENTIAL = (
     ('hedge_each', ('hedge', '*'), 'products', 'Hedge some coins on',
      'a coin on another perpetual than the one above, like SOL usdt, SUI '
      'usdc — the funding table below the form compares them. Blank = every '
-     'coin on the one above', False),
+     'coin on the one above. An outright short is on usdt unless named here', False),
     ('perp_leverage', ('perp_leverage',), 'num', 'Perp leverage',
      'set on every hedge at each start; blank = whatever the venue holds', False),
 )
@@ -167,13 +168,16 @@ def row_from_form(form):
         row['hedge'].setdefault('ratio', 1.0)
     if each:
         # a coin on another perp: the hedge is written per coin, every long
-        # named with the one ratio (a coin left out would read 100 %)
+        # named with the one ratio (a coin left out would read 100 %); an
+        # outright short named by its product alone, no ratio (H1c)
         longs = [a['coin'] for a in row['assets'] if a['weight'] > 0]
-        stray = sorted(set(each) - set(longs))
+        stray = sorted(set(each) - {a['coin'] for a in row['assets']})
         if stray:
             raise ValueError(f"Hedge some coins on: {', '.join(stray)} is not a coin the basket holds")
         h = row.get('hedge') or {'product': 'inverse', 'ratio': 1.0}
-        row['hedge'] = {c: {'product': each.get(c, h['product']), 'ratio': h['ratio']} for c in longs}
+        row['hedge'] = {a['coin']: ({'product': each.get(a['coin'], h['product']), 'ratio': h['ratio']}
+                                    if a['coin'] in longs else {'product': each[a['coin']]})
+                        for a in row['assets'] if a['coin'] in longs or a['coin'] in each}
     return {k: row[k] for k in _ORDER if k in row}
 
 
@@ -190,21 +194,31 @@ def _products(text):
 
 
 def form_from_row(row):
-    """The form's values for a row (edit, copy, a refused form kept)."""
+    """The form's values for a row (edit, copy, a refused form kept). The
+    row is read as the engine reads it (U108c): every long's hedge, every
+    short's product, every perp's leverage — what the form cannot hold is
+    said, never flattened."""
+    from gridgremlin.portfolio import validate_portfolio
+    cfg = validate_portfolio(json.loads(json.dumps(row)), 'the row')
     hedge = row.get('hedge') or {}
     each = {}
     if any(k not in ('product', 'ratio') for k in hedge):
-        # per coin: one ratio for all, the products the form can say
-        ratios = {float((h or {}).get('ratio', 1.0)) for h in hedge.values()}
-        if len(ratios) != 1:
+        # per coin: one ratio for all, the products the form can say — over
+        # every long, a coin the hedge leaves out as the engine has it
+        ratios = {h['ratio'] for h in cfg['hedges'].values()}
+        if len(ratios) > 1:
             raise ValueError('the hedge ratio differs by coin — edit it in the fleet file')
-        prods = [(c, (h or {}).get('product', 'inverse')) for c, h in hedge.items()]
-        common = max(sorted({p for _, p in prods}), key=lambda p: sum(q == p for _, q in prods))
+        prods = [(c, h['product']) for c, h in cfg['hedges'].items()]
+        common = max(sorted({p for _, p in prods}) or ['inverse'],
+                     key=lambda p: sum(q == p for _, q in prods))
         each = {c: p for c, p in prods if p != common}
-        row = dict(row, hedge={'product': common, 'ratio': ratios.pop()})
+        row = dict(row, hedge={'product': common, 'ratio': ratios.pop() if ratios else 1.0})
+    # an outright short off the usdt it defaults to is named too (H1c)
+    each.update({c: p for c, p in cfg['short_products'].items() if p != 'usdt'})
     if row.get('spot_quote', 'USDT') != 'USDT' or row.get('account') or row.get('venue', 'bybit') != 'bybit':
         raise ValueError('a basket on another quote, account or venue is edited in the fleet file')
     lev = Decimal(str((row.get('margin') or {}).get('spot_leverage', 1)))
+    perps = [c for c, h in cfg['hedges'].items() if h['ratio'] > 0] + list(cfg['short_products'])
     vals = {'hedge_each': ', '.join(f'{c} {p}' for c, p in each.items())} if each else {}
     for n, path, kind, _, _, _ in FIELDS:
         if kind == 'products':
@@ -212,6 +226,10 @@ def form_from_row(row):
         v = row.get(path[0])
         if len(path) == 2:
             v = v.get(path[1]) if isinstance(v, dict) else None
+        if v is None and n == 'max_weight' and lev != 1:
+            # U108d: a levered row's blank cap is the engine's, a share of
+            # the stack — said, so the edit does not read it as the basket's
+            v = cfg['risk']['max_weight']
         if v is None:
             continue
         if kind == 'assets':
@@ -225,6 +243,10 @@ def form_from_row(row):
         elif kind == 'num' and isinstance(v, dict):
             if len(set(v.values())) != 1:       # one number holds one leverage
                 raise ValueError('perp leverage differs by coin — edit it in the fleet file')
+            if set(v) != set(perps):            # one number would set every perp (U108c)
+                raise ValueError(f"perp leverage is set on {', '.join(v)} only, not every perp "
+                                 f"({', '.join(perps)}) — edit it on the leverage form above, or "
+                                 'in the fleet file')
             vals[n] = f'{next(iter(v.values())):g}'
         elif kind == 'choice:inverse|usdt|usdc' or kind.startswith('choice:'):
             vals[n] = str(v)

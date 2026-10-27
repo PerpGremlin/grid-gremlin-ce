@@ -228,7 +228,7 @@ def unpriced(b):
 UNPRICED = ' <span class="neg">+ an open position not priced (its mark was not read)</span>'
 
 
-HALT_HEAD = {'RETIRED': 'retired: its orders cancelled, its position closed',
+HALT_HEAD = {'RETIRED': 'retired: stood down for good, its orders cancelled',
              'STOPPED': 'its fleet is stopped: nothing placed, nothing watched'}
 
 
@@ -282,8 +282,14 @@ def card(idx, botid, b, contract, belief, full=False):
     # this fleet" (the owner, 2026-10-11, on tilt's ended BTC trade); a trade
     # ends by its own exit, close trade, or clear
     halted = halt_of(contract, botid)                    # U104
+    last_seen = None
     if halted:
-        belief = {}          # the engine's last picture is not now
+        # the engine's last picture is not now — but its last holding is the
+        # last word the page has: a stop parks and never flattens, a retire
+        # may keep its position (hold, leave_position), so a halted card says
+        # what was last seen, never "nothing" it did not read
+        last_seen = (belief.get(botid) or {}).get('position') if botid in belief else None
+        belief = {}
     if b is not None and b.get('realized') is None:
         b = None             # an inverse book with no mark has no dollars (the second
                              # audit, 2026-10-13): shown as the engine's belief, never a crash
@@ -306,6 +312,12 @@ def card(idx, botid, b, contract, belief, full=False):
             head += f'<div class="pnl">{kept}</div>'
         held = (f'holding {pos:.10g} (belief)' if abs(pos) > 1e-12
                 else 'holding nothing')
+        if halted:                                                 # U104
+            held = (f"last seen holding {last_seen:.10g} (the engine's last snapshot) "
+                    '— the exchange has the word' if abs(last_seen or 0.0) > 1e-12 else
+                    "last seen holding nothing (the engine's last snapshot) — the exchange "
+                    'has the word' if last_seen is not None else
+                    'what it holds is not known here — the exchange has the word')
         _quiet_held = held                        # U68: the slim card says it too
         mark = (contract.get('marks') or {}).get(botid)             # U57: a quiet bot has a price too
         more, note = '', ''

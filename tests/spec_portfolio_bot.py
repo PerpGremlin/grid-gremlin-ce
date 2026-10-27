@@ -1355,3 +1355,222 @@ def spec_H3c_a_drift_read_trades_between_ticks_and_leaves_the_clock_alone():
         if trades:
             assert ('spot', 'BTCUSDT', 'Sell') in {o[:3] for o in moved}
             assert ('spot', 'ETHUSDT', 'Buy') in {o[:3] for o in moved}
+
+
+def _three_coin_legs():
+    """BTC, ETH and SOL, each with its inverse leg (SOL's own adapters, so
+    the module's two-coin tables stay as every other spec reads them)."""
+    legs = _legs()
+    legs['spot']['SOL'] = {'market_type': 'spot', 'symbol': 'SOLUSDT', 'adapter': SpotAdapter(
+        {'symbol': 'SOLUSDT', 'qty_step': 0.001, 'price_tick': 0.01, 'min_qty': 0.001, 'min_notional': 1})}
+    legs['hedge']['SOL'] = {'market_type': 'inverse', 'symbol': 'SOLUSD', 'adapter': InverseAdapter(
+        {'symbol': 'SOLUSD', 'qty_step': 1, 'price_tick': 0.01, 'min_qty': 1, 'settle_coin': 'SOL'})}
+    return legs
+
+
+THREE = {'assets': [{'coin': 'BTC', 'weight': 0.4}, {'coin': 'ETH', 'weight': 0.3}, {'coin': 'SOL', 'weight': 0.3}],
+         'hedge': {'product': 'inverse', 'ratio': 0.0},
+         'rebalance': {'cash_reserve': 0, 'trigger': 'drift', 'drift_pct': 0.05}}
+
+
+def spec_H14_a_sales_proceeds_are_the_rows_cash_a_sell_only_drift_read_keeps_the_value():
+    """The review (2026-10-27): only buys moved the row's cash, so a sale's
+    proceeds vanished from the book — a sell-only drift read took 99,000 to
+    93,600 at unchanged marks. BTC +25% puts it past the drift alone: it
+    is sold, the others stay, and the value is the value."""
+    venue, lines, clock = _venue(), [], Clock()
+    venue.marks.update({'SOLUSDT': 100.0, 'SOLUSD': 100.0})
+    venue.t_ms = int(clock.t * 1000)
+    bot, _ = _bot(venue, lines, clock=clock, legs=_three_coin_legs(), row=THREE)
+    bot.cycle()
+    for s in ('BTCUSDT', 'BTCUSD'):
+        venue.marks[s] = 75000.0
+    clock.t += 3600; venue.t_ms = int(clock.t * 1000)
+    n = len(venue.orders)
+    bot.cycle()
+    assert [o[:3] for o in venue.orders[n:]] == [('spot', 'BTCUSDT', 'Sell')]   # sell-only
+    assert abs(bot.portfolio_view['value'] - 99000.0) < 1e-6
+    sold = venue.orders[n][3] * 75000.0
+    assert abs(bot.row['cash'] - sold) < 1e-6                                  # the proceeds are cash
+    venue.fills[-1]['fee'] = 7.5                                               # the sale's quote fee
+    for _ in range(3):
+        clock.t += 61; venue.t_ms = int(clock.t * 1000)
+        bot.cycle()
+        assert abs(bot.portfolio_view['value'] - 98992.5) < 0.5, bot.portfolio_view['value']   # a buy's lot rounding aside
+        assert abs(bot.portfolio_view['total'] - 8992.5) < 0.5               # the fee once, as it booked
+
+
+def spec_H14_a_margin_floor_cut_is_not_a_loss():
+    """The same hole under the floor: a 20% cut read as an 18,000 loss —
+    which with `max_loss` set would have flattened a book that lost
+    nothing."""
+    venue, lines, clock = _venue(), [], Clock()
+    venue.t_ms = int(clock.t * 1000)
+    bot, _ = _bot(venue, lines, clock=clock,
+                  row={'risk': {'margin_floor_pct': 0.25, 'max_loss': 5000,
+                                'max_loss_since': '2026-01-01T00:00:00Z'}})
+    bot.cycle()
+    venue.available_pct, venue.im = 0.20, 100000.0
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    bot.cycle()
+    assert any('every leg cut by 20%' in ln for ln in lines)
+    assert abs(bot.row['cash'] - 18000.0) < 1e-6
+    venue.available_pct = 0.9
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    bot.cycle()
+    v = bot.portfolio_view
+    assert bot.alive and abs(v['value'] - 90000.0) < 1e-6 and abs(v['total']) < 1e-6, v['value']
+
+
+def spec_H14_the_live_bot_and_the_rehearsal_value_a_sale_alike():
+    """H7's promise, checked where they parted: the same row, the same
+    prices, no fees — the rehearsal credited the sale, the live bot did not."""
+    import gridgremlin.portfolio_rehearse as R
+    venue, lines, clock = _venue(), [], Clock()
+    venue.marks.update({'SOLUSDT': 100.0, 'SOLUSD': 100.0})
+    venue.t_ms = int(clock.t * 1000)
+    bot, _ = _bot(venue, lines, clock=clock, legs=_three_coin_legs(), row=THREE)
+    bot.cycle()
+    for s in ('BTCUSDT', 'BTCUSD'):
+        venue.marks[s] = 75000.0
+    for _ in range(2):
+        clock.t += 3600; venue.t_ms = int(clock.t * 1000)
+        bot.cycle()
+    H = 3_600_000
+    bars = {'BTC': [{'t': 0, 'c': 60000.0}, {'t': H, 'c': 75000.0}, {'t': 2 * H, 'c': 75000.0}],
+            'ETH': [{'t': i * H, 'c': 3000.0} for i in range(3)],
+            'SOL': [{'t': i * H, 'c': 100.0} for i in range(3)]}
+    fees = R.SPOT_FEE, R.PERP_FEE
+    R.SPOT_FEE = R.PERP_FEE = 0.0
+    try:
+        out = R.rehearse(bot.cfg, bars, {})
+    finally:
+        R.SPOT_FEE, R.PERP_FEE = fees
+    assert abs(out['path'][-1] - bot.portfolio_view['value']) < 1e-6, (out['path'][-1], bot.portfolio_view['value'])
+
+
+def _levered(lines, clock, trigger, tmp=None, venue=None):
+    if venue is None:
+        venue = _venue()
+        venue.coins['USDT'] = 100000.0
+    venue.t_ms = int(clock.t * 1000)
+    bot, tmp = _bot(venue, lines, clock=clock, tmp=tmp,
+                    row={'capital': 100000, 'spot_borrow': True, 'margin': {'spot_leverage': 2.0},
+                         'assets': [{'coin': 'BTC', 'weight': 1.0}, {'coin': 'ETH', 'weight': 1.0}],
+                         'risk': {'max_weight': 1.0, 'margin_floor_pct': 0.25},
+                         'rebalance': {'cash_reserve': 0, 'trigger': trigger}})
+    return venue, bot, tmp
+
+
+def spec_H15_the_ratchet_eases_on_its_own_clock_under_a_drift_trigger():
+    """The review (2026-10-27): the easing waited for the tick's clock, and a
+    drift trigger never moves it — so once a day had passed it eased every
+    read, 1.8× → 1.89 → 1.98 → the file's 2× in two minutes. Its own clock:
+    one step every `every_hours`. A state row from before the clock (no
+    `relax_ms`) eases on the tick's once, then on its own."""
+    for old in (False, True):
+        lines, clock = [], Clock()
+        venue, bot, tmp = _levered(lines, clock, 'drift')
+        bot.cycle()
+        venue.available_pct, venue.im = 0.20, 100000.0
+        clock.t += 61; venue.t_ms = int(clock.t * 1000)
+        bot.cycle()
+        assert abs(bot.row['lever_cap'] - 1.8) < 1e-9 and bot.row['relax_ms'] == venue.t_ms
+        assert bot.portfolio_view['next_tick_ms'] is None                    # H3c: a drift row keeps no clock
+        if old:
+            del bot.row['relax_ms']
+            bot.state.set(bot.botid, bot.row)
+            venue, bot, _ = _levered(lines, clock, 'drift', tmp=tmp, venue=venue)
+            assert 'relax_ms' not in bot.row
+        venue.available_pct = 0.40
+        clock.t += DAY; venue.t_ms = int(clock.t * 1000)
+        caps = []
+        for _ in range(6):
+            bot.cycle()
+            caps.append(round(bot.row['lever_cap'], 6))
+            clock.t += 61; venue.t_ms = int(clock.t * 1000)
+        assert caps == [1.89] * 6, (old, caps)
+        assert sum('leverage eased' in ln for ln in lines) == 1
+        clock.t += DAY; venue.t_ms = int(clock.t * 1000)
+        bot.cycle()
+        assert abs(bot.row['lever_cap'] - 1.9845) < 1e-9                    # the next step, a day on
+
+
+def spec_H15_a_refused_leg_holding_the_tick_open_does_not_ease_every_read():
+    """Clock mode, the same hole: a refused leg keeps the tick open (it is
+    asked again each read), and the easing rode it — a step a minute."""
+    from gridgremlin.exchange.errors import VenueError
+    lines, clock = [], Clock()
+    venue, bot, _ = _levered(lines, clock, 'clock')
+    bot.cycle()
+    venue.available_pct, venue.im = 0.20, 100000.0
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    bot.cycle()
+    assert abs(bot.row['lever_cap'] - 1.8) < 1e-9
+    venue.available_pct = 0.40
+    venue.positions['BTCUSD'] = {}                                          # the hedge lifted by an outside hand
+    real = venue.place_market
+
+    def refuse(mt, symbol, side, *a, **k):
+        if symbol == 'BTCUSD' and side == 'Sell':
+            raise VenueError('BTCUSD: venue says no', kind='other')
+        return real(mt, symbol, side, *a, **k)
+    venue.place_market = refuse
+    clock.t += DAY; venue.t_ms = int(clock.t * 1000)
+    tick = bot.row['last_tick_ms']
+    caps = []
+    for _ in range(5):
+        bot.cycle()
+        caps.append(round(bot.row['lever_cap'], 6))
+        clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    assert bot.row['last_tick_ms'] == tick                                  # the tick held open
+    assert caps == [1.89] * 5, caps
+
+
+def spec_H13b_money_moved_in_or_out_of_the_account_is_the_accounts_never_the_rows():
+    """The review (2026-10-27): `outside_cash` was fixed at the first read,
+    so a later deposit read as the row's profit, and its next tick sized
+    the stack from it. The venue's cash log names each transfer: it joins
+    the account's own; a withdrawal beyond that takes the row's cash as
+    capital out, never as a loss."""
+    lines, clock = [], Clock()
+    venue = _venue()
+    venue.coins['USDT'] = 300000.0
+    venue.t_ms = int(clock.t * 1000)
+    venue.log = []
+    venue.cash_log = lambda coin, since, now: [r for r in venue.log if since <= r['time_ms'] <= now]
+
+    def transfer(change):
+        venue.log.append({'id': f't{len(venue.log)}', 'time_ms': venue.t_ms, 'symbol': '', 'category': '',
+                          'type': 'TRANSFER_IN' if change > 0 else 'TRANSFER_OUT', 'change': change})
+        venue.coins['USDT'] += change
+    bot, _ = _bot(venue, lines, clock=clock,
+                  row={'capital': 100000, 'spot_borrow': True, 'margin': {'spot_leverage': 2.0},
+                       'assets': [{'coin': 'BTC', 'weight': 1.0}, {'coin': 'ETH', 'weight': 1.0}],
+                       'risk': {'max_weight': 1.0}})
+    transfer(1000.0)                                                         # before the row: in its first wallet
+    bot.cycle()
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    bot.cycle()
+    assert abs(bot.row['outside_cash'] - 201000.0) < 1.0
+    cash0 = bot.row['cash']
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    transfer(50000.0)
+    bot.cycle()
+    v = bot.portfolio_view
+    assert abs(bot.row['outside_cash'] - 251000.0) < 1.0 and abs(bot.row['cash'] - cash0) < 1e-6
+    assert abs(v['total']) < 1.0 and abs(v['value'] - 100000.0) < 1.0
+    assert any('+50,000.00 USDT moved into the account' in ln for ln in lines)
+    n = len(venue.orders)
+    clock.t += 25 * 3600; venue.t_ms = int(clock.t * 1000)                 # past the clock
+    bot.cycle()
+    assert len(venue.orders) == n                                            # nothing sized from the deposit
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    transfer(-300000.0)                                                      # 49,000 beyond the account's own
+    bot.cycle()
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    bot.cycle()                                                              # counted once across the overlap
+    v = bot.portfolio_view
+    assert bot.row['outside_cash'] == 0.0 and abs(bot.row['contributed'] + 49000.0) < 1.0
+    assert abs(v['value'] - 51000.0) < 1.0 and abs(v['total']) < 1.0 and bot.alive
+    assert any("49,000.00 USDT moved out beyond the account's own" in ln for ln in lines)

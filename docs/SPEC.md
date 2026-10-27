@@ -905,6 +905,31 @@ eventually pin (T1).
   with it, the request and the tombstone go. A stand-down asked with
   remove waits for the tombstone, then removes. Not for a trade (close
   trade) or a portfolio row (its flatten).
+- **X15f** Retire all (D149): `python3 -m gridgremlin.retire_all
+  <fleet.json> [--dry] [--sell] [--clear]` retires every row of a stopped
+  fleet as X15c does and every open trade with it (D81), flattens each
+  portfolio row (H4), then reads the venue back: each row and trade's
+  position and its own orders, and each portfolio's hedge and short legs
+  one by one (its flatten answers with wallet balances, which do not see
+  a perp left open). The fleet's prelock is held from the check to the
+  end, so the engine cannot start on the file mid-retire (F3); a prelock
+  already held refuses. `--clear` acts only on a flat read-back: then
+  every row and its watchdog line leave the file and every row and
+  trade's local state is forgotten (X16); not flat, nothing is cleared and
+  the answer says what is left. A row the engine refuses (D52) is never
+  retired, so a clear is refused naming it, before anything is touched.
+  *(the review of 2026-10-27)*
+- **X16** A bot removed leaves nothing under its name. A bot's name is its
+  coin, side and kind, so a new bot of the same name read every fact the
+  old one left. One helper (`gridgremlin.forget.forget_bot`) forgets them
+  all — every local state kind (the slide offset, the tombstone, the
+  portfolio book with its loan, an ended trade's row) plus the pending
+  retire request and the kept ledger's record (R18c) — and every path
+  that takes a row out or puts a new one in calls it: retire all's clear,
+  the panel's retire remove, the edit page's create and remove, the carry
+  create and the orphans' clear. A live trade's row stays (its position
+  is open). A new kind of state must join the list (the spec walks them).
+  *(the review of 2026-10-27)*
 - **F1** Every fleet names a watchdog config, and its account guards (staleness,
   mm_rate, equity floor, drawdown) cover every bot. A per-bot position bound is
   opt-in (D32): present, it is checked; absent, the bot has no limit of its own. A
@@ -1225,7 +1250,7 @@ eventually pin (T1).
   *(owner, 2026-10-05: per-bot and per-exchange P&L that survives round
   ends and the venues forgetting)*
 - **R18c** A row taken out of its fleet ends its bot's kept record (`cut`):
-  the panel's remove, the fleet's clear (D149) and the orphans' clear write
+  the panel's removes, the fleet's clear (D149) and the orphans' clear (X16) write
   the moment into the ledger, its anchor goes, the fills stay kept. A new
   bot on that coin and side counts from its own first fill — the list, the
   card, the digest, the chart and the collector's next anchor. Fleets
@@ -1653,6 +1678,9 @@ eventually pin (T1).
   today's price (the coin minimum binds on a dear coin: 0.001 BTC), never
   the dollar minimum alone, and never "raise the leverage" (a size is the
   order's whole value).
+- **U107b** A DCA sized in coins (D89) is told its smallest order in coins,
+  rounded up to the market's step, its money beside it — never a money
+  figure for a size typed in coins.
 - **U108** A carry bot (the portfolio row, D78) is set up from the panel:
   name, investment, coins and weights and the hedge first, every other key
   of the row under Advanced. A row survives the form unchanged; one the
@@ -1665,6 +1693,17 @@ eventually pin (T1).
   scaled to fill the stack, spot leverage included; spot leverage turns
   borrowing on; the most in one coin is a share of the basket, scaled
   the same way.
+- **U108c** The carry form reads a row as the engine reads it: a per-coin
+  hedge's ratio and common product over every long (a coin the hedge leaves
+  out at the engine's 100 % on inverse, never the named coins' ratio), an
+  outright short's product off usdt named in "Hedge some coins on" and
+  written by its product alone (H1c), and a perp leverage set on some
+  perps only (the leverage form, D143) said, never spread to every perp.
+  An unchanged edit changes nothing the engine reads.
+- **U108d** A carry edit never loosens the cap on one coin: a levered row
+  with no cap of its own shows the engine's (50 % of the stack, H1) as its
+  share of the basket, so the save writes the same cap; a new row's blank
+  is still 50 % of the basket (U108b).
 - **U109** The right half's tables fit the half: latest trades in four
   columns (the account under the bot, the side with its role, the size at
   its price), a bot's fills in six (the date over the time), their text
@@ -1681,6 +1720,8 @@ eventually pin (T1).
   taken out, a long turned short or back, a hedged coin moved to another
   perpetual — each would leave coins or a short with nothing managing
   them. *(owner, 2026-10-23)*
+- **U111b** A carry edit keeps the row's own notes (keys starting `_`, the
+  operator's), as the grid and DCA edit does.
 - **U110** The right half scrolls on its own: the page's refresh keeps each
   half where it was scrolled to (a pick opens at its top), and a wheel at
   the half's end stays in it. *(owner, 2026-10-23: the carry bot's numbers
@@ -1689,8 +1730,13 @@ eventually pin (T1).
   owner, 2026-10-22, after the flatten: "the demo accounts are all still
   running"). A bot its tombstone names reads RETIRED; a bot whose fleet's
   unit is known and not active reads STOPPED, and the fleet's heading says
-  stopped. Neither shows the snapshot's holding, orders or valuation; the
-  exchange's fills still show. With no units given the card is unchanged.
+  stopped. Neither shows the snapshot's orders or valuation; the
+  exchange's fills still show. What it held is said as last seen, the
+  exchange having the word: a stop parks and never flattens, and a retire
+  may keep its position, so "nothing" is said only when the last snapshot
+  read flat. With no units given the card is unchanged. *(corrected
+  2026-10-27: the halted card had said "holding nothing" and "position
+  closed" over positions nobody had read)*
 - **U67** *(retired by D96, 2026-10-12: the front page's right half is
   U78's)* The fleet page is
   two halves on a wide screen — the bots, and the
@@ -2224,7 +2270,7 @@ that pins it (T1).
   by the same share — so the book stays neutral while the loan is
   repaid; said once an hour. A levered row remembers the floor's verdict:
   after a trim it aims lower by the trimmed share, and eases back toward
-  the file's leverage by 5% a tick only while free margin sits two
+  the file's leverage by 5% a step, on its own clock (H15), only while free margin sits two
   buffers above the floor — so the daily tick does not lever back into
   the floor it was just trimmed from. The loan's cost is read from the
   venue's own ledger (`borrow_history`: the hourly charges on the
@@ -2339,6 +2385,32 @@ that pins it (T1).
   so once. *(owner, 2026-10-23: a levered basket on a larger subaccount
   read the rest of the account as profit, and its next tick would have
   sized the stack from all of it)*
+- **H13b** Money moved into or out of the account after the row began is
+  the account's: each transfer the venue's cash log names (`TRANSFER_IN`,
+  `TRANSFER_OUT`, no market) moves `outside_cash`, so it is neither the
+  row's profit nor cash its next tick sizes from, and is said. A
+  withdrawal beyond the account's own takes the row's cash as capital out
+  (the anchor moves), never as a loss. Transfers before the row's first
+  read are in its first wallet, kept apart there. A venue without the
+  log moves nothing. *(the review, 2026-10-27: `outside_cash` was fixed at
+  the first read, so a later deposit read as the row's profit)*
+- **H14** A spot sale's proceeds are the row's cash, at mark, as a buy's
+  cost is — in the rebalance and under the margin floor alike — and the
+  sale's quote fee leaves the cash when its fill books; a row without a
+  loan never goes below zero, and the wallet still bounds it (D76). At
+  unchanged marks a sale leaves the value where it was, and the live
+  row and the rehearsal (H7) value it alike. *(the review, 2026-10-27:
+  only buys moved the cash — a sell-only drift read lost the sale from
+  the value, and a floor cut read as a loss of everything it sold, which
+  with `max_loss` set could flatten a book that had lost nothing)*
+- **H15** The ratchet's easing (H4) keeps its own clock (`relax_ms`): a
+  step every `every_hours`, the clock started by the cut or stand-down
+  that lowered the cap — never the tick's, which a drift trigger (H3c)
+  never moves and a refused leg holds open. A state row from before the
+  clock eases on the tick's once, then on its own. A drift row's card
+  shows no next tick. *(the review, 2026-10-27: under `drift` the easing
+  ran every read once a day had passed, back to the file's leverage in
+  two minutes)*
 - **H6** The card says the three truths. A portfolio's card shows the
   stack's value and coins, one line per asset (weight target → actual,
   hedge ratio target → actual, coins hedged, the regime word when the tilt

@@ -22,6 +22,7 @@ RELAX_STEP = 0.05            # the ratchet eases back toward the file's leverage
 PAIR_BACKOFF_S = 3600.0      # H10: after a buy undone for its refused hedge, the coin waits this long
 LEG_CODES = {'spot': 's', 'hedge': 'h', 'short': 'x'}
 STABLES = ('USDT', 'USDC', 'USDE', 'DAI', 'FDUSD')   # cash the account counts as collateral
+TRANSFERS = ('TRANSFER_IN', 'TRANSFER_OUT')          # the cash log's word for money moved in or out
 
 
 def _unreal(mt, size, avg, mark):
@@ -276,6 +277,26 @@ class PortfolioBot:
                               'what it spent and the interest it paid (H13)')
         return max(wq - own, 0.0)
 
+    def _transfer(self, moved):
+        """H13: money moved into or out of the account after the row began
+        joins the account's own (`outside_cash`), so it is neither the row's
+        profit nor cash its next tick sizes from; a withdrawal beyond the
+        account's own takes the row's cash, counted as capital taken out
+        (the anchor moves), never as a loss."""
+        row, q = self.row, self.cfg.get('spot_quote', 'USDT')
+        outside = row['outside_cash'] + moved
+        if outside < 0:
+            self._contribute(outside)
+            self.notify.event('warn', self.botid,
+                              f"{-outside:,.2f} {q} moved out beyond the account's own: taken from "
+                              "the row's cash as capital out, not a loss (H13)")
+            outside = 0.0
+        row['outside_cash'] = outside
+        way = 'into' if moved > 0 else 'out of'
+        self.notify.event('info', self.botid,
+                          f"{moved:+,.2f} {q} moved {way} the account: the account's, "
+                          "not the row's (H13)")
+
     def _learn_terms(self, prices, wallet=None):
         """H2: the row's terms changed under it (a restart on an edited
         file): a raised capital is cash to spend, a lowered one is said and
@@ -408,6 +429,11 @@ class PortfolioBot:
                             if f['side'] == 'buy' and f.get('price') else 0.0)
                 row['coins'][coin] = max(row['coins'].get(coin, 0.0)
                                          + (q if f['side'] == 'buy' else -q) - fee_coin, 0.0)
+                if f['side'] == 'sell':
+                    # H4: the sale's quote fee leaves the cash when it books;
+                    # its proceeds joined at the sale, at mark (the buy's way)
+                    fee = float(f.get('fee') or 0.0)
+                    row['cash'] = row['cash'] - fee if self.cfg.get('margin') else max(row['cash'] - fee, 0.0)
                 book = (row.get('spot_cost') or {}).get(coin)
                 if book is not None and f.get('price'):
                     spot_fill(book, f['side'], q, float(f['price']), float(f.get('fee') or 0.0))
@@ -522,19 +548,26 @@ class PortfolioBot:
                 if leg['market_type'] == 'linear':
                     linear.add(leg['symbol'])
         seen, fresh = set(row['cash_log_seen']), []
+        moved = 0.0
         for r in rows:
             if r['id'] in seen:
                 continue
             seen.add(r['id'])
             fresh.append(r['id'])
             if not r['symbol']:
-                continue                     # the loan's interest, a transfer: the account's
+                # H13: a transfer in or out is the account's, never the row's
+                # profit — the first read's wallet holds those before it
+                if r['type'] in TRANSFERS and not first and 'outside_cash' in row:
+                    moved += r['change']
+                continue                     # the loan's interest: the row's, through the wallet
             if (r['category'], r['symbol']) not in own:
                 row['others_cash'] += r['change']
             elif r['category'] == 'linear' and r['symbol'] in linear and r['type'] == 'TRADE':
                 row['linear_cash'] += r['change']        # in its book already
         row['cash_log_seen'] = (row['cash_log_seen'] + fresh)[-400:]
         row['cash_log_to_ms'] = now_ms
+        if moved:
+            self._transfer(moved)
         if first and (row['others_cash'] or row['linear_cash']):
             self.notify.event('info', self.botid,
                               f"cash apart from the row since it began: siblings {row['others_cash']:+,.2f}, "
@@ -593,6 +626,7 @@ class PortfolioBot:
         def stand_down(key, kind, text):
             if (row.get('lever_cap') or L) > 1.0:
                 row['lever_cap'] = 1.0
+                row['relax_ms'] = now_ms             # H4: the easing's own clock starts here
                 row['last_tick_ms'] = None           # planned at the next read
             self._say_once(key, kind, text)
 
@@ -710,10 +744,16 @@ class PortfolioBot:
         stays neutral while the loan is repaid; an outright short bought
         back by the same share. Cutting the shorts alone would leave a
         levered long at the worst moment."""
-        n = 0
+        n, sold = 0, 0.0
         for coin, q in coins.items():
-            if q > 0 and self._place('spot', coin, 'Sell', q * share, prices[coin], 'margin floor'):
+            done = self._place('spot', coin, 'Sell', q * share, prices[coin], 'margin floor') if q > 0 else 0.0
+            if done:
                 n += 1
+                sold += done * prices[coin]
+        # H4: the sale's proceeds are the row's cash (they repay its loan) —
+        # left out, a cut read as a loss of everything it sold
+        self.row['cash'] += sold
+        self.row['spent'] -= sold
         for kind in ('hedge', 'short'):
             for coin, size in held[kind].items():
                 if size > 0 and self._place(kind, coin, 'Buy', size * share, prices[coin], 'margin floor'):
@@ -910,6 +950,7 @@ class PortfolioBot:
                 # the next tick does not lever back into the floor
                 L = cfg['margin']['spot_leverage']
                 row['lever_cap'] = (row.get('lever_cap') or L) * (1.0 - share)
+                row['relax_ms'] = now_ms             # H4: the easing's own clock starts at the cut
             self._say_once('floor', 'margin',
                            f"free margin {avail / eq:.0%} under the floor {risk['margin_floor_pct']:.0%} "
                            f'— every leg cut by {share:.0%}, spot and its hedge together (H4)')
@@ -962,8 +1003,14 @@ class PortfolioBot:
                 active = [dict(a, weight=a['weight'] * scale) if a['weight'] > 0 else a for a in active]
             if cfg.get('margin') and row.get('lever_cap'):
                 L = cfg['margin']['spot_leverage']
-                due = (row['last_tick_ms'] is None
-                       or now_ms - row['last_tick_ms'] >= cfg['rebalance']['every_hours'] * 3_600_000)
+                # H4: the easing keeps its own clock, a step every `every_hours`
+                # — never the tick's, which a drift trigger never moves and a
+                # refused leg holds open (eased every read, 2026-10-27). A row
+                # from before the clock was kept eases on the tick's, once.
+                every = cfg['rebalance']['every_hours'] * 3_600_000
+                since = row.get('relax_ms')
+                due = (now_ms - since >= every if since is not None
+                       else row['last_tick_ms'] is None or now_ms - row['last_tick_ms'] >= every)
                 if (due and row['lever_cap'] < L and eq and avail is not None
                         and not row.get('rate_blocks_relax')
                         and not row.get('yield_blocks_relax')
@@ -971,10 +1018,12 @@ class PortfolioBot:
                     # eased back toward the file's number, a step a tick, only
                     # while free margin sits well above the floor
                     row['lever_cap'] = min(L, row['lever_cap'] * (1.0 + RELAX_STEP))
+                    row['relax_ms'] = now_ms
                     self.notify.event('info', self.botid,
                                       f"leverage eased to {row['lever_cap']:.2f}× of the file's {L:g}× (H4)")
                 if row['lever_cap'] >= L - 1e-9:
                     row['lever_cap'] = None
+                    row.pop('relax_ms', None)
                 else:
                     f = row['lever_cap'] / L
                     active = [dict(a, weight=a['weight'] * f) if a['weight'] > 0 else a for a in active]
@@ -988,7 +1037,7 @@ class PortfolioBot:
             plan = plan_portfolio(eff, book, prices, now_ms, row['last_tick_ms'],
                                   regimes=regimes, funding_trailing=trailing)
         if plan['tick'] or plan['orders']:          # H3c: a drift read trades, the clock stays
-            spent, refused = 0.0, False
+            spent, sold, refused = 0.0, 0.0, False
             # spot sells first, so a buy is paid from the sale beside it. H10: a
             # buy never stands without its hedge — a coin's added hedge goes
             # before its buy, a refused hedge skips the buy, and a refused buy
@@ -1045,9 +1094,11 @@ class PortfolioBot:
                         opened[c] = done
                     if kind == 'spot' and side == 'Buy':
                         spent += done * prices[c]
-            row['cash'] = (row['cash'] - spent if cfg.get('margin')      # a loan stays negative
-                           else max(row['cash'] - spent, 0.0))
-            row['spent'] += spent
+                    elif kind == 'spot':
+                        sold += done * prices[c]     # H4: a sale's proceeds are the row's cash
+            row['cash'] = (row['cash'] - spent + sold if cfg.get('margin')      # a loan stays negative
+                           else max(row['cash'] - spent + sold, 0.0))
+            row['spent'] += spent - sold
             if not refused and plan['tick']:
                 row['last_tick_ms'] = now_ms         # a refused leg keeps the tick open
         self.portfolio_view = {
@@ -1084,7 +1135,9 @@ class PortfolioBot:
             'basis': value - basis_value - row['funding_total'] - row['tilt_pnl'] + row.get('interest_total', 0.0),
             'unreal': unreal, 'realised': realised, 'value': value,
             'anchor': basis_value, 'contributed': row['contributed'], 'last_tick_ms': row['last_tick_ms'],
-            'next_tick_ms': ((row['last_tick_ms'] or now_ms)
+            # H3c: a drift trigger keeps no clock, so no next tick to show
+            'next_tick_ms': (None if cfg['rebalance'].get('trigger', 'clock') == 'drift'
+                             else (row['last_tick_ms'] or now_ms)
                              + int(cfg['rebalance']['every_hours'] * 3_600_000)),
             'delevered': row['delevered'],
             'siblings': self.siblings if cfg.get('margin') else 0, 'others_cash': row.get('others_cash', 0.0)}

@@ -5,7 +5,6 @@ from ..html_bits import qarg
 from pathlib import Path
 import html
 import json
-import time
 import urllib.parse
 
 
@@ -96,7 +95,6 @@ class FleetAdminPages:
         from the dash"): one fleet's leftover tombstones out at once, the
         fleet file's name typed. A tombstone whose bot is still in the file
         is a stand-down and keeps its own revive."""
-        from gridgremlin.tombstones import remove
         from ..html_bits import refusal_box
         from panel.chart import _f
         if not self.units and not self.supervise:
@@ -110,9 +108,12 @@ class FleetAdminPages:
             tombs = json.loads(tp.read_text() or '{}') if tp.exists() else {}
         except (OSError, ValueError):
             tombs = {}
-        gone = [b for b in self._orphans(fi, tombs) if remove(tp, b) is not None]
-        from gridgremlin.kept_fills import cut
-        cut(self.fleets[min(fi, len(self.fleets) - 1)], gone, time.time() * 1000)    # R18c
+        # X16: everything under the name goes with its tombstone — an ended
+        # trade's row too, which the tombstone alone kept from starting again
+        from gridgremlin.forget import forget_bot
+        f = self.fleets[min(fi, len(self.fleets) - 1)]
+        raw = json.loads(Path(f).read_text())
+        gone = [b for b in self._orphans(fi, tombs) if 'tombstones' in forget_bot(f, raw, b)]
         return self._page(f'<h1>{html.escape(name)}: {len(gone)} tombstone'
                           f'{"" if len(gone) == 1 else "s"} cleared</h1>'
                           + (f'<p>{html.escape(", ".join(gone))}</p>' if gone else

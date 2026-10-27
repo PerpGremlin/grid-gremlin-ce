@@ -146,6 +146,9 @@ class CarryFlowPages:
                 for k in ('account', 'spot_quote'):
                     if k in old:
                         row[k] = old[k]
+                # a row's own notes (keys starting '_') are the operator's and
+                # ride along, as the grid and DCA edit has them (U111b)
+                row.update({k: v for k, v in old.items() if k.startswith('_')})
                 fleet['bots'][at] = row
             else:
                 if any(row_botid(b) == botid for b in fleet_raw.get('bots') or []):
@@ -179,6 +182,11 @@ class CarryFlowPages:
                     'not applied', f'the name typed must be {botid} (capitals do not '
                     'matter) — a click is not a decision (§11)'))
             atomic_write(fleet_p, new_fleet)
+            if not form.get('edit'):
+                # X16: a new carry row is a first sight — an old row's book of
+                # its name (anchor, loan, spent) is not its
+                from gridgremlin.forget import forget_bot
+                forget_bot(fleet_p, fleet_raw, botid)
             return self._page(
                 f'<h1>{html.escape(botid)}: written</h1><p>the carry bot is in the '
                 'fleet file; a backup is kept beside it.'

@@ -71,11 +71,18 @@ class CreateFlowPages:
                         coins = vbot.get('size_in') == 'coin'     # D89
                         q0 = adapter.round_qty(size if coins else size / m0)
                         if q0 <= 0 or not adapter.meets_minimum(q0, m0):
+                            # U107b: said in the unit the size is typed in
+                            import math
+                            step = adapter.qty_step
+                            least_c = (math.ceil(least / m0 / step - 1e-9) * step
+                                       if coins else None)
                             raise _CE(
                                 f"the {what} ({size:g}{' coins' if coins else ''}) "
-                                "is under this market's "
-                                f"smallest order: about {least:.4g} at today's "
-                                f"price ({adapter.min_qty:g} coins at {m0:g}) — "
+                                "is under this market's smallest order: "
+                                + (f"about {least_c:.4g} coins at today's price "
+                                   f"({least:.4g} at {m0:g}) — " if coins else
+                                   f"about {least:.4g} at today's price "
+                                   f"({adapter.min_qty:g} coins at {m0:g}) — ") +
                                 f'raise the {what} size to at least that (it is '
                                 "the order's whole value, leverage included), or "
                                 'raise the investment the quick setup draws it from')
@@ -114,11 +121,10 @@ class CreateFlowPages:
             atomic_write(fleet_p, new_fleet)
             atomic_write(wd_p, new_wd)
             if mode in ('create', 'remove'):
-                # D149: a new or removed bot owns no old window — a slide
-                # offset left under its name would shift the new grid
-                from gridgremlin.durable import state_path
-                from gridgremlin.slide_state import forget
-                forget(state_path(str(fleet_p), fleet_raw, 'slide_state'), botid)
+                # D149/X16: a new or removed bot owns nothing of an old one
+                # of its name — window, request, tombstone, fills, book
+                from gridgremlin.forget import forget_bot
+                forget_bot(fleet_p, fleet_raw, botid)
             return self._page(
                 f'<h1>{html.escape(botid)}: written</h1><p>bot and watcher landed '
                 'together in the fleet file; a backup is kept beside each '

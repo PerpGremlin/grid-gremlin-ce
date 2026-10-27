@@ -261,7 +261,7 @@ def spec_D149_a_cleared_or_new_bot_starts_its_window_at_home():
         assert SlideState(str(sp)).get('spoBTCUSDTl') == 0
     import panel.pages.create_flow as cf
     src = inspect.getsource(cf)
-    assert "if mode in ('create', 'remove'):" in src and "forget(state_path(str(fleet_p), fleet_raw, 'slide_state'), botid)" in src
+    assert "if mode in ('create', 'remove'):" in src and 'forget_bot(fleet_p, fleet_raw, botid)' in src
 
 
 def spec_control_names_each_unit_by_its_account():
@@ -311,3 +311,307 @@ def spec_E2b_a_spot_exit_is_judged_as_an_exit_not_to_half_a_step():
     import inspect
     from gridgremlin.ladder import plan_grid
     assert "'reduce_only': exits_ro, 'exit': True" in inspect.getsource(plan_grid)   # the grid marks its exits
+
+
+def _tmp_fleet(d, bots, wd_positions=None):
+    """configs/fleet.x.json and its watchdog in a fresh tree under `d`."""
+    conf = Path(d) / 'configs'
+    conf.mkdir()
+    (Path(d) / 'logs').mkdir()
+    wd = conf / 'watchdog.x.json'
+    wd.write_text(json.dumps({'equity_min': 10, 'positions': wd_positions or {}}))
+    f = conf / 'fleet.x.json'
+    f.write_text(json.dumps({'watchdog': str(wd), 'bots': bots}))
+    return f, wd
+
+
+SPOT_ROW = {'venue': 'bybit', 'market_type': 'spot', 'symbol': 'BTCUSDT', 'side': 'long',
+            'capital': 100, 'lower': 50000, 'upper': 60000, 'rungs': 5}
+
+
+class _Sticky(_Spot):
+    """A cancel the venue acknowledges while the order still rests."""
+
+    def cancel_order(self, category, symbol, order_id):
+        self.cancelled.append(order_id)
+
+
+def _retiring(venue, fn):
+    """`fn()` with the venue faked and the fleet read as stopped."""
+    import gridgremlin.main as gm
+    import gridgremlin.retire as rt
+    real_open, real_running = rt.open_venue, gm.fleet_running
+    try:
+        rt.open_venue = lambda cfg, clients=None: (clients.setdefault('bybit', venue), None)
+        gm.fleet_running = lambda *a, **k: False
+        return fn()
+    finally:
+        rt.open_venue, gm.fleet_running = real_open, real_running
+
+
+def spec_D149_a_clear_waits_for_a_flat_venue():
+    """The reviewer (2026-10-27): a cancel acknowledged while the order
+    still rests read back not flat, and --clear took the row, its watchdog
+    line and its tombstone out anyway; a new bot of the same name then
+    adopted the order by its link. The clear happens only over a flat
+    read-back; otherwise every row, tombstone and record stays and the
+    answer says what is left. Sabotage: clearing over `left` is caught."""
+    from gridgremlin.retire_all import retire_fleet
+    from gridgremlin.tombstones import Tombstones, path_for
+    with tempfile.TemporaryDirectory() as d:
+        f, wd = _tmp_fleet(d, [SPOT_ROW], {'spoBTCUSDTl': {'max': 1}})
+        out = _retiring(_Sticky(), lambda: retire_fleet(f, clear=True))
+        assert out['flat'] is False and out['left'][0]['orders'] == ['spoBTCUSDTl-1-5']
+        assert out['cleared'] == [] and 'not flat' in out['not_cleared']
+        assert json.loads(f.read_text())['bots'] == [SPOT_ROW]
+        assert json.loads(wd.read_text())['positions'] == {'spoBTCUSDTl': {'max': 1}}
+        assert Tombstones(str(path_for(str(f), json.loads(f.read_text())))).has('spoBTCUSDTl')
+
+
+def spec_D149_a_fleet_with_refused_rows_is_not_cleared():
+    """Retire walks the rows the engine accepts; a row it refuses (D52) is
+    not retired, so clearing it would leave what it holds unmanaged. A
+    clear is refused, naming the row, before anything is touched; a retire
+    without the clear says which rows it did not retire. Sabotage:
+    dropping the refusal clears the refused row."""
+    from gridgremlin.retire_all import retire_fleet
+    bad = dict(SPOT_ROW, symbol='ETHUSDT', bogus_key=1)
+    with tempfile.TemporaryDirectory() as d:
+        f, _ = _tmp_fleet(d, [SPOT_ROW, bad])
+        venue = _Spot()
+        out = _retiring(venue, lambda: retire_fleet(f, clear=True))
+        assert 'cannot be cleared' in out['refused'] and 'bogus_key' in out['refused'], out
+        assert venue.cancelled == [] and len(json.loads(f.read_text())['bots']) == 2
+        out = _retiring(venue, lambda: retire_fleet(f))
+        assert venue.cancelled == ['a'] and 'bogus_key' in ' '.join(out['not_retired'])
+
+
+def spec_D149_open_trades_retire_and_clear_with_their_fleet():
+    """A trade (D81) is a bot of its fleet, kept in logs/trades-<fleet>.json:
+    retire all retired the rows and left the trade's position open, and an
+    emptied fleet is one the engine will not run, so nothing managed it.
+    Each open trade is retired with the rows and read back; the clear takes
+    its row out of the trades file. Sabotage: walking the rows alone leaves
+    the trade."""
+    import gridgremlin.retire as rt
+    from gridgremlin.durable import state_path
+    from gridgremlin.retire_all import retire_fleet
+    from gridgremlin.trades import load_trades
+    retired = []
+
+    def fake_retire(cfg, client, adapter, tombs, reason, dry=False):
+        from gridgremlin.apply import row_botid
+        retired.append(row_botid(cfg))
+        if not dry:
+            tombs.add(row_botid(cfg), reason)
+        return {'botid': row_botid(cfg), 'tombstoned': not dry}
+    with tempfile.TemporaryDirectory() as d:
+        f, _ = _tmp_fleet(d, [SPOT_ROW])
+        tp = state_path(str(f), json.loads(f.read_text()), 'trades')
+        tp.write_text(json.dumps([{'market_type': 'linear', 'symbol': 'SOLUSDT', 'side': 'long',
+                                   'capital': 50, 'leverage': 5, 'take_profit_avg_pct': 0.015,
+                                   'venue': 'bybit'}]))
+        assert load_trades(tp)[0]
+        real = rt.retire_bot
+        try:
+            rt.retire_bot = fake_retire
+            out = _retiring(_Spot(), lambda: retire_fleet(f, clear=True))
+        finally:
+            rt.retire_bot = real
+        assert retired == ['linSOLUSDTl'] and out['flat'] is True, out
+        assert out['cleared'] == ['linSOLUSDTl', 'spoBTCUSDTl']
+        assert load_trades(tp) == ([], []) and json.loads(f.read_text())['bots'] == []
+
+
+class _Leg:
+    def position_idx(self, side, reduce_only):
+        return 2
+
+
+class _Portfolio:
+    """A portfolio bot whose flatten left its BTCUSD short open."""
+
+    def __init__(self):
+        self.legs = {'spot': {}, 'hedge': {'BTC': {'market_type': 'inverse', 'symbol': 'BTCUSD',
+                                                   'adapter': _Leg()}}, 'short': {}}
+        self.client = self
+
+    def read_symbol_truth(self, market_type, symbol):
+        return {'orders': [], 'positions': {2: {'side': 'Sell', 'size': 500.0}}, 'mark': 80000}
+
+    def flatten_now(self, reason, tombstone=True):
+        return {'BTC': 0.0, 'USDT': 1000.0}                 # the wallet, clean
+
+    def _short_size(self, truth, leg):
+        from gridgremlin.portfolio_bot import PortfolioBot
+        return PortfolioBot._short_size(self, truth, leg)
+
+
+PORTFOLIO_ROW = {'strategy': 'portfolio', 'name': 'carry', 'venue': 'bybit', 'capital': 300,
+                 'assets': [{'coin': 'BTC', 'weight': 0.5}, {'coin': 'ETH', 'weight': 0.5}],
+                 'hedge': {'product': 'inverse', 'ratio': 1.0},
+                 'rebalance': {'every_hours': 24, 'drift_pct': 0.05, 'min_notional': 20},
+                 'risk': {'max_loss': 60, 'max_loss_since': '2026-10-08T00:00:00Z',
+                          'margin_floor_pct': 0.4, 'basis_stop_pct': 0.01, 'max_weight': 0.5}}
+
+
+def spec_D149_a_portfolio_row_is_read_back_leg_by_leg():
+    """A portfolio's flatten answers with wallet balances, so a clean
+    wallet over an open hedge read flat and the clear forgot the row's book
+    and its loan. Each hedge and short leg's position is read back into
+    `left`; not flat, nothing is forgotten. Sabotage: skipping the legs'
+    read-back reads flat."""
+    import gridgremlin.exchange.bybit.client as bc
+    import gridgremlin.main as gm
+    from gridgremlin.durable import state_path
+    from gridgremlin.portfolio_state import PortfolioState
+    from gridgremlin.retire_all import retire_fleet
+    with tempfile.TemporaryDirectory() as d:
+        f, _ = _tmp_fleet(d, [PORTFOLIO_ROW])
+        sp = state_path(str(f), json.loads(f.read_text()), 'portfolio_state')
+        PortfolioState(str(sp)).set('pfocarry', {'anchor_value': 300.0, 'loan': 100.0})
+        real = gm.fleet_running, gm.build_portfolio, gm.refuse_mainnet, bc.WriteClient
+        try:
+            gm.fleet_running = lambda *a, **k: False
+            gm.build_portfolio = lambda cfg, client, n, state, tombs: (_Portfolio(), [])
+            gm.refuse_mainnet = lambda *a, **k: None
+            bc.WriteClient = lambda: object()
+            out = retire_fleet(f, clear=True)
+        finally:
+            gm.fleet_running, gm.build_portfolio, gm.refuse_mainnet, bc.WriteClient = real
+        assert out['flat'] is False and out['cleared'] == [], out
+        assert out['left'] == [{'botid': 'pfocarry', 'legs': [
+            {'leg': 'hedge BTC', 'symbol': 'BTCUSD', 'held': 500.0}]}]
+        assert PortfolioState(str(sp)).get('pfocarry')['loan'] == 100.0
+        assert json.loads(f.read_text())['bots'] == [PORTFOLIO_ROW]
+
+
+def spec_F3_retire_all_holds_the_fleets_prelock():
+    """The reviewer (2026-10-27): fleet_running asks the lock and lets it
+    go, so an engine could start on the file during a retire of minutes.
+    The retire holds the fleet's own prelock throughout, as the engine's
+    start does; an engine starting meanwhile is refused (F3), and a
+    prelock already held refuses the retire. Sabotage: not taking it lets
+    the engine's lock through."""
+    from gridgremlin.config import ConfigError
+    from gridgremlin.durable import logs_dir
+    from gridgremlin.main import acquire_fleet_lock
+    from gridgremlin.retire_all import retire_fleet
+    with tempfile.TemporaryDirectory() as d:
+        f, _ = _tmp_fleet(d, [SPOT_ROW])
+        pre = str(logs_dir(f) / f'{f.resolve().name}.prelock')
+        tried = []
+
+        class _Racing(_Spot):
+            def cancel_order(self, category, symbol, order_id):
+                try:
+                    acquire_fleet_lock(pre).close()
+                    tried.append('started')
+                except ConfigError:
+                    tried.append('refused')
+                super().cancel_order(category, symbol, order_id)
+        out = _retiring(_Racing(), lambda: retire_fleet(f))
+        assert tried == ['refused'] and out['flat'] is True, (tried, out)
+        acquire_fleet_lock(pre).close()                      # let go after
+        held = acquire_fleet_lock(pre)
+        try:
+            out = _retiring(_Spot(), lambda: retire_fleet(f))
+            assert 'starting on this file' in out['refused']
+        finally:
+            held.close()
+
+
+def spec_X16_a_removed_bot_leaves_nothing_under_its_name():
+    """Every local fact a bot keeps under its name — each state kind, its
+    retire request and the kept ledger's record — is forgotten by one
+    helper, so a new bot of the same name starts at first sight: no slide
+    offset, no pending request, no tombstone, no fills, no carry book. A
+    neighbour's facts stay; a live trade's row stays (its position is
+    open). The list is every STATE_KIND plus the two files
+    beside them, so a new kind cannot be missed. Sabotage: forgetting any
+    one kind is caught."""
+    from gridgremlin.durable import STATE_KINDS, state_path
+    from gridgremlin.forget import FORGETS, forget_bot
+    from gridgremlin.kept_fills import anchor_of, load
+    from gridgremlin.portfolio_state import PortfolioState
+    from gridgremlin.retire import load_requests, request, requests_path
+    from gridgremlin.slide_state import SlideState
+    from gridgremlin.tombstones import Tombstones
+    assert set(FORGETS) == set(STATE_KINDS) | {'retire_requests', 'kept_fills'}
+    with tempfile.TemporaryDirectory() as d:
+        f, _ = _tmp_fleet(d, [])
+        raw = json.loads(f.read_text())
+        sp = lambda k: str(state_path(str(f), raw, k))       # noqa: E731
+        for b in ('linSOLUSDTl', 'linETHUSDTl', 'linXRPUSDTl'):
+            SlideState(sp('slide_state')).set(b, -4)
+            request(requests_path(f), b, 'close', 'owner')
+            PortfolioState(sp('portfolio_state')).set(b, {'anchor_value': 1.0})
+        Tombstones(sp('tombstones')).add('linSOLUSDTl', 'ended')
+        Tombstones(sp('tombstones')).add('linXRPUSDTl', 'stood down')
+        trade = {'market_type': 'linear', 'side': 'long', 'capital': 50, 'leverage': 5,
+                 'take_profit_avg_pct': 0.015, 'venue': 'bybit'}
+        Path(sp('trades')).write_text(json.dumps([dict(trade, symbol='SOLUSDT'),
+                                                  dict(trade, symbol='ETHUSDT')]))
+        kp = Path(d) / 'logs' / 'fills' / 'x.json'
+        kp.parent.mkdir()
+        kp.write_text(json.dumps({'fills': [], 'anchors': {
+            b: {'time_ms': 1, 'qty': 1.0, 'price': 1.0} for b in ('linSOLUSDTl', 'linETHUSDTl')}}))
+        said = forget_bot(f, raw, 'linSOLUSDTl', at_ms=5)
+        assert set(said) == set(FORGETS), said               # every kind held it, every kind forgot it
+        assert SlideState(sp('slide_state')).get('linSOLUSDTl') == 0
+        assert 'linSOLUSDTl' not in load_requests(requests_path(f))
+        assert not Tombstones(sp('tombstones')).has('linSOLUSDTl')
+        assert PortfolioState(sp('portfolio_state')).get('linSOLUSDTl') == {}   # a first sight
+        assert [r['symbol'] for r in json.loads(Path(sp('trades')).read_text())] == ['ETHUSDT']
+        assert anchor_of(load(kp), 'linSOLUSDTl') is None and load(kp)['cuts']['linSOLUSDTl'] == 5
+        # the neighbour's facts stay
+        assert SlideState(sp('slide_state')).get('linXRPUSDTl') == -4
+        assert Tombstones(sp('tombstones')).has('linXRPUSDTl')
+        assert anchor_of(load(kp), 'linETHUSDTl') is not None
+        # a live trade (no tombstone) keeps its row
+        said = forget_bot(f, raw, 'linETHUSDTl')
+        assert said['trades'] == 'a live trade — its row kept'
+        assert [r['symbol'] for r in json.loads(Path(sp('trades')).read_text())] == ['ETHUSDT']
+
+
+def spec_X16_every_removal_path_forgets_the_whole_bot():
+    """The panel's removals and creations each forgot a different few
+    facts: retire's remove kept the slide offset, the edit page's remove
+    kept the fills and the carry book, the carry create took the old
+    book's anchor and loan, the orphans clear kept the request. Each calls
+    the one helper now. A carry row removed and created again under its
+    name starts at first sight. Sabotage: the edit page's remove without
+    the helper keeps the old book."""
+    import inspect
+    import panel.pages.carry_flow as carry
+    import panel.pages.create_flow as cf
+    import panel.pages.fleet_admin as fa
+    import panel.pages.retire as rp
+    import gridgremlin.retire_all as ra
+    for mod, at in ((cf, 'forget_bot(fleet_p, fleet_raw, botid)'),
+                    (carry, 'forget_bot(fleet_p, fleet_raw, botid)'),
+                    (rp, 'forget_bot(f, fleet_raw, botid)'),
+                    (fa, 'forget_bot(f, raw, b)'),
+                    (ra, 'forget_bot(fleet_path, raw, botid, at)')):
+        assert at in inspect.getsource(mod), mod.__name__
+    from gridgremlin.durable import state_path
+    from gridgremlin.portfolio_state import PortfolioState
+    from panel.routes import Handler
+    with tempfile.TemporaryDirectory() as d:
+        f, wd = _tmp_fleet(d, [PORTFOLIO_ROW])
+        wd.write_text(json.dumps({'tag': 'x', 'snapshot': 'logs/snapshots-x.jsonl',
+                                  'state': 'logs/watchdog-x.state.json', 'staleness_seconds': 1000,
+                                  'mm_rate_max': 0.5, 'equity_min': 10, 'equity_drawdown_max': 0.25,
+                                  're_alert_seconds': 86400, 'assumes_sole_actor': True,
+                                  'positions': {}}))
+        sp = state_path(str(f), json.loads(f.read_text()), 'portfolio_state')
+        PortfolioState(str(sp)).set('pfocarry', {'anchor_value': 300.0, 'contributed': 50.0})
+        h = Handler.__new__(Handler)
+        h.fleets, h.units, h.supervise = [str(f)], (), False
+        h._page = lambda body: body
+        seen = h._seen(f.read_text(), wd.read_text())
+        page = h._create_flow({'fleet': '0', 'confirm': 'pfocarry', 'proposal': json.dumps(
+            {'mode': 'remove', 'orig': 'pfocarry', 'seen': seen})}, apply=True)
+        assert 'written' in page, page
+        assert json.loads(f.read_text())['bots'] == []
+        assert PortfolioState(str(sp)).get('pfocarry') == {}            # the next carry row is fresh
