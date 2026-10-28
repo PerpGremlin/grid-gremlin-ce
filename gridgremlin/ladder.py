@@ -60,6 +60,26 @@ def grid_rungs(cfg, adapter, offset=0):
     return [adapter.round_price(lattice_price(cfg, offset + i)) for i in range(n)]
 
 
+def slide_floor(cfg):
+    """G17/G19 (the review, 2026-10-28): the lowest offset a FIXED lattice's
+    window may take — the one whose bottom rung sits two steps above zero,
+    so every rung it rests and the rung below it (where a short's bottom
+    lot covers) is at least a step above zero. A fixed lattice extends
+    below `lower` by its step, and the clamp alone slid a cheap short onto
+    a rung at 0.0 that divided by zero on every cycle. A long's
+    `rungs_beyond` stop (X8) follows the window down under G24, so the
+    floor also keeps it a step above zero: a stop there could never fire.
+    None for a geometric lattice: it never reaches zero."""
+    if cfg['spacing_type'] == 'percent':
+        return None
+    step = (cfg['upper'] - cfg['lower']) / (cfg['rungs'] - 1)
+    floor = int(math.ceil(2.0 - cfg['lower'] / step - 1e-9))
+    r = (cfg.get('stop') or {}).get('rungs_beyond')
+    if r is not None and cfg['side'] == 'long':
+        floor = max(floor, int(math.ceil(1.0 + r - cfg['lower'] / step - 1e-9)))
+    return floor
+
+
 def slide_offset(cfg, offset, ref):
     """G18/G19: the ratchet, pure. Unchanged unless the ref sits
     `trigger_rungs` whole rungs beyond one of the window's edges. Then the
@@ -83,7 +103,9 @@ def slide_offset(cfg, offset, ref):
     if (long or both) and x >= offset + (n - 1) + k:          # up
         return max(offset, min(int(math.floor(x)) - land, m))
     if (not long or both) and x <= offset - k:                # down
-        return min(offset, max(int(math.ceil(x)) - land, -m))
+        floor = slide_floor(cfg)
+        lowest = -m if floor is None else max(-m, floor)
+        return min(offset, max(int(math.ceil(x)) - land, lowest))
     return offset
 
 
@@ -183,6 +205,49 @@ def held_block(cfg, n_lots, basis):
     return lo, lo + n_lots - 1
 
 
+def own_lot(cfg, adapter, j, offset=0):
+    """G25: the lot bought at absolute rung j — that rung's own notional at
+    its own price, not the mean lot at today's ref. The notional is the
+    weight of j's place in the window at `offset` (exact without a slide;
+    after one, the current window's weight, the nearest end's beyond it)."""
+    notionals = rung_notionals(cfg)
+    i = min(max(j - offset, 0), len(notionals) - 1)
+    return adapter.round_qty(adapter.qty_from_notional(notionals[i],
+                                                       lattice_price(cfg, j)))
+
+
+def _off_ref(cfg, block, split_ref):
+    """G23: the block lies wholly on one side of the ref (a descent held
+    under water, or lots carried up) — none of it bought at the ref."""
+    return (lattice_price(cfg, block[0]) > split_ref
+            or lattice_price(cfg, block[1]) < split_ref)
+
+
+def fitted_block(cfg, adapter, sellable, basis, n_ref, split_ref, offset=0):
+    """G23 (the review, 2026-10-28): (n, block) for the lots the average
+    pins. Counted in lots at the ref (n_ref), a block bought away from it
+    is miscounted — a descent's lots were bought higher and are smaller —
+    and the block loses a rung, its lot exiting at its own buy price. So a
+    block wholly off the ref is counted in its own rungs' lots: the count
+    whose block's lots come nearest the sellable (a tie keeps n_ref; G8
+    folds any remainder), kept only if that block is wholly off too. A
+    block across the ref (a seed, a fresh fill) keeps n_ref."""
+    block = held_block(cfg, n_ref, basis)
+    if not block or not _off_ref(cfg, block, split_ref):
+        return n_ref, block
+    want = adapter.to_steps(sellable)
+    best = None
+    for n in range(1, 4 * n_ref + 5):
+        alt = held_block(cfg, n, basis)
+        got = sum(adapter.to_steps(own_lot(cfg, adapter, j, offset))
+                  for j in range(alt[0], alt[1] + 1))
+        key = (abs(got - want), n != n_ref, n)        # a tie keeps n_ref
+        if best is None or key < best[0]:
+            best = (key, n, alt)
+    _, n, alt = best
+    return (n, alt) if _off_ref(cfg, alt, split_ref) else (n_ref, block)
+
+
 def rung_floor(cfg, adapter, side, split_ref, held_rungs):
     """G23 (D35): exits pair per rung. A long sells each held lot one rung
     above the rung it was bought at, so the floor is the LOWEST held rung's
@@ -196,7 +261,8 @@ def rung_floor(cfg, adapter, side, split_ref, held_rungs):
 
 
 def paired_exits(cfg, adapter, split_ref, held_rungs, n_lots, window_exits,
-                 bid=None, ask=None, resting=frozenset(), within=None):
+                 bid=None, ask=None, resting=frozenset(), within=None,
+                 offset=0):
     """G25 (D36): every held lot's exit rests where it was intended — one
     rung beyond the rung it was bought at (a long's above, a short's below)
     — wherever that rung now lies on the lattice, inside the slid window or
@@ -215,8 +281,9 @@ def paired_exits(cfg, adapter, split_ref, held_rungs, n_lots, window_exits,
     is kept anyway: the venue order is the proof once the fills have aged
     out of the history window.
     Each own exit carries the qty of the lot it closes — the lot sized at
-    the rung it was bought at, not at today's ref — so a lot bought high is
-    never short of an exit; a displaced lot carries `lot` at the ref.
+    the rung it was bought at, not at today's ref, and at that rung's own
+    weight (own_lot) — so a lot bought high is never short of an exit, nor a
+    heavy rung's lot half-sold; a displaced lot carries `lot` at the ref.
     Returns [(rung, price, qty)] nearest-first, for G8's pour."""
     side = cfg['side']
     long = side == 'long'
@@ -231,7 +298,7 @@ def paired_exits(cfg, adapter, split_ref, held_rungs, n_lots, window_exits,
             if not within[0] <= j <= within[1]:
                 taken.add(j)
                 out.append((j, adapter.round_price(lattice_price(cfg, j)),
-                            lot(cfg, adapter, lattice_price(cfg, j - step))))
+                            own_lot(cfg, adapter, j - step, offset)))
     for h in sorted(held_rungs or (), reverse=not long):
         j = h + step
         price = adapter.round_price(lattice_price(cfg, j))
@@ -240,7 +307,7 @@ def paired_exits(cfg, adapter, split_ref, held_rungs, n_lots, window_exits,
         if j in resting or (beyond(price) and placeable_exits(
                 side, [(j, price)], bid, ask, resting)):
             taken.add(j)
-            out.append((j, price, lot(cfg, adapter, lattice_price(cfg, h))))
+            out.append((j, price, own_lot(cfg, adapter, h, offset)))
     displaced = max(0, n_lots - len(out))
     at_ref = lot(cfg, adapter, split_ref)
     for j, price in placeable_exits(side, window_exits, bid, ask, resting):
@@ -453,7 +520,8 @@ def plan_grid(cfg, adapter, split_ref, held_base=0.0, basis=None,
             # bought below and carried up. A block on or across the ref
             # (a seed, a fresh market fill, a lagging fill list) came from
             # no entry rung the ref has not passed: nothing to suppress.
-            block = held_block(cfg, suppressed, basis)
+            suppressed, block = fitted_block(cfg, adapter, sellable, basis,
+                                             suppressed, split_ref, offset)
             if block:
                 held_rungs = list(range(block[0], block[1] + 1))
                 edge = lattice_price(cfg, block[1] if cfg['side'] == 'long'
@@ -463,6 +531,12 @@ def plan_grid(cfg, adapter, split_ref, held_base=0.0, basis=None,
                 held_set = set() if across else set(held_rungs)
         else:
             held_set = set(held_rungs)
+            # G25: the lots the fills name, each at its own rung's weight;
+            # only what they leave (a seed's lots) counts in lots at the ref
+            own = sum(adapter.to_steps(own_lot(cfg, adapter, h, offset))
+                      for h in held_rungs)
+            rest = adapter.from_steps(max(0, adapter.to_steps(sellable) - own))
+            suppressed = len(held_rungs) + lots_held(rest, lot_qty, adapter)
         floor = rung_floor(cfg, adapter, cfg['side'], split_ref, held_rungs)
     parts = split(cfg['side'], rungs, split_ref, basis,
                   cfg.get('market_type'), offset, floor=floor)
@@ -472,7 +546,8 @@ def plan_grid(cfg, adapter, split_ref, held_base=0.0, basis=None,
                                       suppressed, parts['exits'], bid, ask,
                                       resting_exit_rungs,
                                       within=(None if from_fills else
-                                              (offset, offset + len(rungs) - 1)))
+                                              (offset, offset + len(rungs) - 1)),
+                                      offset=offset)
     sized = None
     if floor is not None:
         sized = parts['exits']              # G25: already placeable, sized
@@ -491,22 +566,40 @@ def plan_grid(cfg, adapter, split_ref, held_base=0.0, basis=None,
         orders.append({'rung': i, 'side': exit_side, 'price': price, 'qty': qty,
                        'reduce_only': exits_ro, 'exit': True})
 
-    free = lots_free(position_cap(cfg, adapter, rungs), held_base, lot_qty, adapter)   # D87
+    # G10: the headroom under the cap, in whole steps (D87). Each armed entry
+    # spends its OWN quantity: a long's entries below the ref are larger than
+    # the lot at the ref, and counting lots armed past the cap — every one
+    # filling in one cycle went ~12% over it (the review, 2026-10-28). That
+    # is a cap the USER set. The default cap is the ladder's own size, and
+    # a seed buys a lot at the ref per exit rung (more than those rungs' own
+    # lots): spent strictly, it starved the seeded ladder's deepest rung
+    # (the second review). It counts whole lots at the ref, as G10 says.
+    cap = position_cap(cfg, adapter, rungs)
+    room = (None if cap is None else
+            max(0, adapter.to_steps(cap, 'floor') - adapter.to_steps(abs(held_base))))
+    free = (lots_free(cap, held_base, lot_qty, adapter)
+            if cfg.get('max_position_base') is None else None)
+    if free is not None:
+        room = None                                # the default: by lots
     if held_set is not None:                     # G7 by identity (G23)
         armed = [(i, p) for i, p in parts['entries'] if i not in held_set]
     else:                                        # G7 by count (the proxy)
         armed = parts['entries'][suppressed:]
     for i, price in armed:
-        if free is not None and free <= 0:
+        if (room is not None and room <= 0) or (free is not None and free <= 0):
             break
         qty = adapter.round_qty(adapter.qty_from_notional(notionals[i - offset],
                                                           price))
         if qty <= 0 or not adapter.meets_minimum(qty, price):
             continue
-        orders.append({'rung': i, 'side': entry_side, 'price': price, 'qty': qty,
-                       'reduce_only': False})
+        if room is not None:
+            if adapter.to_steps(qty) > room:
+                break                            # the next lot does not fit
+            room -= adapter.to_steps(qty)
         if free is not None:
             free -= 1
+        orders.append({'rung': i, 'side': entry_side, 'price': price, 'qty': qty,
+                       'reduce_only': False})
     return orders
 
 

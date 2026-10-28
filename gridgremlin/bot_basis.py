@@ -45,7 +45,7 @@ class BasisMixin:
             self._round_t0 = t0 / 1000.0
         return self._round_t0
 
-    def _rungs_filled_this_round(self, held):
+    def _rungs_filled_this_round(self, held, resting=frozenset()):
         """M24: which safety rungs have filled since this round began, by
         link identity from the venue's fills. Only a tranche round asks —
         there a partial exit shrinks the holding below the ladder's
@@ -54,18 +54,25 @@ class BasisMixin:
         the capital M2 approved (replay 2026-10-04: SO1 filled twice in
         one round). Read once per change of holding; a round's fills only
         accumulate, so the set is a union. Short of an answer (the fill
-        list lagging the position, or unreadable) the set is what it was."""
-        if not self.cfg.get('take_profit_tranches'):
+        list lagging the position, or unreadable) the set is what it was.
+        A spot round asks too: its wallet holds each buy net of the fee
+        taken in the coin, so its holding sits under the prefix from the
+        first fill (the tester's finding 4, 2026-10-28). A rung whose
+        order still `resting` is not suppressed: a partial fill names it,
+        and dropping it from the plan cancelled the unfilled remainder
+        (the review of #593). Only an order that is gone suppresses."""
+        if not (self.cfg.get('take_profit_tranches')
+                or self.cfg['market_type'] == 'spot'):
             return frozenset()
         if self._round_rungs_at == held:
-            return frozenset(self._round_rungs)
+            return frozenset(self._round_rungs) - resting
         t0 = self._round_started(held)
         if t0 is None:
-            return frozenset(self._round_rungs)
+            return frozenset(self._round_rungs) - resting
         try:
             fills = self._round_fills()
         except (VenueError, OSError):
-            return frozenset(self._round_rungs)
+            return frozenset(self._round_rungs) - resting
         entry = self._entry_side.lower()
         for f in fills:
             r = rung_of(f.get('link_id'), self.botid)
@@ -73,7 +80,7 @@ class BasisMixin:
                     and str(f.get('side', '')).lower() == entry):
                 self._round_rungs.add(r)
         self._round_rungs_at = held
-        return frozenset(self._round_rungs)
+        return frozenset(self._round_rungs) - resting
 
     def _own_fills(self, days=HISTORY_WINDOW_DAYS, since_ms=None):
         """M12/M13: this bot's venue fills over the last HISTORY_WINDOW_DAYS,

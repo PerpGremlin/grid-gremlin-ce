@@ -61,7 +61,12 @@ eventually pin (T1).
   never zero. No irreversible action (kill, tombstone, cancel-all, stop-fire) may be
   taken on a single such read — flat is confirmed across consecutive reads, and
   unknown equity fires nothing. *(audit 2026-08-06, demonstrated: one empty read
-  killed a holding grid and abandoned its position)*
+  killed a holding grid and abandoned its position)* The portfolio row (H2)
+  reads a short its own book holds, answered as gone, once more on the same
+  read before believing it, and on a hollow wallet decides and keeps nothing;
+  the owner's flatten refuses one. *(an outside review, 2026-10-28: one empty
+  list flattened the row and left its short naked, or doubled a hedge; one
+  hollow wallet read a loss of everything)*
 - **E10** The venue READS ride one kept HTTPS connection per host; writes keep a
   fresh connection each. Only a stale failure (the server closed the idle kept
   connection, so the request never reached it) on a REUSED connection is sent
@@ -165,7 +170,11 @@ eventually pin (T1).
   *held* while the ladder covers *held − floor* — two named quantities, never one
   variable. *(the overnight cap failure)*
 - **G10** Entry headroom is whole lots under the cap; zero headroom stops entries and
-  nothing else.
+  nothing else. Under a cap the user set (`max_position_base`), each armed entry
+  spends its own quantity, so every one filling at once stays under it; the default
+  cap (the ladder's own size) counts whole lots at the ref, so a seed — a lot at
+  the ref per exit rung — never starves the ladder's own deepest rung. *(the review 2026-10-28: counted in lots at the ref, a
+  long's larger lower lots armed ~12% past a set cap)*
 - **G11** Out of range the grid idles — it never chases; it ends only when its stop
   fires or the position is closed from outside (S7). With `slide` configured, "out of
   range" in the favourable direction is the G18 trigger and the window follows; the
@@ -206,7 +215,13 @@ eventually pin (T1).
   `slide` absent the same trend leaves the grid idle. *(D28; v2's trail retired by D10)*
 - **G19** `max_rungs` clamps the window's offset from home in either direction; the
   clamp is required, never defaulted — an unbounded follower is a decision, not an
-  omission. *(D28)*
+  omission. A fixed lattice is floored too: its window never slides lower than the
+  one whose bottom rung sits two steps above zero (every rung it rests, and the rung
+  below where a short's bottom lot covers, a step above zero), nor, for a long with
+  a `rungs_beyond` stop, lower than the one that keeps the stop a step above zero
+  (`slide_floor`; a geometric lattice never reaches zero). *(D28; the review
+  2026-10-28: a cheap short slid onto a rung at 0.0 that divided by zero on every
+  cycle)*
 - **G20** A slide touches no inventory: held lots keep their basis and their exits
   (G25 under `exit_floor: rung`; under `basis` the ladder re-derives over the new
   window by G6/G8), and nothing is sold to make room. In the
@@ -224,7 +239,10 @@ eventually pin (T1).
   from the venue — the bot's own fills walked newest-first, LIFO, each link carrying
   its absolute rung (G17) — and, when the account cannot yet cover the holding
   (adoption, a lagging fill list), from the block the venue's average pins
-  (`held_block`: the n contiguous rungs whose mean is nearest the average). The floor
+  (`held_block`: the n contiguous rungs whose mean is nearest the average; n counted
+  in the block's own rungs' lots when it lies wholly off the ref — a descent's lots
+  were bought higher and are smaller — and in lots at the ref when it lies across it,
+  as a seed's does). The floor
   is the block's lowest rung (short: highest), bounded by the ref (G13); suppression is
   the block itself, and only when it lies wholly on the entry side of the ref — a
   seed (its fill carries `SEED_RUNG`, off every lattice) or a block across the ref
@@ -276,8 +294,9 @@ eventually pin (T1).
 - **G25** A lot's exit rests where it was intended until it fills or the bot ends
   (D36): every lot the bot's own fills prove (G23) keeps its exit one rung beyond the
   rung it was bought at, wherever that rung lies on the lattice — inside the window
-  or left behind by a slide — sized to that lot at its own entry price, not at the
-  ref. W3 keeps it resting; one cancelled from outside is re-placed when the mark
+  or left behind by a slide — sized to that lot at its own entry price and its own
+  rung's weight (the current window's, after a slide), not at the ref's mean lot; only
+  what the proven lots leave (a seed's) is counted in lots at the ref. W3 keeps it resting; one cancelled from outside is re-placed when the mark
   returns inside the placement window (the virtual fallback). A lot whose own rung
   cannot be placed now (not beyond the ref, or inside B4's band) and does not
   already rest there takes the nearest free placeable window exit, so a mark
@@ -447,8 +466,8 @@ eventually pin (T1).
   what is still held; a step or a size change clears the old row first
   (partial mode stacks). A restart adopts the venue's row and never loosens it.
   Unhosted, the engine watches the mark. The round's best mark is re-seeded on
-  restart from the round's own exit fills, unwinding the holding back to flat,
-  so a fired tranche is not re-placed and the step survives (M10 across a
+  restart from the round's own exit fills, back to the newest entry fill
+  (M22), so a fired tranche is not re-placed and the step survives (M10 across a
   restart). With the mark through the level: a resting venue stop is left to
   fire; with nothing resting, the round's exits are cancelled first (E2) and
   what is held closes at market under our link, so M14 reads it as our exit.
@@ -498,6 +517,11 @@ eventually pin (T1).
   exit side is shielded from the ladder's diff on every venue (D21's shield,
   widened), so it is placed once, left resting, and the fill is announced once.
   *(found by T7's first run, 2026-10-03: twelve placements in twelve cycles)*
+  The uncovered remainder is whole steps (D87): the holding floored (M23a)
+  less what rests, no slack — a step of slack left a one-lot holding with
+  every target met and no exit ever. *(the tester's finding 6, 2026-10-28)*
+  A gap under the venue's minimum cannot be placed: it is a warn (D60),
+  said once per gap. *(the review of #593: it was skipped in silence)*
 
 - **M21** The trailing stop the engine carries (D31): on a venue that hosts none
   (M11's refusal, lifted) `trailing_stop_pct` is a fixed distance, that fraction of
@@ -516,8 +540,11 @@ eventually pin (T1).
   and measured against the round's old high those new targets read as already
   met, a tranche "fired" that never did, and the breakeven ladder (D38) armed
   above the mark and closed the round at a loss (replay 2026-10-03). Within one
-  average the gauge stays monotone (M10). (2) The venue fills in price order: a
-  hosted breakeven stop above a resting safety order closes the position and the
+  average the gauge stays monotone (M10), and the exit fills folded into it
+  (M17's restart walk, M25) are this average's: the walk stops at the newest
+  entry fill *(the tester's finding 10, 2026-10-28: an exit from before a
+  safety fill retired a re-anchored tranche unfilled)*. (2) The venue fills
+  in price order: a hosted breakeven stop above a resting safety order closes the position and the
   safety fills a moment later, so the position is never flat for M5 to see and
   the bot read the net change as a continuing round. While a breakeven stop is
   known, the venue's own stop-loss close AFTER this round's base order is the
@@ -543,7 +570,13 @@ eventually pin (T1).
   capital M2 approved (replay 2026-10-04: 12 of 113 rounds). The venue's fills
   since the round's first fill (M19's walk) name the rungs that filled this
   round, read once per change of holding and unioned; a named rung is never
-  re-placed. Only a tranche row reads; a plain round's holding is its prefix.
+  re-placed once its order is gone — while it still rests, partly filled,
+  it is left to fill (the review of #593: the plan dropped it and the diff
+  cancelled the unfilled remainder). A tranche row reads, and a spot row: its wallet holds each buy
+  net of the fee taken in the coin, under the prefix from the first fill. A
+  plain perp round's holding is its prefix, counted in whole steps (D87),
+  as are a re-quoted base's remainder and the rehearsal venue's holding.
+  *(the tester's finding 4, 2026-10-28)*
 - **M25** A filled tranche is done even while the mark lags it. A resting exit
   fills on a trade and the venue's mark can sit under it: HL's `markPx` stayed
   below a filled TP1 for 286 cycles, so M10's gauge read t1 as unfired, the
@@ -557,7 +590,18 @@ eventually pin (T1).
   the one before — the holding covered whole, said once per change; a lone
   tranche stays. In either placement loop a venue refusing one order leaves
   the others written; the first refusal is raised after the loop (a `flat`
-  refusal still stops it: the round just closed).
+  refusal still stops it: the round just closed). A fold is not a fire:
+  M17 and M11 count the tranches the gauge passed that carried a quantity
+  after the fold — sized with one under this average, or carrying one were
+  the holding split over every tranche now, or proved by the venue: an
+  exit fill of this average at or beyond its price, from fills that explain
+  the holding back to flat, the tranche carrying a quantity of the holding
+  as it was before those exits (a restart remembers nothing; a lagging list
+  proves nothing). *(the tester's finding 3, 2026-10-28: a 100 USDT base's
+  two halves folded and the ladder closed the round at market; the review
+  of #593: so did the mark passing the sliver's price; its re-review: a
+  restart after a two-lot base's t1 sold read t1 as a sliver and dropped
+  the breakeven step on HL)*
 
 ## S — start states
 
@@ -784,7 +828,8 @@ eventually pin (T1).
   slide (G24) too, so it follows the window down (a short's, up) — so a server-side
   stop (X3, level-triggered) is re-set after each slide. An absolute `level` is
   refused with `slide` — once the window has left home it protects nothing — and
-  `rungs_beyond` is refused without it. `account_equity` stays absolute: a wallet
+  `rungs_beyond` is refused without it. A long's `rungs_beyond` on a fixed lattice
+  that puts the stop at or below zero is refused by name: it could never fire. `account_equity` stays absolute: a wallet
   has no window. *(D28's wiring; JOURNAL 2026-09-25 evening)*
 - **X9** The stop's timeout (D33's "Time" mode, 3Commas' SL timeout):
   with `stop.confirm_seconds` a `mark_price` stop fires only after the level has
@@ -1058,7 +1103,12 @@ eventually pin (T1).
   marked urgent reaches the phone once as *persisting* when the same bot's same
   message (its numbers aside) comes 5 times in 15 minutes, then at most
   hourly. Fills, exits, take-profit placement, round turns and slides are the
-  log's and the ledger's. *(2026-10-05: 1,389 pings in a day, 86% trading
+  log's and the ledger's. A bot's lost cycle is network weather (`net`, the log's)
+  only when the venue or the network raised it (`NETWORK_ERRORS`, a wrong-shaped
+  answer's `TruthError` among them); any other
+  exception is a warning, so a defect that raises every cycle is heard as
+  persisting. *(the review 2026-10-28: a division by zero froze a bot in silence)*
+  *(2026-10-05: 1,389 pings in a day, 86% trading
   churn, and the one that mattered — the SUI exit refused with nothing
   resting — was 286 of them; replayed under F16, 141, the SUI refusal once)*
 - **F17** The day is digested (D62). Once a day at 23:58 UTC,
@@ -2260,7 +2310,12 @@ that pins it (T1).
   asset's stated `holding`, and moves only by the row's own fills (a buy's
   fee shaved from the coins received), an inverse leg's funding — paid in
   the coin, it joins the book as coins — and its cash, like its coins,
-  is bounded by what the wallet holds in its quote; at a tick spot sells
+  is bounded by what the wallet holds in its quote; a spot order's quote,
+  booked when it is placed, is set against its fills at the next read — a
+  buy filled in part and cancelled gives back what it did not spend, a sale
+  filled in part takes back what it did not sell, and a fill written later
+  moves its quote then, once *(an outside review, 2026-10-28: a part-filled
+  buy's unspent quote left the row for good, read as a loss)*; at a tick spot sells
   are placed before spot buys, the perps after, and a spot buy is placed
   in quote ("spend this much"), since the venue checks a coin-sized market
   buy at a buffered price and refuses one that spends nearly all the cash; (link-attributed, deduped
@@ -2328,7 +2383,10 @@ that pins it (T1).
   most; a quarter when the venue states no margin) — each long's coins
   sold and its hedge bought back together, an outright short bought back
   by the same share — so the book stays neutral while the loan is
-  repaid; said once an hour. A levered row remembers the floor's verdict:
+  repaid; said once an hour. The rest of that read plans from the cut
+  book, never from the old one plus the cut's proceeds *(an outside
+  review, 2026-10-28: a 10% trim on a 2× row was 80% bought back in the
+  same read)*. A levered row remembers the floor's verdict:
   after a trim it aims lower by the trimmed share, and eases back toward
   the file's leverage by 5% a step, on its own clock (H15), only while free margin sits two
   buffers above the floor — so the daily tick does not lever back into
@@ -2366,7 +2424,14 @@ that pins it (T1).
   the hedge counted against the spot coins alone drifted a ratio-1 book net
   short in a rally and long in a fall, and the arithmetic entry invented
   ~40 points of the rehearsal's two-year return; the true neutral basket
-  earned its funding, x1.13, at a 1% drawdown)*
+  earned its funding, x1.13, at a 1% drawdown)* So every act that closes
+  an inverse hedge sells what its close settled too: H4's flatten (the
+  owner's and the loss limit's) and the basis stop sell what the wallet
+  holds for the row once the shorts are bought back — its coins plus the
+  wallet's change across the close, bounded by the wallet — and the floor's
+  trim sells its share of the coins the planner hedges. *(an outside
+  review, 2026-10-28: after ±30% a flatten was refused for coins the close
+  had taken, or sold the spot book and left the close's coin long)*
 - **H8b** A portfolio row's hedge books rebuild from the venue's own fills:
   every short leg's fills since the anchor replayed through today's book
   (H8's harmonic entry, the inverse fee in the coin), set beside what was

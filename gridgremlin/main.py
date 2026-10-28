@@ -1,6 +1,7 @@
 # Fleet build and run (SPEC E8, F1-F7, I2, I3, C5, C6). Mainnet is
 # double-safetied (F7), never an accident.
 import fcntl
+import http.client
 import json
 import time
 from pathlib import Path
@@ -19,6 +20,7 @@ from .events import Notifier, TelegramNotifier, VenueNotifier
 from .exchange.bybit.client import WriteClient
 from .exchange.bybit.truth import parse_instrument
 from .exchange.errors import VenueError
+from .exchange.truth import TruthError
 from common.env import load_env
 from .ladder import grid_rungs, position_cap
 from .slide_state import SlideState, SlideStateError
@@ -32,6 +34,13 @@ CEILING_MULTIPLE = 1.5      # F2: a watchdog ceiling beyond this is decorative
 
 
 ALL_DEAD_EXIT = 3          # every bot stood down: a failure to systemd, so OnFailure pages
+
+# D60: what a lost bot cycle files as network weather (log-only): a venue's
+# refusal or error page, a socket, a cut-off reply, truncated JSON, an answer
+# in the wrong shape (V1's TruthError: a venue-wide glitch, never a page per
+# bot). Any other exception is a defect — a warning, paged once it persists.
+NETWORK_ERRORS = (VenueError, OSError, http.client.HTTPException,
+                  json.JSONDecodeError, TruthError)
 
 
 def refuse_mainnet(client, fleet_allows=False, run_allows=False):
@@ -980,8 +989,12 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
                             equity=wallets[bot.cfg['venue']]['equity'])
                     except Exception as e:              # noqa: BLE001
                         # M3: one bot's venue trouble must never starve the
-                        # REST of the fleet's stop evaluation.
-                        notifier.event('net', bot.botid,
+                        # REST of the fleet's stop evaluation. Weather is the
+                        # log's; anything else is a warning the phone hears
+                        # once it persists (D60) — a bug that raises every
+                        # cycle freezes the bot (the review, 2026-10-28).
+                        kind = 'net' if isinstance(e, NETWORK_ERRORS) else 'warn'
+                        notifier.event(kind, bot.botid,
                                        f'cycle lost: {type(e).__name__}: {e}')
                         continue
                     if counts is not None:

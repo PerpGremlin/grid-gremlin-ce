@@ -10,8 +10,8 @@ from .config import CANDLE_SECONDS, hosts_position_stop
 from .exchange.errors import VenueError, may_have_landed
 from .ladder import (SEED_RUNG, anchor_from_rung, fee_floor_for, grid_rungs,
                      guard_band, lot, min_gap, plan_grid, plan_martingale,
-                     sellable_base, slide_is_adverse, slide_offset, split,
-                     stop_level_for)
+                     sellable_base, slide_floor, slide_is_adverse, slide_offset,
+                     split, stop_level_for)
 from .window import window
 from .bot_constants import (FLAT_CONFIRMATIONS, RUNGS_LAG_CYCLES, DEFER_ESCALATE_CYCLES, FLAP_LIMIT, FLAP_COOLDOWN, BACKOFF_BASE, BACKOFF_CEILING, HISTORY_WINDOW_DAYS, VENUE_STOP, STOP_RUNG)  # noqa: F401  (re-exported: the specs read them here)
 from .bot_basis import BasisMixin
@@ -75,6 +75,9 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
             else:
                 self.offset = (min(max(want, 0), m) if cfg['side'] == 'long'
                                else max(min(want, 0), -m))  # G19 on restart
+            floor = slide_floor(cfg)                         # never onto zero
+            if floor is not None and self.offset < 0:
+                self.offset = max(self.offset, min(floor, 0))
             if self.offset != want:
                 self.notify.event('warn', self.botid,
                                   f'persisted window offset {want:+d} is '
@@ -137,8 +140,11 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
             return False
         rungs = grid_rungs(self.cfg, self.adapter, self.offset)
         exit_rungs = split(self.cfg['side'], rungs, ref)['exits']
-        qty = self.adapter.round_qty(
-            lot(self.cfg, self.adapter, ref) * len(exit_rungs))
+        # G27/D87: the exits' own lots summed in whole steps — 0.009 x 3
+        # floored as a float product was 0.026, a step short of them
+        qty = self.adapter.from_steps(
+            self.adapter.to_steps(lot(self.cfg, self.adapter, ref))
+            * len(exit_rungs))
         if qty <= 0 or not self.adapter.meets_minimum(qty, ref):
             return False
         idx = self.adapter.position_idx(self._entry_side, False) or 0
@@ -522,7 +528,12 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
                            if cfg.get('reinvest')
                            and self._scale is not None
                            else 1.0),
-                    filled_rungs=self._rungs_filled_this_round(held))
+                    filled_rungs=self._rungs_filled_this_round(
+                        held, resting={
+                            rung_of(o['link_id'], self.botid)
+                            for o in truth['orders']
+                            if not o['reduce_only']
+                            and o['side'] == self._entry_side}))
         else:
             held_rungs = (self._held_rungs(held)
                           if cfg.get('exit_floor', 'rung') == 'rung' else None)
@@ -588,7 +599,10 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
         amends, cancels, placed_now, placed_exit_links, skipped = self._reconcile(
             to_cancel, to_create, bid, ask, now)
 
-        sellable = held and abs(held) > 0 and cfg['strategy'] == 'grid'
+        # G9: the floor core is never for sale, so a holding that IS the
+        # core has no exits by design — S5 reads the sellable, not the held
+        sellable = (held and cfg['strategy'] == 'grid'
+                    and sellable_base(cfg, self.adapter, held) > 0)
         has_exits = any(o['side'] == self._exit_side for o in desired)
         if sellable and not has_exits and not defer_exits:   # S5: warned once
             # two causes, two names (the old text asserted one cause it

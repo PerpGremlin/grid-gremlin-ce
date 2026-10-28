@@ -115,6 +115,41 @@ def spec_G10_over_cap_adopt_arms_no_entries_but_still_covers():
     assert abs(covered - ADAPTER.round_qty(cap + 5 * LOT)) < 1e-9
 
 
+def spec_G10_review_every_armed_entry_filling_stays_under_the_cap():
+    """The headroom was counted in lots at the ref (0.007 at 60k) and each
+    armed entry spent one, but a long's entries below the ref are larger
+    (0.008): under a cap of 0.05 seven armed, 0.056 if they all fill in one
+    cycle — 12% past the cap the user set. Each entry spends its own
+    quantity now. Sabotage: the lot count arms the seventh."""
+    cfg = _cfg(max_position_base=0.05)
+    orders = plan_grid(cfg, ADAPTER, REF)
+    armed = sum(o['qty'] for o in orders if o['side'] == 'Buy')
+    assert armed <= 0.05 + 1e-12, armed
+    assert len(_buys(orders)) == 6                       # 6 x 0.008 = 0.048
+    held = plan_grid(cfg, ADAPTER, REF, held_base=0.03, basis=REF)
+    assert 0.03 + sum(o['qty'] for o in held if o['side'] == 'Buy') <= 0.05 + 1e-12
+    assert lots_free(0.05, 0.0, LOT, ADAPTER) == 7       # the proxy's count
+
+
+def spec_G10_review_the_default_cap_never_starves_a_seeded_ladder():
+    """The default cap is the ladder's own size, summed at each rung's own
+    lot; the seed buys one lot AT THE REF per exit rung, more than those
+    rungs' own lots. Spending each entry's own quantity against it left a
+    seeded long's deepest rung unarmed (45k..75k, 12 rungs, ref 60k: 5 of 6
+    fixed, 6 of 7 geometric — the second review, 2026-10-28). The default
+    cap counts whole lots at the ref, as it was sized to; a cap the user
+    set stays strict (the spec above)."""
+    for spacing, n in (('fixed', 6), ('percent', 7)):
+        cfg = _cfg(upper=75000.0, lower=45000.0, rungs=12, spacing_type=spacing,
+                   seed=True)
+        parts = split('long', grid_rungs(cfg, ADAPTER), REF)
+        assert len(parts['entries']) == n
+        seed = ADAPTER.from_steps(ADAPTER.to_steps(lot(cfg, ADAPTER, REF))
+                                  * len(parts['exits']))     # bot._maybe_seed
+        orders = plan_grid(cfg, ADAPTER, REF, held_base=seed, basis=REF)
+        assert len(_buys(orders)) == n, (spacing, len(_buys(orders)))
+
+
 def spec_G9_the_floor_core_is_never_offered_and_never_suppresses():
     cfg = _cfg(min_position_base=2 * LOT)
     held = 5 * LOT                                   # stack: 2 floored + 3 grid

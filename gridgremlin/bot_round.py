@@ -25,6 +25,10 @@ ROUND_SCOPED = (
     ('_round_hwm_held', None),   # M25: ...and the holding it last saw
     ('_be_level', None),         # D38: the breakeven stop
     ('_folded', ()),             # D71: the slivers folded, said once
+    ('_carried', None),          # M17: (average, tranche prices sized > 0)
+    ('_fired', 0),               # M17/M11: tranches fired, last counted
+    ('_walk', None),             # M17: the exit fills' proof, per holding
+    ('_gap_said', None),         # M20: an unplaceable remainder, said once
     ('_stop_since', None),       # X9: when the stop level was crossed
     ('_stop_base', None),        # X10: the round's base price, from the fills
     ('_round_t0', None),         # M19: the round's first fill, from the venue
@@ -134,6 +138,7 @@ class RoundMixin:
         sign = 1.0 if long else -1.0
         priced = [(adapter.round_price(basis * (1.0 + sign * t['at_avg_pct'])),
                    t['share']) for t in tranches]
+        every = priced
         if mark is not None:
             # M10: "passed" must be MONOTONE within a round — measured
             # against the best mark the round has seen, not the current one.
@@ -181,28 +186,58 @@ class RoundMixin:
             # with zero profit taken, M11's bug reborn (audit 2026-08-07).
             priced = [(p, sh) for p, sh in priced
                       if (p > gauge if long else p < gauge)]
+        # M17/M11: a FIRED tranche is one the gauge passed that carried a
+        # quantity after D71's fold. A sliver folded into its neighbour
+        # sold nothing: counted after the fold a $100 base's two halves
+        # read as "1 tranche filled", and counted by the mark alone the
+        # mark passing the sliver's price did the same — the ladder closed
+        # the round at fees, the trail armed (the tester's finding 3 and
+        # the review of #593). Carried = sized with a quantity under this
+        # average (remembered), or carrying one were the holding split
+        # over every tranche now, or — a restart remembers nothing, and
+        # the 0.001 left after a two-lot base's t1 sold carries no t1 —
+        # proved sold by the venue's own exit fills (_sold_through).
+        kept = {p for p, _ in priced}
+        passed = [p for p, _ in every if p not in kept]
+        mem = self._carried
+        mem = (mem[1] if mem is not None
+               and abs(mem[0] - basis) <= 1e-9 * abs(basis) else frozenset())
+        now = set()
+        if passed and any(p not in mem for p in passed):
+            now = {p for p, q in self._fold_slivers(
+                self._split_tranches(every, held), quiet=True) if q > 0}
+            if any(p not in mem and p not in now for p in passed):
+                now |= self._sold_through(basis, held, every, long)
+        self._fired = sum(1 for p in passed if p in mem or p in now)
+        mem = mem | {p for p in passed if p in now}
         if not priced:
             return []
+        out = self._fold_slivers(self._split_tranches(priced, held))
+        self._carried = (basis, mem | {p for p, q in out if q > 0})
+        return out
+
+    def _split_tranches(self, priced, held):
+        """M23: shares round DOWN to the lot step, so two halves of 0.017
+        are 0.008 and 0.008 and 0.001 is left with no exit of its own — on
+        a venue whose lot is bigger than the dust the round could never
+        end. The last tranche takes what the others leave — to the NEAREST
+        lot: the rest of an on-grid holding is on the grid, and float
+        subtraction puts it a hair under (3.19 - 1.59 floored to 1.59 left
+        0.01 with no exit, replay 2026-10-04)."""
+        from .ladder import last_lot
+        adapter = self.adapter
         total = sum(sh for _, sh in priced)
-        # M23: shares round DOWN to the lot step, so two halves of 0.017
-        # are 0.008 and 0.008 and 0.001 is left with no exit of its own —
-        # on a venue whose lot is bigger than the dust the round could
-        # never end. The last tranche takes what the others leave — to the
-        # NEAREST lot: the rest of an on-grid holding is on the grid, and
-        # float subtraction puts it a hair under (3.19 - 1.59 floored to
-        # 1.59 left 0.01 with no exit, replay 2026-10-04)
         out, used = [], 0.0
         for i, (p, sh) in enumerate(priced):
             if i == len(priced) - 1:
-                from .ladder import last_lot
                 q = last_lot(adapter, max(abs(held) - used, 0.0))
             else:
                 q = adapter.round_qty(abs(held) * sh / total)
                 used += q
             out.append((p, q))
-        return self._fold_slivers(out)
+        return out
 
-    def _fold_slivers(self, targets):
+    def _fold_slivers(self, targets, quiet=False):
         """D71: a tranche under the venue's minimum folds into its
         neighbour — the next target out, else the one before — instead of
         being asked for and refused every cycle (HL, 2026-10-05: the half
@@ -225,7 +260,7 @@ class RoundMixin:
             if j < i:
                 i = j                      # the one before may now be last
         key = tuple((p, q) for p, q, _ in folded)
-        if key != self._folded:
+        if not quiet and key != self._folded:
             self._folded = key
             if folded:
                 self.notify.event('tp', self.botid, '; '.join(
@@ -239,27 +274,75 @@ class RoundMixin:
         so a restart after a tranche filled and price fell back re-placed
         that tranche and forgot the breakeven step. The venue still knows —
         the round's own exit fills are the marks it reached. Walk NEWEST
-        first, unwinding the holding back to flat (the round's start); the
-        best exit price on the way is a floor under the best mark."""
+        first back to the newest ENTRY fill; the best exit price on the way
+        is a floor under the best mark. M22: the gauge belongs to ONE
+        average — walking on to the round's start crossed the safety fill
+        that moved it, and the old 61200 retired a re-anchored t2' unfilled
+        (the tester's finding 10, 2026-10-28)."""
+        walk = self._exit_walk(held)
+        return walk[0] if walk else None
+
+    def _exit_walk(self, held):
+        """This average's own exit fills, from the venue: walk the fills
+        NEWEST first; the exits before the newest ENTRY fill are this
+        average's (M22) — their best price and their total. The walk goes
+        on, unwinding the holding, to say whether the fills EXPLAIN it:
+        only a walk that reaches flat does (M19's test). A list lagging
+        the position — this round's own base not yet listed, the last
+        round's close read in its place — does not. Returns (best, sold,
+        explained), or None when there is nothing to walk."""
+        half = self.adapter.qty_step * 0.5
+        if abs(held) <= half:
+            return None
         try:
             fills = self._round_fills()
         except (VenueError, OSError):
             return None                   # unreadable: today's mark, as before
         long = self.cfg['side'] == 'long'
         entry, exit_ = self._entry_side.lower(), self._exit_side.lower()
-        pos, best = abs(held), None
+        pos, best, sold, this_avg = abs(held), None, 0.0, True
         for f in sorted(fills, key=lambda f: f['time_ms'], reverse=True):
-            if pos <= self.adapter.qty_step:
-                break                     # unwound to flat: the round began
             side = str(f.get('side', '')).lower()
             if side == entry:
+                this_avg = False          # M22: this average began here
                 pos -= abs(f['qty'])
             elif side == exit_:
                 pos += abs(f['qty'])
-                p = f['price']
-                best = p if best is None else (max(best, p) if long
-                                               else min(best, p))
-        return best
+                if this_avg:
+                    sold += abs(f['qty'])
+                    p = f['price']
+                    best = p if best is None else (max(best, p) if long
+                                                   else min(best, p))
+            if pos <= half:
+                return best, sold, True
+        return best, sold, False
+
+    def _sold_through(self, basis, held, every, long):
+        """M17 across a restart: the passed tranches the venue's own exit
+        fills prove carried a quantity — an exit of this average at or
+        beyond the tranche's price, from fills that explain the holding,
+        and the tranche a quantity of its own were the holding as it was
+        before those exits split over every tranche. A sliver that never
+        sold stays one; a lagging list proves nothing and is asked again
+        next cycle. An explained answer is kept for this average and
+        holding."""
+        key = (basis, abs(held))
+        if self._walk is not None and self._walk[0] == key:
+            return self._walk[1]
+        walk = self._exit_walk(held)
+        if not walk or not walk[2]:
+            return frozenset()
+        best, sold, _ = walk
+        out = frozenset()
+        if best is not None:
+            a = self.adapter
+            pre = a.from_steps(a.to_steps(abs(held)) + a.to_steps(sold))
+            carried = {p for p, q in self._fold_slivers(
+                self._split_tranches(every, pre), quiet=True) if q > 0}
+            out = frozenset(p for p in carried
+                            if (best >= p if long else best <= p))
+        self._walk = (key, out)
+        return out
 
     def _breakeven_level(self, basis, fired):
         """D38, 3Commas' ladder: TP1 filled -> average entry plus the fee
@@ -856,8 +939,10 @@ class RoundMixin:
             targets = self._round_targets(basis, held, truth['mark'])
             self.exits_view = {'at': 'conditional' if hosted else 'orders',   # U102
                                'prices': [p for p, q in targets if q > 0]}
-            # M11: a tranche has fired iff fewer targets remain than configured
-            fired = len(targets) < len(self.cfg['take_profit_tranches'])
+            # M11: a tranche has fired iff the gauge passed one that
+            # carried a quantity (a folded sliver sold nothing)
+            n_fired = self._fired
+            fired = n_fired > 0
             trailed = self._maintain_trailing(truth, basis, held, idx,
                                               armed=fired)
             if trailed:
@@ -865,8 +950,7 @@ class RoundMixin:
             if cfg.get('breakeven_ladder') and targets:
                 try:
                     out = self._maintain_breakeven(
-                        truth, basis, held, idx, hosted,
-                        len(self.cfg['take_profit_tranches']) - len(targets))
+                        truth, basis, held, idx, hosted, n_fired)
                 except VenueError as e:
                     out = None
                     if e.kind != 'flat':         # the round just closed
@@ -883,12 +967,31 @@ class RoundMixin:
                     # capacity (110017) and warns every cycle forever.
                     want, resting = self._exits_cover(truth, held, idx,
                                                       hosted)
-                    slack = max(self.adapter.qty_step, want * 1e-6)
-                    if resting < want - slack:
-                        self._close_remainder_at_best(
-                            self.adapter.round_qty(want - resting), basis)
+                    # M20/D87: the gap in whole steps, the holding floored
+                    # (M23a) — round_qty(0.03 - 0.01) floored to 0.019 and
+                    # a step of slack left the last lot with no exit ever
+                    # (the tester's finding 6, 2026-10-28)
+                    adapter = self.adapter
+                    gap = adapter.from_steps(max(0, adapter.to_steps(
+                        want, 'floor') - adapter.to_steps(resting)))
+                    if gap > 0 and adapter.meets_minimum(gap, basis):
+                        self._gap_said = None
+                        self._close_remainder_at_best(gap, basis)
                         self._last_pos = held      # seen: say a fill once
                         return {'round': 'closing'}
+                    if gap > 0 and gap != self._gap_said:
+                        # under the venue's minimum: no order can carry it,
+                        # and silence left a holding with no exit and no
+                        # word (the review of #593) — said once per gap,
+                        # D60's warn
+                        self._gap_said = gap
+                        self.notify.event(
+                            'warn', self.botid,
+                            f'{gap:.10g} held with every tranche target met '
+                            'and no exit covering it — under the venue\'s '
+                            'minimum, so no order can carry it (M20)')
+                    elif not gap:
+                        self._gap_said = None
                     return None
                 if hosted:
                     self._maintain_partial_tps(truth, targets, idx)
@@ -1059,7 +1162,11 @@ class RoundMixin:
             if e.kind != 'gone':
                 self.notify.event('warn', self.botid, f'base requote: {e}')
             return {'round': 'entering'}
-        left = adapter.round_qty(base['qty'] - (base['cum_exec_qty'] or 0.0))
+        # D87: whole steps less whole steps — round_qty(0.03 - 0.01) floors
+        # the float difference to 0.019, a lot lost (the tester's finding 4)
+        left = adapter.from_steps(max(0, adapter.to_steps(base['qty'])
+                                      - adapter.to_steps(base['cum_exec_qty']
+                                                         or 0.0)))
         if left <= 0 or not adapter.meets_minimum(left, price):
             return {'round': 'entering'}  # the remainder is dust: base done
         self._gen += 1

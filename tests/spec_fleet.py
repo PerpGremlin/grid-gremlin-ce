@@ -476,6 +476,67 @@ def spec_E7_a_failed_read_costs_a_cycle_never_the_process():
     assert not any('cycle' in e and 'lost' in e for e in events)
 
 
+def spec_F16_review_a_bot_cycle_that_keeps_raising_is_paged_once_it_persists():
+    """A bot's cycle exception was filed as `net`, which LOG_ONLY_KINDS keeps
+    off the phone: a ZeroDivisionError on every cycle froze the bot and
+    nobody heard (the review, 2026-10-28). Network weather (OSError, a venue
+    error) stays the log's; anything else is a warning, paged by D60's
+    persisting rule — not on the first cycle, once it keeps coming. A
+    TruthError (the venue answered in the wrong shape) is weather."""
+    from gridgremlin import main as m
+    from gridgremlin.events import PERSIST_COUNT, TelegramNotifier
+    from gridgremlin.exchange.truth import TruthError
+
+    class Wallet:
+        env = 'demo'
+
+        def read_wallet(self):
+            return {'equity': 1000.0, 'mm_rate': 0.01}
+
+    class Raising:
+        alive = True
+        cfg = {'venue': 'bybit'}
+
+        def __init__(self, botid, exc):
+            self.botid, self.exc = botid, exc
+
+        def cycle(self, equity=None):
+            raise self.exc
+
+    def run(cycles):
+        sent, lines = [], []
+        bots = [Raising('frozen', ZeroDivisionError('float division by zero')),
+                Raising('weather', OSError('[Errno 104] Connection reset by peer')),
+                Raising('shape', TruthError('positions: missing avgPrice')),
+                Raising('bug', KeyError('avgPrice'))]
+        saved = (m.build_fleet, m.make_notifier, m.load_env, m.acquire_fleet_lock)
+        m.build_fleet = lambda p, notif, **kw: ({'notify_orders': False,
+                                                 'poll_seconds': 0},
+                                                {'bybit': Wallet()}, bots)
+        m.make_notifier = lambda: TelegramNotifier('t', 'c', transport=sent.append,
+                                                   sink=lines.append)
+        m.load_env = lambda: None
+        m.acquire_fleet_lock = lambda path: open('/dev/null')
+        try:
+            m.run('ignored', cycles=cycles, poll_seconds=0)
+        finally:
+            m.build_fleet, m.make_notifier, m.load_env, m.acquire_fleet_lock = saved
+        return '\n'.join(sent), lines
+
+    phone, lines = run(PERSIST_COUNT - 1)
+    assert 'ZeroDivisionError' not in phone                 # one bad cycle: the log's
+    assert any('frozen' in ln and 'ZeroDivisionError' in ln for ln in lines)
+    phone, lines = run(PERSIST_COUNT + 1)
+    assert 'frozen' in phone and 'ZeroDivisionError' in phone, phone
+    assert 'persisting' in phone
+    assert 'Connection reset' not in phone                  # weather stays off
+    # a venue answering in the wrong shape is weather too (V1): one glitch
+    # venue-wide must not page once per bot; a KeyError stays a warning
+    assert 'TruthError' not in phone and 'missing avgPrice' not in phone
+    assert 'bug' in phone and 'KeyError' in phone
+    assert any('[log] net weather' in ln for ln in lines)
+
+
 def spec_F5_no_repo_fleet_file_ever_carries_the_mainnet_flag():
     import json
     from pathlib import Path

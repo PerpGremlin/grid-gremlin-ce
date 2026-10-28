@@ -383,3 +383,92 @@ def spec_D58_a_dca_round_never_opens_twice_on_its_own_fill_in_flight():
     assert venue.market_calls == 1
     assert bot._last_pos == venue.pending[2]        # its own, not the 3 ADA
     assert [o for o in venue.orders if o['side'] == 'Sell'], 'no exit'
+
+
+class FeeInCoin(FakeSpotVenue):
+    """Bybit spot takes a buy's fee in the coin: the wallet gets 99.9%."""
+
+    def place_market(self, category, symbol, side, qty, position_idx=0,
+                     reduce_only=False, link_id=None, borrow=False):
+        q = float(qty)
+        self.base += q * 0.999 if side == 'Buy' else -q   # the fee, in coin
+        self.record_fill(side.lower(), self.mark, q, link_id)
+
+    def fill_order(self, order, qty=None):
+        """All of a resting order fills, or `qty` of it (it keeps resting,
+        its original size and what has filled shown as Bybit shows them)."""
+        q = float(order['qty']) - order.get('cum', 0.0) if qty is None else qty
+        if qty is None:
+            self.orders = [o for o in self.orders if o is not order]
+        else:
+            order['cum'] = order.get('cum', 0.0) + qty
+        self.base += q * 0.999 if order['side'] == 'Buy' else -q
+        self.record_fill(order['side'].lower(), order['price'], q,
+                         order['link_id'])
+
+
+def _spot_dca(venue, lines):
+    from gridgremlin.adapters import SpotAdapter
+    from gridgremlin.config import validate_config
+    cfg = validate_config({'strategy': 'martingale', 'market_type': 'spot',
+                           'symbol': 'ADAUSDT', 'side': 'long',
+                           'capital': 200, 'spot_borrow': True,
+                           'spot_leverage': 5, 'base_order_size': 50,
+                           'safety_order_size': 50, 'deviation_pct': 0.01,
+                           'max_averaging_orders': 3,
+                           'take_profit_avg_pct': 0.05})
+    return Bot(cfg, SpotAdapter(ADA_SPEC), venue, Notifier(sink=lines.append),
+               gen_seed=1)
+
+
+def spec_M24_a_spot_round_never_rebuys_a_filled_safety():
+    """The tester's finding 4 (2026-10-28): the spot wallet holds each buy
+    net of the fee Bybit takes in the coin, so the holding sits under M1's
+    cumulative prefix and safety order 1, filled, was placed again the
+    moment the price came back above it — past `max_averaging_orders` and
+    the capital M2 approved, on borrowed coin (D59). M24's fill-based
+    record serves a spot round too."""
+    from gridgremlin.apply import rung_of
+    venue, lines = FeeInCoin(mark=0.1950, base=0.0), []
+    bot = _spot_dca(venue, lines)
+    bot.cycle()                                     # base at market
+    bot.cycle()                                     # exit + safeties rest
+    so1 = next(o for o in venue.orders
+               if rung_of(o['link_id'], bot.botid) == 1)
+    venue.mark = so1['price']
+    venue.fill_order(so1)                           # safety order 1 fills
+    bot.cycle()
+    venue.mark = 0.1950                             # and the price comes back
+    for _ in range(3):
+        bot.cycle()
+    rungs = sorted(rung_of(o['link_id'], bot.botid) for o in venue.orders
+                   if o['side'] == 'Buy')
+    assert 1 not in rungs, (rungs, so1['price'])    # SO1 is NOT back
+    assert rungs, 'the deeper safeties still rest'
+
+
+def spec_M24_a_partly_filled_safety_keeps_resting():
+    """The review of #593: any entry fill under a rung's link put the rung
+    in M24's record, partial fills included; the plan then dropped the
+    rung and the diff cancelled the live order's unfilled half — coins the
+    ladder meant to buy, never bought. A fill suppresses its rung only once
+    the order is gone."""
+    from gridgremlin.apply import rung_of
+    venue, lines = FeeInCoin(mark=0.1950, base=0.0), []
+    bot = _spot_dca(venue, lines)
+    bot.cycle()
+    bot.cycle()
+    so1 = next(o for o in venue.orders
+               if rung_of(o['link_id'], bot.botid) == 1)
+    venue.mark = so1['price'] + 0.0003
+    venue.fill_order(so1, qty=round(float(so1['qty']) / 2))   # half fills
+    for _ in range(3):
+        bot.cycle()
+    assert so1 in venue.orders, 'the unfilled half was cancelled'
+    venue.fill_order(so1)                           # the rest fills
+    venue.mark = 0.1950
+    for _ in range(3):
+        bot.cycle()
+    rungs = sorted(rung_of(o['link_id'], bot.botid) for o in venue.orders
+                   if o['side'] == 'Buy')
+    assert 1 not in rungs and rungs, rungs          # gone: now suppressed

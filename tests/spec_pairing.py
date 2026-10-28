@@ -371,6 +371,61 @@ def spec_G25_a_resting_exit_outlives_the_fill_history():
     assert before == after == [59000.0, 60000.0, 61000.0]
 
 
+# --- G23: the fitted block is counted in its own rungs' lots (the review) ----
+
+def _descent(cfg, top):
+    """Lots bought from rung `top` down to rung 0, each sized at its own
+    rung: (held, average)."""
+    from gridgremlin.ladder import lattice_price, rung_notionals
+    qs = [(lattice_price(cfg, j), ADAPTER.round_qty(ADAPTER.qty_from_notional(
+        rung_notionals(cfg)[j], lattice_price(cfg, j)))) for j in range(top + 1)]
+    held = round(sum(q for _, q in qs), 3)
+    return held, sum(p * q for p, q in qs) / held
+
+
+def spec_G23_review_a_fitted_descent_counts_its_lots_at_their_own_rungs():
+    """Twelve lots bought 61k down to 50k (0.097), no fill history, the mark
+    at 49,950. Counted in lots at the mark they were eleven: the block lost
+    its top rung and the 61k lot exited at 61k, its own buy price, two fees
+    for nothing. Counted in its own rungs' lots the block is the twelve, and
+    each exits one rung up. A seed (bought at the ref, the block across it)
+    keeps today's count."""
+    cfg = _cfg()
+    held, avg = _descent(cfg, 11)
+    assert held == 0.097
+    orders = plan_grid(cfg, ADAPTER, 49950.0, held_base=held, basis=avg)
+    sells = {o['price']: o['qty'] for o in orders if o['side'] == 'Sell'}
+    assert sorted(sells) == [51000.0 + 1000 * i for i in range(12)], sells
+    assert sells[62000.0] == 0.007 and sells[61000.0] == 0.007
+    assert abs(sum(sells.values()) - held) < 1e-9          # G8: all covered
+    # carried up: three lots bought 55k..57k (0.008 each), the mark now
+    # 60,500 where a lot is 0.007 — three exits above the mark, not four
+    up = plan_grid(cfg, ADAPTER, 60500.0, held_base=0.024, basis=56000.0)
+    assert _sells(up) == [61000.0, 62000.0, 63000.0], _sells(up)
+    # a seed: three lots at the ref, the block across it — today's count
+    seed = plan_grid(cfg, ADAPTER, 60000.0, held_base=3 * LOT, basis=60000.0)
+    assert len(_sells(seed)) == 3
+
+
+def spec_G25_review_a_weighted_lot_exits_at_its_own_rungs_weight():
+    """G25: each exit is sized to the lot it closes. With weights
+    [3]*5 + [1]*16 the lots bought at 52k..54k are 0.018, 0.018 and 0.017;
+    sized at the MEAN rung they got 0.009, 0.008 and 0.008, and the count at
+    the ref added three exits for lots that do not exist — a one-rung bounce
+    sold half of what was meant."""
+    cfg = _cfg(rung_sizing='weighted', rung_weights=[3] * 5 + [1] * 16)
+    orders = plan_grid(cfg, ADAPTER, 51500.0, 0.053, 53000.0,
+                       held_rungs=[2, 3, 4])
+    sells = [(o['price'], o['qty']) for o in orders if o['side'] == 'Sell']
+    assert sells == [(53000.0, 0.018), (54000.0, 0.018), (55000.0, 0.017)], sells
+    # a seed lot beside them (no rung of its own, 0.009 at the ref) is the
+    # one displaced lot: it takes the nearest free window exit
+    seeded = plan_grid(cfg, ADAPTER, 51500.0, 0.062, 53000.0,
+                       held_rungs=[2, 3, 4])
+    assert [(o['price'], o['qty']) for o in seeded if o['side'] == 'Sell'] == \
+        sells + [(56000.0, 0.009)]
+
+
 # --- G26: the fill list lags the position; an exit never fires twice ---------
 
 def _two_lots_then_the_lower_exit_fills(lag=True):

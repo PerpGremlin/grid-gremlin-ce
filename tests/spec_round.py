@@ -803,6 +803,29 @@ def spec_M16_a_partial_fill_holds_its_tp_and_the_ladder_waits():
     assert float(rest['qty']) == 0.007 and rest['price'] == 60099.5
 
 
+def spec_M16_the_requoted_remainder_is_counted_in_whole_steps():
+    """The tester's finding 4 (2026-10-28): the remainder was
+    round_qty(0.03 - 0.01), and the float difference floors to 0.019 — a
+    whole lot lost, the holding left a lot under M1's prefix, and a filled
+    safety rung placed again. D87: the remainder is whole steps less
+    whole steps."""
+    venue, lines, t = FakeVenue(), [], [0.0]
+    bot = _maker_bot(venue, lines, t, base_order_size=1800.0, capital=2000.0)
+    bot.cycle()
+    base = venue.orders[0]
+    assert base['qty'] == '0.03'
+    base['cum'] = 0.01
+    venue.position = {'positionIdx': 1, 'side': 'Buy', 'size': '0.01',
+                      'avgPrice': '59999.5', 'leverage': '10',
+                      'unrealisedPnl': '0'}
+    bot.cycle()
+    venue.mark = 60100.0
+    t[0] = 40.0
+    assert bot.cycle() == {'round': 'requoted'}
+    [rest] = venue.orders
+    assert rest['qty'] == '0.02', rest['qty']
+
+
 def spec_M16_a_restart_mid_entry_adopts_the_base_and_never_kills():
     # the sabotage this guards: the round-complete check counted any owned
     # order on a fresh start — a resting base read as a finished round
@@ -1162,6 +1185,136 @@ def spec_D71_a_sliver_tranche_folds_into_its_neighbour():
     assert bot2._fold_slivers([(60600.0, 0.001)]) == [(60600.0, 0.001)]   # lone: left
 
 
+def _small_base(**over):
+    """The tester's finding 3 (2026-10-28), Bybit's own BTCUSDT minimums
+    (0.001 BTC, 5 USDT — ADAPTER's): a 100 USDT base buys 0.001, and two
+    50% tranches of 0.0005 floor to 0 and fold (D71)."""
+    return _tranche_cfg(base_order_size=100.0, safety_order_size=100.0,
+                        capital=1500.0, **over)
+
+
+def spec_M17_a_folded_sliver_is_not_a_fired_tranche():
+    """Counted after D71's fold, one fold with no fill read as '1 tranche
+    filled': the breakeven ladder armed at average + fees over the mark
+    and closed the round at market on its second cycle. Counted before the
+    fold but by the mark alone, the mark passing the sliver's price did the
+    same (the review of #593): nothing sold, and the round closed at fees
+    instead of its 2% target. Fired is a passed tranche that carried a
+    quantity after the fold."""
+    venue, lines = FakeVenue(), []
+    bot = Bot(_small_base(breakeven_ladder=True), ADAPTER, venue,
+              Notifier(sink=lines.append), gen_seed=1)
+    bot.cycle()                                    # base 0.001 at 60000
+    assert bot.cycle() != {'round': 'breakeven'}   # one exit rests, whole
+    assert venue.position and _sl_book(venue) == []
+    assert any('folded into the one at 61200' in ln for ln in lines)
+    venue.mark = 60700.0                           # past the sliver's price
+    bot.cycle()
+    assert bot._be_level is None and _sl_book(venue) == []
+    venue.mark = 60050.0                           # and back under avg + fees
+    assert bot.cycle() != {'round': 'breakeven'}
+    assert venue.position and float(venue.position['size']) == 0.001
+    assert not any('breakeven stop' in ln for ln in lines)
+
+
+def spec_M17_a_tranche_that_carried_a_quantity_still_fires():
+    """The other side of the fold rule: a 0.002 base splits into two
+    0.001 exits, both above the minimum; t1 sells, the holding left could
+    no longer carry a t1 of its own, and t1 is still a fired tranche."""
+    venue, lines = FakeVenue(), []
+    bot = Bot(_tranche_cfg(base_order_size=130.0, safety_order_size=130.0,
+                           capital=1500.0, breakeven_ladder=True),
+              ADAPTER, venue, Notifier(sink=lines.append), gen_seed=1)
+    bot.cycle()
+    bot.cycle()
+    assert sorted(o['qty'] for o in venue.stop_book) == ['0.001', '0.001']
+    assert not any('folded' in ln for ln in lines)
+    venue.mark = 60700.0                           # t1 (+1%) fired
+    venue.position = dict(venue.position, size='0.001')
+    venue.stop_book = [o for o in venue.stop_book
+                       if float(o['triggerPrice']) != 60600.0]
+    bot.cycle()
+    assert bot._be_level == 60060.0
+
+
+def _two_lot(**over):
+    return _tranche_cfg(venue='hyperliquid', base_order_size=120.0,
+                        safety_order_size=120.0, capital=1500.0,
+                        breakeven_ladder=True, **over)
+
+
+def spec_M17_a_restart_after_tp1_keeps_the_breakeven_step():
+    """The re-review of #593's fix: a 0.002 base on HL rests two 0.001
+    exits; t1 sells, 0.001 is left — too little to give t1 a quantity of
+    its own. The running bot remembered t1 carried one and stepped to
+    60060; a restarted bot remembered nothing, re-sized the 0.001 over
+    both tranches, read t1 as a sliver, and at 60030 did nothing: the
+    breakeven protection thrown away. The venue's own exit fill at t1's
+    price since the newest entry is the evidence."""
+    venue, lines = FakeHLRound(), []
+    bot = Bot(_two_lot(), ADAPTER, venue, Notifier(sink=lines.append),
+              gen_seed=1)
+    bot.cycle()
+    bot.cycle()
+    exits = sorted(o['price'] for o in venue.orders if o['reduce_only'])
+    assert exits == [60600.0, 61200.0]
+    t1 = next(o for o in venue.orders
+              if o['reduce_only'] and o['price'] == 60600.0)
+    venue.orders.remove(t1)                        # t1 sold
+    b = bot.botid
+    fills = _histfills((1_000, 'buy', 60000.0, 0.002, 0.0, f'{b}-0-x'),
+                       (2_000, 'sell', 60600.0, 0.001, 0.0, t1['link_id']))
+    venue.fills_history = lambda mt, sym, a, c: list(fills)
+    venue.position = dict(venue.position, size='0.001')
+    venue.mark = 60650.0
+    fresh = Bot(_two_lot(), ADAPTER, venue, Notifier(sink=lines.append),
+                gen_seed=1)                        # a restart
+    fresh.cycle()
+    assert fresh._fired == 1 and fresh._be_level == 60060.0
+    venue.mark = 60030.0
+    assert fresh.cycle() == {'round': 'breakeven'}
+    assert venue.position is None
+
+
+def spec_M17_a_lagging_fill_list_never_fires_a_sliver():
+    """The guard on that evidence: with this round's own base not yet
+    listed, the walk from the holding back through the fills reaches the
+    LAST round's close, whose exits sat above this round's sliver. The
+    fills do not explain the holding, so they prove nothing: the sliver
+    stays unfired."""
+    venue, lines = FakeVenue(), []
+    b = Bot(_small_base(breakeven_ladder=True), ADAPTER, venue,
+            Notifier(sink=lambda l: None), gen_seed=1).botid
+    venue.fills_history = lambda mt, sym, a, c: _histfills(
+        (1_000, 'buy', 60000.0, 0.002, 0.0, f'{b}-0-x'),     # last round
+        (2_000, 'sell', 61000.0, 0.002, 0.0, f'{b}-0-y'))    # its close
+    venue.position = {'positionIdx': 1, 'side': 'Buy', 'size': '0.001',
+                      'avgPrice': '60000', 'leverage': '10',
+                      'unrealisedPnl': '0'}            # this round, unlisted
+    venue.mark = 60700.0                           # past the sliver's price
+    bot = Bot(_small_base(breakeven_ladder=True), ADAPTER, venue,
+              Notifier(sink=lines.append), gen_seed=1)
+    bot.cycle()
+    assert bot._fired == 0 and bot._be_level is None
+    assert _sl_book(venue) == []
+
+
+def spec_M11_a_folded_sliver_does_not_arm_the_trail():
+    """The same fold armed `trailing_stop_pct` before the first target:
+    M11's bug by another road — and again once the mark passed the
+    sliver's price with nothing sold (the review of #593)."""
+    venue, lines = FakeVenue(), []
+    bot = Bot(_small_base(trailing_stop_pct=0.005), ADAPTER, venue,
+              Notifier(sink=lines.append), gen_seed=1)
+    bot.cycle()
+    bot.cycle()
+    assert any('folded into' in ln for ln in lines)
+    assert not getattr(venue, 'trail_calls', [])   # NOT armed yet
+    venue.mark = 60700.0
+    bot.cycle()
+    assert not getattr(venue, 'trail_calls', [])   # still not: nothing sold
+
+
 def spec_D71_one_refused_exit_does_not_leave_the_others_unwritten():
     """M25's other half: a venue refusing one tranche's order used to abort
     the loop — the bot's other exits were not written that cycle."""
@@ -1180,6 +1333,60 @@ def spec_D71_one_refused_exit_does_not_leave_the_others_unwritten():
     exits = [(o['price'], o['qty']) for o in venue.orders if o['reduce_only']]
     assert exits == [(61200.0, '0.008')]              # t2 rests although t1 was refused
     assert any('tp: refused by the venue' in ln for ln in lines)   # and it is said
+
+
+def spec_M20_the_remainder_gap_is_counted_in_whole_steps():
+    """The tester's finding 6 (2026-10-28): the gap was round_qty(want -
+    resting), and 0.03 - 0.01 floors to 0.019 — a lot lost; with a step of
+    slack 0.029 then read as covered, and once those exits filled the lot
+    left (0.001, every target met, nothing resting) was never given an
+    exit: the round could not end on its own exits. The gap is whole
+    steps: the holding floored (M23a) less what rests."""
+    venue, lines = FakeHLRound(), []
+    bot = Bot(_tranche_cfg(venue='hyperliquid'), ADAPTER, venue,
+              Notifier(sink=lines.append), gen_seed=1)
+    bot.cycle()
+    bot.cycle()                                    # base 0.016, two exits
+    venue.orders = [o for o in venue.orders if not o['reduce_only']]
+    venue.position = dict(venue.position, size='0.03')
+    venue.place_order('linear', 'BTCUSDT', 'Sell', '0.01', '61200',
+                      f'{bot.botid}-0-x', reduce_only=True, post_only=False)
+    venue.mark = 61300.0                           # every target behind it
+    assert bot.cycle() == {'round': 'closing'}
+    close = venue.orders[-1]
+    assert close['reduce_only'] and close['qty'] == '0.02', close['qty']
+    # the last lot, every target met and nothing resting, gets its exit
+    venue.orders = [o for o in venue.orders if not o['reduce_only']]
+    venue.position = dict(venue.position, size='0.001')
+    assert bot.cycle() == {'round': 'closing'}
+    close = venue.orders[-1]
+    assert close['reduce_only'] and close['qty'] == '0.001'
+
+
+def spec_M20_an_unplaceable_remainder_is_said_once():
+    """The review of #593: a gap of whole steps under the venue's minimum
+    was skipped in silence — a holding with no exit and no word. It is a
+    warn (D60 decides the phone), said once per gap, not every cycle."""
+    tight = LinearAdapter({'symbol': 'BTCUSDT', 'qty_step': 0.001,
+                           'price_tick': 0.1, 'min_qty': 0.001,
+                           'min_notional': 200.0, 'settle_coin': 'USDT'})
+    venue, lines = FakeHLRound(), []
+    bot = Bot(_tranche_cfg(venue='hyperliquid'), tight, venue,
+              Notifier(sink=lines.append), gen_seed=1)
+    bot.cycle()
+    bot.cycle()                                    # base 0.016, two exits
+    venue.orders = [o for o in venue.orders if not o['reduce_only']]
+    venue.position = dict(venue.position, size='0.012')
+    venue.place_order('linear', 'BTCUSDT', 'Sell', '0.01', '61200',
+                      f'{bot.botid}-0-x', reduce_only=True, post_only=False)
+    venue.mark = 61300.0                           # every target behind it
+    n = len(venue.orders)
+    for _ in range(3):
+        bot.cycle()
+    assert len(venue.orders) == n                  # 0.002 = 122 USDT < 200
+    said = [ln for ln in lines if '] warn' in ln and 'no exit covering' in ln]
+    assert len(said) == 1, said
+
 
 
 def spec_M17_a_restart_that_fires_at_once_still_ends_a_round():
@@ -1784,6 +1991,37 @@ def spec_M22_a_safety_fill_starts_the_tranche_gauge_again():
     assert len(t4) == 2 and bot._round_hwm == 59000.0       # monotone again
 
 
+def spec_M22_exits_from_an_earlier_average_never_retire_a_live_tranche():
+    """The tester's finding 10 (2026-10-28): t1 and t2 filled, the price
+    fell, safety order 1 filled and re-anchored every target lower. The
+    round's exit walk (M25 when the holding shrinks, M17 across a restart)
+    went back to the round's start, past that safety fill, and the old
+    61200 retired t2' unfilled. The gauge belongs to one average: the walk
+    stops at the newest entry fill."""
+    venue, lines = FakeVenue(), []
+    bot = Bot(_tranche_cfg(take_profit_tranches=THREE), ADAPTER, venue,
+              Notifier(sink=lines.append), gen_seed=1)
+    b = bot.botid
+    fills = _histfills((1_000, 'buy', 60000.0, 0.016, 0.0, f'{b}-0-x'),
+                       (2_000, 'sell', 60600.0, 0.006, 0.0, f'{b}-0-x'),
+                       (3_000, 'sell', 61200.0, 0.004, 0.0, f'{b}-0-x'),
+                       (4_000, 'buy', 59400.0, 0.016, 0.0, f'{b}-1-y'))
+    venue.fills_history = lambda mt, sym, a, c: list(fills)
+    basis = 59563.6                                 # after the safety fill
+    bot._last_pos = 0.022                           # mid-round
+    t = bot._round_targets(basis, 0.022, mark=59500.0)
+    assert len(t) == 3                              # nothing passed yet
+    t1 = t[0][0]
+    fills.append(_histfills((5_000, 'sell', t1, t[0][1], 0.0,
+                             f'{b}-0-x'))[0])       # t1' fills, the mark lags
+    left = bot._round_targets(basis, 0.022 - t[0][1], mark=t1 - 50.0)
+    assert [p for p, _ in left] == [p for p, _ in t[1:]], left   # t2' lives
+    # and across a restart: the walk stops at the same place
+    fresh = Bot(_tranche_cfg(take_profit_tranches=THREE), ADAPTER, venue,
+                Notifier(sink=lines.append), gen_seed=1)
+    assert fresh._seed_round_hwm(0.022 - t[0][1]) == t1
+
+
 def spec_M22_a_venue_fired_stop_then_a_stray_fill_ends_the_round():
     """The venue fills in price order: the breakeven stop above a resting
     safety order fires first, the safety fills a moment later, and the
@@ -1935,6 +2173,35 @@ def spec_M24_a_tranche_fill_does_not_rearm_a_filled_safety():
     bot._round_rungs = {1, 2}
     bot._round_rungs_at = half
     assert bot._rungs_filled_this_round(half) == frozenset({1, 2})
+    # a rung whose order still rests is not suppressed (the review of #593)
+    assert bot._rungs_filled_this_round(half, resting={2}) == frozenset({1})
+
+
+def spec_M24_a_partly_filled_safety_keeps_resting_on_a_tranche_round():
+    """The review of #593: a partial fill under safety order 1's link put
+    the rung in M24's record, the plan dropped it, and the diff cancelled
+    the order's unfilled remainder. Only an order that is gone suppresses
+    its rung."""
+    from gridgremlin.apply import rung_of
+    venue, lines = FakeVenue(), []
+    bot = Bot(_tranche_cfg(), ADAPTER, venue, Notifier(sink=lines.append),
+              gen_seed=1)
+    bot.cycle()
+    bot.cycle()
+    so1 = next(o for o in venue.orders
+               if rung_of(o['link_id'], bot.botid) == 1)
+    base_qty = float(venue.position['size'])
+    link0 = next(l for l in venue.market_links)
+    so1['cum'] = 0.008                               # half of SO1 fills
+    venue.position = dict(venue.position, size=str(base_qty + 0.008),
+                          avgPrice='59700')
+    venue.mark = 59450.0
+    venue.fills_history = lambda mt, sym, a, b: _histfills(
+        (1_000, 'buy', 60000.0, base_qty, 0.1, link0),
+        (2_000, 'buy', 59400.0, 0.008, 0.1, so1['link_id']))
+    for _ in range(2):
+        bot.cycle()
+    assert so1 in venue.orders, 'the unfilled half was cancelled'
 
 
 # --- E6b: a clear no is a no; an unknown fate stays careful -------------------

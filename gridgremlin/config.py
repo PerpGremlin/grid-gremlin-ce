@@ -469,6 +469,7 @@ def validate_grid(row, where='row'):
 
     cfg['stop'] = _validate_stop(cfg.get('stop'), where,
                                  slide=bool(cfg.get('slide')))
+    _refuse_stop_at_zero(cfg, where)
     _validate_max_loss(cfg, where)
     _validate_holding(cfg, where)                                 # D76
     if (cfg['stop'] and cfg['stop']['server_side']
@@ -485,6 +486,24 @@ def validate_grid(row, where='row'):
         eff = cfg.get('spot_leverage', 1.0)
     cfg['ladder_notional'] = capital * eff
     return cfg
+
+
+def _refuse_stop_at_zero(cfg, where):
+    """X8/G17 (the review, 2026-10-28): a long's `rungs_beyond` stop on a
+    FIXED lattice sits that many steps below the home window's bottom; at
+    or below zero it can never fire. (An adverse slide never takes it
+    lower: slide_floor stops the window first.) A short's sits above the
+    top, and a geometric lattice never reaches zero."""
+    stop = cfg.get('stop') or {}
+    r = stop.get('rungs_beyond')
+    if r is None or cfg['side'] != 'long' or cfg['spacing_type'] == 'percent':
+        return
+    from .ladder import lattice_price
+    level = lattice_price(cfg, -r)
+    if level <= 1e-12 * cfg['upper']:
+        _refuse(f"{where}.stop: 'rungs_beyond' {r} puts the stop at "
+                f"{level:.10g}, at or below zero, so it could never fire "
+                '(X8): fewer rungs beyond, or a geometric lattice')
 
 
 SLIDE_LEVERAGE_WARN = 20.0   # the 48-day replay: 10x held, 55-75x liquidated

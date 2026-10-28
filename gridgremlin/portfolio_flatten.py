@@ -45,7 +45,12 @@ def main(argv):
         print('mainnet: not from here (D25)')
         return 1
     bot, _ = build_portfolio(cfg, client, Notifier(sink=print), state, tombs)
-    after = bot.flatten_now('flattened by the owner', tombstone=not reset)
+    from .exchange.errors import VenueError
+    try:
+        after = bot.flatten_now('flattened by the owner', tombstone=not reset)
+    except VenueError as e:
+        print(f'{bot.botid}: {e}')
+        return 1
     print('after: ' + ', '.join(f'{c} {q:,.6g}' for c, q in after.items()))
     if reset:
         state.forget(bot.botid)

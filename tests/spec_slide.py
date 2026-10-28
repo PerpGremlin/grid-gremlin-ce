@@ -342,3 +342,83 @@ def spec_G24_an_adverse_slide_buys_beyond_capital_in_the_replay():
     assert kept['max_held'] <= ladder
     assert both['max_held'] > 2 * ladder
     assert both['entry_fills'] > 2 * kept['entry_fills']
+
+
+# --- G17/G19: a fixed lattice never slides to a rung at zero (the review) ----
+
+FINE = LinearAdapter({'symbol': 'XUSDT', 'qty_step': 1.0, 'price_tick': 0.0001,
+                      'min_qty': 1.0, 'min_notional': 5.0, 'settle_coin': 'USDT'})
+
+
+def _cheap(**over):
+    """A short 1.0..3.0 in 11 rungs: step 0.2, max_rungs 20."""
+    row = {'market_type': 'linear', 'symbol': 'XUSDT', 'side': 'short',
+           'capital': 1000.0, 'leverage': 1, 'upper': 3.0, 'lower': 1.0,
+           'rungs': 11, 'spacing_type': 'fixed',
+           'slide': dict(SLIDE, max_rungs=20)}
+    row.update(over)
+    return validate_config(row)
+
+
+def spec_G17_review_a_fixed_lattice_floors_its_slide_a_step_above_zero():
+    """The fixed lattice extends below `lower` by its step, and the clamp was
+    only +-max_rungs: at 0.55 the short slid to -0.4..1.6, and the 0.0 rung
+    divided by zero in position_cap on every cycle. The window's floor keeps
+    every rung it rests — and the rung below it, where a short's bottom lot
+    covers — at least a step above zero."""
+    cfg = _cheap()
+    new = slide_offset(cfg, 0, 0.55)
+    assert new == -3, new
+    rungs = grid_rungs(cfg, FINE, new)
+    assert abs(rungs[0] - 0.4) < 1e-9 and lattice_price(cfg, new - 1) > 0.19
+    for ref in (0.55, 0.3, 0.01):
+        assert slide_offset(cfg, new, ref) == new          # floored, held
+        plan_grid(cfg, FINE, ref, offset=new)              # never raises
+    held = plan_grid(cfg, FINE, 0.3, held_base=-1000.0, basis=0.4,
+                     offset=new, held_rungs=[new])
+    assert all(o['price'] > 0 for o in held)
+    # a geometric lattice never reaches zero: no floor, the clamp alone
+    geo = _cheap(spacing_type='percent')
+    assert slide_offset(geo, 0, 0.05) < -3
+
+
+def spec_G17_review_sabotage_the_clamp_alone_lands_a_rung_on_zero():
+    """Why the floor exists: at the offset the clamp alone allows, a rung is
+    priced 0.0 and the plan raises on every cycle — the bot frozen."""
+    cfg = _cheap()
+    alone = max(int(math.ceil(lattice_index(cfg, 0.55))) - 5, -20)
+    assert alone == -7
+    assert min(abs(p) for p in grid_rungs(cfg, FINE, alone)) < 1e-9
+    try:
+        plan_grid(cfg, FINE, 0.55, offset=alone)
+    except ZeroDivisionError:
+        return
+    raise AssertionError('a rung at 0.0 planned without raising')
+
+
+def spec_X8_review_a_rungs_beyond_stop_at_or_below_zero_is_refused():
+    """A long's `rungs_beyond` stop on a fixed lattice can sit at or below
+    zero, and never fire: refused by name. Under G24 the stop follows the
+    window down, so the slide's floor stops the window while the stop is
+    still a step above zero. A short's sits above the top; a geometric
+    lattice never reaches zero."""
+    from gridgremlin.ladder import stop_level_for
+
+    def build(**over):
+        return _cheap(side='long', **over)
+    try:
+        build(stop={'watch': 'mark_price', 'rungs_beyond': 5})   # 1.0 - 1.0 = 0
+    except ConfigError as e:
+        assert 'rungs_beyond' in str(e) and 'zero' in str(e), e
+    else:
+        raise AssertionError('a stop at 0.0 was accepted')
+    # direction both: the floor alone would take the window to 0.4 and the
+    # stop three rungs below it to -0.2; it stops at 0.8, the stop at 0.2
+    both = build(slide=dict(BOTH, max_rungs=20), max_position_base='unbounded',
+                 stop={'watch': 'mark_price', 'rungs_beyond': 3})
+    low = slide_offset(both, 0, 0.05)
+    assert low == -1, low
+    assert abs(stop_level_for(both, low) - 0.2) < 1e-9
+    build(stop={'watch': 'mark_price', 'rungs_beyond': 4})        # 0.2: fine
+    _cheap(stop={'watch': 'mark_price', 'rungs_beyond': 30})      # a short's
+    build(spacing_type='percent', stop={'watch': 'mark_price', 'rungs_beyond': 30})

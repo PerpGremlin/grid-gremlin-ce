@@ -82,6 +82,19 @@ def spec_S3_seed_is_one_lot_per_exit_rung_at_market():
     assert any('[ship] seed' in ln for ln in lines)
 
 
+def spec_G27_the_seed_is_whole_lots_never_a_floored_product():
+    """The tester's further lead (2026-10-28): the seed was
+    round_qty(lot x count), and 0.009 x 3 is 0.026999999999999996 in a
+    float, floored to 0.026 — a step short of the three exits that sell
+    it. G27: the rungs' own lots summed, never rounded as a whole."""
+    venue, lines = SeedVenue(mark=67000.0), []
+    bot = _bot(venue, lines, seed=True, capital=1300.0)
+    from gridgremlin.ladder import lot
+    assert lot(bot.cfg, ADAPTER, 67000.0) == 0.009
+    assert bot.cycle() == {'seeded': True}
+    assert venue.market_orders == [('Buy', 0.027)], venue.market_orders
+
+
 def spec_S3_seed_scales_with_where_the_mark_sits():
     low, high = SeedVenue(mark=62000.0), SeedVenue(mark=68000.0)
     _bot(low, [], seed=True).cycle()
@@ -178,6 +191,11 @@ def spec_S6_the_reset_list_is_complete_and_documented():
                                   # or re-stepped from the round's exit fills
                   '_folded',      # D71: the slivers folded, said once; a
                                   # restart says them again
+                  '_carried', '_fired', '_walk',   # M17/M11: the tranches
+                                  # sized with a quantity; a restart re-sizes
+                                  # the holding and re-reads the exit fills
+                  '_gap_said',    # M20: an unplaceable remainder, said
+                                  # once; a restart says it again
                   '_last_mark',   # U65: the price last read, re-read next cycle
                   '_rungs_seen', '_rungs_lag'}   # G26: no baseline after a
     # restart, so the first derivation is not lag-checked — a restart within
@@ -215,6 +233,24 @@ def spec_S5_basis_beyond_range_no_exits_one_warning():
     bot.cycle()
     assert not any(o['side'] == 'Sell' for o in venue.orders)
     assert sum('nothing harvestable' in ln for ln in lines) == 1
+
+
+def spec_S5_review_a_core_held_alone_is_not_a_basis_beyond_the_range():
+    """G9: the floor core is never offered for sale, so a holding that IS the
+    core has no exits by design. S5's page read the whole holding, not the
+    sellable, and paged "basis beyond the range" — urgent — each time the
+    grid came back to its core (the review, 2026-10-28)."""
+    def pos(size):
+        return {'positionIdx': 1, 'side': 'Buy', 'size': size,
+                'avgPrice': '60000', 'leverage': '10', 'unrealisedPnl': '0'}
+    venue, lines = FakeVenue(), []
+    venue.position = pos('0.014')
+    bot = _bot(venue, lines, min_position_base=0.014)
+    for size in ('0.014', '0.014', '0.021', '0.014', '0.014'):
+        venue.position = pos(size)
+        bot.cycle()
+    assert not any('nothing harvestable' in ln for ln in lines), lines
+    assert bot.alive
 
 
 # --- S7: involuntary flat is terminal ----------------------------------------

@@ -278,6 +278,32 @@ def spec_T7_the_pretend_venue_takes_the_rows_venue_shape():
     assert hl['rounds'] == by['rounds'] == 1        # both take the profit
 
 
+def spec_T7_the_pretend_venue_reports_exact_steps():
+    """The tester's finding 4 (2026-10-28): the venue reported
+    fmt_qty(steps x step), and 33501 x 0.000001 is a hair under 0.033501
+    in a float, floored to 0.0335 — a step short of the prefix, so on
+    D59's own path safety order 1 filled twice in round 1 and its exit
+    left a step behind. D87: whole steps back to the quantity, exactly."""
+    from gridgremlin.adapters import SpotAdapter
+    spot = SpotAdapter({'symbol': 'BTCUSDT', 'qty_step': 0.000001,
+                        'min_qty': 0.000048, 'price_tick': 0.1,
+                        'min_notional': 1.0})
+    venue = BarVenue(spot, 'long', MAKER, TAKER)
+    venue.advance(60000.0, 0.0)
+    venue._fill('Buy', '0.016666', 60000.0, TAKER)
+    venue._fill('Buy', '0.016835', 59400.0, TAKER)
+    assert venue.steps == 33501 and venue.held == 0.033501
+    [pos] = venue.position_list('spot', 'BTCUSDT')['list']
+    assert pos['size'] == '0.033501', pos['size']
+    cfg = _cfg(market_type='spot', spot_borrow=True, spot_leverage=10,
+               leverage=None, repeat=True)
+    r = backtest_martingale(cfg, spot, _bars(
+        (60000, 60050, 59950, 60000), (60000, 60010, 59300, 59350),
+        (59350, 60300, 59340, 60250), (60250, 60900, 60200, 60800),
+        (60800, 60850, 60100, 60200), (60200, 61500, 60150, 61400)))
+    assert r['so_fills'] == 1 and r['rounds'] >= 2, (r['so_fills'], r['rounds'])
+
+
 # --- D59: a DCA bot on margin spot ---------------------------------------------
 
 def spec_D59_a_spot_dca_bot_rests_its_exit_as_a_sell_and_turns_rounds():

@@ -65,10 +65,10 @@ class BarVenue:
 
     @property
     def held(self):
-        return self.steps * self.adapter.qty_step
+        return self.adapter.from_steps(self.steps)   # D87: exact, never floored
 
     def _steps_of(self, qty):
-        return int(round(float(qty) / self.adapter.qty_step))
+        return self.adapter.to_steps(float(qty))
 
     def _fill(self, side, qty, price, fee_rate, link_id='', kind=''):
         n = self._steps_of(qty)
@@ -76,7 +76,7 @@ class BarVenue:
             n = min(n, self.steps)
         if n <= 0:
             return 0.0
-        qty = n * self.adapter.qty_step
+        qty = self.adapter.from_steps(n)
         if side == self.entry:
             total = (self.avg or 0.0) * self.held + price * qty
             self.steps += n
