@@ -1794,6 +1794,18 @@ eventually pin (T1).
   columns (the account under the bot, the side with its role, the size at
   its price), a bot's fills in six (the date over the time), their text
   scaled to the pane's width down to a floor; float dust is +0.
+- **U112** The panel has four themes, the theme button stepping through
+  them and saying which is on: dark (the default), light, win95 (silver
+  windows with bevelled edges on a teal desktop, navy title bars, pressed
+  buttons sunk, white tables on a grey grid) and metatrader (MT4's chart
+  window: black, lime up, red down, a dotted grid, small Tahoma). Each
+  overrides every colour token the default sets, as a class on `<html>`;
+  win95 and metatrader have square corners. A script in the head sets the
+  theme before the page paints on every live page; the browser keeps it
+  (`gg-theme`), and a tab on the old light (`gg-light`) is carried over
+  once. Charts draw with the tokens, so they follow. The export carries
+  no script. *(owner, 2026-10-28: "more themes… windows 95,
+  or Metatrader")*
 - **U111** A carry bot's hedge may differ by coin — inverse, usdt or usdc,
   the common one above and the others named ("SOL usdt") — and the form
   shows each coin's three perpetuals side by side: what a short was paid
@@ -2714,7 +2726,7 @@ that pins it (T1).
   price and no money: it reads the slider and shows the server's words.
 - **U10** A refresh does not undo the reader. The live page reloads whole; the
   boxes the reader opened reopen, the scroll position returns and the chosen
-  theme holds, remembered in the browser tab by one script that carries no number.
+  theme holds (U112), remembered by scripts that carry no number.
   Each foldable box is named by fleet and botid. The export carries no script.
 - **U11** No form is a dead end. Every page off the main one opens with the link
   back to it. A refusal is the first thing on the page it returns to: boxed, saying

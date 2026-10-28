@@ -958,7 +958,7 @@ def spec_U10_a_refresh_does_not_shut_what_the_reader_opened():
     assert 'http-equiv="refresh"' in live and KEEP_JS in live
     assert KEEP_JS in render([('demo', CONTRACT)], table=True)
     assert '<script' not in render([('demo', CONTRACT)], static='then')
-    for word in ("details[data-k]", "'toggle'", 'scrollTo', 'gg-light'):
+    for word in ("details[data-k]", "'toggle'", 'scrollTo', 'ggTheme(1)'):   # U112: the theme is THEME_JS's
         assert word in KEEP_JS, word
     for word in ('http://', 'https://', 'eval(', 'Math.', 'localStorage', 'cookie'):
         assert word not in KEEP_JS, word
@@ -2584,3 +2584,70 @@ def spec_U98_the_exchange_box_says_its_window():
     bot's own window, not the equity line's (a reader took the gap for a bug)."""
     from panel.server import render
     assert 'not the same window as the equity line below' in render([('demo', CONTRACT)])
+
+
+def _theme_block(css, name):
+    """U112: a theme's token block, {token: value}; the default's is the first :root."""
+    import re
+    sel = ':root{' if name == 'dark' else f':root.t-{name}{{'
+    body = css.split(sel, 1)[1].split('}', 1)[0]
+    return dict(re.findall(r'(--[\w-]+):([^;]+)', body))
+
+
+def _rounded(css, names):
+    """U112: the rules of the square themes that set a corner other than 0."""
+    import re
+    rules = re.findall(r'([^{}]*)\{([^{}]*)\}', re.sub(r'/\*.*?\*/', '', css, flags=re.S))
+    return [sel.strip() for sel, body in rules
+            if any(f':root.t-{n}' in sel for n in names)
+            for v in re.findall(r'border-radius:([^;}]+)', body) if v.strip() not in ('0', '0!important')]
+
+
+def spec_U112_every_theme_overrides_every_colour_the_default_sets():
+    """The owner, 2026-10-28: "more themes… windows 95, or Metatrader".
+    Each theme is the default's colour tokens overridden, every one of them
+    (a token left out would leak the dark look into it), and a class on <html>."""
+    from panel.css import CSS, THEMES
+    assert THEMES == ('dark', 'light', 'win95', 'metatrader')
+    colours = {k for k, v in _theme_block(CSS, 'dark').items() if v.startswith('#')}
+    assert {'--bg', '--fg', '--pos', '--neg', '--accent', '--line', '--edge'} <= colours
+    for name in THEMES[1:]:
+        mine = _theme_block(CSS, name)
+        assert colours <= set(mine), (name, colours - set(mine))
+    assert ':root.light' not in CSS                     # U46's light is t-light now
+    assert _theme_block(CSS, 'win95')['--bg'] == '#c0c0c0' and ':root.t-win95,:root.t-win95 body{background:#008080}' in CSS
+    assert _theme_block(CSS, 'metatrader')['--bg'] == '#000' and _theme_block(CSS, 'metatrader')['--pos'] == '#00ff00'
+
+
+def spec_U112_win95_and_metatrader_are_square_and_the_guard_bites():
+    from panel.css import CSS
+    assert ':root.t-win95 *,:root.t-metatrader *{border-radius:0!important}' in CSS
+    assert _rounded(CSS, ('win95', 'metatrader')) == []
+    assert _rounded(CSS + ':root.t-win95 .card{border-radius:4px}', ('win95',)) == [':root.t-win95 .card']   # sabotage
+    assert 'url(' not in CSS                            # the published page's check refuses one
+
+
+def spec_U112_the_button_cycles_every_theme_before_the_page_paints():
+    """The button steps through the themes and says which is on; the choice
+    is set in the head before anything is drawn, kept in the browser
+    (gg-theme), a tab on the old light carried over once; every storage
+    touch in a try. The export carries no script."""
+    import json
+    import re
+    from pathlib import Path
+    from panel.css import THEMES
+    from panel.server import KEEP_JS, render
+    from panel.reference import THEME_JS
+    assert 'var T=' + json.dumps(list(THEMES)).replace(' ', '') in THEME_JS
+    assert "'theme: '+t" in THEME_JS and "classList.toggle('t-'+n" in THEME_JS
+    assert "localStorage.getItem('gg-theme')" in THEME_JS and "sessionStorage.getItem('gg-light')" in THEME_JS
+    assert 'Storage' not in re.sub(r'try\{[^{}]*\}catch\(e\)\{\}', '', THEME_JS)
+    for word in ('fetch(', 'http', 'eval(', 'cookie'):
+        assert word not in THEME_JS, word
+    assert 'ggTheme(1)' in KEEP_JS and "toggle('light')" not in KEEP_JS
+    live = render([('demo', CONTRACT)])
+    assert live.index(THEME_JS) < live.index('class="hero"') < live.index(KEEP_JS)
+    assert '<script' not in render([('demo', CONTRACT)], static='then')
+    for f in Path(__file__).resolve().parents[1].joinpath('panel').rglob('*.py'):   # every live page
+        for after in f.read_text().split('<style>{CSS}</style>')[1:]:
+            assert after.startswith(('{THEME_JS}', "{'' if static else THEME_JS}")), f.name

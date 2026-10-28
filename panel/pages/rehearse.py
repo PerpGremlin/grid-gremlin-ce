@@ -1,6 +1,7 @@
 """The rehearsal pages (§9): the form's answer, a job's page, the account a draft rehearses against. Moved out of routes.py whole (D91 step 3): a mixin
 the Handler inherits."""
 from ..css import CSS
+from ..reference import THEME_JS
 from ..forms import BACK, verdict
 from ..html_bits import refusal_box
 from pathlib import Path
@@ -12,7 +13,7 @@ import time
 class RehearsePages:
     def _rehearse_html(self, form, draft, bot_json, result):
         return (f'<!doctype html><meta charset="utf-8"><title>rehearse'
-                f'</title><style>{CSS}</style>'
+                f'</title><style>{CSS}</style>{THEME_JS}'
                 + BACK + verdict(draft, result, typed={
                     k: form[k] for k in ('symbol', 'side', 'lower', 'upper',
                                          'rungs', 'capital', 'days')
@@ -77,7 +78,7 @@ class RehearsePages:
         if job is None:
             return self._send_html(
                 f'<!doctype html><meta charset="utf-8"><title>rehearse'
-                f'</title><style>{CSS}</style>{BACK}'
+                f'</title><style>{CSS}</style>{THEME_JS}{BACK}'
                 + refusal_box('no such rehearsal', 'it finished more than '
                               'fifteen minutes ago, or the panel was '
                               'restarted — run it again'))
@@ -92,7 +93,7 @@ class RehearsePages:
         return self._send_html(
             f'<!doctype html><meta charset="utf-8">'
             '<meta http-equiv="refresh" content="3">'
-            f'<title>working</title><style>{CSS}</style>{BACK}'
+            f'<title>working</title><style>{CSS}</style>{THEME_JS}{BACK}'
             f'<h1>{what}: working <span class="dim">· {elapsed}s</span></h1>'
             f'<div class="bar" title="{pct}%"><div style="width:{pct}%">'
             '</div></div>'

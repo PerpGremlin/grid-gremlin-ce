@@ -4,7 +4,7 @@ from gridgremlin.report import card_total
 import html
 import time
 from .css import CSS
-from .reference import KEEP_JS
+from .reference import KEEP_JS, THEME_JS
 from .card import card, pnl_parts, unpriced
 from .drawings import equity_boxes
 from .fleet_bits import sweep_note
@@ -113,7 +113,7 @@ def render(labelled, static=None, table=False, view='all', pane=None, notice='')
         chrome = KEEP_JS
     vp = '' if static else VIEWPORT
     return f"""<!doctype html><meta charset="utf-8">{vp}
-<title>grid-gremlin</title><style>{CSS}</style>
+<title>grid-gremlin</title><style>{CSS}</style>{'' if static else THEME_JS}
 {head}{hero_strip(labelled)}{f'<p class="neg">{notice}</p>' if notice and not static else ''}{body}
 {chrome}
 <p class="dim">this page renders the engine's own readout contract — it

@@ -13,6 +13,7 @@ import subprocess
 import sys
 import time
 from panel.chart import _f
+from panel.css import THEMES
 
 
 STATE_WORDS = {
@@ -197,10 +198,27 @@ wants and the hedge it holds, as coins.</td></tr>
 </table><p><a href="/">&larr; fleet</a></p>"""
 
 
+# U112: the theme, set in the head before the page paints (no flash): the
+# choice kept in the browser across tabs (gg-theme), a tab still on U46's
+# light (gg-light) carried over once; ggTheme(1) steps to the next and every
+# theme button says which is on. Nothing else passes through it.
+THEME_JS = ("<script>(function(){var T=" + json.dumps(list(THEMES)).replace(' ', '')
+            + """,r=document.documentElement,t=null;
+try{t=localStorage.getItem('gg-theme');
+ if(!t&&sessionStorage.getItem('gg-light'))localStorage.setItem('gg-theme',t='light');
+ sessionStorage.removeItem('gg-light');}catch(e){}
+if(T.indexOf(t)<0)t=T[0];
+window.ggTheme=function(step){if(step){t=T[(T.indexOf(t)+1)%T.length];
+  try{localStorage.setItem('gg-theme',t);}catch(e){}}
+ T.forEach(function(n){r.classList.toggle('t-'+n,n===t&&n!==T[0]);});
+ document.querySelectorAll('[data-theme]').forEach(function(b){b.textContent='theme: '+t;});};
+ggTheme(0);})();</script>""")
+
+
 # V12: the live page reloads whole, so what the reader opened would shut and
 # the page would jump on every refresh. This script only remembers, in the
-# browser tab: which boxes are open, how far down the page is, and the
-# theme. No number passes through it. U82: the newest swap wins — an older
+# browser tab: which boxes are open and how far down the page is (U112: the
+# theme is THEME_JS's). No number passes through it. U82: the newest swap wins — an older
 # answer arriving late is dropped (seq) — and the timer waits while a swap is
 # in flight or a form in the right half is being typed in (dirty).
 KEEP_JS = """<script>(function(){
@@ -231,7 +249,7 @@ window.ggFoldIn=function(i){var all=true,ds=inAcct(i);
  ds.forEach(function(d){if(!d.open)all=false;});
  ds.forEach(function(d){d.open=!all;open[d.dataset.k]=all?0:1;});
  S.setItem('gg-open',JSON.stringify(open));picks();};
-if(S.getItem('gg-light'))root.classList.add('light');
+if(window.ggTheme)ggTheme(0);
 window.ggSize=function(k){['coin','value','cost'].forEach(function(u){
  root.classList.toggle('only-'+u,k===u);});S.setItem('gg-size',k);
  document.querySelectorAll('[data-size]').forEach(function(a){
@@ -241,9 +259,6 @@ window.ggLev=function(k){root.classList.toggle('lev-on',k==='filled');
  S.setItem('gg-lev',k);document.querySelectorAll('[data-lev]').forEach(
  function(a){a.classList.toggle('pick',a.dataset.lev===k);});};
 ggLev(S.getItem('gg-lev')||'now');
-new MutationObserver(function(){
- if(root.classList.contains('light'))S.setItem('gg-light','1');
- else S.removeItem('gg-light');}).observe(root,{attributes:true});
 var hero=document.querySelector('.hero');
 function top(){if(hero)root.style.setProperty('--hero',hero.offsetHeight+'px');}
 top();window.addEventListener('resize',top);
@@ -279,7 +294,7 @@ document.addEventListener('click',function(e){
  if(t){e.preventDefault();var d=t.dataset;
   if('fold' in d)ggFold(d.fold,d.cls);else if('foldin' in d)ggFoldIn(d.foldin);
   else if('size' in d)ggSize(d.size);else if('lev' in d)ggLev(d.lev);
-  else if('back' in d)history.back();else root.classList.toggle('light');return;}
+  else if('back' in d)history.back();else if(window.ggTheme)ggTheme(1);return;}
  var o=e.target.closest&&e.target.closest('button[data-once]');
  if(o)setTimeout(function(){o.disabled=true;o.textContent=o.dataset.once;},0);
  var a=e.target.closest&&e.target.closest('a[data-pick]');

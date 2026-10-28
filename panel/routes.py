@@ -359,9 +359,9 @@ class Handler(RehearsePages, CarryFlowPages, CreateFlowPages, FleetAdminPages, C
             return self._rehearse_job_page(self.path.split('job=', 1)[1][:16])
         if self.path == '/rehearse':
             from panel.nav import PAGE_END
-            from panel.reference import KEEP_JS
+            from panel.reference import KEEP_JS, THEME_JS
             body = (f'<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-                    f'<title>rehearse</title><style>{CSS}</style>{BACK}{FORM}{PAGE_END}{KEEP_JS}')
+                    f'<title>rehearse</title><style>{CSS}</style>{THEME_JS}{BACK}{FORM}{PAGE_END}{KEEP_JS}')
             self.send_response(200)
             self.send_header('Content-Type', 'text/html; charset=utf-8')
             self.end_headers()
@@ -369,11 +369,11 @@ class Handler(RehearsePages, CarryFlowPages, CreateFlowPages, FleetAdminPages, C
             return
         if self.path.split('?')[0] == '/carry':                      # U69
             from ggdata.market import latest
-            from panel.reference import KEEP_JS
+            from panel.reference import KEEP_JS, THEME_JS
             from .carry import carry_page
             from .nav import PAGE_END, side_nav
             q = dict(urllib.parse.parse_qsl(self.path.partition('?')[2]))
-            body = (f'<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>carry</title><style>{CSS}</style>'
+            body = (f'<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>carry</title><style>{CSS}</style>{THEME_JS}'
                     f'{side_nav()}<main>{carry_page(latest(), q)}</main>{PAGE_END}{KEEP_JS}')
             self.send_response(200)
             self.send_header('Content-Type', 'text/html; charset=utf-8')
@@ -381,10 +381,10 @@ class Handler(RehearsePages, CarryFlowPages, CreateFlowPages, FleetAdminPages, C
             self._out(body)
             return
         if self.path == '/results':                                   # R24
-            from panel.reference import KEEP_JS
+            from panel.reference import KEEP_JS, THEME_JS
             from .nav import PAGE_END, side_nav
             from .results import results_page
-            body = (f'<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>results</title><style>{CSS}</style>'
+            body = (f'<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>results</title><style>{CSS}</style>{THEME_JS}'
                     f'{side_nav()}{results_page(self._labelled())}{PAGE_END}{KEEP_JS}')
             self.send_response(200)
             self.send_header('Content-Type', 'text/html; charset=utf-8')
@@ -629,9 +629,9 @@ class Handler(RehearsePages, CarryFlowPages, CreateFlowPages, FleetAdminPages, C
         self.send_header('Content-Type', 'text/html; charset=utf-8')
         self.end_headers()
         from panel.nav import PAGE_END
-        from panel.reference import KEEP_JS
+        from panel.reference import KEEP_JS, THEME_JS
         self._out((f'<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-                              f'<title>grid-gremlin</title><style>{CSS}</style>'
+                              f'<title>grid-gremlin</title><style>{CSS}</style>{THEME_JS}'
                               + BACK + body + PAGE_END + KEEP_JS))
 
 

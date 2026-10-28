@@ -14,13 +14,19 @@ import time
 from panel.chart import _f
 
 
+# U112 (owner, 2026-10-28: "more themes… windows 95, or Metatrader"): the
+# theme button's cycle, in order; each but the first is a class t-<name> on
+# <html>, its colour tokens overridden at the stylesheet's end
+THEMES = ('dark', 'light', 'win95', 'metatrader')
+
+
 CSS = """/* U86: the site's look (terminalgremlin) — its green on near-black, and
 every part in a box with a thick edge (--edge) */
 :root{--bg:#0b0f0c;--fg:#d7e4da;--dim:#7c8c80;--line:#1c2620;--edge:#2c3d31;
 --pos:#36d17a;--neg:#e5534b;--accent:#36d17a;--accent-soft:#36d17a26;
 --calm:#5fb3c2;--wild:#e59a4c;--s3:#b48ef0;
 --gap:1em;--gap-s:.5em;--hero:3.2em;--bw:2px}
-:root.light{--bg:#f3f5f1;--fg:#1d2620;--dim:#5f6d63;--line:#d5ddd6;--edge:#a9b8ac;
+:root.t-light{--bg:#f3f5f1;--fg:#1d2620;--dim:#5f6d63;--line:#d5ddd6;--edge:#a9b8ac;
 --pos:#1f8a4c;--neg:#c0392b;--accent:#1f8a4c;--accent-soft:#1f8a4c24;
 --calm:#2f7d8c;--wild:#c26a12;--s3:#7a4fc4}
 html{background:var(--bg)}
@@ -219,4 +225,36 @@ button[disabled]{opacity:.55;cursor:not-allowed}
 a.off.bname{display:inline;border:0;padding:0;margin:0;color:inherit;cursor:default;border-bottom:1px dotted var(--edge);border-radius:0}
 @media (max-width:860px){.split{display:block}.pane{position:static;max-height:none;overflow:visible;
 margin-top:calc(var(--gap)*1.5)}}
+/* U112: win95 — silver windows on the teal desktop, every box and button a
+raised bevel (--up), a pressed one and every field sunk (--down), navy title
+bars, white tables on a grey grid */
+:root.t-win95{--bg:#c0c0c0;--fg:#000;--dim:#404040;--line:#dfdfdf;--edge:#808080;
+--pos:#006400;--neg:#a00000;--accent:#000080;--accent-soft:#c0c0c0;
+--calm:#00607a;--wild:#8a4500;--s3:#5a2d82;
+--up:inset -1px -1px #000,inset 1px 1px #fff,inset -2px -2px #808080,inset 2px 2px #dfdfdf;
+--down:inset -1px -1px #fff,inset 1px 1px #000,inset -2px -2px #dfdfdf,inset 2px 2px #808080}
+:root.t-win95,:root.t-win95 body{background:#008080}
+:root.t-win95 body{font:12px/1.4 "MS Sans Serif","Microsoft Sans Serif",Tahoma,Geneva,sans-serif;font-variant-numeric:tabular-nums}
+:root.t-win95 :is(main,section.fbox,.card,.pane,nav.side,.hero,.eqbox,.fsec,.carryform,:is(form,.fakeform)>details){border:0;box-shadow:var(--up);background:var(--bg)}
+:root.t-win95 main{padding:.2em .8em .8em}:root.t-win95 body>p{color:#fff}
+:root.t-win95 :is(.pnl,.card .pnl,.bar,.gauge){border:0;box-shadow:var(--down);background:var(--bg)}
+:root.t-win95 :is(h1,.pane h2,.fsec>h2){background:#000080;color:#fff;font-weight:bold;padding:.15em .4em}
+:root.t-win95 :is(h1,.pane h2) :is(.meta,.dim){color:#dfdfdf}
+:root.t-win95 :is(a[href]:not(.bname),b.on,button,label.lab:not(.bname),a.off:not(.bname)){background:var(--bg);color:#000;border:0;box-shadow:var(--up);filter:none}
+:root.t-win95 :is(a[href]:not(.bname):active,button:active,label.lab:not(.bname):active,a.pick,b.on){box-shadow:var(--down)}
+:root.t-win95 :is(a[href*='mode=remove'],a[href^='/retire'],a[href^='/close'],button.danger){color:var(--neg)}
+:root.t-win95 a.off:not(.bname){color:#808080}
+:root.t-win95 table:not(:is(form,.fakeform) table){background:#fff}
+:root.t-win95 table:not(:is(form,.fakeform) table) :is(td,th){border:1px solid var(--bg)}
+:root.t-win95 :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),select,.fin){background:#fff;border:0;box-shadow:var(--down)}
+/* U112: metatrader — the MT4 chart window: black, lime up, red down, gold
+price line, the grid dotted dark grey, small Tahoma */
+:root.t-metatrader{--bg:#000;--fg:#fff;--dim:#a0a0a0;--line:#333;--edge:#555;
+--pos:#00ff00;--neg:#ff3030;--accent:#ffd700;--accent-soft:#ffd70022;
+--calm:#00bfff;--wild:#ff8c00;--s3:#ff00ff}
+:root.t-metatrader body{font:11px/1.35 Tahoma,Verdana,Geneva,sans-serif;font-variant-numeric:tabular-nums}
+:root.t-metatrader :is(td,th,.grp){border-bottom-style:dotted}
+:root.t-metatrader svg line[stroke="var(--line)"]{stroke-dasharray:1 3}
+/* U112: both square, every corner */
+:root.t-win95 *,:root.t-metatrader *{border-radius:0!important}
 """
