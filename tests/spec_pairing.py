@@ -204,9 +204,10 @@ def spec_G23_underwater_oscillations_are_trips_per_rung_and_idle_under_G6():
                      bar_hours=1 / 12)
     assert basis['trips'] == 0                              # idle under water
     assert rung['trips'] >= 8, rung['trips']                # a trip per swing
-    assert rung['grid_profit'] < 0 < rung['trips']          # booked against
+    assert rung['realized'] < 0 < rung['trips']             # booked against
     # the average (R2), as 3Commas' own docs say — the readout's D8 split
     # shows the realised line negative while the trips bank one gap each
+    assert rung['grid_profit'] > 0                          # R12: the trips' own
 
 
 # --- G25 (D36): a lot's exit rests where it was intended, window or not ------

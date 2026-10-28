@@ -262,6 +262,22 @@ def spec_T8_the_sweep_returns_every_candidate_names_the_best_and_the_plateau():
     assert out['score'] == 'net' and out['bars'] == len(bars)
 
 
+def spec_T8_a_full_gap_trip_is_grid_profit_and_the_average_cost_is_realized():
+    """R12/U64b: the card's grid profit is the matched trips', each exit
+    against its own lot; the rehearsal said average-cost realised under that
+    name (the outside tester, 2026-10-28). Four lots bought 69k..66k, the 66k
+    lot sold one gap up: the trip earned its gap, the average booked a loss."""
+    bars = [_bar(69500, 69600, 67500.0, 67600),     # 69k, 68k
+            _bar(67600, 67700, 65995.0, 66100),     # 67k, 66k
+            _bar(66200, 67005.0, 66100, 66900)]     # the 66k lot sells at 67k
+    r = backtest(_cfg(), ADAPTER, bars, fee_rate=0.0002)
+    assert r['entry_fills'] == 4 and r['trips'] == 1
+    sold = 0.027 - r['held']
+    assert abs(r['grid_profit'] - sold * 1000.0) < 1e-6, r['grid_profit']
+    assert r['realized'] < 0                          # 67k against a ~67.5k average
+    assert abs(r['net'] - (r['realized'] - r['fees'] - r['funding'])) < 1e-9   # the score is unchanged
+
+
 def spec_T8_a_gap_inside_the_fee_is_skipped_by_name_not_run():
     from gridgremlin.backtest_cli import sweep_rungs
     raw = {'market_type': 'linear', 'symbol': 'BTCUSDT', 'side': 'long',
@@ -367,6 +383,35 @@ def spec_T9_the_sweep_is_read_on_two_windows_and_tested_out_of_sample():
     outside = _saw(80000.0, 90000.0, 2, 10)
     assert visited_pct(outside, 50000.0, 70000.0) == 0.0
     assert visited_pct([], 1, 2) is None
+
+
+def spec_T9_a_losing_week_gets_its_tenth_too():
+    """T9's "within a tenth" is best - fit <= 0.1 x |best|, whatever the
+    sign: a week every count lost read a choice a cent short as fitting
+    noise (the outside tester, 2026-10-28)."""
+    import gridgremlin.backtest_cli as cli
+    raw = {'market_type': 'linear', 'symbol': 'BTCUSDT', 'side': 'long',
+           'capital': 1000.0, 'leverage': 10, 'upper': 70000.0,
+           'lower': 50000.0, 'rungs': 21, 'spacing_type': 'fixed'}
+    bars = _saw(50000.0, 70000.0, 2, 10)
+    older = bars[:len(bars) // 2]
+
+    def verdict(fit_net, best_net):
+        def fake(raw, part, adapter, **k):     # the older week picks 13
+            rows = [{'rungs': 9, 'net': best_net}, {'rungs': 13, 'net': fit_net}]
+            return {'rows': rows, 'best': 13 if part == older else 9,
+                    'plateau': (9, 13)}
+        was = cli.sweep_rungs
+        cli.sweep_rungs = fake
+        try:
+            return cli.sweep_windows(raw, bars, ADAPTER)['oos']['holds']
+        finally:
+            cli.sweep_rungs = was
+    assert verdict(-10.01, -10.0) is True        # a cent short of a losing best
+    assert verdict(-11.0, -10.0) is True         # the tenth itself
+    assert verdict(-11.5, -10.0) is False        # beyond it
+    assert verdict(9.0, 10.0) is True and verdict(8.9, 10.0) is False   # as before
+    assert verdict(-0.01, 0.0) is False          # a zero best keeps no tolerance
 
 
 def spec_T3a_an_inverse_row_rehearses_in_the_adapters_own_maths_instead_of_being_refused():

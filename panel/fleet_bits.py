@@ -118,7 +118,9 @@ def windows_html(draft, out):
               '<th>net 14d</th><th>fees share</th><th>max drawdown</th>'
               '<th></th></tr>'
             + rows + '</table>'
-            "<p class='dim'>score = grid profit − fees, the range exactly as "
+            "<p class='dim'>score = net: realised at average cost (stop-outs "
+            "in) less fees; fees share = fees over the matched trips' grid "
+            "profit. The range exactly as "
             'you set it, the engine\'s own planner, fills on trade-through '
             'through 5-minute candles. Rows in the 14-day plateau are '
             'coloured. Two windows and an out-of-sample test are how a '
@@ -184,7 +186,9 @@ def sweep_html(draft, out):
             + '<table><tr><th>grids</th><th>gap</th><th>net</th><th>trips'
             '</th><th>fees share</th><th>max drawdown</th></tr>'
             + rows + '</table>'
-            "<p class='dim'>score = grid profit − fees over this window, "
+            "<p class='dim'>score = net over this window: realised at "
+            "average cost (stop-outs in) less fees; fees share = fees over "
+            "the matched trips' grid profit. "
             'the range exactly as you set it, the engine\'s own planner, '
             'fills on trade-through through 5-minute candles. Rows in the '
             'plateau are coloured. Window shown, never annualised; a '

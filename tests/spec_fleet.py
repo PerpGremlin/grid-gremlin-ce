@@ -100,22 +100,30 @@ def spec_F4_dead_but_present_is_not_missing():
 # --- F7 (D25): mainnet is double-safetied ------------------------------------
 
 def spec_F7_mainnet_needs_both_safeties():
+    # D25 is the private edition's; the public one refuses flatly (F21) —
+    # set here, never left to whichever spec file ran before
+    from gridgremlin import edition
+    found, edition.PUBLIC = edition.PUBLIC, False
+
     class _Client:
         env = 'mainnet'
-    _refused(refuse_mainnet, _Client(), frag='double-safetied')
     try:
-        refuse_mainnet(_Client(), fleet_allows=True)      # file alone: refuse
-    except Exception as e:
-        assert '--allow-mainnet' in str(e)
-    else:
-        raise AssertionError('the fleet file alone armed mainnet')
-    try:
-        refuse_mainnet(_Client(), run_allows=True)        # launch alone: refuse
-    except Exception as e:
-        assert 'allow_mainnet' in str(e)
-    else:
-        raise AssertionError('the launch flag alone armed mainnet')
-    refuse_mainnet(_Client(), fleet_allows=True, run_allows=True)  # both: fires
+        _refused(refuse_mainnet, _Client(), frag='double-safetied')
+        try:
+            refuse_mainnet(_Client(), fleet_allows=True)      # file alone: refuse
+        except Exception as e:
+            assert '--allow-mainnet' in str(e)
+        else:
+            raise AssertionError('the fleet file alone armed mainnet')
+        try:
+            refuse_mainnet(_Client(), run_allows=True)        # launch alone: refuse
+        except Exception as e:
+            assert 'allow_mainnet' in str(e)
+        else:
+            raise AssertionError('the launch flag alone armed mainnet')
+        refuse_mainnet(_Client(), fleet_allows=True, run_allows=True)  # both: fires
+    finally:
+        edition.PUBLIC = found
 
 
 def spec_F7_demo_and_testnet_never_consult_the_safeties():
@@ -282,9 +290,10 @@ def spec_F24_the_watchdog_pings_the_deadman_after_every_completed_run():
     snap.write_text(json.dumps({'t': 10**10, 'equity': 5000.0, 'mm_rate': 0.1,
                                 'bots': {}}) + '\n')
     (d / 'wd.json').write_text(json.dumps(dict(WD, snapshot=str(snap), state=str(state), positions={})))
-    pinged, saved = [], (wd.send_telegram, wd.load_env, wd.time.time, wd.ping_deadman)
+    pinged, saved = [], (wd.send_telegram, wd.load_env, wd.time.time, wd.ping_deadman, wd.disk_used)
     try:
         wd.send_telegram, wd.load_env = (lambda t: None), (lambda: None)
+        wd.disk_used = lambda path: 0.5                      # never this machine's disk
         wd.time.time, wd.ping_deadman = (lambda: 10**10), (lambda url, get=None: pinged.append(url))
         creds = {k: os.environ.pop(k, None) for k in ('TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID')}
         os.environ['DEADMAN_URL'] = 'https://hc.example/p/2'
@@ -295,7 +304,7 @@ def spec_F24_the_watchdog_pings_the_deadman_after_every_completed_run():
         os.environ.pop('DEADMAN_URL')
         wd.main([str(d / 'wd.json')])
     finally:
-        wd.send_telegram, wd.load_env, wd.time.time, wd.ping_deadman = saved
+        wd.send_telegram, wd.load_env, wd.time.time, wd.ping_deadman, wd.disk_used = saved
         os.environ.pop('DEADMAN_URL', None)
         for k, v in creds.items():
             os.environ.pop(k, None)
@@ -346,13 +355,14 @@ def spec_F14_a_torn_watchdog_state_heals_and_says_so():
     cfg = dict(WD, snapshot=str(snap), state=str(state), positions={})
     (d / 'wd.json').write_text(json.dumps(cfg))
     state.write_text('{"_peak": 5000, "_al')                 # torn mid-write
-    sent, saved = [], (wd.send_telegram, wd.load_env, wd.time.time)
+    sent, saved = [], (wd.send_telegram, wd.load_env, wd.time.time, wd.disk_used)
     try:
         wd.send_telegram, wd.load_env = sent.append, (lambda: None)
         wd.time.time = lambda: 10**10
+        wd.disk_used = lambda path: 0.5                      # never this machine's disk
         assert wd.main([str(d / 'wd.json')]) == 0               # ran, healed
     finally:
-        wd.send_telegram, wd.load_env, wd.time.time = saved
+        wd.send_telegram, wd.load_env, wd.time.time, wd.disk_used = saved
     assert any('state file unreadable' in s for s in sent)
     assert json.loads(state.read_text()) == {'_peak': 5000.0, '_alerts': {}}
     assert not list(d.glob('.state.json.*'))                  # no temp left

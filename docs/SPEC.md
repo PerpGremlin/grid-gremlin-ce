@@ -1104,7 +1104,8 @@ eventually pin (T1).
   heading. *(owner, 2026-10-07: "is there a way to make the headings at the
   start of each message type bold?")*
 - **F21** The public edition refuses real money in code (D68): with the
-  edition flag set, `refuse_mainnet`, the Hyperliquid client and the
+  edition flag set, `refuse_mainnet`, the Hyperliquid client, Bybit's write
+  client (in its constructor, not only at each caller) and the
   `--allow-mainnet` flag all refuse flatly, whatever the fleet file or the
   launch says; the private edition keeps D25's double safety. The example
   fleets in `configs/examples/` build clean, keep every size small (capital
@@ -2985,7 +2986,10 @@ that pins it (T1).
   are what run; the result says which shape it wore.
 - **T8** The step optimiser is the rehearsal, swept (D50). `sweep_rungs` runs
   the grid backtester (T3/T6) once per candidate rung count over the same
-  5-minute candles, the range as written; the score is net (grid profit − fees);
+  5-minute candles, the range as written; the score is net (realised at average cost, stop-outs in, − fees); a row's
+  `grid_profit` is the matched trips' (R12), each exit against its own lot,
+  as the card's (U64b), and `realized` the average cost, which the score
+  uses; the fee share is over the grid profit;
   every row is returned (rungs, gap, net, trips, fees, fee share, max drawdown),
   sorted; the coarse pass is every eighth count from 5, the best is then refined
   by ±4 and ±2 (14 replays — a 30-day sweep of 22 took 293 s on the one-core
@@ -3002,7 +3006,8 @@ that pins it (T1).
   "compare grid counts" fetches 14 days of 5-minute candles once and sweeps three
   ways: the whole, the newer 7 days, the older 7. The count chosen on the older
   half alone is scored on the newer half against that half's own best: within a
-  tenth of it the choice holds up; otherwise the sweep is fitting noise and the
+  tenth of it (best − fit ≤ 0.1 × |best|, a losing week too) the choice holds
+  up; otherwise the sweep is fitting noise and the
   page says so. Beside it, the share of candles whose close sat inside the range,
   for each window — a weak result is explained before the grid is blamed. The
   table shows both windows' nets per count, both bests marked, the 14-day
@@ -3072,9 +3077,12 @@ that pins it (T1).
   fleet sets it: research uses it to ask whether pausing helps.
 - **T12** A spec never reaches the network: the runner refuses name
   resolution for anything but loopback (the panel's specs serve on
-  127.0.0.1), so the workstation runs the suite as GitHub's runners do.
+  127.0.0.1), so the workstation runs the suite as GitHub's runners do;
+  it clears `http_proxy`, `https_proxy` and `all_proxy` (both cases) there
+  too, since a proxy on loopback resolves the venue's name itself.
   *(2026-10-10: a door spec fetched a live price — green here, red on the
-  public edition's CI, where Bybit answers 403)*
+  public edition's CI, where Bybit answers 403; the proxy, an outside
+  tester, 2026-10-28)*
 
 - **T13** No tracked file carries a Telegram bot token, in its name or its
   text (digits, then `AA…`: a shape nothing else has). The suite lists the

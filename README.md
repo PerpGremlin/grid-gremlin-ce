@@ -37,7 +37,8 @@ not built; tell us if WSL is a wall for you.
 
 ## Ten minutes to a running bot
 
-1. **Python 3.12 or newer.** `python3 --version`.
+1. **Python 3.12 or newer, and `rsync`** (the suite's backup spec uses it).
+   `python3 --version`, `rsync --version`.
 2. **Clone, then run the suite** — every spec, about half a minute, must end "0 failed":
    ```
    git clone <this repo> && cd grid-gremlin

@@ -27,6 +27,9 @@ def spec_F21_the_public_edition_refuses_real_money_whatever_the_flags_say():
     from gridgremlin.exchange.errors import VenueError
     from gridgremlin.exchange.hyperliquid.client import InfoClient
 
+    from gridgremlin import edition
+    found = edition.PUBLIC
+
     class C:
         env = 'mainnet'
     try:
@@ -47,14 +50,39 @@ def spec_F21_the_public_edition_refuses_real_money_whatever_the_flags_say():
                             'x.json', '--allow-mainnet'],
                            capture_output=True, text=True, cwd=ROOT)
         assert r.returncode == 2 and 'cannot reach real money' in r.stderr
-    finally:
         _public(False)
-    refuse_mainnet(C(), fleet_allows=True, run_allows=True)   # private: D25 holds
+        refuse_mainnet(C(), fleet_allows=True, run_allows=True)   # private: D25 holds
+        try:
+            refuse_mainnet(C(), fleet_allows=True, run_allows=False)
+            raise AssertionError('half a safety armed real money')
+        except ConfigError as e:
+            assert 'double-safetied' in str(e)
+    finally:
+        _public(found)        # the edition it found: the public tree stays public
+
+
+def spec_F21_the_public_bybit_write_client_refuses_mainnet_itself():
+    """D68 in the client, as Hyperliquid's: every caller refused mainnet
+    before building one, and the next to forget would not have (the
+    outside tester, 2026-10-28). The private edition builds it (D25 is
+    the callers')."""
+    from gridgremlin import edition
+    from gridgremlin.exchange.bybit.client import WriteClient
+    from gridgremlin.exchange.errors import VenueError
+    found = edition.PUBLIC
     try:
-        refuse_mainnet(C(), fleet_allows=True, run_allows=False)
-        raise AssertionError('half a safety armed real money')
-    except ConfigError as e:
-        assert 'double-safetied' in str(e)
+        _public(True)
+        try:
+            WriteClient(env='mainnet', api_key='k', api_secret='s')
+            raise AssertionError('the public Bybit write client opened on mainnet')
+        except VenueError as e:
+            assert 'cannot reach real money' in str(e)
+        assert WriteClient(env='demo', api_key='k', api_secret='s').env == 'demo'
+        assert WriteClient(env='testnet', api_key='k', api_secret='s').env == 'testnet'
+        _public(False)
+        assert WriteClient(env='mainnet', api_key='k', api_secret='s').env == 'mainnet'
+    finally:
+        _public(found)
 
 
 def spec_F21_the_examples_build_and_show_every_mechanic_once():
@@ -108,12 +136,14 @@ def spec_F22_the_doctor_says_what_is_missing_and_what_is_next():
     assert 'Hyperliquid: no HL_ACCOUNT_ADDRESS — skipped' in text
     assert 'no fleet file' in text and 'press init' in text
     env.write_text('BYBIT_API_KEY=k\nBYBIT_API_SECRET=s\n')     # neither flag: real money
+    from gridgremlin import edition
+    found = edition.PUBLIC
     try:
         _public(True)
         text, ok = doctor.run(env_path=str(env), fleet_root=str(d / 'none'), probes=probes)
         assert not ok and 'this edition refuses' in text
     finally:
-        _public(False)
+        _public(found)
 
     def down(e):
         raise OSError('timed out')

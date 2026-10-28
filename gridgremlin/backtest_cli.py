@@ -75,8 +75,9 @@ def sweep_rungs(raw, bars, adapter, fee=BYBIT_MAKER, bar_minutes=5,
                 candidates=None, progress=None, mark_bars=None):
     """T8 (D50): the step optimiser is the rehearsal, swept. The range is
     the owner's; only `rungs` moves. Each candidate is the real planner
-    over the same bars (T3/T6), scored by net = grid profit - fees (+
-    funding). Every row is returned — the table is the answer, the best
+    over the same bars (T3/T6), scored by net = realised at average cost
+    - fees (- funding); the fee share is over the matched trips' grid
+    profit (R12). Every row is returned — the table is the answer, the best
     is named, and the plateau (within 5% of the best) says how much the
     choice matters. A gap that cannot clear the round-trip fee (G16) is
     skipped by name, never run. `raw` is the row as written: each
@@ -221,8 +222,9 @@ def sweep_windows(raw, bars, adapter, fee=BYBIT_MAKER, bar_minutes=5,
                                     bar_minutes, mark_bars=mark_bars))
         best_net = rows[newer_best]['net']
         oos.update(fit_net_newer=fit_net, newer_best_net=best_net,
-                   holds=(best_net <= 0 and fit_net >= best_net)
-                   or (best_net > 0 and fit_net >= 0.9 * best_net))
+                   # a tenth of the best's size, whatever its sign: a
+                   # losing week had no tolerance at all (2026-10-28)
+                   holds=best_net - fit_net <= 0.1 * abs(best_net))
     out['oos'] = oos
     out['dropped'] = out['windows']['14d'].get('dropped', [])
     return out
@@ -485,7 +487,11 @@ def main(argv):
               f"deepest {r['max_depth']};  {r['stops']} stop(s), "
               f"{r['max_hold_closes']} hold-limit close(s)")
         print(f"  ended: {r['ended'] or 'still running at the end'}")
-    print(f"  {'round' if dca else 'grid'} profit {r['grid_profit']:,.2f}  fees {r['fees']:,.2f}  "
+    if not dca:
+        print(f"  grid profit (the matched trips) {r['grid_profit']:,.2f}  "
+              f"realised at average cost {r['realized']:,.2f}")
+    print(("  round profit " + format(r['grid_profit'], ',.2f') if dca else ' ')
+          + f"  fees {r['fees']:,.2f}  "
           f"funding {r['funding']:,.2f}  net {r['net']:,.2f}")
     print(f"  total (incl. open) {r['total']:,.2f}  "
           f"max drawdown {r['max_drawdown']:,.2f}")

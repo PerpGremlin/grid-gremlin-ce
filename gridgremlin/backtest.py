@@ -54,9 +54,11 @@ def backtest(cfg, adapter, bars, fee_rate=BYBIT_MAKER, funding_rate_hourly=0.0,
     held_steps = 0            # inventory in integer qty-steps: float
     held, basis = 0.0, None   # subtract-then-floor loses a whole step
     lots = []                 # G23: the rung each held lot came from
+    lot_px = []               # R12: and the price it was bought at
     rung_mode = cfg.get('exit_floor', 'rung') == 'rung'
     lot_step = -1 if long else 1       # an exit at j closes the lot at j+step
     realized = fees = funding = 0.0
+    matched = 0.0             # R12: each exit against its own lot
     trips = entry_fills = 0
     peak = max_drawdown = 0.0
     equity_curve = []
@@ -202,6 +204,7 @@ def backtest(cfg, adapter, bars, fee_rate=BYBIT_MAKER, funding_rate_hourly=0.0,
                         fees += adapter.notional(o['qty'], o['price']) * fee_rate
                         entry_fills += 1
                         lots.append(o['rung'])
+                        lot_px.append(o['price'])
                 else:                                               # exits
                     through = fb['h'] > o['price'] if long else fb['l'] < o['price']
                     if through and held > 0:
@@ -214,10 +217,15 @@ def backtest(cfg, adapter, bars, fee_rate=BYBIT_MAKER, funding_rate_hourly=0.0,
                         fees += adapter.notional(qty, o['price']) * fee_rate
                         trips += 1
                         filled.add(o['rung'])
+                        bought = basis
                         if lots:                       # G23: the lot this exit closed
                             want = o['rung'] + lot_step
-                            lots.remove(want if want in lots
-                                        else (min(lots) if long else max(lots)))
+                            i = lots.index(want if want in lots
+                                           else (min(lots) if long else max(lots)))
+                            lots.pop(i)
+                            bought = lot_px.pop(i)
+                        matched += adapter.pnl_to_usd(     # R12: the trip's own gain
+                            adapter.realised_pnl(bought, o['price'], qty), o['price']) * sign
             resting = frozenset(o['rung'] for o in desired
                                 if o['side'] == exit_side and o['rung'] not in filled)
             fired = touch
@@ -265,7 +273,7 @@ def backtest(cfg, adapter, bars, fee_rate=BYBIT_MAKER, funding_rate_hourly=0.0,
                            'action': 'leave_position' if leave else 'flatten',
                            'held_after': held}
         if held_steps == 0:
-            held, basis, lots, resting = 0.0, None, [], frozenset()
+            held, basis, lots, lot_px, resting = 0.0, None, [], [], frozenset()
         max_held = max(max_held, held)
         if events:                                   # T10: the market's settlements
             t0 = bar.get('t')
@@ -315,7 +323,10 @@ def backtest(cfg, adapter, bars, fee_rate=BYBIT_MAKER, funding_rate_hourly=0.0,
                             {'start': (acct.get('mm') or 0.0) / acct['equity'],
                              'peak': mmr_peak, 'reaches_100': mmr_cross,
                              'label': acct.get('label')}),
-            'funding_modelled': bool(events) or bool(funding_rate_hourly),'grid_profit': realized, 'fees': fees, 'funding': funding,
+            'funding_modelled': bool(events) or bool(funding_rate_hourly),
+            # R12/U64b: grid profit is the matched trips' gain, as the card's;
+            # realized is average-cost (R2) and the score's (T8), stop-outs in
+            'grid_profit': matched, 'realized': realized, 'fees': fees, 'funding': funding,
             'net': realized - fees - funding,
             'total': equity_curve[-1] if equity_curve else 0.0,
             'trips': trips, 'entry_fills': entry_fills,

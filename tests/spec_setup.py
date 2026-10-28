@@ -1801,7 +1801,7 @@ def spec_U30_a_verdict_hands_its_exact_draft_to_the_advanced_form():
         re.search(r'name="values" value="([^"]*)"', b17).group(1)))
     assert v17['rungs'] == '17' and 'rung_weights' not in v17   # set aside
     # the rehearsal verdict carries the button and its words
-    out = {'grid_profit': 3.0, 'fees': 0.5, 'net': 2.5, 'total': 2.4,
+    out = {'grid_profit': 3.0, 'realized': 3.0, 'fees': 0.5, 'net': 2.5, 'total': 2.4,
            'hold_benchmark': 1.0, 'max_drawdown': 0.7, 'held': 0.0,
            'trips': 2, 'entry_fills': 3, 'bars': 100, 'equity_curve': []}
     page = verdict(draft, out, typed={'symbol': 'FARTCOINUSDT'})

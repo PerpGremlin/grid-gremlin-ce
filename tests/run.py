@@ -40,8 +40,14 @@ def _no_network():
             raise OSError(f'specs never reach the network (T12): {h}')
         return real(host, *a, **k)
     socket.getaddrinfo = guarded
+    # a proxy on loopback resolves the venue's name itself, past the guard
+    # (the outside tester, 2026-10-28); the subprocesses specs start inherit it
+    for name in PROXY_VARS:
+        os.environ.pop(name, None)
+        os.environ.pop(name.upper(), None)
 
 
+PROXY_VARS = ('http_proxy', 'https_proxy', 'all_proxy')
 _no_network()
 
 

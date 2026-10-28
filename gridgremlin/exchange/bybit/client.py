@@ -277,6 +277,12 @@ class WriteClient(Client):
 
     hosts_position_tp = True     # D21: native position-TP, arguably stronger
 
+    def __init__(self, *a, **k):
+        super().__init__(*a, **k)
+        from ...edition import real_money_refused
+        if self.env == 'mainnet' and real_money_refused():
+            raise VenueError(real_money_refused())        # D68, as HL's client
+
     def post(self, path, body):
         if not self._synced:
             self._sync_clock()

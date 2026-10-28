@@ -427,7 +427,7 @@ def spec_T3_the_verdict_draws_the_equity_path_with_a_zero_line():
     """The curve is inline SVG with the zero line drawn — a rehearsal that
     spent the window underwater must LOOK underwater."""
     from panel.server import verdict
-    out = {'grid_profit': 5.0, 'fees': 1.0, 'net': 4.0, 'total': 4.0,
+    out = {'grid_profit': 5.0, 'realized': 5.0, 'fees': 1.0, 'net': 4.0, 'total': 4.0,
            'hold_benchmark': 2.0, 'max_drawdown': 3.0, 'trips': 2,
            'entry_fills': 4, 'held': 0.0, 'basis': None, 'bars': 3,
            'equity_curve': [0.0, -2.0, 4.0]}
@@ -436,6 +436,21 @@ def spec_T3_the_verdict_draws_the_equity_path_with_a_zero_line():
     assert '<polyline' in html and '<line' in html
     from panel.server import curve_svg
     assert curve_svg([]) == '' and curve_svg([1.0]) == ''
+
+
+def spec_T8_the_rehearsal_page_names_grid_profit_and_the_average_cost_apart():
+    """R12/U64b: the page's grid profit is the matched trips', as the card's;
+    the average-cost realised the net is made of has its own line and name."""
+    from panel.server import verdict
+    out = {'grid_profit': 7.2, 'realized': -3.47, 'fees': 0.4, 'net': -3.87,
+           'total': -1.0, 'hold_benchmark': 2.0, 'max_drawdown': 3.0,
+           'trips': 1, 'entry_fills': 4, 'held': 0.02, 'basis': 67500.0,
+           'bars': 3, 'equity_curve': [0.0, -2.0, -1.0]}
+    html = verdict({'symbol': 'X', 'side': 'long', 'lower': 1, 'upper': 2,
+                    'rungs': 3}, out)
+    assert 'grid profit (the matched trips, R12)' in html and '7.20' in html
+    assert 'realised at average cost' in html and '3.47' in html
+    assert 'each exit against its own lot' in html
 
 
 def spec_M2_the_preview_does_the_compounding_and_names_full_depth():

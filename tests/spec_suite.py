@@ -126,6 +126,18 @@ def spec_T12_a_spec_never_reaches_the_network():
     assert socket.getaddrinfo('127.0.0.1', 80)                    # the panel's specs still serve
 
 
+def spec_T12_no_proxy_carries_a_spec_past_the_guard():
+    """urllib sends every request to HTTPS_PROXY, and a proxy on loopback
+    resolves the venue's name itself (the outside tester, 2026-10-28): the
+    runner clears the proxy variables, both cases, where it installs the
+    guard."""
+    import os
+    import urllib.request
+    for name in ('http_proxy', 'https_proxy', 'all_proxy'):
+        assert name not in os.environ and name.upper() not in os.environ, name
+    assert not [k for k in urllib.request.getproxies_environment() if k != 'no']
+
+
 def spec_T5_every_spec_id_is_defined_once():
     """A second definition of an id read into a dict overwrites the first
     without a word: T6 was given twice (the backtester's window, then the

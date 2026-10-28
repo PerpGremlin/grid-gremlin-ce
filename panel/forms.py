@@ -119,8 +119,10 @@ def verdict(draft, out, typed=None, bot_json=None, days='7'):
     dca = out.get('strategy') == 'martingale'
     rows = ''.join(
         f'<tr><td>{k}</td>{money(v)}</tr>' for k, v in
-        [('profit from closed rounds' if dca else 'grid profit',
-          out['grid_profit']), ('fees', -out['fees'])]
+        ([('profit from closed rounds', out['grid_profit'])] if dca else
+         [('grid profit (the matched trips, R12)', out['grid_profit']),
+          ('realised at average cost', out['realized'])])
+        + [('fees', -out['fees'])]
         + ([('funding (the market\'s own)', -out['funding'])]
            if out.get('funding_modelled') else [])
         + [('net', out['net']), ('total (incl. open)', out['total']),
@@ -186,8 +188,10 @@ def verdict(draft, out, typed=None, bot_json=None, days='7'):
                   + holding + stop_row + risk
                   + ('' if out.get('funding_modelled') or draft.get('market_type') == 'spot' else
                      '<tr><td>funding</td><td>not modelled for this market</td></tr>'))
-        foot = ('window shown, never annualised. beat the hold benchmark '
-                'or hold.')
+        foot = ('grid profit is each exit against its own lot, as the card '
+                'says it; net is realised at average cost (stop-outs in) '
+                'less fees and funding. window shown, never annualised. '
+                'beat the hold benchmark or hold.')
     note = (f"from a rehearsal over {days} days: net {out['net']:+,.2f}, "
             f"hold benchmark {out['hold_benchmark']:+,.2f}, "
             f"max drawdown {out['max_drawdown']:,.2f}")

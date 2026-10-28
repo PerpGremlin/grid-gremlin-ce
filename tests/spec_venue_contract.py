@@ -154,17 +154,23 @@ def spec_V4_the_contract_is_one_module_for_both_venues():
 def spec_F7_hl_mainnet_is_double_safetied():
     # D25 (2026-08-05) ends the testnet-only phase: mainnet is CONSTRUCTIBLE
     # but only through the explicit armed path — a bare env flag still refuses.
+    # the private edition's, set here (the public one refuses flatly, F21)
+    from gridgremlin import edition
     from gridgremlin.exchange.errors import VenueError
     from gridgremlin.exchange.hyperliquid.client import InfoClient
+    found, edition.PUBLIC = edition.PUBLIC, False
     try:
-        InfoClient(env='mainnet')
-    except VenueError as e:
-        assert 'double-safetied' in str(e)
-    else:
-        raise AssertionError('HL mainnet client armed itself')
-    armed = InfoClient(env='mainnet', allow_mainnet=True)
-    assert armed.base == 'https://api.hyperliquid.xyz'
-    assert InfoClient(env='testnet').base.startswith('https://api.hyperliquid-t')
+        try:
+            InfoClient(env='mainnet')
+        except VenueError as e:
+            assert 'double-safetied' in str(e)
+        else:
+            raise AssertionError('HL mainnet client armed itself')
+        armed = InfoClient(env='mainnet', allow_mainnet=True)
+        assert armed.base == 'https://api.hyperliquid.xyz'
+        assert InfoClient(env='testnet').base.startswith('https://api.hyperliquid-t')
+    finally:
+        edition.PUBLIC = found
 
 
 # --- C7 at the universe seam: a removed coin refuses BY NAME -----------------
