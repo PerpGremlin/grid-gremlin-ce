@@ -3,7 +3,8 @@
 # after fees, trips and rounds, what is open now, the kept history — then
 # what happened (from the fleet log since the last digest) and whether the
 # machinery is healthy. Read-only toward the venues: it reads the archive the
-# readout just wrote, the kept ledger, the snapshots and the logs.
+# readout just wrote, the kept ledger, the snapshots and the logs; and each
+# box's hygiene report, said only when something is off (D155).
 #   python3 -m gridgremlin.digest <fleet.json> ... [--dry]
 import json
 import re
@@ -271,6 +272,7 @@ def build(fleet_paths, now=None, **roots):
         state = {}
     parts, places = [f'🧌 daily digest · {day} (UTC day)'], {}
     market_store = roots.pop('market_store', None)
+    hygiene_root = roots.pop('hygiene_root', None)
     for fp in fleet_paths:
         try:
             lines, tag, place = section(fp, now, day_start, state=state,
@@ -280,6 +282,13 @@ def build(fleet_paths, now=None, **roots):
         parts.append('\n'.join(lines))
         if tag is not None:
             places[tag] = place
+    from .hygiene import digest_lines                                  # D155: only what is off
+    try:
+        hygiene = digest_lines(hygiene_root, now)
+    except Exception as e:                                       # noqa: BLE001
+        hygiene = [f'box hygiene: unreadable — {e}']
+    if hygiene:
+        parts.append('\n'.join(hygiene))
     from ggdata.market import digest_block, latest                     # D67
     try:
         parts.append('\n'.join(digest_block(latest(market_store), now)))

@@ -1,0 +1,11 @@
+[Unit]
+Description=Grid Gremlin v3 box hygiene on the data box (D155) — reports, never kills; holds no key, sends nothing
+
+[Service]
+Type=oneshot
+WorkingDirectory={{REPO_DIR}}
+Nice=10
+# The report stays on this box, in the checkout's logs/hygiene/ — never in
+# the site's public folder or its status.json. The trading box pulls
+# data.json read-only and its digest says what is off (F38).
+ExecStart=/usr/bin/python3 -m gridgremlin.hygiene run --box data

@@ -1203,6 +1203,31 @@ eventually pin (T1).
   market is a real answer. No key passes between the servers; trading
   needs none of it. *(2026-10-12: the step back found no one told when
   collecting stops)*
+- **F35** A stray is a process outside a known service (D155). Once a day
+  `gridgremlin.hygiene` reads every process's cgroup from `/proc`: in its
+  innermost unit a `*.service`, or `init.scope` (pid 1 and each user's own
+  service manager), is known; a session scope, any other scope, or no unit
+  is a stray, named with its pid, its unit and its command line. Kernel
+  threads are not listed, nor the check and the chain that started it. It
+  reports and never kills: nothing in it can signal a process. Where
+  `/proc` hides other users' processes the report says it sees its own.
+- **F36** A leak is steady growth (D155). Each service's `memory.current`
+  is kept a day at a time, thirty days, in `logs/hygiene/<box>.history.json`;
+  a service is growing when, over its last 7 readings, it rose on at least
+  5 of the 6 steps and ended a quarter and 32 MiB above where it began. Six
+  readings or fewer are not judged; a restart inside the window breaks the
+  climb. The thresholds live in one place (`LIMITS`).
+- **F37** A box near its memory limit pages, and nothing else in the check
+  does (D155, D60): a report under two hours old with MemAvailable under a
+  tenth of MemTotal is one page; under a fifth the digest says it. A stray,
+  a leak or an old report is the digest's.
+- **F38** The digest names a box only when its report has something off —
+  strays, growing services, memory under a fifth, or a report over 36 hours
+  old — one line a box, after the fleets; clean, it says nothing (D155). A
+  second box's report reaches the digest as one file pulled read-only by
+  the trading box's check (`rrsync -ro` on that box's report folder, the
+  pull's failure never the unit's); that box holds no key and sends nothing,
+  and its public status file never carries it.
 - **F28** The runbook (`docs/RUNBOOK.md`, D75) names what exists: every unit
   the templates in `ops/systemd/` render (by its `grid-gremlin3-` or `gg-`
   name), every timer, every phone command the phone answers, the close tool,

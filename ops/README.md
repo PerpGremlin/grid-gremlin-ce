@@ -116,6 +116,16 @@ What runs, from the inside out:
     `daemon-reload` and restart `gg-panel`) so its box and score show.
     Going live later needs the subaccount's keys, a watchdog in the fleet
     file, `paper: false` and a fleet unit — each on the owner's word.
+16. **Box hygiene** (`gridgremlin.hygiene`, F35–F38, D155) — once a day on
+    each box, 23:50 UTC here and 23:40 on a second box: every process
+    outside a known service (a stray: left in an ssh session, a reparented
+    loop), each service's memory kept a day at a time (a leak: rising on 5
+    of the last 6 steps, up a quarter and 32 MiB over 7 readings), and the
+    box's MemTotal and MemAvailable. It reports and never kills. The report
+    is `logs/hygiene/<box>.json`, the history beside it; the digest says a
+    box only when something is off; a box under a tenth of its memory
+    available pages (D60). `python3 -m gridgremlin.hygiene show` prints what
+    the digest would say and every stray's command line.
 
 > **Retired: the box-side Claude** — triage on failure, the Telegram relay
 > and the daily range review, kept in the private tree's `ops/retired/`
@@ -140,7 +150,7 @@ keys as it reads the file. Per fleet: `fleet.service` →
 `watchdog-failed.service` → `grid-gremlin3-<fleet>-watchdog.*` /
 `grid-gremlin3-<fleet>-watchdog-failed.service`. Once per box, listing every
 fleet file in `{{MORE_FLEET_CONFIGS}}`: `logrotate.*`, `fills.*`, `archive.*`,
-`digest.*`, `market.*`, `market-report.*`, `momentum-paper.*` → `grid-gremlin3-<name>.*`; `phone.service` →
+`digest.*`, `market.*`, `market-report.*`, `momentum-paper.*`, `hygiene.*` → `grid-gremlin3-<name>.*`; `phone.service` →
 `grid-gremlin3-phone.service`; `panel.service` → `gg-panel.service`. The
 panel shows the fleets in the order its unit names them — the owner's: the
 Bybit accounts first, Hyperliquid after (U59).
@@ -153,7 +163,7 @@ systemctl --user enable --now grid-gremlin3-<fleet>-watchdog.timer    # each fle
 systemctl --user enable --now grid-gremlin3-logrotate.timer grid-gremlin3-fills.timer \
   grid-gremlin3-archive.timer grid-gremlin3-digest.timer \
   grid-gremlin3-market.timer grid-gremlin3-market-report.timer \
-  grid-gremlin3-momentum-paper.timer
+  grid-gremlin3-momentum-paper.timer grid-gremlin3-hygiene.timer
 systemctl --user enable --now grid-gremlin3-phone.service gg-panel.service
 loginctl enable-linger $USER        # units survive logout
 ```
@@ -179,6 +189,19 @@ then `pgrep -x sleep` on a fresh login finds nothing. The one change in habit:
 a job meant to outlive your login runs as a unit of its own,
 `systemd-run --user --unit=NAME <command>`, and `systemctl --user stop NAME`
 ends it. To undo, remove the file and restart `systemd-logind`.
+
+**Box hygiene on a second box** (D155): a box with a checkout of this
+repo and no fleet (the data server) runs `hygiene-data.{service,timer}` as
+its own user's units, rendered with `{{REPO_DIR}}` like the rest, as
+`grid-gremlin3-hygiene-data.*`. It holds no key and sends nothing; its
+report stays in its checkout's `logs/hygiene/data.json`. To bring it to
+this box's digest, once, by the owner: here
+`ssh-keygen -t ed25519 -N '' -f ~/.ssh/gg-hygiene -C gg-hygiene`, the second
+box in `~/.ssh/known_hosts` (`ssh-keyscan -H`); there, the
+key's line in that user's `authorized_keys`, prefixed
+`command="rrsync -ro <its checkout>/logs/hygiene",restrict ` — it can only
+read that folder. Render `hygiene.service` with `{{HYGIENE_SOURCE}}` set to
+`<user>@<second box>:`; with no second box, delete its `rsync` line.
 
 `ops/logrotate.conf.template` takes the same `{{REPO_DIR}}`; save it as
 `ops/logrotate.conf` (gitignored, box-local like the rendered units).
@@ -241,10 +264,12 @@ venue key. They live in their own private repository, datagremlin (D95),
 with their units and the data folder's format; the data sits in a folder
 of its own outside any checkout.
 
-**Nothing is pulled from it** since D96 (2026-10-12): the market is the
-site's, and the panel draws none of the collected data. The pull
-(`collect-pull`, D93) and its key are retired; on the data server the
-key's line in `authorized_keys` goes with them.
+**Nothing of the data is pulled from it** since D96 (2026-10-12): the
+market is the site's, and the panel draws none of the collected data. The
+pull (`collect-pull`, D93) and its key are retired; on the data server the
+key's line in `authorized_keys` goes with them. The one file that comes
+back is its hygiene report (D155), over a key of its own that reads one
+folder.
 
 | placeholder | meaning |
 |---|---|
@@ -257,6 +282,7 @@ key's line in `authorized_keys` goes with them.
 | `{{START_LIMIT_INTERVAL}}` | `600` normally; `0` for patient-retry fleets (venue outages) |
 | `{{RESTART_SEC}}` | `10` normally; longer (`30`) for patient-retry fleets |
 | `{{SLOT}}` | the fleet's own watchdog minute slot, e.g. `*:4/5` |
+| `{{HYGIENE_SOURCE}}` | `hygiene.service` only: the second box's report folder as rsync names it, `<user>@<second box>:` (D155) |
 
 The fleet needs `{{REPO_DIR}}/.env` (chmod 600 — the engine refuses a
 group/other-readable one) with the venue keys, `TELEGRAM_BOT_TOKEN`,

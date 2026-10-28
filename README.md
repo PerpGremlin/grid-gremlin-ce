@@ -123,7 +123,7 @@ will do (`CONTRIBUTING.md`).
 - `docs/SPEC.md` — every invariant, by ID; the suite pins each one.
 - `docs/DECISIONS.md` — why things are the way they are, in order.
 - `docs/THREECOMMAS.md` — the mechanics ledger: what 3Commas does, what this does.
-- `ops/README.md` — running it unattended on a box (units, watchdog, pages).
+- `ops/README.md` — running it unattended on a box (units, watchdog, pages, a daily box hygiene check).
 
 ## Licence and terms
 

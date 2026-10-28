@@ -1319,6 +1319,22 @@ stands unless the owner corrects it.
   clears a fleet's leftover tombstones (bots no longer in its file) at once,
   the fleet file's name typed ("that needs to be something we can do from
   the dash").
+- **D155 — A daily box hygiene check that reports and never kills
+  (2026-10-28).** The owner, of a check for forgotten processes and slow
+  leaks on both boxes: "go, do both". A timer on each box
+  (`gridgremlin.hygiene`, F35–F38) lists every process outside a known
+  systemd service, keeps each service's memory a day at a time and flags
+  steady growth (rising on 5 of the last 6 steps, up a quarter and 32 MiB
+  over 7 readings), and reads the box's memory. Nothing is killed. The
+  trading box's evening digest says a box only when something is off; the
+  phone hears only a box with under a tenth of its memory available (D60).
+  The data box keeps its report locally, no key and no send; the trading
+  box's check pulls that one file read-only, over a key its line on the
+  data box holds to `rrsync -ro` on the report folder, never the public
+  status file. That amends D96's "nothing is pulled" by this one file, and
+  only once the owner adds the key; without it the data box's report stays
+  on that box and the digest is the trading box's alone. Installing on
+  either box is the owner's.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

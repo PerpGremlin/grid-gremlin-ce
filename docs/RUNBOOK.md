@@ -38,6 +38,7 @@ does) and `docs/SPEC.md` (why it is pinned that way).
 | `grid-gremlin3-logrotate.timer` | hourly: rotation, then archive compression | the disk alarm catches it |
 | `grid-gremlin3-market.timer`, `-market-report.timer` | hourly readings; reports at 00/08/16 UTC | cards lose the market line |
 | `grid-gremlin3-archive.timer`, `-digest.timer` | 23:56 the day's results; 23:58 the digest | no digest |
+| `grid-gremlin3-hygiene.timer` (`-hygiene-data.timer` on a second box, optional) | 23:50 daily (23:40 there): processes outside every service, each service's memory, the box's memory; reports, never kills (`ops/README.md` §16) | the digest says the report's age |
 | `grid-gremlin3-momentum-paper.timer` (optional) | 00:22 daily: a paper momentum book on public prices, nothing sent anywhere; `python3 -m gridgremlin.momentum_paper show` | a missed Monday is caught up, marked late |
 
 `systemctl --user status <unit>` · `journalctl --user -u <unit> -n 50` ·
@@ -51,6 +52,8 @@ the fleet logs: `logs/fleet-<fleet>.log` (grep the botid).
 | **margin** / `mm_rate … >` / **account cap reached** | the account is near its maintenance margin, or at a cap you set | look at the strip's leverage and the liquidation lines; reduce by closing the biggest loser from its card, or lift the cap; the engine itself never force-closes |
 | **snapshot is Ns old** / **no readable snapshot** | the fleet is not writing — hung, crashing, or the venue unreachable | `systemctl --user status grid-gremlin3-<fleet>`; `journalctl` for the traceback; `systemctl --user restart` it; orders rest on the venue meanwhile and are re-adopted by identity |
 | **equity … <** / **below the peak** | the account fell through your floor or drawdown | decide, not the engine: it is a page. Pause by stopping the fleet; close by card |
+| **box memory · <box>: N% available** | that box has under a tenth of its memory free | `python3 -m gridgremlin.hygiene show` names what grew; restart that unit |
+| **🧹 box hygiene · <box>:** (a digest line, only when off) | **N stray processes**: outside every service, e.g. a job left in an ssh session · **growing: <unit> A → B MiB over 7 days** · **memory N% available**: under a fifth · **report N h old**: its timer stopped | `hygiene show` gives each stray's command line: end it by pid if it is yours; restart a grower and watch a week |
 | **disk N% used** | the box is filling | `du -sh logs/*` on the box; the archive compresses itself hourly; delete rotated `.gz` you have in the backup |
 | **backoff** / **wallet read failed** / **venue down** | the exchange or the network, not the engine | wait; it retries; a re-page after 15 min means look at the exchange's status page |
 | **the dead-man (outside) says "down"** | the box itself, or the watchdog, has stopped | `ssh box`; if it answers, `systemctl --user list-timers`; if it does not, your provider's console; rebuild from the backup if it is gone |

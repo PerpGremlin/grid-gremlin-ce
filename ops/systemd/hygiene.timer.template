@@ -1,0 +1,12 @@
+[Unit]
+Description=Grid Gremlin v3 box hygiene — daily at 23:50 UTC, before the digest
+
+[Timer]
+# Ten minutes after the data box's own check (23:40), eight before the
+# digest (23:58) that reads both reports; minute 50 is off the watchdogs'
+# slots (*:1/5 to *:4/5) and logrotate (:52).
+OnCalendar=*-*-* 23:50:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

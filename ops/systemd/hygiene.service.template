@@ -1,0 +1,16 @@
+[Unit]
+Description=Grid Gremlin v3 box hygiene (D155) — strays, each service's memory, the box's memory; reports, never kills
+
+[Service]
+Type=oneshot
+WorkingDirectory={{REPO_DIR}}
+Nice=10
+ExecStart=/usr/bin/python3 -m gridgremlin.hygiene run --box trading
+# The data box's report (F38): one file, over a key whose authorized_keys
+# line there holds it to `rrsync -ro` on that box's report folder. The
+# leading '-' keeps a failed pull from failing the unit; the digest then
+# says the report's age. Without a second box, delete this line.
+ExecStartPost=-/usr/bin/rsync -t -e "ssh -i %h/.ssh/gg-hygiene -o BatchMode=yes" {{HYGIENE_SOURCE}}data.json logs/hygiene/data.json
+# The one page (F37, D60): a fresh report of a box with under a tenth of its
+# memory available. A missing report is skipped, never a page.
+ExecStartPost=/usr/bin/python3 -m gridgremlin.hygiene page logs/hygiene/trading.json logs/hygiene/data.json

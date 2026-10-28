@@ -1,0 +1,10 @@
+[Unit]
+Description=Grid Gremlin v3 box hygiene on the data box — daily at 23:40 UTC
+
+[Timer]
+# Ten minutes before the trading box's check pulls the report (23:50).
+OnCalendar=*-*-* 23:40:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
