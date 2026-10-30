@@ -38,8 +38,9 @@ What runs, from the inside out:
    fleet's readout and newest snapshot, one file per fleet per day under
    `logs/daily/`, the record the soak's results are cited from.
 7. **The daily digest** (`gridgremlin.digest`, 23:58 UTC, F17/D62) — tops up
-   the ledger, then sends one message: each exchange's day after fees and
-   before funding, open and kept P&L, what the log said, health.
+   the ledger, checks it against the venue (§17), then sends one message:
+   each exchange's day after fees and before funding, open and kept P&L,
+   what the log said, health.
 8. **Reading commands** (`gridgremlin.phone`, a long-running service,
    F18/D61) — answers the owner's `/commands` from the snapshot, readout,
    ledger and logs. Owner-only (`TELEGRAM_OWNER_ID`, fail closed), read-only,
@@ -126,6 +127,25 @@ What runs, from the inside out:
     box only when something is off; a box under a tenth of its memory
     available pages (D60). `python3 -m gridgremlin.hygiene show` prints what
     the digest would say and every stray's command line.
+17. **The drift check** (`gridgremlin.pnl_drift`, F39–F41; D-number: the
+    owner's to assign) — in the digest's unit, after the ledger's top-up
+    and before the message: each fleet's kept ledger beside the venue's own
+    record of the last 7 days. The fills by execution id (missing, extra,
+    restated), each bot's average-cost realised against the venue's closed
+    P&L (Bybit's `/v5/position/closed-pnl`, gross from each row's entry and
+    exit values; Hyperliquid's per-fill `closedPnl`) within a cent plus a
+    basis point of what closed, and a grid's U113 identity on its real
+    book. A ledger behind (its mark over two hours old) is said. At most
+    ten minutes (`timeout 600`); the whole digest unit at most thirty. Read-only: the collector's own
+    reads and the closed P&L. The report is `logs/drift/<fleet>.json`; the
+    digest says a fleet only when something is off, and a venue it could
+    not read as unread; nothing pages. `python3 -m gridgremlin.pnl_drift
+    show` prints what the digest would say and every id and figure. Its
+    line has a leading `-`, so a crash never costs the digest, which then
+    says the report's age. **Installing** (the owner's): re-render
+    `digest.service.template` as it was rendered before (the same fleet
+    files), then `systemctl --user daemon-reload`; the timer is unchanged.
+    By hand: `python3 -m gridgremlin.pnl_drift run configs/<fleet> ...`.
 
 > **Retired: the box-side Claude** — triage on failure, the Telegram relay
 > and the daily range review, kept in the private tree's `ops/retired/`

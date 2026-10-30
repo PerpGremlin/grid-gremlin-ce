@@ -414,7 +414,7 @@ def spec_E10_writes_never_ride_the_kept_connection():
         end = rest.find('\n    def ', 1)
         return rest if end < 0 else rest[:end]
     for path, name in (('gridgremlin/exchange/bybit/client.py', 'post'),
-                       ('gridgremlin/exchange/hyperliquid/client.py', '_post')):
+                       ('gridgremlin/exchange/hyperliquid/exchange.py', '_post')):
         write = body(path, name)
         assert 'urlopen' in write and '_wire' not in write, (path, name)
 

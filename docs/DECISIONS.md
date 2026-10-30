@@ -1335,6 +1335,20 @@ stands unless the owner corrects it.
   only once the owner adds the key; without it the data box's report stays
   on that box and the digest is the trading box's alone. Installing on
   either box is the owner's.
+- **D156 — A daily check that our profit figures have not drifted from the
+  exchange's (2026-10-30; D-number: owner to assign, the lead proposes
+  D156).** The owner asked for it after U113. Positions cannot drift: the
+  exchange is the only durable state and every cycle reads it (E3). Profit
+  is counted from the kept ledger, so a fill missing from it would make
+  every figure after it quietly wrong. Each evening, in the digest's unit
+  after the ledger's top-up, `gridgremlin.pnl_drift` sets each fleet's
+  ledger beside the venue's own record of the last week: the fills by
+  execution id, each bot's average-cost realised against the venue's closed
+  P&L, and a grid's U113 identity on its real book (F39–F41). It reads and
+  never writes. The digest says a fleet only when something is off, and a
+  venue it could not read is said as unread. Nothing is paged (D60): drift
+  is a figure to correct, not an emergency. Installing it is the owner's
+  (re-render the digest unit).
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

@@ -172,6 +172,15 @@ class Client:
             params['execType'] = exec_type
         return self.get('/v5/execution/list', params, signed=True)
 
+    def closed_pnl_page(self, category, symbol, start_ms, end_ms, cursor=None):
+        """F39: one page of the venue's own closed P&L (one row per closing
+        order) — a read, at most 7 days a query, 100 rows a page."""
+        params = {'category': category, 'symbol': symbol, 'limit': 100,
+                  'startTime': int(start_ms), 'endTime': int(end_ms)}
+        if cursor:
+            params['cursor'] = cursor
+        return self.get('/v5/position/closed-pnl', params, signed=True)
+
 
     def stop_orders(self, category, symbol):
         """D23: the conditional book — partial TPs live here, not in order

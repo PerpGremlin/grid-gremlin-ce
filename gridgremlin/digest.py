@@ -4,7 +4,8 @@
 # what happened (from the fleet log since the last digest) and whether the
 # machinery is healthy. Read-only toward the venues: it reads the archive the
 # readout just wrote, the kept ledger, the snapshots and the logs; and each
-# box's hygiene report, said only when something is off (D155).
+# box's hygiene report and each fleet's drift check (F39), said only when
+# something is off (D155).
 #   python3 -m gridgremlin.digest <fleet.json> ... [--dry]
 import json
 import re
@@ -273,6 +274,7 @@ def build(fleet_paths, now=None, **roots):
     parts, places = [f'🧌 daily digest · {day} (UTC day)'], {}
     market_store = roots.pop('market_store', None)
     hygiene_root = roots.pop('hygiene_root', None)
+    drift_root = roots.pop('drift_root', None)
     for fp in fleet_paths:
         try:
             lines, tag, place = section(fp, now, day_start, state=state,
@@ -289,6 +291,13 @@ def build(fleet_paths, now=None, **roots):
         hygiene = [f'box hygiene: unreadable — {e}']
     if hygiene:
         parts.append('\n'.join(hygiene))
+    from .pnl_drift import digest_lines as drift_lines                 # F39: only what is off
+    try:
+        drift = drift_lines(drift_root, now, tags={fleet_tag(fp) for fp in fleet_paths})
+    except Exception as e:                                       # noqa: BLE001
+        drift = [f'📏 drift: unreadable — {e}']
+    if drift:
+        parts.append('\n'.join(drift))
     from ggdata.market import digest_block, latest                     # D67
     try:
         parts.append('\n'.join(digest_block(latest(market_store), now)))

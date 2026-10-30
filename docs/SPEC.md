@@ -1283,6 +1283,63 @@ eventually pin (T1).
   the trading box's check (`rrsync -ro` on that box's report folder, the
   pull's failure never the unit's); that box holds no key and sends nothing,
   and its public status file never carries it.
+- **F39** The kept ledger holds what the venue lists, and nothing else
+  (D156, proposed; the owner to assign). Once a day, in the digest's unit
+  after the ledger is topped up, `gridgremlin.pnl_drift` reads each
+  fleet's markets back for the last 7 days, up to an hour before the
+  ledger's own mark (the collector re-reads that hour): every execution
+  the venue lists is in the ledger and every ledger fill is on the venue,
+  by execution id; the same id with another price, size or fee is named
+  too. Each id is said under its bot: its link (R1), else the bot whose
+  exits sit on its side (R7/R16), else the market's unowned. A hedge pair
+  shares a market by I2 and is told apart the same way; two fleets on one
+  account and market are noted. A portfolio row's fills on its legs, by
+  its link, are among the ids its row has settled (`seen`; its newest 400
+  when full); extras are not judged there. The reads are the collector's
+  own and the venue's closed P&L — no write is reachable (a spec scans the
+  module and runs it against a venue that answers reads only). The report
+  is `logs/drift/<fleet>.json`; the digest says a fleet only when
+  something is off, one line a fleet; a venue it could not read is said
+  as unread, never as agreement; a report over two hours old is said.
+  *(2026-10-31, after review: a market whose ledger mark is missing, over
+  two hours old, or before the window is said — "ledger collected …
+  only to …" — never a clean report over days nobody compared; the digest
+  reads only its own fleets' reports, one that will not read is its own
+  line, and one bot's failure is its own, not the fleet's. A portfolio
+  row with a full `seen` judges only fills no older than the oldest it
+  still remembers. The read clients carry no write: Hyperliquid's write
+  transport lives on the exchange client alone.)*
+- **F40** A bot's average-cost realised agrees with the venue's (D156,
+  proposed). Over the window, the kept book's realised (R2, the card's
+  record, R18) against Bybit's closed P&L for the market, gross from each
+  row's own values — exit value less entry value, signed by the closing
+  side (only the bot's closing side when a pair shares it) — or
+  Hyperliquid's per-fill `closedPnl`; inverse in the coin. What Bybit's
+  `closedPnl` holds besides the trade (fees; funding or not, the API does
+  not say) is assumed neither way: `show` prints closedPnl plus its fees
+  less the gross as the residue. A closing order whose fills in the
+  window do not add up to its row's size (a resting exit filled in part,
+  or one begun before the window) is left out of both sides. Off by more than a cent of the quote (a millionth of the coin) plus
+  one basis point of the notional the window closed is said: the venue
+  rounds to 8 decimals and may hold its entry at the tick, while a
+  missing exit moves the figure by its own margin. Not compared, and said
+  in `show`: a spot bot (the venue states none), a record with no whole
+  start, a market with a fill no bot of the fleet owns (the venue's
+  position holds it, no book of ours does), a fresh anchor not yet flat
+  since its opening balance (then from that flat). A portfolio row's perp
+  books, gross since its anchor, against the closing buys of each leg,
+  when the anchor is within 90 days and no other row shorts the market.
+- **F41** U113's identity holds on each grid's real book (D156, proposed):
+  the trips' gross less the average-cost realised equals what the open
+  lots cost beyond the book's average, times the position (in the coin
+  for an inverse: the position over the average less the lots' coins).
+  The lots are walked from the record — an entry a lot at its rung, an
+  exit closing the lot one rung inside it, newest first as R15 prices it,
+  else the seed's (R15b). An exit that closes no lot (an entry lost before
+  the window, priced on the lattice by R15), lots that do not add up to
+  the position, or a gap past float rounding is said. Not checked: a DCA,
+  a record opening at a fresh anchor's balance, a book with an exit no
+  entry can match (U113's "—").
 - **F28** The runbook (`docs/RUNBOOK.md`, D75) names what exists: every unit
   the templates in `ops/systemd/` render (by its `grid-gremlin3-` or `gg-`
   name), every timer, every phone command the phone answers, the close tool,

@@ -20,9 +20,11 @@ nonce. The discipline mirrors the Bybit client's hard-won stances:
 
 Key + address come from `.env` (HL_PRIVATE_KEY / HL_ACCOUNT_ADDRESS).
 """
+import json
 import os
 import time
 import urllib.error
+import urllib.request
 
 from .client import HLError, InfoClient
 from .signing import link_to_cloid, priv_to_address, sign_l1_action
@@ -53,6 +55,24 @@ class ExchangeClient(InfoClient):
         # sub-account's address as the action's vault
         self.vault = os.environ.get('HL_SUBACCOUNT') or None
         self._last_nonce = 0
+
+    def _post(self, path, body, retry_429=True):
+        """The write transport (stub point for specs) — here, never on the
+        read client, so a reader holds no way to post (F39)."""
+        data = json.dumps(body).encode()
+        req = urllib.request.Request(self.base + path, data=data,
+                                     headers={'Content-Type': 'application/json'})
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return json.loads(resp.read().decode())
+        except urllib.error.HTTPError as e:
+            text = e.read().decode(errors='replace')[:300]
+            if e.code == 429 and retry_429:
+                import time as _t
+                _t.sleep(2.0)
+                return self._post(path, body, retry_429=False)
+            raise HLError(e.code, f'{path}: HTTP {e.code}: {text}', text,
+                          kind='rate_limit' if e.code == 429 else 'other')
 
     def _nonce(self):
         """Strictly increasing even when two writes land in the same millisecond."""

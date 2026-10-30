@@ -241,7 +241,10 @@ def read_fills(client, category, symbol, start_ms, end_ms):
                               'price': _f(e.get('execPrice')),
                               'qty': _f(e.get('execQty'), 0.0),
                               'fee': fee,
-                              'link_id': e.get('orderLinkId') or ''})
+                              'link_id': e.get('orderLinkId') or '',
+                              # F40: the order a fill belongs to — the venue's
+                              # closed P&L is a row per order
+                              'order_id': e.get('orderId') or ''})
             cursor = page.get('nextPageCursor')
             if not cursor:
                 break
@@ -251,6 +254,52 @@ def read_fills(client, category, symbol, start_ms, end_ms):
         win_start = win_end
     fills.sort(key=lambda f: f['time_ms'])
     return fills
+
+
+def read_closed_pnl(client, category, symbol, start_ms, end_ms):
+    """F40: the venue's own realised P&L for a market, one row per closing
+    order, oldest first. `side` is read as the closing order's (a long
+    closes by selling). `gross` is taken from the row's own values — the
+    exit value less the entry value, signed by that side (an inverse's
+    values are in the coin, so its long gains as the entry value exceeds
+    the exit's) — never from `closedPnl`, whose make-up (fees, and whether
+    funding) the API does not state. `stated` is closedPnl with the open
+    and close fees added back, kept beside it so `stated - gross` shows
+    what closedPnl holds besides the trade. `exit_value` is the order's
+    closed notional. The same 7-day windows and cursor discipline as the
+    fills (E5)."""
+    out, seen = [], set()
+    win_start, end_ms = int(start_ms), int(end_ms)
+    while win_start < end_ms:
+        win_end = min(win_start + SEVEN_DAYS_MS, end_ms)
+        cursor = None
+        for _ in range(MAX_ORDER_PAGES):
+            page = client.closed_pnl_page(category, symbol, win_start, win_end, cursor)
+            for e in page.get('list', []):
+                key = (e.get('orderId'), e.get('createdTime'), e.get('closedSize'))
+                if key in seen:
+                    continue
+                seen.add(key)
+                side = 'buy' if e.get('side') == 'Buy' else 'sell'
+                entry_v, exit_v = _f(e.get('cumEntryValue'), 0.0), _f(e.get('cumExitValue'), 0.0)
+                gains_on_exit = (side == 'sell') != (category == 'inverse')
+                out.append({'order_id': e.get('orderId') or '',
+                            'time_ms': int(e.get('createdTime') or 0),
+                            'side': side,
+                            'qty': _f(e.get('closedSize'), 0.0),
+                            'gross': (exit_v - entry_v) if gains_on_exit else (entry_v - exit_v),
+                            'stated': (_f(e.get('closedPnl'), 0.0) + _f(e.get('openFee'), 0.0)
+                                       + _f(e.get('closeFee'), 0.0)),
+                            'exit_value': exit_v})
+            cursor = page.get('nextPageCursor')
+            if not cursor:
+                break
+        else:
+            raise VenueError(f'{symbol}: closed P&L beyond {MAX_ORDER_PAGES} pages',
+                             kind='partial_read')
+        win_start = win_end
+    out.sort(key=lambda r: r['time_ms'])
+    return out
 
 
 def read_borrow(client, coin, start_ms, end_ms):

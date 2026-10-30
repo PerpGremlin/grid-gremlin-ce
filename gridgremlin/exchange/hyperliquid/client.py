@@ -2,7 +2,6 @@
 import json
 import os
 import urllib.error
-import urllib.request
 
 from ..errors import VenueError
 from ..keepalive import KeepAlive
@@ -111,20 +110,3 @@ class InfoClient:
     def spot_clearinghouse_state(self):
         return self._transport({'type': 'spotClearinghouseState',
                                 'user': self._user()})
-
-    def _post(self, path, body, retry_429=True):
-        """The write transport (stub point for specs)."""
-        data = json.dumps(body).encode()
-        req = urllib.request.Request(self.base + path, data=data,
-                                     headers={'Content-Type': 'application/json'})
-        try:
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                return json.loads(resp.read().decode())
-        except urllib.error.HTTPError as e:
-            text = e.read().decode(errors='replace')[:300]
-            if e.code == 429 and retry_429:
-                import time as _t
-                _t.sleep(2.0)
-                return self._post(path, body, retry_429=False)
-            raise HLError(e.code, f'{path}: HTTP {e.code}: {text}', text,
-                          kind='rate_limit' if e.code == 429 else 'other')
