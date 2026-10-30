@@ -229,36 +229,71 @@ def check_realised(record, cfg, botid, fleet, start_ms, end_ms, unowned, venue_r
             'off': abs(ours - venue) > tol}, None
 
 
-def open_lots(counted, botid, entry_side):
-    """F41's lots, walked from the record: each entry fill a lot at its
-    rung; each exit closes the lot one rung inside it (G25), newest first
-    as R15 prices it, else the seed's lots (R15b). Returns (lots left
-    [(price, qty)], exits no lot could take)."""
+def open_lots(counted, botid, entry_side, inverse=False):
+    """F41's lots, walked from the record by its own hand (not report's):
+    each entry fill a lot; each exit consumes the lots it closes as the
+    engine nets them (G23) — the lot one rung inside it first (G25), then
+    the newest open lot of any rung, seed lots included; an exit with no
+    rung (a venue's or a hand's close) the newest first. Returns {lots
+    [(price, qty)] left, no_lot (exits the whole inventory could not
+    cover), same_rung (exits whose lot was bought at their own rung, R9:
+    said, not a failure), exits [(fill, qty covered, its cost)] — the cost
+    in quote, or in coin for an inverse}."""
     from .apply import rung_of
     from .ladder import SEED_RUNG
     step = -1 if entry_side == 'buy' else 1
-    at, seed, unmatched = {}, [], 0
+    book = {}                                   # seq -> [rung, price, qty]
+    seq = 0
+    no_lot = same = 0
+    exits = []
     for f in counted:
         rung = rung_of(f.get('link_id') or '', botid)
         if f['side'] == entry_side:
-            (seed if rung == SEED_RUNG else at.setdefault(rung, [])).append([f['price'], f['qty']])
+            seq += 1
+            book[seq] = [rung, f['price'], f['qty']]
             continue
-        left = f['qty']
-        pools = ([at.get(rung + step, [])] if rung is not None and rung != SEED_RUNG else []) + [seed]
-        if rung is None:
-            pools = []
-        for pool in pools:
-            while left > 1e-12 and pool:
-                lot = pool[-1]
-                take = min(lot[1], left)
-                lot[1] -= take
-                left -= take
-                if lot[1] <= 1e-12:
-                    pool.pop()
+        inside = rung + step if rung is not None and rung != SEED_RUNG else None
+        newest = sorted(book, reverse=True)
+        order = [k for k in newest if book[k][0] == inside] + \
+                [k for k in newest if book[k][0] != inside]
+        left, cost, own_rung = f['qty'], 0.0, False
+        for k in order:
+            if left <= 1e-12 * max(1.0, f['qty']):
+                break
+            r, p, q = book[k]
+            take = q if q < left else left
+            book[k][2] = q - take
+            if book[k][2] <= 1e-12 * max(1.0, f['qty']):
+                del book[k]
+            left -= take
+            cost += take / p if inverse else take * p
+            own_rung = own_rung or (rung is not None and r == rung)
         if left > 1e-9 * max(1.0, f['qty']):
-            unmatched += 1
-    lots = [(p, q) for pool in list(at.values()) + [seed] for p, q in pool if q > 1e-12]
-    return lots, unmatched
+            no_lot += 1
+        same += own_rung
+        exits.append((f, f['qty'] - left, cost))
+    return {'lots': [(p, q) for _, p, q in book.values()], 'no_lot': no_lot,
+            'same_rung': same, 'exits': exits}
+
+
+def first_disagreement(exits, rows, inverse):
+    """F41's diagnostic: the first exit whose pairing (the pane's `own`,
+    report's R15) cost differs from the walker's consumed cost —
+    {fill, time_ms, pairing, walker}, or None."""
+    by_time = {}
+    for row in rows:
+        if not row['entry'] and row.get('own') is not None:
+            by_time.setdefault((row['time_ms'], row['price'], row['qty']), []).append(row['own'])
+    for f, covered, cost in exits:
+        owns = by_time.get((f['time_ms'], f['price'], f['qty']))
+        if not owns:
+            continue
+        own = owns.pop(0)
+        paired = f['qty'] / own if inverse else f['qty'] * own
+        if abs(paired - cost) > IDENT_ABS['coin' if inverse else 'quote'] + IDENT_REL * abs(cost):
+            return {'fill': f.get('exec_id') or f.get('link_id') or '', 'time_ms': f['time_ms'],
+                    'pairing': paired, 'walker': cost}
+    return None
 
 
 def check_identity(kept, fleet, botid, cfg, record):
@@ -279,9 +314,10 @@ def check_identity(kept, fleet, botid, cfg, record):
         return None, (f"{got['unmatched']} exit{'s' if got['unmatched'] > 1 else ''} with no "
                       'entry to match (a venue or hand close): the identity needs every exit matched')
     entry = 'buy' if cfg['side'] == 'long' else 'sell'
-    lots, unmatched = open_lots(counted, botid, entry)
-    book = _book(counted, botid, cfg, 1 << 62, fleet)
     inverse = cfg['market_type'] == 'inverse'
+    walk = open_lots(counted, botid, entry, inverse)
+    lots, unmatched = walk['lots'], walk['no_lot']
+    book = _book(counted, botid, cfg, 1 << 62, fleet)
     sign = 1.0 if entry == 'buy' else -1.0
     pos = abs(book['position'])
     held = sum(q for _, q in lots)
@@ -297,8 +333,10 @@ def check_identity(kept, fleet, botid, cfg, record):
     tol = IDENT_ABS[unit] + IDENT_REL * scale
     lots_off = abs(held - pos) > 1e-9 * max(1.0, pos)
     gap = got['trip_gross'] - got['realized'] - shift
+    first = first_disagreement(walk['exits'], got['rows'], inverse)
     return {'gross': got['trip_gross'], 'realised': got['realized'], 'shift': shift,
             'lots_qty': held, 'position': pos, 'tol': tol, 'gap': gap, 'no_lot': unmatched,
+            'same_rung': walk['same_rung'], 'first_off': first,
             'off': bool(unmatched) or lots_off or abs(gap) > tol, 'lots_off': lots_off}, None
 
 
@@ -605,6 +643,13 @@ def details(report):
             out.append(f"    identity: trips {i['gross']:+.8f} − realised {i['realised']:+.8f} = "
                        f"{i['gross'] - i['realised']:+.8f}; open lots {i['shift']:+.8f} "
                        f"({i['lots_qty']:.10g} held, book {i['position']:.10g})")
+            if i.get('same_rung'):
+                out.append(f"    same-rung exits (R9, a trip of ~0): {i['same_rung']}")
+            d = i.get('first_off')
+            if d:
+                out.append(f"    first exit the pairing and the walk price apart: {d['fill']} at "
+                           + time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime(d['time_ms'] / 1000))
+                           + f" — pairing {d['pairing']:.8f}, walk {d['walker']:.8f}")
         elif e.get('identity_note'):
             out.append(f"    identity not checked: {e['identity_note']}")
     return out

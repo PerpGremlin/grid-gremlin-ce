@@ -314,10 +314,12 @@ def spec_F41_the_identity_holds_on_an_agreeing_book_long_and_short():
         assert abs(i['shift'] - 1.5) < 1e-9 and i['lots_qty'] == 3.0 == i['position']
 
 
-def spec_F41_an_entry_lost_before_the_window_is_caught_by_the_identity():
+def spec_F41_an_entry_lost_before_the_window_is_said_by_the_walk():
     """The exit's entry fell out of the ledger before the look-back, so
-    check 1 cannot see it; the pane priced the exit on the lattice (R15)
-    and the lots no longer add up — reported."""
+    check 1 cannot see it. While other lots are held the exit consumes the
+    newest of them (G23, 2026-10-31) — here the rung-8 lot, its own rung:
+    a same-rung exit, counted in `show`, not a failure. When the lost
+    entries leave nothing held, the exit closes no lot — said."""
     cfgs, kept, venue, closed = _agreeing()
     b = _bot(cfgs[0])
     kept['anchors'][b]['time_ms'] = NOW - 11 * DAY                       # the record began earlier
@@ -326,8 +328,19 @@ def spec_F41_an_entry_lost_before_the_window_is_caught_by_the_identity():
             f['time_ms'] = NOW - 10 * DAY                                # the entry, before the look-back
     kept['fills'] = [f for f in kept['fills'] if not f['link_id'].startswith(b + '-7-')]
     r = _run(cfgs, kept, Bybit(venue, closed))
-    e = r['bots'][b]
-    assert e['missing'] == [] and e['identity']['no_lot'] == 1
+    i = r['bots'][b]['identity']
+    assert r['bots'][b]['missing'] == [] and i['no_lot'] == 0 and i['same_rung'] == 1, i
+    assert not i['off'] and i['first_off'] is None
+    assert any('same-rung exits (R9, a trip of ~0): 1' in line for line in pd.details(r))
+    # every entry lost: the whole inventory is empty when the exit comes
+    cfgs, kept, venue, closed = _agreeing()
+    kept['anchors'][b]['time_ms'] = NOW - 11 * DAY
+    for f in venue:
+        if f['side'] == 'buy':
+            f['time_ms'] = NOW - 10 * DAY
+    kept['fills'] = [f for f in kept['fills'] if f['side'] != 'buy']
+    r = _run(cfgs, kept, Bybit(venue, closed))
+    assert r['bots'][b]['identity']['no_lot'] == 1, r['bots'][b]
     said = _said(r)
     assert any('1 exit close no lot the record holds' in s for s in said), said
 
@@ -589,7 +602,7 @@ def spec_F40_a_fresh_anchor_flat_mid_window_is_compared_from_that_flat():
 def spec_F41_lots_that_do_not_add_up_to_the_book_are_said():
     cfgs, kept, venue, closed = _agreeing()
     real = pd.open_lots
-    pd.open_lots = lambda *a: (real(*a)[0][1:], 0)            # a lot the walk lost
+    pd.open_lots = lambda *a: dict(real(*a), lots=real(*a)['lots'][1:])   # a lot the walk lost
     try:
         said = _said(_run(cfgs, kept, Bybit(venue, closed)))
     finally:

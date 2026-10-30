@@ -1340,6 +1340,13 @@ eventually pin (T1).
   the position, or a gap past float rounding is said. Not checked: a DCA,
   a record opening at a fresh anchor's balance, a book with an exit no
   entry can match (U113's "—").
+  *(2026-10-31: the walk, still written apart from report's pairing, uses
+  R15's consuming rule — the lot one rung inside first, then the newest open
+  lot of any rung, seed lots included; an exit with no rung, the newest
+  first. "No lot" is said only when the whole inventory is empty. `show`
+  counts same-rung exits (said, not a failure) and names the first exit
+  whose pairing cost differs from the walk's consumed cost, by fill id and
+  time.)*
 - **F28** The runbook (`docs/RUNBOOK.md`, D75) names what exists: every unit
   the templates in `ops/systemd/` render (by its `grid-gremlin3-` or `gg-`
   name), every timer, every phone command the phone answers, the close tool,
@@ -1534,6 +1541,20 @@ eventually pin (T1).
   judged right wherever the buy was seen. *(2026-10-05: the SOL long re-latticed
   31→19 at a restart; the window held fills from both, and 60 of 61 trips were
   flagged zero-spread at −41 per trip on a day the book realised +251.)*
+  *(2026-10-31: "the price its lot was bought at", implemented faithfully. The
+  price was a lookup no exit consumed: a buy at rung r priced every later exit at
+  r+1 until another buy overwrote it, so a duplicate exit, same-rung churn and a
+  partial entry fill were credited as full-gap trips against lots already gone.
+  Now each entry fill is a lot (rung, price, quantity, fee per unit) and an exit
+  consumes lots as the engine nets them (G23): the lot one rung inside it first
+  (G25; one rung above for a short), then the newest open lot of any rung, seed
+  lots included, split by quantity, so a partial entry fill hands the remainder
+  to the next lot. The exit's own entry is the quantity-weighted cost of what it
+  consumed (harmonic for an inverse book); the lattice prices only quantity no
+  seen lot covers. A same-rung exit prices at its own lot, a trip of ~0, and is
+  counted same-rung (R9). A flat lets every lot go, as a seed does. The first
+  live drift run found grid profit wrong on 9 of 10 bots; with the lots, U113's
+  identity held on all 10.)*
 - **R15b** A seed lot's exit is judged against the seed's own price. The seed
   buys at market, off every lattice, and runs only from flat (S3): a lot whose
   buy the window did not see after a seed it holds is a seed lot, its level the
@@ -1541,6 +1562,10 @@ eventually pin (T1).
   the lattice. A seed clears the earlier rounds' buys, so an old buy at a
   rung never prices a seed lot. *(the audit before real money, 2026-10-13;
   the clearing, the second audit the same day)*
+  *(2026-10-31: the seed's price prices at most the seed's quantity still held:
+  each seed fill is a lot under R15's consuming rule, the newest taken first, so
+  an exit of the whole seed is judged at its average and an exit past it on the
+  lattice.)*
 - **R12** Per trip is what the trip earned. The book's realized is average-cost
   (R2): a long grid that bought cheaper lots on the way down carries an average
   above its exits, so every full-gap trip "realises" a loss while the
@@ -1880,6 +1905,10 @@ eventually pin (T1).
   record without a whole start keep the average-cost column.
   *(owner, 2026-10-30: "right now it just shows that every single trade
   is a loss")*
+  *(2026-10-31: an exit's entry is the lots it consumed, R15's dated addition;
+  each trip's figure and the total change where an exit was a duplicate, a
+  same-rung re-buy or took a partial fill — the card's grid profit and the
+  paper bots page's per trip with them.)*
 - **U111** A carry bot's hedge may differ by coin — inverse, usdt or usdc,
   the common one above and the others named ("SOL usdt") — and the form
   shows each coin's three perpetuals side by side: what a short was paid

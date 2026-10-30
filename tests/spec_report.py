@@ -660,7 +660,11 @@ def spec_R15b_a_seed_lots_exit_is_judged_against_the_seeds_price():
     kw = dict(entry_sides={b: 'buy'}, grids={b: cfg})
     seed = [f(1, 'buy', 84000.0, 1.0, SEED_RUNG), f(2, 'buy', 84300.0, 2.0, SEED_RUNG)]   # avg 84,200
     book = ledger(seed + [f(3, 'sell', 86000.0, 1.0, 6)], [b], **kw)[b]
-    assert abs(book['gap_realized'] - 1800.0) < 1e-9                 # not the lattice's +1,000
+    assert abs(book['gap_realized'] - 1700.0) < 1e-9                 # not the lattice's +1,000
+    # each seed fill is its own lot, the newest taken first (2026-10-31,
+    # R15's consuming lots); the whole seed sold is the seed's average
+    book = ledger(seed + [f(3, 'sell', 86000.0, 3.0, 6)], [b], **kw)[b]
+    assert abs(book['gap_realized'] - 5400.0) < 1e-9
     later = seed + [f(3, 'buy', 82900.0, 1.0, 3), f(4, 'sell', 84000.0, 1.0, 4)]
     assert abs(ledger(later, [b], **kw)[b]['gap_realized'] - 1100.0) < 1e-9   # its own buy
     assert abs(ledger([f(3, 'sell', 86000.0, 1.0, 6)], [b], **kw)[b]['gap_realized'] - 1000.0) < 1e-9
@@ -978,8 +982,8 @@ def spec_R12_identity_needs_no_book_so_a_truncated_window_still_states_it():
                 'fee': 0.0, 'link_id': f'{s}-{rung}-{t}', 'symbol': 'XRPUSDT',
                 'exec_id': f'e{t}'}
     fills = [f(1, 'buy', 1.5, 100.0, 5),      # the window opens on an EXIT:
-             f(2, 'sell', 1.5, 100.0, 5),     # lot 6 (1.6) closed: +10
-             f(3, 'buy', 1.5, 100.0, 5)]      # lot 5 sold, lot 6 closed: +10
+             f(2, 'sell', 1.6, 100.0, 6),     # lot 6 (1.6, the lattice) closed: +10
+             f(3, 'buy', 1.5, 100.0, 5)]      # lot 6 sold again, closed: +10
     book = ledger(fills, [s], entry_sides={s: 'sell'}, grids={s: cfg})[s]
     assert window_truncated(book, 'short')
     assert book['gap_trips'] == 2 and abs(book['gap_realized'] - 20.0) < 1e-9
