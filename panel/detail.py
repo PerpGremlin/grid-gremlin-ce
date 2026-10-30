@@ -39,6 +39,19 @@ def _signed(v):
         f'<td class="{_num_cls(v)}">{v:+,.2f}</td>'
 
 
+def _trip(r):
+    """U113: a grid exit's "made" — its trip after both legs' fees, the
+    entry it was matched to under it; an exit no entry is linked to says
+    so; an entry made nothing yet (its fee is beside it)."""
+    if r['entry']:
+        return '<td></td>'
+    if r.get('own') is None:
+        return ('<td class="dim" title="no entry this exit can be matched to (no rung in its '
+                'link: the venue\'s or a hand\'s close) — not guessed">—</td>')
+    cell = _signed(r['trip'])
+    return f'{cell[:-5]}<br><span class="dim">vs {_n(r["own"])}</span></td>'
+
+
 TABS = (('fills', 'fills'), ('numbers', 'numbers'), ('edit', 'edit'))
 
 
@@ -68,7 +81,21 @@ def detail_pane(idx, label, botid, contract, listing, show='fills', numbers='', 
     if not listing or not listing['rows']:
         return f'<aside class="pane">{head}<p class="dim">No fills kept for this bot yet.</p></aside>'
     rows = listing['rows']
-    if listing['whole']:
+    trips = listing.get('per_trip')
+    if trips:
+        net = listing['realized'] - listing['fees']
+        n = listing['trips']
+        left = (f' · {listing["unmatched"]} exit{"s" * (listing["unmatched"] != 1)} with no '
+                'entry to match (—) left out' if listing['unmatched'] else '')
+        summary = (f'<p>{len(rows)} fills since its record began · grid profit '
+                   f'<b class="{_num_cls(listing["trip_total"])}">{listing["trip_total"]:+,.2f}</b> '
+                   f'over {n} trip{"s" * (n != 1)}, after fees{left} · the exchange\'s average-cost '
+                   f'realised {listing["realized"]:+,.2f} ({net:+,.2f} after fees)</p>'
+                   f'<p class="dim">{esc(quote)}. "made" is each exit against the entry it closes '
+                   '(the price under it), less both legs\' fees; "total" is that grid profit so far. '
+                   'The exchange counts by average cost: the difference between the two sits in '
+                   'the open position\'s average, not in the trips. Funding is under numbers.</p>')
+    elif listing['whole']:
         net = listing['realized'] - listing['fees']
         summary = (f'<p>{len(rows)} fills since its record began · realised '
                    f'<b class="{_num_cls(listing["realized"])}">{listing["realized"]:+,.2f}</b> · fees '
@@ -87,7 +114,8 @@ def detail_pane(idx, label, botid, contract, listing, show='fills', numbers='', 
                     f'<td><span class="{"pos" if r["side"] == "buy" else "neg"}">{r["side"]}</span> {what}</td>'
                     f'<td>{_n(r["qty"])}<br><span class="dim">@ {_n(r["price"])}</span></td>'
                     f'<td>{_n(r["fee"], ",.4g")}</td>'
-                    f'{_signed(r["realized"])}{_signed(r["net"])}</tr>')
+                    + (f'{_trip(r)}{_signed(r["trip_net"])}</tr>' if trips else
+                       f'{_signed(r["realized"])}{_signed(r["net"])}</tr>'))
     older = (f'<p class="dim">{len(rows) - shown} older fills not drawn.</p>'
              if len(rows) > shown else '')
     # U109: six columns that fit the half — the side with its role, the

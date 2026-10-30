@@ -242,3 +242,127 @@ def spec_U110_the_right_half_scrolls_on_its_own_and_the_refresh_keeps_its_place(
     i = CSS.index('.pane{position:sticky')
     pane = CSS[i:CSS.index('}', i)]
     assert 'overscroll-behavior:contain' in pane and 'overflow:auto' in pane
+
+
+# --- U113: a grid's fills say each trip, not the average ---------------------
+
+GRID = {'lower': 90.0, 'upper': 110.0, 'rungs': 21, 'spacing_type': 'linear'}      # rung j at 90 + j
+
+
+def _grid(side):
+    sym = 'BTCUSDT' if side == 'long' else 'ETHUSDT'
+    bot = f"lin{sym}{side[0]}"
+    fleet = {'bots': [dict(GRID, venue='bybit', market_type='linear', symbol=sym, side=side)]}
+    return bot, sym, fleet
+
+
+def _gf(bot, sym, t, side, rung, price, qty=1.0, fee=0.01, **kw):
+    return dict({'venue': 'bybit', 'market_type': 'linear', 'symbol': sym, 'exec_id': f'{bot}{t}',
+                 'time_ms': DAY + t, 'side': side, 'price': price, 'qty': qty, 'fee': fee,
+                 'link_id': f'{bot}-{rung}-a{t}'}, **kw)
+
+
+def _ladder(side):
+    """The owner's case (2026-10-30): bought down three rungs, sold one up
+    — or a short's mirror. Four entries at 0.01 fee, one exit at 0.02."""
+    bot, sym, fleet = _grid(side)
+    e, x = ('buy', 'sell') if side == 'long' else ('sell', 'buy')
+    step = -1 if side == 'long' else 1
+    fills = [_gf(bot, sym, i, e, 10 + step * i, 100.0 + step * i) for i in range(4)]
+    fills.append(_gf(bot, sym, 4, x, 10 + step * 2, 100.0 + step * 2, fee=0.02))
+    kept = {'fills': fills, 'anchors': {bot: {'kind': 'clean', 'time_ms': DAY - 1}}}
+    return bot, fleet, kept
+
+
+def _made(pane):
+    """The newest row's "made" cell (the exit's)."""
+    row = pane[pane.index('<tr><td>', pane.index('fills bot')):]
+    return row[:row.index('</tr>')].split('<td')[5]
+
+
+def spec_U113_a_grid_exit_shows_its_trip_not_the_average():
+    """A long grid that bought down three rungs and sold one rung up made a
+    rung's gap on that trip, though the exchange's average-cost realised
+    reads a loss: its "made" is the gap less both legs' fees (the entry
+    fill's own fee, the exit's), the entry it was matched to under it; the
+    entries show nothing made."""
+    from panel.detail import detail_pane
+    bot, fleet, kept = _ladder('long')
+    got = fill_list(kept, fleet, bot, held=3.0)
+    ex = got['rows'][-1]
+    assert abs(ex['realized'] - (98.0 - 98.5)) < 1e-9                       # the exchange's: a loss
+    assert ex['own'] == 97.0 and abs(ex['trip'] - (1.0 - 0.02 - 0.01)) < 1e-9   # the trip: a gain
+    assert got['per_trip'] and got['trips'] == 1 and got['unmatched'] == 0
+    assert all(r.get('own') is None and r['trip_net'] == 0.0 for r in got['rows'][:4])
+    contract = {'bots': {bot: None}, 'terms': {bot: {'quote': 'USDT'}}}
+    pane = detail_pane(0, 'demo', bot, contract, got)
+    assert '+0.97<br><span class="dim">vs 97</span>' in _made(pane), _made(pane)
+    assert 'grid profit <b class="pos">+0.97</b> over 1 trip,' in pane
+    assert "average-cost realised -0.50" in pane and 'open position' in pane
+    head = pane[pane.index('<table class="fills bot">'):]
+    assert head[:head.index('</tr>')].count('<th>') == 6                     # U109's fit
+
+
+def spec_U113_a_short_grid_mirrors_it():
+    """A short that sold up three rungs and bought one back: the same gap,
+    the same fees, the same loss by average cost."""
+    bot, fleet, kept = _ladder('short')
+    got = fill_list(kept, fleet, bot, held=3.0)
+    ex = got['rows'][-1]
+    assert abs(ex['realized'] - (-0.5)) < 1e-9 and ex['own'] == 103.0
+    assert abs(ex['trip'] - 0.97) < 1e-9 and abs(got['trip_total'] - 0.97) < 1e-9
+
+
+def spec_U113_the_two_figures_reconcile_through_the_open_average():
+    """R12's identity, asserted: the trips' gross less the average-cost
+    realised is what the open lots cost beyond the book's average, times
+    the position — the loss the exchange printed sits in the remainder."""
+    for side in ('long', 'short'):
+        bot, fleet, kept = _ladder(side)
+        got = fill_list(kept, fleet, bot, held=3.0)
+        sign = 1.0 if side == 'long' else -1.0
+        lots = [100.0, 99.0, 98.0] if side == 'long' else [100.0, 101.0, 102.0]   # the lots still held
+        book_avg = sum(lots + [97.0 if side == 'long' else 103.0]) / 4
+        shift = (sum(lots) / 3 - book_avg) * 3 * sign
+        assert abs(got['trip_gross'] - got['realized'] - shift) < 1e-9, side
+        assert abs(got['trip_total'] - (got['trip_gross'] - 0.03)) < 1e-9   # both legs' fees
+
+
+def spec_U113_an_exit_with_no_entry_to_match_says_so():
+    """A venue's close carries no link, so no rung: no entry it closed is
+    known, and its "made" is "—" with a title, never a guess; the summary
+    counts it out."""
+    from panel.detail import detail_pane
+    bot, fleet, kept = _ladder('long')
+    kept['fills'].append(_gf(bot, 'BTCUSDT', 5, 'sell', 0, 95.0, qty=3.0, link_id='',
+                             venue_closed=True, venue_kind='liquidation'))
+    got = fill_list(kept, fleet, bot, held=0.0)
+    last = got['rows'][-1]
+    assert last['own'] is None and last['trip'] is None and got['unmatched'] == 1
+    assert abs(got['trip_total'] - 0.97) < 1e-9                             # left out, not guessed
+    pane = detail_pane(0, 'demo', bot, {'bots': {bot: None}, 'terms': {bot: {'quote': 'USDT'}}}, got)
+    assert 'title="no entry this exit can be matched to' in _made(pane) and '>—</td>' in _made(pane)
+    assert '1 exit with no entry to match' in pane
+
+
+def spec_U113_a_martingale_keeps_the_average():
+    """A DCA's exit closes the round's average — that is its trip — so it
+    keeps the realised column as before (no lattice, no per-trip)."""
+    got = fill_list({'fills': FILLS}, FLEET, B, held=0.0)
+    assert not got['per_trip'] and 'own' not in got['rows'][2]
+
+
+def spec_U113_sabotage_made_falling_back_to_realised_is_caught():
+    """Were "made" the average-cost figure again, the owner's case reads a
+    loss and the check above fails."""
+    import panel.detail as d
+    bot, fleet, kept = _ladder('long')
+    got = fill_list(kept, fleet, bot, held=3.0)
+    contract = {'bots': {bot: None}, 'terms': {bot: {'quote': 'USDT'}}}
+    real = d._trip
+    d._trip = lambda r: d._signed(r['realized'])                            # the old column
+    try:
+        made = _made(d.detail_pane(0, 'demo', bot, contract, got))
+    finally:
+        d._trip = real
+    assert '+0.97' not in made and '-0.5' in made

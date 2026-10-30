@@ -1810,6 +1810,19 @@ eventually pin (T1).
   once. Charts draw with the tokens, so they follow. The export carries
   no script. *(owner, 2026-10-28: "more themes… windows 95,
   or Metatrader")*
+- **U113** A grid's fills say each trip, as Bybit and Pionex do: an
+  exit's "made" is its gain against the entry it closes (R12, the entry
+  by R15/R15b) less both legs' fees — the entry fill's own fee per unit
+  when seen, the exit's otherwise — with that entry's price under it; an
+  entry's is blank; an exit with no rung (a venue's or a hand's close) is
+  "—", never a guess, and the summary counts it out. "total" is the
+  trips so far. The summary puts the exchange's average-cost realised
+  beside the grid profit and says the difference sits in the open
+  position's average. Display only: no book, card or total changes. A
+  martingale (no lattice; its exit closes the round's average) and a
+  record without a whole start keep the average-cost column.
+  *(owner, 2026-10-30: "right now it just shows that every single trade
+  is a loss")*
 - **U111** A carry bot's hedge may differ by coin — inverse, usdt or usdc,
   the common one above and the others named ("SOL usdt") — and the form
   shows each coin's three perpetuals side by side: what a short was paid

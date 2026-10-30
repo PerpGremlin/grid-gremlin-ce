@@ -221,7 +221,7 @@ def attribute(fills, botids, closers=None, entry_sides=None):
 
 
 def ledger(fills, botids, inverse_ids=(), entry_sides=None, closers=None,
-           grids=None, rounders=(), series=None):
+           grids=None, rounders=(), series=None, trips=None):
     """R1/R3: time-ordered fills -> books keyed by botid, or by
     ('unowned', symbol) — external activity is reported, never dropped.
     R6: rung and entry side ride along so the activity layer can count.
@@ -236,12 +236,18 @@ def ledger(fills, botids, inverse_ids=(), entry_sides=None, closers=None,
     re-anchored flat: identity, not inference. A split base order shares
     one link and anchors once.
     R24: with `series` (a dict) each bot's net after fees is recorded after
-    every fill, (time_ms, realized - fees) — the results page's curve."""
+    every fill, (time_ms, realized - fees) — the results page's curve.
+    U113: with `trips` (a dict) each bot's fills are recorded alongside,
+    (own entry, that entry's fee per unit) — the R15/R15b price an exit is
+    judged against and what its entry leg paid per unit (None where the
+    entry fill was not seen), (None, None) for a fill no entry is linked
+    to: the fills pane's per-trip column. Display only; no book reads it."""
     books, entry_sides = {}, entry_sides or {}
     closers, grids = closers or {}, grids or {}
     last_base = {}
     entry_px = {}        # R15: (bot, rung) -> the price that lot was bought at
-    seed_px = {}         # R15b: bot -> [seed link, notional, qty] of its seed's fills
+    seed_px = {}         # R15b: bot -> [seed link, notional, qty, fee] of its seed's fills
+    entry_fee = {}       # U113: (bot, rung) -> the fee per unit that lot's buy paid
     for key, f in attribute(fills, botids, closers, entry_sides):   # R16
         rung = rung_of(f['link_id'], key) if isinstance(key, str) else None
         if (key in rounders and rung == 0 and f['side'] == entry_sides.get(key)
@@ -253,14 +259,15 @@ def ledger(fills, botids, inverse_ids=(), entry_sides=None, closers=None,
                 book['anchored'] = True
                 book['_round_realized0'] = book['realized']
                 book['_round_depth'] = 0
-        own = None
+        own = own_fee = None
         if rung is not None and key in grids and f['side'] == \
                 entry_sides.get(key) and rung != SEED_RUNG:
             entry_px[(key, rung)] = f['price']        # R15: the lot's own price
+            entry_fee[(key, rung)] = f['fee'] / f['qty'] if f['qty'] else None
         if rung == SEED_RUNG and key in grids and f['side'] == entry_sides.get(key):
             seen = seed_px.get(key)                   # R15b: one seed, its fills averaged
             if seen is None or seen[0] != f['link_id']:
-                seen = seed_px[key] = [f['link_id'], 0.0, 0.0]
+                seen = seed_px[key] = [f['link_id'], 0.0, 0.0, 0.0]
                 # a seed runs from flat: no lot bought before it is held,
                 # so an earlier round's buy at a rung never prices a seed
                 # lot (the second audit, 2026-10-13)
@@ -268,6 +275,7 @@ def ledger(fills, botids, inverse_ids=(), entry_sides=None, closers=None,
                     del entry_px[k]
             seen[1] += f['price'] * f['qty']
             seen[2] += f['qty']
+            seen[3] += f['fee']
         if rung is not None and key in grids and f['side'] != \
                 entry_sides.get(key) and rung != SEED_RUNG:
             # R15: the lot this exit closes was bought at a PRICE the
@@ -279,11 +287,13 @@ def ledger(fills, botids, inverse_ids=(), entry_sides=None, closers=None,
             # lattice its older fills were never on)
             step = -1 if entry_sides.get(key) == 'buy' else 1
             own = entry_px.get((key, rung + step))
+            own_fee = entry_fee.get((key, rung + step))
             if own is None and seed_px.get(key) and seed_px[key][2] > 0:
                 # R15b: a seed runs only from flat (S3), so a lot whose buy
                 # was not seen after a seed the window holds is a seed lot:
                 # it cost the seed's price, not its rung's
                 own = seed_px[key][1] / seed_px[key][2]
+                own_fee = seed_px[key][3] / seed_px[key][2]
             if own is None:
                 from .ladder import lattice_price
                 own = lattice_price(grids[key], rung + step)
@@ -296,6 +306,8 @@ def ledger(fills, botids, inverse_ids=(), entry_sides=None, closers=None,
                    entry_side=entry_sides.get(key), link=f.get('link_id') or None)
         if series is not None and isinstance(key, str):              # R24
             series.setdefault(key, []).append((f['time_ms'], book['realized'] - book['fees']))
+        if trips is not None and isinstance(key, str):               # U113
+            trips.setdefault(key, []).append((own, own_fee if own is not None else None))
     return books
 
 
