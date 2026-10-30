@@ -85,6 +85,10 @@ def slide_offset(cfg, offset, ref):
     `trigger_rungs` whole rungs beyond one of the window's edges. Then the
     window moves by whole rungs so the ref lands at `ref_position` of the
     range, clamped to `max_rungs` from home either way (G19).
+    `ref_position` is measured from the ENTRY side's far edge: 1.0 puts the
+    whole ladder on the entry side — a long's buys below the ref, a short's
+    sells above it — so a short lands at `1 − ref_position` from the bottom
+    (the owner, 2026-10-30; the outside review's twelfth finding).
 
     Which edges count: by default only the FAVOURABLE one (long: above the
     top; short: below the bottom) — a long window never slides down, a short
@@ -96,10 +100,11 @@ def slide_offset(cfg, offset, ref):
     if not s:
         return offset
     n, k, m = cfg['rungs'], s['trigger_rungs'], s['max_rungs']
-    land = int(round(s['ref_position'] * (n - 1)))
+    long = cfg['side'] == 'long'
+    rp = s['ref_position'] if long else 1.0 - s['ref_position']
+    land = int(round(rp * (n - 1)))
     x = lattice_index(cfg, ref)
     both = s.get('direction', 'favourable') == 'both'
-    long = cfg['side'] == 'long'
     if (long or both) and x >= offset + (n - 1) + k:          # up
         return max(offset, min(int(math.floor(x)) - land, m))
     if (not long or both) and x <= offset - k:                # down

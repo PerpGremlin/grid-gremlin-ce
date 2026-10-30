@@ -14,16 +14,18 @@ PANEL = '/user.slice/user-1000.slice/user@1000.service/app.slice/gg-panel.servic
 
 
 def _box(procs, total_kb=2_000_000, avail_kb=1_000_000, memory=None):
-    """A fake /proc and cgroup tree: procs = [(pid, ppid, comm, cgroup, kthread)]."""
+    """A fake /proc and cgroup tree: procs = [(pid, ppid, comm, cgroup, kthread)],
+    a sixth field the command line when it is not `comm -c loop`."""
     d = Path(tempfile.mkdtemp())
     proc, cg = d / 'proc', d / 'cgroup'
-    for pid, ppid, comm, path, kthread in procs:
+    for pid, ppid, comm, path, kthread, *cmd in procs:
         p = proc / str(pid)
         p.mkdir(parents=True)
         flags = hy.PF_KTHREAD if kthread else 4194304
         p.joinpath('stat').write_text(f'{pid} ({comm}) S {ppid} {pid} {pid} 0 -1 {flags} 0 0')
         p.joinpath('cgroup').write_text(f'0::{path}\n')
-        p.joinpath('cmdline').write_bytes(b'' if kthread else comm.encode() + b'\0-c\0loop')
+        line = cmd[0] if cmd else comm + ' -c loop'
+        p.joinpath('cmdline').write_bytes(b'' if kthread else line.encode().replace(b' ', b'\0'))
     proc.joinpath('meminfo').write_text(f'MemTotal: {total_kb} kB\nMemFree: 1 kB\n'
                                         f'MemAvailable: {avail_kb} kB\n')
     for path, n in (memory or {}).items():
@@ -72,6 +74,61 @@ def spec_F35_run_by_hand_the_check_leaves_out_its_own_login_chain():
     proc, _ = _box(BOX + [(5000, 1, 'bash', SESSION, False), (5001, 5000, 'python3', SESSION, False)])
     pids = [x['pid'] for x in hy.strays(hy.read_procs(proc), me=5001)]
     assert 5000 not in pids and 5001 not in pids and 1200 in pids
+
+
+TUNNEL = '/user.slice/user-1000.slice/session-7.scope'     # a standing `ssh -N` login
+TYPED = '/user.slice/user-1000.slice/session-9.scope'      # an interactive ssh run
+
+
+def spec_F35_an_ssh_logins_daemon_processes_are_plumbing_not_strays():
+    # the owner, 2026-10-30: the workstation's panel tunnel showed as two
+    # strays every night — `sshd: user [priv]` and `sshd: user@notty`
+    tunnel = [(6000, 950, 'sshd', TUNNEL, False, 'sshd: user [priv]'),
+              (6001, 6000, 'sshd', TUNNEL, False, 'sshd: user@notty'),
+              (6010, 950, 'sshd-session', TUNNEL, False, 'sshd-session: user [priv]')]
+    proc, _ = _box(BOX + tunnel)
+    assert [x['pid'] for x in hy.strays(hy.read_procs(proc), me=7000)] == [1200, 1300]
+
+
+def spec_F35_a_job_left_in_an_ssh_session_still_counts():
+    # the same tunnel's session, with real jobs in it: a loop under its
+    # shell and a background python3 reparented to pid 1
+    procs = BOX + [(6000, 950, 'sshd', TUNNEL, False), (6001, 6000, 'sshd', TUNNEL, False),
+                   (6100, 6001, 'bash', TUNNEL, False, 'bash -c while true; do sleep 60; done'),
+                   (6200, 1, 'python3', TUNNEL, False, 'python3 study.py')]
+    proc, _ = _box(procs)
+    pids = [x['pid'] for x in hy.strays(hy.read_procs(proc), me=7000)]
+    assert pids == [1200, 1300, 6100, 6200]
+
+
+def spec_F35_the_runs_own_chain_is_never_a_stray():
+    # by hand through its unit: the login's shell and the systemctl that
+    # started the service are the run's own; a job the same shell left is not
+    typed = [(8000, 950, 'sshd', TYPED, False), (8001, 8000, 'bash', TYPED, False),
+             (8002, 8001, 'systemctl', TYPED, False,
+              'systemctl --user start grid-gremlin3-hygiene.service'),
+             (8003, 8001, 'python3', TYPED, False, 'python3 left.py')]
+    proc, _ = _box(BOX + typed)
+    pids = [x['pid'] for x in hy.strays(hy.read_procs(proc), me=7000)]
+    assert pids == [1200, 1300, 8003]
+    # a systemctl that starts something else is no part of the run
+    other = [t if t[0] != 8002 else t[:5] + ('systemctl --user start other.service',)
+             for t in typed]
+    proc, _ = _box(BOX + other)
+    assert [x['pid'] for x in hy.strays(hy.read_procs(proc), me=7000)] == [1200, 1300, 8001, 8002, 8003]
+
+
+def spec_F35_sabotage_were_the_whole_session_plumbing_its_jobs_would_pass_unseen():
+    procs = BOX + [(6000, 950, 'sshd', TUNNEL, False),
+                   (6200, 1, 'python3', TUNNEL, False, 'python3 study.py')]
+    got = hy.read_procs(_box(procs)[0])
+    real = hy.is_plumbing
+    try:
+        hy.is_plumbing = lambda p: p['cgroup'].endswith('.scope')     # widened to the scope
+        assert [x['pid'] for x in hy.strays(got, me=7000)] == []
+    finally:
+        hy.is_plumbing = real
+    assert [x['pid'] for x in hy.strays(got, me=7000)] == [1200, 1300, 6200]
 
 
 def spec_F36_each_service_memory_is_read_from_its_cgroup():

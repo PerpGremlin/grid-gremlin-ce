@@ -103,6 +103,33 @@ def spec_G18_ref_position_one_puts_the_whole_ladder_below_the_ref():
     assert all(o['side'] == 'Buy' for o in plan_grid(cfg, ADAPTER, 75000.0, offset=new))
 
 
+def spec_G18_ref_position_one_puts_a_shorts_whole_ladder_above_the_ref():
+    # the outside review's twelfth finding (owner, 2026-10-30): 1.0 is the
+    # ENTRY side for a short too — its sells above the ref. Measured from the
+    # bottom, a short 50k..70k falling to 45k slid to 25k..45k and planned
+    # nothing but exits it did not hold.
+    cfg = _cfg(side='short', slide=dict(SLIDE, ref_position=1.0))
+    new = slide_offset(cfg, 0, 45000.0)
+    rungs = grid_rungs(cfg, ADAPTER, new)
+    assert rungs[0] >= 45000.0 and rungs[0] - 45000.0 < 1000.0
+    orders = plan_grid(cfg, ADAPTER, 45000.0, offset=new)
+    assert orders and all(o['side'] == 'Sell' for o in orders)
+    # 0.0 is the mirror: the whole ladder below, the exit side
+    low = _cfg(side='short', slide=dict(SLIDE, ref_position=0.0))
+    assert grid_rungs(low, ADAPTER, slide_offset(low, 0, 45000.0))[-1] <= 45000.0
+
+
+def spec_G18_the_middle_is_the_middle_for_either_side():
+    # the 0.5 default lands the ref on the same index whichever side
+    for n in (12, 21):
+        long_ = _cfg(rungs=n)
+        short = _cfg(rungs=n, side='short')
+        up = slide_offset(long_, 0, 80000.0)
+        down = slide_offset(short, 0, 40000.0)
+        assert (math.floor(lattice_index(long_, 80000.0)) - up
+                == math.ceil(lattice_index(short, 40000.0)) - down), n
+
+
 def spec_G18_without_slide_the_offset_is_frozen():
     cfg = _cfg(slide=None)
     assert 'slide' not in cfg or not cfg['slide']

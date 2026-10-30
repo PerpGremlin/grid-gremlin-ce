@@ -430,7 +430,7 @@ def validate_grid(row, where='row'):
         _reject_unknown(slide, SLIDE_KEYS, sw)
         k = _num(slide, 'trigger_rungs', sw, least=1, required=True, integer=True)
         m = _num(slide, 'max_rungs', sw, least=1, required=True, integer=True)
-        rp = _num(slide, 'ref_position', sw, least=0.0, most=1.0)   # 1.0 = all entries
+        rp = _num(slide, 'ref_position', sw, least=0.0, most=1.0)   # 1.0 = all entries, either side (G18)
         c = _num(slide, 'confirm_seconds', sw, least=0.0, required=True)
         d = _enum(slide, 'direction', sw, SLIDE_DIRECTIONS, default='favourable')
         if d == 'both' and cfg.get('max_position_base') is None:

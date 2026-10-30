@@ -208,7 +208,7 @@ eventually pin (T1).
 - **G18** The slide is a ratchet: the window moves only when the split ref sits
   `trigger_rungs` whole rungs beyond its far edge in the FAVOURABLE direction (long:
   above the top; short: below the bottom), then by whole rungs so the ref lands at
-  `ref_position` of the range (0.5 default; 1.0 = the whole ladder on the entry side).
+  `ref_position` of the range (0.5 default; 1.0 = the whole ladder on the entry side, a short's sells above the ref as a long's buys below it).
   By default it never retreats — a long window never slides down, a short one never
   up; the adverse side belongs to the stop (D1) — and G24 is the one opt-in exception. No band, no SMA, no snap home: the trigger
   count is the only hysteresis, and a ratchet cannot flap. Pinned by sabotage: with
@@ -1259,7 +1259,11 @@ eventually pin (T1).
   innermost unit a `*.service`, or `init.scope` (pid 1 and each user's own
   service manager), is known; a session scope, any other scope, or no unit
   is a stray, named with its pid, its unit and its command line. Kernel
-  threads are not listed, nor the check and the chain that started it. It
+  threads are not listed, nor the check and its ancestors, nor a
+  `systemctl` that started its unit with that systemctl's ancestors; an ssh
+  login's own daemon processes (`sshd`, `sshd-session`) are session
+  plumbing, matched by name, never by their scope — a job left in the same
+  session still counts (the owner, 2026-10-30). It
   reports and never kills: nothing in it can signal a process. Where
   `/proc` hides other users' processes the report says it sees its own.
 - **F36** A leak is steady growth (D155). Each service's `memory.current`

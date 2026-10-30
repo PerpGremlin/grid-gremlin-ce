@@ -88,7 +88,8 @@ GRID = {
          'started; required when following is on'),
         ('slide_ref', 'slide.ref_position', 'num',
          'Where the price lands in the moved range',
-         '0.5 = the middle; 1 = the whole ladder on the buying side'),
+         '0.5 = the middle; 1 = the whole ladder on the entry side '
+         '(a long buys below the price, a short sells above it)'),
     ],
     'Stop loss': [
         ('stop_on', 'stop', 'block', 'Use a stop loss',

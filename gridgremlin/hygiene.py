@@ -64,6 +64,24 @@ def is_known(unit):
     return bool(unit) and (unit.endswith('.service') or unit == 'init.scope')
 
 
+# An ssh login's own processes (the daemon's per-session child: `sshd`, or
+# `sshd-session` from OpenSSH 9.8) are plumbing, not a job someone left: a
+# standing `ssh -N` tunnel is one every night. Matched by name alone, never
+# by the scope they share with the session's real jobs.
+SSH_PLUMBING = ('sshd', 'sshd-session')
+
+
+def is_plumbing(p):
+    """A session's ssh daemon process — not a stray (the owner, 2026-10-30)."""
+    return p['comm'] in SSH_PLUMBING
+
+
+def _starts_the_check(p):
+    """A `systemctl … start …hygiene…` typed in a login: it started this
+    run through its unit, so it and its chain are the run's own."""
+    return p['comm'] == 'systemctl' and 'hygiene' in p['cmd']
+
+
 def read_procs(proc='/proc'):
     """Every process the reader may see: pid, parent, name, command line,
     cgroup path, whether it is a kernel thread. A process that ended
@@ -96,17 +114,22 @@ def read_procs(proc='/proc'):
 
 def strays(procs, me=None):
     """F35: every process outside a known service. Kernel threads are not
-    processes of ours; the check itself, and the chain that started it, are
-    left out (run by hand, that chain is the owner's own login)."""
+    processes of ours; the check itself and its ancestors are left out (run
+    by hand, that chain is the owner's own login), and so is a `systemctl`
+    that started its unit, with that systemctl's own ancestors; an ssh
+    login's daemon processes are plumbing (`is_plumbing`). Anything else in
+    a session — a loop, a job sent to the background — is a stray."""
     me = os.getpid() if me is None else me
     parent = {p['pid']: p['ppid'] for p in procs}
-    mine, at = set(), me
-    while at and at not in mine:
-        mine.add(at)
-        at = parent.get(at)
+    mine = set()
+    for start in [me] + [p['pid'] for p in procs if _starts_the_check(p)]:
+        at = start
+        while at and at not in mine:
+            mine.add(at)
+            at = parent.get(at)
     out = []
     for p in procs:
-        if p['kthread'] or p['pid'] in mine:
+        if p['kthread'] or p['pid'] in mine or is_plumbing(p):
             continue
         unit, _ = unit_of(p['cgroup'])
         if not is_known(unit):
