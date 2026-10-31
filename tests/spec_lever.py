@@ -63,7 +63,8 @@ def spec_U99_the_panel_reviews_asks_for_the_name_and_writes_onto_what_it_read():
         seen = review.split('name="seen" value="')[1].split('"')[0].replace('&quot;', '"')
         wrong = _call(base, '/lever', dict(form, seen=seen, confirm='pfoother'))
         assert 'not applied' in wrong and json.loads(f.read_text()) == fleet
-        ok = _call(base, '/lever', dict(form, seen=seen, confirm='PFOcarry'))
+        assert '<code>carry portfolio</code>' in review                 # D157: its plain name
+        ok = _call(base, '/lever', dict(form, seen=seen, confirm='Carry  portfolio'))
         assert 'pfocarry: written' in ok
         row = json.loads(f.read_text())['bots'][1]
         assert row['margin']['spot_leverage'] == 3 and row['perp_leverage'] == {'BTC': 4, 'SOL': 2}
@@ -75,6 +76,6 @@ def spec_U99_the_panel_reviews_asks_for_the_name_and_writes_onto_what_it_read():
         assert 'from 1 to 10' in _call(base, '/lever', dict(form, spot='12'))
         assert 'no portfolio row' in _call(base, '/lever', dict(form, orig=fleet['bots'][0].get('symbol', 'x')))
         f.write_text(json.dumps(dict(json.loads(f.read_text()), allow_mainnet=True)))
-        assert 'by hand (D64)' in _call(base, '/lever', form)
+        assert 'in the fleet file by hand' in _call(base, '/lever', form)
     finally:
         close()

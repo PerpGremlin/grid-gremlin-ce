@@ -275,7 +275,7 @@ def spec_K9_the_card_says_its_markets_regime_red_when_thin():
     c['market'] = {'spoADAUSDTl': {'line': 'ranging · ADX 18 · ATR 1.2%/4h',
                                    'thin': True, 'regime': 'ranging', 'age_s': 8000}}
     page = _everything(c)
-    assert ('<div class="neg">market ranging · ADX 18 · ATR 1.2%/4h · THIN for this fleet'
+    assert ('<div class="neg">market ranging · ADX 18 · ATR 1.2%/4h · order book thin for this size'
             ' · read 2 h ago') in page
     c['market']['spoADAUSDTl'].update(thin=False, age_s=30)
     assert '<div class="dim">market ranging · ADX 18 · ATR 1.2%/4h</div>' in _everything(c)

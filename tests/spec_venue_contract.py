@@ -559,3 +559,141 @@ def spec_D63_hl_funding_takes_its_side_from_szi_and_pages_by_time():
     assert len(got) == 501                     # 500 + the one new ETH row
     last = got[-1]
     assert (last['symbol'], last['side'], last['amount']) == ('ETH', 'sell', 0.02)
+
+
+# --- R1 on HL: a read past 2000 fills is paged, or refused (2026-10-31) -------
+# HL answers userFillsByTime with at most 2000 fills for the whole account,
+# OLDEST first, and no cursor. The engine's thirty-day read on the testnet
+# account stopped at 2026-10-29 18:34: every newer fill was missing, G23
+# found no cover and the plan fell back to the block. The cap warning
+# counted the coin's own fills, after the per-coin filter, and never fired.
+
+class _HLCapped:
+    """userFillsByTime as the venue answers it: the oldest 2000 in the
+    window, every coin of the account."""
+    CAP = 2000
+
+    def __init__(self, rows):
+        self.rows, self.calls = rows, 0
+
+    def __call__(self, start_ms, end_ms=None):
+        self.calls += 1
+        got = [r for r in self.rows if r['time'] >= start_ms
+               and (end_ms is None or r['time'] <= end_ms)]
+        return sorted(got, key=lambda r: r['time'])[:self.CAP]
+
+
+def _hl_row(i, t, coin):
+    return {'coin': coin, 'tid': i, 'time': t, 'side': 'B', 'px': '1',
+            'sz': '1', 'fee': '0', 'cloid': None}
+
+
+def _hl_client(rows):
+    from gridgremlin.exchange.hyperliquid.venue import HLVenueClient
+    c = HLVenueClient.__new__(HLVenueClient)
+    c.user_fills_by_time = _HLCapped(rows)
+    c._user = lambda: '0x' + 'ab' * 20
+    return c
+
+
+def spec_R1_an_hl_read_past_the_cap_is_paged_to_the_newest_fill():
+    """2,600 account fills over thirty days, 40 of them the bot's coin, the
+    newest of those after the oldest 2,000. SABOTAGE: one unpaged call (the
+    old read) and the newest fills are missing."""
+    now = 1_800_000_000_000
+    start = now - 30 * 86_400_000
+    rows = [_hl_row(i, start + 1000 * (i + 1),
+                    'SOL' if i % 65 == 0 else 'BTC') for i in range(2600)]
+    c = _hl_client(rows)
+    got = c.fills_history('linear', 'SOL', start, now)
+    want = {r['tid'] for r in rows if r['coin'] == 'SOL'}
+    assert {int(f['exec_id']) for f in got} == want, len(got)
+    assert c.fills_answered == 2600 and c.user_fills_by_time.calls > 1
+
+
+def spec_R1_an_hl_answer_that_cannot_be_paged_is_refused():
+    """2000 fills in one millisecond: the cursor cannot move past them, so
+    the read is refused, never read short."""
+    from gridgremlin.exchange.errors import VenueError
+    now = 1_800_000_000_000
+    rows = [_hl_row(i, now - 500, 'SOL') for i in range(2000)]
+    c = _hl_client(rows)
+    try:
+        c.fills_history('linear', 'SOL', now - 86_400_000, now)
+    except VenueError as e:
+        assert e.kind == 'partial_read' and 'refused' in str(e)
+    else:
+        raise AssertionError('a read that cannot be paged was read short')
+
+
+def spec_R1_the_cap_warning_counts_the_accounts_fills():
+    """The coin's own fills are few; the account's pass the cap. SABOTAGE:
+    count the list the bot got (the coin's) and nothing is said."""
+    from gridgremlin.adapters import LinearAdapter
+    from gridgremlin.bot import Bot
+    from gridgremlin.config import validate_config
+    from gridgremlin.events import Notifier
+    now = 1_800_000_000_000
+    start = now - 30 * 86_400_000
+    rows = [_hl_row(i, start + 1000 * (i + 1),
+                    'SOL' if i % 500 == 0 else 'BTC') for i in range(2400)]
+    c = _hl_client(rows)
+    cfg = validate_config({'market_type': 'linear', 'symbol': 'SOL',
+                           'side': 'long', 'capital': 1000.0, 'leverage': 10,
+                           'upper': 200.0, 'lower': 100.0, 'rungs': 11,
+                           'spacing_type': 'fixed', 'venue': 'hyperliquid'})
+    adapter = LinearAdapter({'symbol': 'SOL', 'qty_step': 0.01,
+                             'price_tick': 0.01, 'min_qty': 0.01,
+                             'min_notional': 10.0, 'settle_coin': 'USDC'})
+    lines = []
+    bot = Bot(cfg, adapter, c, Notifier(sink=lines.append), gen_seed=1,
+              clock=lambda: now / 1000.0)
+    got = bot._own_fills_all(30)
+    assert len(got) == 5
+    said = [ln for ln in lines if '2000-fill cap' in ln]
+    assert len(said) == 1 and 'answered 2400' in said[0], lines
+
+
+# --- G23: one order's status, read-only, by its link (2026-10-31) -------------
+
+def spec_G23_an_orders_status_is_read_by_its_link_and_mapped():
+    """Bybit: the live book's recent orders, then the history; HL: the
+    cloid's orderStatus. Something executed -> 'filled' (await its fill);
+    ended with nothing -> 'cancelled'; unknown -> None. SABOTAGE: read
+    only the realtime list and an order already in the history is
+    unknown; read a part-filled cancel as 'cancelled' and its fill is
+    never awaited."""
+    from gridgremlin.exchange.bybit.client import Client as BybitClient
+    from gridgremlin.exchange.hyperliquid.venue import HLVenueClient
+    from gridgremlin.exchange.hyperliquid.signing import link_to_cloid
+    c = BybitClient.__new__(BybitClient)
+    asked = []
+
+    def get(path, params=None, signed=False):
+        asked.append((path, params['orderLinkId']))
+        if path.endswith('realtime'):
+            return {'list': []}
+        return {'list': [{'orderStatus': 'Cancelled', 'cumExecQty': '0'}]}
+    c.get = get
+    assert c.order_status('linear', 'BTCUSDT', 'x-10-a') == 'cancelled'
+    assert [p for p, _ in asked] == ['/v5/order/realtime', '/v5/order/history']
+    from gridgremlin.exchange.bybit.truth import order_state
+    assert order_state({'orderStatus': 'Cancelled', 'cumExecQty': '0.002'}) == 'filled'
+    assert order_state({'orderStatus': 'Rejected', 'cumExecQty': '0'}) == 'cancelled'
+    assert order_state({'orderStatus': 'Filled', 'cumExecQty': '0.007'}) == 'filled'
+    h = HLVenueClient.__new__(HLVenueClient)
+    h._user = lambda: '0x' + 'ab' * 20
+    sent = []
+
+    def transport(body):
+        sent.append(body)
+        return {'status': 'order', 'order': {
+            'status': 'canceled', 'order': {'origSz': '0.5', 'sz': '0.5'}}}
+    h._transport = transport
+    assert h.order_status('linear', 'SOL', 'linSOLl-14-d6hj') == 'cancelled'
+    assert sent[0] == {'type': 'orderStatus', 'user': '0x' + 'ab' * 20,
+                       'oid': link_to_cloid('linSOLl-14-d6hj')}
+    from gridgremlin.exchange.hyperliquid.truth import order_state as hl_state
+    assert hl_state({'status': 'order', 'order': {
+        'status': 'canceled', 'order': {'origSz': '0.5', 'sz': '0.2'}}}) == 'filled'
+    assert hl_state({'status': 'unknownOid'}) is None

@@ -220,5 +220,5 @@ form.addEventListener('change',redraw);redraw();})();</script>"""
 CHART_BOX = ('<div id="chart"><p class="dim">the price chart draws here '
              'once a coin is typed.</p></div><p class="dim">dragging an '
              'edge only fills in its box below. Nothing changes on a '
-             'running bot until you apply the summary and the fleet is '
-             'restarted.</p>')
+             'running bot until you apply the summary; a changed range '
+             'then waits for its account\'s next restart.</p>')   # D157: as F12 says

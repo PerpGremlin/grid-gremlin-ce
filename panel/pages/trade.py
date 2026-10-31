@@ -28,7 +28,12 @@ class TradePages:
             except (TradeError, OSError, ValueError, KeyError):
                 trades = []
             listed.append((fi, lb, [(_botid(t), t) for t in trades]))
-        return trade_form(self.labels, msg, typed) + open_trades_html(listed)
+        # D157: the second typing is asked on Mainnet only, so its box shows
+        # only when an account here may reach Mainnet (the gate is unchanged)
+        real = any(self._mainnet(f, v) for f in self.fleets for v in ('bybit', 'hyperliquid'))
+        each = {fi for fi, f in enumerate(self.fleets)
+                if any(self._mainnet(f, v) for v in ('bybit', 'hyperliquid'))}
+        return trade_form(self.labels, msg, typed, mainnet=real) + open_trades_html(listed, each)
 
     def _listed(self, fi, symbol):
         """U83: a trade names a market the venue lists — letters and digits,
@@ -44,16 +49,32 @@ class TradePages:
             raise TradeError(not_listed(symbol, 'the exchange lists no such market '
                                                 'for this account — pick one from the list'))
 
+    def _trade_typed(self, fi, path, typed):
+        """D157: the trade a clear box names — its code, or off Mainnet its
+        plain name ("SOLUSDT short trade"); what was typed when neither."""
+        from gridgremlin.trades import TradeError, _botid, load_trades
+        from ..html_bits import confirmed
+        real = any(self._mainnet(self.fleets[min(fi, len(self.fleets) - 1)], v)
+                   for v in ('bybit', 'hyperliquid'))
+        try:
+            trades = load_trades(path)[0]
+        except (TradeError, OSError, ValueError):
+            trades = []
+        return next((_botid(t) for t in trades if confirmed(typed, _botid(t), t, mainnet=real)),
+                    (typed or '').strip())
+
     def _trade_post(self, form):
         """L6: open a trade through the bot validator, or clear an ended one."""
         from gridgremlin.config import ConfigError
         from gridgremlin.trade import build_row
         from gridgremlin.trades import TradeError, add_trade, clear_trade
         fi = int(_f(form.get('fleet')) or 0)
+        if form.get('action') == 'change':                      # D157: back to the form, as typed
+            return self._page(self._trade_html('', form))
         try:
             f, _fleet, rows, path = self._trades_of(fi)
             if form.get('action') == 'clear':
-                botid = form.get('confirm', '').strip()
+                botid = self._trade_typed(fi, path, form.get('confirm', ''))   # D157
                 if botid and self._live_trade(fi, botid):       # L6b: clear is for a trade that has ended
                     raise TradeError(f'{botid}: still running — close trade first (on its card); '
                                      'clear is for a trade that has ended')
@@ -77,11 +98,26 @@ class TradePages:
                 again = retype_refusal([('capital', None, cap)], form)
                 if again:
                     raise TradeError(again)
+            if form.get('go') != '1':
+                # D157: reviewed in one line before it opens, as a new bot is;
+                # the trade validator and the one-per-side rule refuse here first
+                from gridgremlin.trades import _botid, load_trades, validate_trade
+                from gridgremlin.apply import make_botid
+                from panel.trade_page import trade_review
+                cfg = validate_trade(row)
+                botid = _botid(cfg)
+                if botid in {make_botid(c['market_type'], c['symbol'], c['side'])
+                             for c in rows if c.get('strategy') != 'portfolio'} | \
+                        {_botid(t) for t in load_trades(path)[0]}:
+                    raise TradeError(f'{botid}: this account already has a bot or a trade on '
+                                     f'{cfg["symbol"]} {cfg["side"]} — one position per side of a '
+                                     'market per account')
+                return self._page(trade_review(cfg, fi, self.labels[min(fi, len(self.labels) - 1)], form))
             botid = add_trade(path, rows, row)
         except (ConfigError, TradeError, ValueError, OSError) as e:
             return self._page(self._trade_html(refusal_box('trade refused', e), form))
         type(self)._cache.pop(self.fleets[min(fi, len(self.fleets) - 1)], None)   # the next readout shows it
-        return self._page(f'<h1>{html.escape(botid)}: queued</h1><p class="say">The fleet '
+        return self._page(f'<h1>{html.escape(botid)}: queued</h1><p class="say">The account '
                           f'{html.escape(self.labels[min(fi, len(self.labels) - 1)])} opens it within a '
                           'cycle; its card appears with the next readout.</p>'
                           '<p><a href="/">back to your bots</a> <a href="/trade">trades</a></p>')

@@ -15,6 +15,11 @@ from .strip_view import exchange_free, exchange_leverage, exchange_mmr, exchange
 from .table import section
 
 
+ACCOUNT_PNL_NOTE = ('this account\'s bots after fees, each counted as its card says: most '
+                    'since it was last flat, so not the same window as the equity line below, '
+                    'which runs from the first snapshot with top-ups in')
+
+
 def cards_section(idx, label, contract, view='all', scripted=True):
     age = max(0, int(time.time() - contract['generated_ms'] / 1000))
     belief = ((contract.get('watchdog') or {}).get('belief')
@@ -50,16 +55,15 @@ def cards_section(idx, label, contract, view='all', scripted=True):
             + ('<span class="tier neg">stopped</span> ' if contract.get('stopped') else '')   # U104
             + f'<span class="meta">{sweep_note(contract)} <span class="dim">(read {age}s ago; '
             f'refreshes every {REFRESH_S}s)</span></span></h1>'
-            + (f'<div class="refusal"><b>readout unavailable</b> — the engine\'s '
-               f'readout of this fleet failed; the panel tries again on a later refresh.'
+            + (f'<div class="refusal"><b>couldn\'t load this account</b> — reading '
+               f'it failed; the panel tries again on a later refresh.'
                f'<br>{html.escape(contract["unavailable"])}</div>'
                if contract.get('unavailable') else '') +
-            f'<div class="pnl {_num_cls(total)}"><span class="dim">this '
-            'exchange</span> <span class="big '
+            # D157: the headline in the platforms' words; the caveat (U98) on hover
+            f'<div class="pnl {_num_cls(total)}"><span class="dim st" title="{ACCOUNT_PNL_NOTE}">'
+            'Total P&amp;L</span> <span class="big '
             f'{_num_cls(total)}">{total:+,.2f}</span> {venue_money(contract)} '
-            '<span class="dim">after fees, each bot counted as its card says — most since it was '
-            'last flat, so not the same window as the equity line below, which runs from the '
-            'first snapshot with top-ups in</span>'                                  # U98
+            '<span class="dim">after fees</span>'
             f'<div class="parts">'
             f'{pnl_parts(net, sum(opened) if opened else None, funding)}'
             + (f' · portfolio rows <b class="{_num_cls(pfo)}">{pfo:+,.2f}</b>' if pfo else '')
@@ -73,7 +77,7 @@ def cards_section(idx, label, contract, view='all', scripted=True):
             f"{len(contract['bots'])} bots</summary>"
             + (f'<div class="cards">{cards}</div>' if contract['bots'] else
                '<p class="dim">no bots in this fleet — <a href="/setup">set one up</a>; '
-               'it starts with the fleet (D149)</p>')
+               'it starts with its account\'s engine</p>')   # D149
             + '</details></section>')
 
 

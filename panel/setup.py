@@ -38,14 +38,15 @@ COMMON = [
      'Leave blank on spot'),
     ('risk_profile', 'risk_profile', 'text', 'Risk profile',
      'optional: a named set of limits from this fleet\'s risk_profiles; '
-     'anything you fill in here wins over it (D57)'),
+     'anything you fill in here wins over it'),               # D57
 ]
 
 GRID = {
     'The basics': COMMON + [
         ('market_type', 'market_type', 'choice:linear|inverse|spot',
          'Market type',
-         'linear = USDT/USDC futures; inverse = coin-margined futures; spot'),
+         'a perpetual settled in USDT or USDC, one settled in the coin '
+         'itself (inverse), or spot'),
     ],
     'The range': [
         ('lower', 'lower', 'num', 'Lowest price', 'the bottom of the grid'),
@@ -56,7 +57,8 @@ GRID = {
          'give this OR the number of grids, not both'),
         ('spacing_type', 'spacing_type', 'choice:percent|fixed',
          'How the grids are spaced',
-         'percent = each gap the same % of price; fixed = the same amount'),
+         'geometric: each gap the same % of the price; arithmetic: each '
+         'gap the same amount'),
     ],
     'Order sizes': [
         ('rung_sizing', 'rung_sizing', 'choice:equal|weighted',
@@ -77,8 +79,8 @@ GRID = {
          'moves after it'),
         ('slide_direction', 'slide.direction', 'choice:favourable|both',
          'Which way it may follow',
-         'favourable = only the profitable way (a long follows up); both '
-         '= the losing way too, which buys more than the investment'),
+         'only the profitable way (a long follows up), or both ways: the '
+         'losing way too, which buys more than the investment'),
         ('slide_trigger', 'slide.trigger_rungs', 'int',
          'Grids outside before it moves', 'how far out the price must be'),
         ('slide_confirm', 'slide.confirm_seconds', 'num',
@@ -123,9 +125,9 @@ GRID = {
          'exchange, so it works even if this program is not running'),
         ('stop_action', 'stop.action', 'choice:stop_bot|leave_position',
          'When it fires',
-         'stop_bot = close the position and stop for good. leave_position '
-         '= cancel the orders and stop, but leave the position open for '
-         'you to manage yourself, unprotected'),
+         'close the position and stop: for good. Leave the position open: '
+         'cancel the orders and stop, the position yours to manage '
+         'yourself, unprotected'),
     ],
     'The most it may lose': [
         ('max_loss', 'max_loss', 'num', 'Most this bot may lose',
@@ -144,8 +146,8 @@ GRID = {
          'Coins never to sell', 'a core holding no exit and no stop touches'),
         ('exit_floor', 'exit_floor', 'choice:rung|basis',
          'How each piece is sold',
-         'rung = one grid above where it was bought; basis = never below '
-         'the average cost'),
+         'each piece sells one grid above where it was bought, or never '
+         'below the average cost'),
         ('split_hysteresis_rungs', 'split_hysteresis_rungs', 'num',
          'Jitter guard (0 to 0.5 of a gap)',
          'holds orders still when the price wobbles on a grid'),
@@ -169,7 +171,7 @@ GRID = {
 MARTINGALE = {
     'The basics': COMMON + [
         ('market_type', 'market_type', 'choice:linear|spot', 'Market type',
-         'futures, or spot (D59: Bybit, long); the exits rest as sells'),
+         'a perpetual, or spot (on Bybit, long only); the exits rest as sells'),
         ('spot_borrow', 'spot_borrow', 'switch', 'Margin spot (borrow)',
          'spot only: buys on borrowed money up to the spot leverage'),
         ('spot_leverage', 'spot_leverage', 'num', 'Spot leverage',
@@ -184,15 +186,15 @@ MARTINGALE = {
     ],
     'The orders': [
         ('size_in', 'size_in', 'choice:quote|coin', 'Order sizes in',
-         'quote = the money each order spends (the default); coin = the coins '
-         'each order buys (D89)'),
+         'money: what each order spends (the default); coins: the coins '
+         'each order buys'),
         ('base_order_size', 'base_order_size', 'num', 'First order size',
          'in the quote currency, leverage included — or in coins when sizes '
          'are in coin'),
         ('start_order_type', 'start_order_type', 'choice:market|maker',
          'How the first order goes in',
-         'market = at once; maker = waits at the best price to pay the '
-         'lower fee'),
+         'a market order goes in at once; a post-only limit waits at the '
+         'best price to pay the lower fee'),
         ('start_order_requote_seconds', 'start_order_requote_seconds',
          'num', 'Re-price a waiting first order after (s)',
          'maker only. Default 40'),
@@ -248,7 +250,8 @@ MARTINGALE = {
     ],
     'After a round': [
         ('repeat', 'repeat', 'switch', 'Start again after taking profit',
-         'off = one round, then the bot stops'),
+         'off = one round, then the bot stops (a blank form\'s default); '
+         'the quick setup\'s buy-the-dips and sell-the-rallies turn it on'),
         ('repeat_cooldown_seconds', 'repeat_cooldown_seconds', 'num',
          'Wait before the next round (s)', 'only with repeat on'),
         ('reinvest', 'reinvest', 'switch', 'Grow order sizes with profit',
@@ -279,11 +282,11 @@ MARTINGALE = {
          'round\'s first order. It must be further than the last add-on'),
         ('stop_action', 'stop.action',
          'choice:stop_bot|end_round|leave_position', 'When it fires',
-         'stop_bot = close and stop for good. end_round = close this '
-         'round only and start again (needs the percent form above, and '
-         'start-again switched on). leave_position = cancel the orders '
-         'and stop, but leave the position open for you to manage '
-         'yourself, unprotected'),
+         'close the position and stop: for good. Close this round: only '
+         'this round, then start again (needs the percent form above, and '
+         'start-again switched on). Leave the position open: cancel the '
+         'orders and stop, the position yours to manage yourself, '
+         'unprotected'),
     ],
 }
 
@@ -294,13 +297,21 @@ OPEN_GROUPS = ('The basics', 'The range', 'The orders', 'Taking profit')
 # are mandatory, and everything else is an advanced setting in a dropdown
 # box"): what a bot needs, first and in this order; the rest folds into one
 # Advanced box whose blanks take the engine's defaults
+# D157: in the platforms' order — coin, direction, range, levels, leverage,
+# money (Bybit's futures grid and martingale, Binance's futures grid)
 ESSENTIAL = {
-    'grid': ('symbol', 'side', 'market_type', 'capital', 'leverage',
-             'lower', 'upper', 'rungs'),
-    'martingale': ('symbol', 'side', 'market_type', 'capital', 'leverage',
-                   'base_order_size', 'safety_order_size', 'max_averaging_orders',
-                   'deviation_pct', 'take_profit_avg_pct'),
+    'grid': ('symbol', 'market_type', 'side', 'lower', 'upper', 'rungs',
+             'leverage', 'capital'),
+    'martingale': ('symbol', 'market_type', 'side', 'deviation_pct',
+                   'max_averaging_orders', 'take_profit_avg_pct', 'leverage',
+                   'capital', 'base_order_size', 'safety_order_size'),
 }
+# D157 (the audit's twelfth): what only an expert reaches for folds a second
+# time, below Advanced — the alarm's position limit among them
+EXPERT = ('risk_profile', 'split_hysteresis_rungs', 'exit_floor',
+          'place_within_pct', 'slide_ref', 'max_loss_since', 'max_rounds_since',
+          'holding_since', 'start_order_requote_seconds',
+          'start_order_expire_seconds')
 # what the engine refuses a row without — each a set of alternatives
 REQUIRED = {
     'grid': (('symbol',), ('side',), ('capital',), ('lower',), ('upper',),
@@ -351,6 +362,15 @@ DCA_SHAPE = {    # first gap, gap multiplier, add-on orders, take profit
     'bold': (0.008, 1.5, 4, 0.010),
 }
 DCA_SIZE_MULTIPLIER = 1.5
+
+
+def caution_words(c):
+    """D157: "How careful?" says in each option the leverage it picks, read
+    from the tables above so the words cannot drift from the numbers; the
+    value posted stays the bare word."""
+    return (f'{c} — {GRID_LEVERAGE[c]}x leverage on a grid '
+            f'(±{GRID_HALF_WIDTH[c]:.0%}, {GRID_RUNGS[c]} grids), '
+            f'{DCA_LEVERAGE[c]}x on buy-the-dips')
 
 
 def fields(strategy):
@@ -444,6 +464,30 @@ var form=ru.form;if(form)form.addEventListener('submit',function(){
  if(gp.classList.contains('derived'))gp.disabled=true;
  if(ru.classList.contains('derived'))ru.disabled=true;});
 show();})();</script>"""
+
+
+# D157: what the setup means, under the inputs, as Bybit and Pionex show it.
+# The SERVER answers (panel/consequence.py, the engine's own functions and
+# its own refusal); the page's script only sends the form as it stands and
+# swaps the answer in, the newest winning. A derived grid count or gap is
+# left out, as on submit (U38). Without script the review page says it all.
+NUMBERS_BOX = ('<div id="numbers"><p class="dim">the numbers this setup '
+               'means (profit per grid level, size per order, the least '
+               'money that works, the estimated liquidation price) show here '
+               'as you type, and on the review page.</p></div>')
+
+NUMBERS_JS = """<script>(function(){
+var box=document.getElementById('numbers');if(!box)return;
+var form=box.closest('form');if(!form)return;
+var asked=0,wait=null;
+function ask(){var mine=++asked,data=new URLSearchParams(new FormData(form));
+ form.querySelectorAll('.derived').forEach(function(e){data.delete(e.name);});
+ fetch('/numbers',{method:'POST',credentials:'same-origin',body:data})
+ .then(function(r){return r.text();})
+ .then(function(t){if(mine===asked)box.innerHTML=t;});}
+function soon(){clearTimeout(wait);wait=setTimeout(ask,600);}
+form.addEventListener('input',soon);form.addEventListener('change',soon);
+ask();})();</script>"""
 
 
 def coin_list(symbols):
@@ -681,7 +725,7 @@ def reversal_leg(form, venue, mark, caution, half, symbol, size, unit, stop):
         raise ValueError('a reversal grid is two bots on one coin, a long '
                          'below the mid and a short above — Hyperliquid '
                          'holds one position per coin, so it cannot host '
-                         'the pair (D54)')
+                         'the pair')                     # D54
     leg = form.get('leg') or 'long'
     if leg not in ('long', 'short'):
         raise ValueError(f'unknown leg "{leg}"')
@@ -696,7 +740,7 @@ def reversal_leg(form, venue, mark, caution, half, symbol, size, unit, stop):
            'lower': _sig(mid * (1.0 - half)) if leg == 'long' else _sig(mid),
            'upper': _sig(mid) if leg == 'long' else _sig(mid * (1.0 + half)),
            'rungs': rungs,
-           '_note': (f'reversal grid (D54): the {leg} half, '
+           '_note': (f'reversal grid: the {leg} half, '   # D54
                      f"{'below' if leg == 'long' else 'above'} the mid "
                      f'{_sig(mid):g}')}
     if stop:                       # a static grid's stop is a level (X8)
@@ -739,7 +783,7 @@ def mirror_leg(bot):
     botid = make_botid(bot.get('market_type', 'linear'), bot['symbol'],
                        bot.get('side', 'long'))
     out['_note'] = (f'the other side of {botid}, mirrored at '
-                    f"{_sig(upper if long else lower):g} (U42)")
+                    f"{_sig(upper if long else lower):g}")              # U42
     return out
 
 
@@ -926,6 +970,34 @@ ALWAYS_STATED = ('side', 'market_type', 'stop_watch')
 # of its own: no candle wait (the seconds, or at once); X1's stop_bot
 BLANK_NAMES = {'stop_candle': 'none', 'stop_action': 'stop_bot'}
 
+# D157: what a choice says, as Bybit's and Pionex's forms say it; the value
+# sent is the file's own, unchanged, so a row and its form round-trip as
+# before (U19). A value not here is shown as itself (long, 1m, …).
+CHOICE_LABELS = {
+    'market_type': {'linear': 'USDT/USDC perpetual', 'inverse': 'coin-margined perpetual',
+                    'spot': 'spot'},
+    'spacing_type': {'percent': 'geometric (the same % apart)',
+                     'fixed': 'arithmetic (the same price apart)'},
+    'rung_sizing': {'equal': 'equal', 'weighted': 'weighted (the list below)'},
+    'slide_direction': {'favourable': 'only the profitable way', 'both': 'both ways'},
+    'stop_watch': {'mark_price': 'the mark price', 'account_equity': "the account's value",
+                   'position_sl': 'a stop you placed on the exchange'},
+    'stop_action': {'stop_bot': 'close the position and stop',
+                    'end_round': 'close this round, then start again',
+                    'leave_position': 'stop, and leave the position open'},
+    'exit_floor': {'rung': 'one grid above where it was bought',
+                   'basis': 'never below the average cost'},
+    'size_in': {'quote': 'money (USDT / USDC)', 'coin': 'coins'},
+    'start_order_type': {'market': 'market order (at once)',
+                         'maker': 'limit, post-only (the lower fee)'},
+    'stop_candle': {'none': 'no candle wait'},
+}
+
+
+def choice_label(name, value):
+    """D157: a choice's words for a person; the value itself when unnamed."""
+    return CHOICE_LABELS.get(name, {}).get(value, value)
+
 
 _MINIMAL = {
     'grid': {'market_type': 'linear', 'symbol': 'BTCUSDT', 'side': 'long',
@@ -1003,16 +1075,19 @@ def _field(name, kind, label, help_, value, fixed=False, unit=None,
         choices = kind[7:].split('|')
         named = (default if default not in (..., None)
                  else BLANK_NAMES.get(name))
+        def opt(o, sel=''):
+            # D157: a labelled choice sends its value and shows its words
+            lb = choice_label(name, o)
+            return (f'<option{sel}>{e(o)}</option>' if lb == o else
+                    f'<option value="{e(o)}"{sel}>{e(lb)}</option>')
         if name in ALWAYS_STATED or value not in (None, '') or named is None:
             blank = ('' if name in ALWAYS_STATED or value not in (None, '')
                      else '<option value="">—</option>')
-            opts = blank + ''.join(
-                f'<option{" selected" if o == value else ""}>{o}</option>'
-                for o in choices)
+            opts = blank + ''.join(opt(o, ' selected' if o == value else '')
+                                   for o in choices)
         else:
-            opts = (f'<option value="" selected>{e(str(named))}</option>'
-                    + ''.join(f'<option>{o}</option>' for o in choices
-                              if o != named))
+            opts = (f'<option value="" selected>{e(choice_label(name, str(named)))}</option>'
+                    + ''.join(opt(o) for o in choices if o != named))
         control = f'<select name="{name}">{opts}</select>'
     elif kind in ('switch', 'block'):
         control = (f'<input type="checkbox" name="{name}" value="1"'
@@ -1038,15 +1113,24 @@ def fleet_select(fleets, chosen=0):
     return f'<select name="fleet">{opts}</select>'
 
 
-def quick_page(fleets, chosen=0, symbols=()):
+def quick_page(fleets, chosen=0, symbols=(), values=None, carry=True):
+    """`values`: what was typed, when a refused quick setup comes back
+    (D157: it came back blank, the preset and the money lost). `carry`:
+    whether any account here can hold a carry bot (Bybit only)."""
+    t = values or {}
+
+    def v(k):
+        return html.escape(str(t.get(k) or ''), quote=True)
+    picked = t.get('preset') if t.get('preset') in PRESETS else 'sideways'
+    careful = t.get('caution') if t.get('caution') in CAUTION else 'balanced'
     presets = ''.join(
         f'<tr><td><label><input type="radio" name="preset" value="{k}"'
-        f'{" checked" if k == "sideways" else ""}> {html.escape(lb)}'
+        f'{" checked" if k == picked else ""}> {html.escape(lb)}'
         f'</label></td><td class="dim">{html.escape(what)}</td></tr>'
         for k, (lb, what) in PRESETS.items())
-    caution = ''.join(
-        f'<option{" selected" if c == "balanced" else ""}>{c}</option>'
-        for c in CAUTION)
+    caution = ''.join(                                   # D157: the leverage said
+        f'<option value="{c}"{" selected" if c == careful else ""}>'
+        f'{html.escape(caution_words(c))}</option>' for c in CAUTION)
     return (
         '<h1>set up a bot <span class="dim">— three answers; today\'s '
         'price fills in the rest. Nothing is saved until you have read '
@@ -1057,42 +1141,48 @@ def quick_page(fleets, chosen=0, symbols=()):
         f'<div class="fsec"><table>{presets}</table></div><div class="fsec"><table>'   # U88
         f'<tr><td>Account</td><td>{fleet_select(fleets, chosen)}</td>'
         '<td class="dim">which fleet the bot joins</td></tr>'
-        '<tr><td>Which coin?</td><td><input name="symbol" size="14" '
+        f'<tr><td>Which coin?</td><td><input name="symbol" value="{v("symbol")}" size="14" '
         'list="coins" placeholder="BTCUSDT"></td><td class="dim">the '
         'venue\'s own name: BTCUSDT on Bybit, BTC on Hyperliquid'
         + (' — pick from the list or type' if symbols else '')
         + f'</td></tr>{coin_list(symbols)}'
-        '<tr><td>Investment</td><td><input name="capital" size="10"> '
-        f'{size_unit_select()}</td><td class="dim">what you put up '
+        f'<tr><td>Investment</td><td><input name="capital" value="{v("capital")}" size="10"> '
+        f'{size_unit_select(t.get("size_unit"))}</td><td class="dim">what you put up '
         '(collateral), or the position\'s size in USDT, or in coins — '
         'converted at today\'s price and the preset\'s leverage</td>'
         '</tr><tr><td>How careful?</td><td><select name="caution">'
-        f'{caution}</select></td><td class="dim">careful = wider and '
-        'lower leverage; bold = tighter and higher</td></tr>'
+        f'{caution}</select></td><td class="dim">each answer names the '
+        'leverage it picks: careful is wider and lower, bold tighter and '
+        'higher. Nothing caps it; the review shows where it would be '
+        'liquidated</td></tr>'
         '<tr><td>Stop loss</td><td><input type="checkbox" name="stop_on" '
-        'value="1"></td><td class="dim">off by default: sells everything '
+        f'value="1"{" checked" if t.get("stop_on") else ""}></td><td class="dim">off by default: sells everything '
         'and stops the bot for good if the price goes well past its '
         'orders</td></tr>'
-        '<tr><td>Most it may lose</td><td><input name="max_loss" size="14">'
+        f'<tr><td>Most it may lose</td><td><input name="max_loss" value="{v("max_loss")}" size="14">'
         '</td><td class="dim">optional, in money: if the bot is ever down '
         'this much in total it closes everything and stops for good. '
         'Blank = no limit</td></tr>'
-        '<tr><td>Mid price</td><td><input name="mid" size="14" '
+        f'<tr class="only-reversal"><td>Mid price</td><td><input name="mid" value="{v("mid")}" size="14" '
         'placeholder="today\'s price"></td><td class="dim">reversal only: '
         'the price the two halves meet at. Above today\'s price and the '
         'long half is the one working now, the short half waits above it; '
-        'below, the other way round (D54)</td></tr></table></div>'
+        'below, the other way round</td></tr></table>'   # D54
+        + NUMBERS_BOX + '</div>'
         '<button name="then" value="gates">Next: review the bot &rarr;'
         '</button> '
         '<button name="then" value="advanced" class="quiet">Open in the '
         'advanced form &rarr;</button> <span class="dim">(nothing above '
-        'needs filling for that)</span></form>'
+        'needs filling for that)</span></form>' + NUMBERS_JS +
         '<p class="dim">or start from a blank advanced form: '
         '<a href="/setup?adv=grid">grid</a> · '
         '<a href="/setup?adv=martingale">buy-the-dips (DCA)</a> — every '
-        'setting the config file accepts — or '
-        '<a href="/setup?adv=carry">a carry bot</a> (coins on spot, hedged '
-        'on their perps, the funding collected).</p>')
+        'setting the config file accepts.</p>'
+        # D157 (the audit's thirteenth): the carry bot is another product,
+        # not a third grid — apart, and only where an account can hold one
+        + ('<p class="dim" style="margin-top:2.5em">a different product: '
+           '<a href="/setup?adv=carry">a carry bot</a> — coins on spot, hedged '
+           'on their perpetuals, the funding collected.</p>' if carry else ''))
 
 
 SPOT_ONLY = ('assumed_avg_entry', 'holding', 'holding_since', 'spot_borrow', 'spot_leverage')
@@ -1117,16 +1207,19 @@ def advanced_page(strategy, values, fleets, chosen=0, note='', edit=None,
     # U105: what the bot needs, open and first; required ones starred
     first = ''.join(field(every[n], mark=n in needed) for n in essential if n in every)
     groups.append('<details open><summary>What the bot needs</summary>'
-                  f'<table>{first}</table><p class="dim">* required. Everything '
+                  f'<table>{first}</table>' + NUMBERS_BOX +
+                  '<p class="dim">* required. Everything '
                   'else is under Advanced, and a blank there takes the engine\'s '
                   'default.</p></details>')
-    advanced, any_set = [], False
+    advanced, any_set, expert = [], False, []
     for title, rows in SCHEMAS[strategy].items():
         if edit and values.get('market_type') != 'spot':
             # U76: a perpetual's edit page has no spot rows — its market
             # type is fixed, so they could never apply
             rows = [r for r in rows if r[0] not in SPOT_ONLY]
         rows = [r for r in rows if r[0] not in essential]
+        expert += [r for r in rows if r[0] in EXPERT]          # D157
+        rows = [r for r in rows if r[0] not in EXPERT]
         if not rows:
             continue
         body = ''.join(field(r) for r in rows)
@@ -1139,13 +1232,29 @@ def advanced_page(strategy, values, fleets, chosen=0, note='', edit=None,
     groups.append(f'<details class="adv"{" open" if any_set else ""}><summary>Advanced '
                   '<span class="dim">— optional; a blank takes the default</span></summary>'
                   + ''.join(advanced) + '</details>')
+    # D157: the second fold — settings only an expert reaches for, and the
+    # alarm's position limit (a watchdog value, not the row's), its unit said
+    ceiling = values.get('ceiling') or ''
+    lim = ('<tr><td>Position limit for the alarm (coins)</td><td>'
+           f'<input name="ceiling" size="14" value="{html.escape(str(ceiling))}"></td>'
+           '<td class="dim">optional: the safety checks warn you when this bot '
+           'holds more than this many coins (contracts on a coin-margined '
+           'market). Blank = no limit</td></tr>')
+    open_x = ' open' if ceiling or any(values.get(r[0]) for r in expert) else ''
+    groups.append(f'<details class="expert"{open_x}><summary>Expert '
+                  '<span class="dim">— rarely needed; a blank takes the default</span>'
+                  f'</summary><table>{lim}{"".join(field(r) for r in expert)}</table>'
+                  '</details>')
     name = 'grid' if strategy == 'grid' else 'buy-the-dips (DCA)'
     if edit:
         title = (f'<h1>edit {html.escape(edit)} <span class="dim">— every '
                  'setting of this bot. The coin, direction and market type '
                  'are what the bot IS and cannot change here: remove it '
-                 'and set up a new one. The running fleet keeps the old '
-                 'settings until it is restarted.</span></h1>')
+                 'and set up a new one. Once saved, a running bot takes '
+                 'changed terms (leverage, investment, stops, limits, take '
+                 'profit, trailing, repeat) within seconds; a changed range, '
+                 'grid count, price following or order size waits for its '
+                 'account\'s next restart.</span></h1>')   # D157: as F12 says
         account = (f'<input type="hidden" name="fleet" value="{chosen}">'
                    '<input type="hidden" name="mode" value="edit">'
                    f'<input type="hidden" name="orig" '
@@ -1168,15 +1277,11 @@ def advanced_page(strategy, values, fleets, chosen=0, note='', edit=None,
         '<input type="hidden" name="how" value="advanced">'
         f'<input type="hidden" name="strategy" value="{strategy}">'
         + '<div class="fsec">' + account +             # U88: boxed like the sections below
-        '<tr><td>Position limit for the alarm</td><td>'
-        f'<input name="ceiling" size="14" value="'
-        f'{html.escape(str(values.get("ceiling", "")))}"></td>'
-        '<td class="dim">optional: the watchdog pages above this '
-        'position size. Blank = no limit</td></tr></table></div>'
+        '</table></div>'
         + CHART_BOX + ''.join(groups) +
         '<button>Next: review the bot &rarr;</button></form>' + CHART_JS
         # U81: after the form, so the fields it fills exist when it runs
-        + HINT_JS
+        + HINT_JS + NUMBERS_JS
         + ('<p class="dim"><a href="/">back to the fleet</a></p>' if edit
            else '<p class="dim"><a href="/setup">back to the quick setup'
                 '</a></p>'))

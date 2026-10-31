@@ -79,7 +79,7 @@ def said(old, new):
                    + '; each hedge follows its coin.')
         if not old.get('margin') and new.get('margin'):
             out.append(f'This row has not borrowed before: it may now, at up to '
-                       f'{new["margin"]["borrow_apr_max"]:.0%} a year before its leverage stands down (H4).')
+                       f'{new["margin"]["borrow_apr_max"]:.0%} a year before its leverage stands down.')
     coins, pa = perps_of(old)
     _, pb = perps_of(new)
     moved = [c for c in coins if pa.get(c) != pb.get(c)]

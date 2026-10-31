@@ -1,9 +1,9 @@
 """A bot's card (U68 slim, U56 full) and a portfolio's (H6), with the lines a card is made of. Out of render.py (D91 step 3)."""
 from common.fmt import signed
 from gridgremlin.report import card_total
-from .reference import STATE_WORDS
+from .reference import STATE_WORDS, state_label
 from .drawings import strip
-from .html_bits import _day, _num_cls, coin_of, esc, money, pick_link, qarg, units_of
+from .html_bits import _day, _num_cls, bot_code, coin_of, esc, money, pick_link, qarg, units_of
 
 
 def run_rate(b, contract, capital=None, trade=False):
@@ -34,12 +34,15 @@ def run_rate(b, contract, capital=None, trade=False):
     if abs(per_day) < 0.005:                 # never "−0.00" (the bug hunt, 2026-10-11)
         per_day = 0.0
     run = f'{shown:.1f} d' if shown >= 1 else f'{shown * 24:.0f} h'
-    word = '' if trade else 'grid '          # a trade (D81) or a DCA has no grid
-    line = (f'running {run} · {word}profit <b class="{_num_cls(per_day)}">{per_day:+,.2f}</b>/day')
+    word = 'Profit' if trade else 'Grid profit'          # a trade (D81) or a DCA has no grid
+    # D157: Bybit's words — Runtime, the profit a day, APR
+    line = (f'Runtime {run} · {word} <b class="{_num_cls(per_day)}">{per_day:+,.2f}</b>/day')
     if capital:
         apr = net / capital / days * 365 * 100
         apr = 0.0 if abs(apr) < 0.05 else apr
-        line += f' · {word}APR <b class="{_num_cls(apr)}">{apr:+,.1f}%</b>'
+        line += (f' · <span class="st" title="{word.lower()} after fees ÷ investment ÷ days × 365, '
+                 f'a run under a day counted as a day">APR</span> '
+                 f'<b class="{_num_cls(apr)}">{apr:+,.1f}%</b>')
     return f'<div class="rate">{line}</div>'
 
 
@@ -128,16 +131,15 @@ def kind_line(terms):
 
 def _plain_name(botid, contract, b):
     """'BTCUSDT long grid' from the botid and the contract — the name a
-    person says; the botid stays on the card for the confirm box."""
-    side = (b or {}).get('side') or ('short' if botid.endswith('s')
-                                     else 'long')
+    person says; the botid stays on the card for the confirm box. D157:
+    spelt by html_bits.plain_name, the one a confirm box takes."""
+    from .html_bits import plain_name, row_of_botid
     kind = (b or {}).get('strategy') or (
         'grid' if botid in (contract.get('ranges') or {}) else 'martingale')
-    market = {'inv': ' inverse', 'spo': ' spot'}.get(botid[:3], '')
-    if ((contract.get('terms') or {}).get(botid) or {}).get('trade'):
-        return f"{botid[3:-1]} {side} trade{market}"                # L6
-    return (f"{botid[3:-1]} {side} "
-            f"{'grid' if kind == 'grid' else 'DCA'}{market}")
+    row = row_of_botid(botid, kind, bool(((contract.get('terms') or {}).get(botid) or {}).get('trade')))
+    if (b or {}).get('side') in ('long', 'short'):
+        row['side'] = b['side']
+    return plain_name(row)
 
 
 def _side_tag(botid):
@@ -148,12 +150,14 @@ def _side_tag(botid):
 
 
 def state_tag(state, cls=''):
-    """U35: the state word with its meaning on hover and its own colour."""
+    """U35: the state word with its meaning on hover and its own colour.
+    D157: the engine's state is the key and the class; the words shown
+    are a person's (Running · in position, Stopped (by its rule), …)."""
     import html as _h
     slug = state.lower().replace(' ', '-')
     return (f'<span class="{cls} st st-{slug}" title="'
             f'{_h.escape(STATE_WORDS.get(state, ""), quote=True)}">'
-            f'{state}</span>')
+            f'{_h.escape(state_label(state))}</span>')
 
 
 EXITS_AT = {'position': 'on the position', 'conditional': "in the exchange's conditional book",
@@ -214,7 +218,9 @@ def slid_range(rng, bl):
         return rng, ''
     gap = (rng['upper'] - rng['lower']) / (rng['rungs'] - 1)
     return (dict(rng, lower=rng['lower'] + off * gap, upper=rng['upper'] + off * gap),
-            f' · window slid {off:+d} rungs from home')
+            # D157 (U124): "window slid +3 rungs from home" in a person's words
+            f" · range moved {'up' if off > 0 else 'down'} {abs(off)} "
+            f"level{'s' if abs(off) != 1 else ''} from where it started")
 
 
 def unpriced(b):
@@ -226,6 +232,14 @@ def unpriced(b):
 
 
 UNPRICED = ' <span class="neg">+ an open position not priced (its mark was not read)</span>'
+
+# D157: the card's money in the words Bybit and Pionex use; each label says
+# on hover what it sums
+TOTAL_PNL = ('<span class="dim st" title="realised after fees, plus funding, plus the '
+             'floating P&amp;L of what it holds now, over the span named after it">'
+             'Total P&amp;L</span>')
+FLOATING = ('<span class="st" title="what it holds now, at the mark price, against what it '
+            'cost; it becomes real only when sold">Floating P&amp;L</span>')
 
 
 HALT_HEAD = {'RETIRED': 'retired: stood down for good, its orders cancelled',
@@ -272,12 +286,16 @@ def card(idx, botid, b, contract, belief, full=False):
     quote_raw, margin_raw = units_of(botid, (contract.get('terms') or {}).get(botid))   # U53
     money_coin, margin_coin = esc(quote_raw), esc(margin_raw)     # P7: names from the file are text
     dca = ((contract.get('terms') or {}).get(botid) or {}).get('strategy') == 'martingale'   # U102
+    # D157: retire and close live behind control; a panel started without it
+    # answers them 404, so the card does not offer them (the audit's bug 4)
+    armed = not contract.get('control_off')
     links = (('' if full else f"<a data-pick href='/?fleet={idx}&amp;bot={qarg(botid)}&amp;show=numbers'>numbers</a>")
              + ('' if ((contract.get('terms') or {}).get(botid) or {}).get('trade') else
                 (' ' if not full else '') + f"<a data-pick href='/?fleet={idx}&amp;bot={qarg(botid)}&amp;show=edit'>edit</a> "
-                f"<a href='/setup?fleet={idx}&amp;copy={qarg(botid)}'>copy</a> "
-                f"<a href='/retire?fleet={idx}&amp;bot={qarg(botid)}'>retire"   # D145: remove is inside
-                '</a>'))
+                f"<a href='/setup?fleet={idx}&amp;copy={qarg(botid)}'>copy</a>"
+                + (f" <a href='/retire?fleet={idx}&amp;bot={qarg(botid)}' title='close the position "
+                   "or leave it open; remove is inside'>stop"   # D145, D157: a choice
+                   '</a>' if armed else '')))
     # L8: a trade is not a fleet row — edit, copy and remove answered "not in
     # this fleet" (the owner, 2026-10-11, on tilt's ended BTC trade); a trade
     # ends by its own exit, close trade, or clear
@@ -302,7 +320,7 @@ def card(idx, botid, b, contract, belief, full=False):
                  'HOLDING' if abs(pos) > 1e-12 else
                  'NOT STARTED' if botid not in belief else 'RESTING')  # U34
         head = (f'<span class="big dim">{HALT_HEAD[halted]}</span>' if halted else
-                '<span class="big dim">waits for the fleet\'s restart</span>'
+                '<span class="big dim">starts at its account\'s next restart</span>'
                 if botid not in belief else
                 '<span class="big dim">no fills</span>'
                 + (f' <span class="dim">— {orders_line(bl.get("orders"), bl.get("exits"), dca)}'
@@ -310,7 +328,7 @@ def card(idx, botid, b, contract, belief, full=False):
         kept = since_first_line(contract, botid)                  # R18
         if kept:
             head += f'<div class="pnl">{kept}</div>'
-        held = (f'holding {pos:.10g} (belief)' if abs(pos) > 1e-12
+        held = (f'holding {pos:.10g} (estimated)' if abs(pos) > 1e-12
                 else 'holding nothing')
         if halted:                                                 # U104
             held = (f"last seen holding {last_seen:.10g} (the engine's last snapshot) "
@@ -357,18 +375,22 @@ def card(idx, botid, b, contract, belief, full=False):
         # U45: the money in its own box — the total, then what it is made of
         net = b['realized'] - b['fees']
         cap = ((contract.get('terms') or {}).get(botid) or {}).get('capital')
-        roi = (f' <span class="{_num_cls(total)}">{total / cap * 100:+.2f}%</span>'
+        roi = (f' <span class="dim">· ROI</span> <span class="{_num_cls(total)}">{total / cap * 100:+.2f}%</span>'
                f' <span class="dim">on {cap:,.0f}</span>' if cap and not unpriced(b) else '')
         part = UNPRICED if unpriced(b) else ''        # U95: never a 0 for the open part
         # U68: the card's money at a glance, as the bot pages of the big
-        # venues show it; every other line is the numbers page's
+        # venues show it; every other line is the numbers page's. D157: in
+        # their words — Total P&L · ROI, then grid profit and floating P&L,
+        # then runtime and APR
         slim_head = (f'<div class="pnl {_num_cls(total)}">'
+                     f'{TOTAL_PNL} '
                      f'<span class="big {_num_cls(total)}">{signed(total)}</span> {money_coin}{coin}{roi}{part}'
                      f' <span class="dim">· {span}</span>'                 # D63: what the figure covers
                      + (grid_split(b, total) or f'<div class="parts">{pnl_parts(net, b["unreal_at_mark"], b.get("funding"))}</div>')
                      + f'{run_rate(b, contract, cap, bool(((contract.get("terms") or {}).get(botid) or {}).get("trade")) or ((contract.get("terms") or {}).get(botid) or {}).get("strategy") == "martingale")}'
                      '</div>')
         head = (f'<div class="pnl {_num_cls(total)}">'
+                f'{TOTAL_PNL} '
                 f'<span class="big {_num_cls(total)}">{signed(total)}</span> '
                 f'{money_coin}{coin}{part} <span class="dim">after fees, {span}</span>'
                 f'{grid_split(b, total)}<div class="parts">'
@@ -446,14 +468,14 @@ def card(idx, botid, b, contract, belief, full=False):
         held += (f'</div><div class="{"neg" if past or away < 5 else "dim"}">' + said)
     mkt = (contract.get('market') or {}).get(botid)
     if mkt and mkt.get('thin'):
-        alerts.append(f"market {mkt.get('line') or ''} · THIN for this fleet")
+        alerts.append(f"market {mkt.get('line') or ''} · order book thin for this size")
     if mkt and mkt.get('line'):
         # D67: the market's regime beside the bot that trades it; red when
         # the book is thin for this fleet
         age = mkt.get('age_s') or 0
         held += (f'</div><div class="{"neg" if mkt.get("thin") else "dim"}">'
                  f"market {mkt['line']}"
-                 + (' · THIN for this fleet' if mkt.get('thin') else '')
+                 + (' · order book thin for this size' if mkt.get('thin') else '')
                  + (f' · read {age // 3600} h ago' if age >= 7200 else ''))
     if mv and (mv.get('im') is not None or mv.get('mm') is not None):
         # V14: the exchange's own margin on this position, from the
@@ -532,13 +554,13 @@ def card(idx, botid, b, contract, belief, full=False):
     flat = (abs(pos) <= 1e-12 if b is not None else
             (belief.get(botid) or {}).get('position') == 0)   # unknown ≠ flat
     is_trade = bool(((contract.get('terms') or {}).get(botid) or {}).get('trade'))
-    if is_trade and state != 'DEAD' and not flat and not botid.startswith('spo'):
+    if armed and is_trade and state != 'DEAD' and not flat and not botid.startswith('spo'):
         # L6: a live trade can be ended early from its card — the close page
         # asks for its name and sends one reduce-only market order
         links += (f" <a href='/close?fleet={idx}&amp;bot={qarg(botid)}'>close trade</a>")
     elif is_trade and state == 'DEAD':
         links += " <a href='/trade'>clear</a>"
-    if state == 'DEAD' and not botid.startswith('spo') and not flat and not (
+    if armed and state == 'DEAD' and not botid.startswith('spo') and not flat and not (
             is_trade and not abs((belief.get(botid) or {}).get('position') or 0.0) > 1e-12):
         # L8: a stopped trade ended by its own exit or stop — offer the close
         # only when its holding is known to be open, and clear otherwise
@@ -561,7 +583,7 @@ def card(idx, botid, b, contract, belief, full=False):
                 f'<div>{slim_head if b is not None else head}</div>'
                 + ('' if b is not None else f'<div class="dim">{_quiet_held}</div>')
                 + f'{where}{warn}'
-                f'<div class="dim foot"><span>{esc(botid)}</span><span>{links}</span></div></div>')
+                f'<div class="dim foot">{bot_code(botid, quote_raw)}<span>{links}</span></div></div>')
     # U58: the lines under the bar fold behind one word, so a card can be
     # small; the click is remembered per card, and the side panel folds or
     # opens every card at once (the owner, 2026-10-09: "toggle all so it
@@ -571,7 +593,7 @@ def card(idx, botid, b, contract, belief, full=False):
             f'{esc(_plain_name(botid, contract, b))}</b>{note} '
             f'{state_tag(state, cls)}</div>'
             f'<div>{head}</div>{where}{fold(idx, botid, f'<div class="dim">{held}</div>')}{more}'
-            f'<div class="dim foot"><span>{esc(botid)}</span><span>{links}</span></div></div>')
+            f'<div class="dim foot">{bot_code(botid, quote_raw)}<span>{links}</span></div></div>')
 
 
 def fold(idx, botid, inner, word='details'):
@@ -590,7 +612,7 @@ def pnl_parts(net, unreal, funding=0.0):
         return ('—' if v is None else
                 f'<b class="{_num_cls(v)}">{v:+,.2f}</b>')
     return (f'realised after fees {part(net)} · funding {part(funding)} · '
-            f'open {part(unreal)}')
+            f'{FLOATING} {part(unreal)}')
 
 
 def grid_split(b, total):
@@ -606,8 +628,13 @@ def grid_split(b, total):
         return ''
     grid = b['gap_realized'] - b['fees']
     trend = total - grid
-    rows = [('grid profit', f'<b class="{_num_cls(grid)}">{grid:+,.2f}</b>'),
-            ('trend', f'<b class="{_num_cls(trend)}">{trend:+,.2f}</b>')]
+    # D157: "trend" is Pionex's word for it; Bybit and the rest say floating
+    rows = [('<span class="st" title="the completed buy-and-sell trips, each against '
+             'its own grid level, after fees">Grid profit</span>',
+             f'<b class="{_num_cls(grid)}">{grid:+,.2f}</b>'),
+            ('<span class="st" title="the rest of the total: what it holds now at the mark '
+             'price, plus funding and what a moved range realised">Floating P&amp;L</span>',
+             f'<b class="{_num_cls(trend)}">{trend:+,.2f}</b>')]
     pos, mark = b.get('position') or 0.0, b.get('mark')
     if abs(pos) > 1e-12 and mark and not b.get('inverse'):
         even = mark - total / pos
@@ -633,14 +660,14 @@ def since_first_line(contract, botid):
         return ''
     sf = contract['since_first'].get(botid)
     if not sf or not sf.get('fills'):
-        return '<div class="parts">kept history: nothing kept yet</div>'
+        return '<div class="parts">all-time: nothing recorded yet</div>'
     if sf.get('behind') is not None:
         when = (f"kept to {_day(sf['behind'])}" if sf['behind']
                 else 'not collected yet')
-        return ('<div class="parts">kept history: the ledger is behind '
+        return ('<div class="parts">all-time: the record is behind '
                 f'— {when}</div>')
     if not sf.get('whole', True):
-        return ('<div class="parts">kept history: no clean start yet — it '
+        return ('<div class="parts">all-time: no clean start yet — it '
                 'held through the whole record, so nothing is summed</div>')
     total = since_first_total(sf)
     rounds = (f"{sf['rounds']} rounds" if sf.get('strategy') == 'martingale'
@@ -652,7 +679,7 @@ def since_first_line(contract, botid):
     since = (f'fresh from {_day(op["time_ms"])} (opened holding '
              f'{op["qty"]:,.10g} at {op["price"]:,.6g})' if op
              else f'since {_day(sf["first_ms"])}')
-    return (f'<div class="parts">kept history, {since}'
+    return (f'<div class="parts">all-time, {since}'
             f' {shown}{star} · {rounds}</div>')
 
 
@@ -718,7 +745,7 @@ def portfolio_card(idx, botid, contract, belief, full=False):
                 f'<div class="dim">{esc(last_seen_book(last_seen))}</div>')
         body = ''
     elif not v:
-        head = ('<span class="big dim">waits for the fleet\'s restart</span>' if botid not in belief
+        head = ('<span class="big dim">starts at its account\'s next restart</span>' if botid not in belief
                 else '<span class="big dim">not yet valued</span>')
         body = ''
     else:
@@ -801,12 +828,12 @@ def portfolio_card(idx, botid, contract, belief, full=False):
                if v and v.get('leverage') else '')
         return (f'<div class="card pfo slim"><div><span class="side pfo">PORTFOLIO</span> <b>{esc(name)}</b> '
                 f'{state_tag(state, cls)}</div><div class="dim">{kind}{shares}</div><div>{head}</div>{lev}'
-                f'<div class="dim foot"><span>{esc(botid)}</span><span>{links}</span></div></div>')
+                f'<div class="dim foot">{bot_code(botid)}<span>{links}</span></div></div>')
     return (f'<div class="card pfo"><div><span class="side pfo">PORTFOLIO</span> <b>{esc(name)}</b> '
             f'{state_tag(state, cls)}</div><div class="dim">{kind}{shares}</div>'
             f'<div class="two"><div>{head}</div><div>{facts}</div></div>'
             + (fold(idx, botid, body, word='assets') if body else '')          # U58
-            + f'<div class="dim foot"><span>{esc(botid)}</span><span>{links}</span></div></div>')
+            + f'<div class="dim foot">{bot_code(botid)}<span>{links}</span></div></div>')
 
 
 def holdings_table(v, q, now_ms):
@@ -829,7 +856,7 @@ def holdings_table(v, q, now_ms):
     for g in v.get('legs') or []:
         what = f"{esc(g['symbol'])} {'hedge' if g['kind'] == 'hedge' else 'short'}"
         size = (f"{n(g['size'], ',.0f')} USD" if g['inverse'] else f"{n(g['size'])} {esc(g['coin'])}")
-        size = 'closed (H17)' if g.get('closed') else f'−{size}'       # a hedge's old market, moved off
+        size = 'closed' if g.get('closed') else f'−{size}'       # a hedge's old market, moved off
         rows += (f"<tr><td>{what}</td><td>{size}</td><td>{n(g['avg'])}</td><td>{n(g['mark'])}</td>"
                  f"<td></td>{money(g['unreal'])}{money(g['realized'])}</tr>")
     # H9b: each coin with its hedge, the pair's result — a short of the coin

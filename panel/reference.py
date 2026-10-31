@@ -16,23 +16,44 @@ from panel.chart import _f
 from panel.css import THEMES
 
 
-STATE_WORDS = {
-    'NOT STARTED': 'in the fleet file but not yet running — it starts at '
-                   'the fleet\'s next restart',
-    'RESTING': 'running, holding nothing; its orders rest or wait for the '
-               'price to come within reach (see "orders" on the card)',
-    'HOLDING': 'running with a position; its exits rest or wait for the '
-               'price to come within reach',
-    'FLAT': 'running, holding nothing now, and it traded in this window',
-    'STOPPED': 'its fleet is not running: nothing is placed or watched, and the '
-               'card shows the exchange\'s fills and the holding last seen, not the '
-               'engine\'s last picture as if it were now',
-    'RETIRED': 'retired: its orders cancelled and its position closed or kept, as '
-               'its retire chose (the card says what was last seen); it never '
-               'starts again unless revived on the tombstones page',
-    'DEAD': 'stood down — a stop, a limit or a round count ended it; its '
-            'reason is on the control page, and revival is deliberate',
+# D157: a bot's state as the engine knows it (the keys, kept in code and in
+# the CSS classes) and as a person reads it (STATE_LABEL, what the card and
+# the table show, as Bybit and Pionex say Running / Stopped); STATE_WORDS is
+# each state's hover
+STATE_LABEL = {
+    'NOT STARTED': 'Waiting to start',
+    'RESTING': 'Running · no position',
+    'FLAT': 'Running · no position',
+    'HOLDING': 'Running · in position',
+    'STOPPED': 'Stopped (engine off)',
+    'RETIRED': 'Retired',
+    'DEAD': 'Stopped (by its rule)',
 }
+
+STATE_WORDS = {
+    'NOT STARTED': 'saved to its account but not running yet: it starts when '
+                   'the account\'s engine is next started or restarted',
+    'RESTING': 'running, holding nothing; its orders rest on the exchange or '
+               'wait for the price to come within reach (see "orders" on the card)',
+    'HOLDING': 'running with a position; its exits rest on the exchange or '
+               'wait for the price to come within reach',
+    'FLAT': 'running, holding nothing now; it traded in this window',
+    'STOPPED': 'its account\'s engine is not running: nothing is placed or '
+               'watched, and the card shows the exchange\'s fills and the holding '
+               'last seen, not the engine\'s last picture as if it were now',
+    'RETIRED': 'retired: its orders cancelled and its position closed or kept, as '
+               'its stop chose (the card says what was last seen); it never '
+               'starts again unless revived on the control page',
+    'DEAD': 'stopped for good by its own rule (its stop loss, its loss limit or '
+            'its round count), or set aside at start because the exchange '
+            'refused it; its orders are cancelled. The reason is on the '
+            'control page, and starting it again is deliberate',
+}
+
+
+def state_label(state):
+    """D157: the words a person reads for an engine state."""
+    return STATE_LABEL.get(state, state)
 
 
 TRADING = """<h1>demo, testnet and mainnet</h1>
@@ -62,140 +83,200 @@ double asks for the new number twice.</li>
 here is advice.</p>"""
 
 
-KEY = """<h1>key — what every word on this page means</h1>
-<table><tr><th>term</th><th></th></tr>
-<tr><td>realized</td><td class="dim">profit from MATCHED buys and sells,
-in quote currency (USDT). Money already made or lost; it never moves
-again.</td></tr>
-<tr><td>fees</td><td class="dim">what the venue charged for every fill
-in the window — already excluded from nothing: total = realized − fees
-+ funding + unreal.</td></tr>
-<tr><td>USDT · USDC · USD · BTC …</td><td class="dim">every money figure
-names its coin (U53): a linear or spot bot's money is its settle coin
-(Bybit USDT or USDC, Hyperliquid USDC); an inverse bot's capital, notional,
-loss and P&amp;L are dollars ($1 contracts) and its margin is the coin
-itself. An exchange's total joins the coins its bots use.</td></tr>
-<tr><td>wallet · this bot's book · not this bot's</td><td class="dim">a spot
-bot with a stated holding (D76): the coin's whole wallet balance, what this
-bot's book says it owns (the stated holding plus its own fills since), and
-the difference — coins that are not its. Where the kept ledger can say,
-how much of that the inverse bots on the same coin realised there, and what
-is left unexplained; red when more than half is unexplained (an outside
-hand, or a ledger behind). Funding settles in the coin too and is not
-counted.</td></tr>
-<tr><td>the ladder</td><td class="dim">a DCA card's own sum (U52): for
-each step, where it fills from the base price, its size, what is then
-committed, the average entry, and how far the price must come back from
-that fill for the whole position to reach take-profit. The summary line
-is the drop (a short: the rise) the ladder covers before it runs out.
-Percentages of the base price, so it holds before a round and during one.</td></tr>
-<tr><td>funding</td><td class="dim">what the bot's position paid (−) or
-received (+) in funding over the same window, from the exchange's own
-record (D63). A perp holds it; spot has none. — when it could not be
-read.</td></tr>
-<tr><td>open@avg</td><td class="dim">what the bot HOLDS right now, at
-its average cost. This inventory is not profit and not loss yet.</td></tr>
-<tr><td>unreal</td><td class="dim">the open remainder marked to the
-current price. Moves every second; becomes real only when sold.</td></tr>
-<tr><td>total</td><td class="dim">realized − fees + funding + unreal. The
-honest sum — the number other dashboards inflate by leaving parts
-out.</td></tr>
-<tr><td>bought / sold</td><td class="dim">base quantity each way in the
-window — how much churn produced the numbers to the left.</td></tr>
-<tr><td>range</td><td class="dim">the grid's territory: bar = range,
-ticks = rungs, dot = current price.</td></tr>
-<tr><td>edge lo/hi</td><td class="dim">distance from price to each end
-of the range, as % of price. Small number = near that edge.</td></tr>
-<tr><td>stop-now est.</td><td class="dim">roughly what you would receive
-if you flattened this bot right now — position at price, minus the
-venue fee. An estimate, never a promise.</td></tr>
-<tr><td>watcher</td><td class="dim">how much of this bot's watchdog
-ceiling its position uses, when you gave it one. The watchdog is the
-independent alarm that pages if a position outgrows that limit.</td></tr>
-<tr><td>NOT STARTED / RESTING / HOLDING / FLAT</td><td class="dim">not
-started = in the fleet file, waits for the fleet's restart; resting =
-running, holding nothing; holding = has a position; flat = no position,
-traded in this window. Hover any state word for its meaning. A bot rests
-only the orders within a few percent of the price (5% unless set) and
-places the rest as the price comes near — so a wide grid shows one or two
-orders and a position, which is correct; the card's "orders" line says
-what rests and what waits.</td></tr>
-<tr><td>DEAD</td><td class="dim">the bot stood down and wrote a
-tombstone. Its reason is on the control page; revival is deliberate.
-</td></tr>
-<tr><td>no limit</td><td class="dim">this bot has no position limit of
-its own. The account guards (margin, equity floor, drawdown, a stale
-fleet) still cover it; a limit is an opt-in.</td></tr>
-<tr><td>(belief)</td><td class="dim">a number from the engine's own
-snapshot rather than venue records — what the bot believes, seconds
-old, honest about its source.</td></tr>
-<tr><td>* (star)</td><td class="dim">this bot's numbers come from a
-window that opened mid-round: partial by construction. Widen the window
-for the whole story.</td></tr>
-<tr><td>ZERO-SPREAD (R9)</td><td class="dim">exits that closed inside
-the fee of their own cost — churn that pays the venue and nobody else.
-Should be zero.</td></tr>
-<tr><td>trips / per-trip</td><td class="dim">a trip is an exit that
-closed a lot; per-trip is what each exit earned against its own rung (R12),
-not the book's average &mdash; a grid that bought cheaper lots on the way
-down shows a falling average, and realized against it is not what the trip
-earned. The grid's heartbeat.</td></tr>
-<tr><td>rounds / SO fills / max depth</td><td class="dim">martingale:
-completed rounds; safety orders filled this window; the deepest rung
-reached. Depth near max SOs = the schedule nearly exhausted.</td></tr>
-<tr><td>hold benchmark</td><td class="dim">what the same capital would
-have done just holding over the same window. Beat it or hold.</td></tr>
-<tr><td>numbers (button)</td><td class="dim">the position's own page (U56),
-live: the position as the exchange shows it, then every number laid open. A
-card on the fleet page is slim (U68) — its money, run rate and range, and
-only what needs you now, in red.</td></tr>
-<tr><td>details / assets (fold)</td><td class="dim">on the position's page,
-the card's lower half — holding, kind, margin, market, limits; a portfolio's
-assets — behind one word (U58). Click to fold or open; it is
-remembered.</td></tr>
-<tr><td>… trade (card)</td><td class="dim">a single long or short with its
-own exit (D81): its take profit, its stop watched at the mark, who opened it
-when. <b>close trade</b> ends it early with one reduce-only market order;
-<b>clear</b>, once it has ended, frees its market and side. Opened from
-<b>new trade</b>.</td></tr>
-<tr><td>price, 24 h / 7 d</td><td class="dim">on a position's page: the
-price the engine read each minute, the window's rungs (edges dashed), the
-bot's own buys and sells as dots, liquidation in red (U65). Hover a dot or
-the line for its time.</td></tr>
-<tr><td>running · per day · grid APR</td><td class="dim">how long the
-bot has run in the figure's span, its realised profit after fees per day,
-and that as a yearly rate on its investment — Bybit's grid APR: profit /
-investment / days x 365, under a day counted as a day (U64). A big APR on
-a short run is arithmetic, not a promise.</td></tr>
-<tr><td>equity, 24 h / 7 d</td><td class="dim">the account's equity as
-the engine's own snapshot saw it, one point a minute or so, over the last
-day and week (U63): the low, the high and the change over the window;
-hover a point for its time. The small line in the strip is the same day.
-Not the venue's chart: the engine's reading of the venue's wallet.</td></tr>
-<tr><td>N bots (fold)</td><td class="dim">an account's cards, behind its
-heading and its box (U59). <b>accounts: full / folded</b> sets them
-all; <b>fold cards / open cards</b> beside the count folds or opens
-this one account's cards.</td></tr>
-<tr><td>window slid N rungs from home</td><td class="dim">a sliding grid's
-window has moved with the price; the card judges the price against the
-window it trades, not the range it started from (U57).</td></tr>
-<tr><td>PORTFOLIO · carry / tilt / basis &amp; shape</td><td class="dim">the
-hedged portfolio row (D78): several coins on spot at target weights, each
-hedged by its own perpetual short. <b>carry</b> is the funding its shorts
-received; <b>tilt</b> what leaning the hedges with the regime made or
-cost; <b>basis &amp; shape</b> what is left of the total since the anchor
-after those two and after the loan's interest — the spot/perp gap and the
-inverse contract's shape. <b>interest</b> is what the venue charged on the
-loan.</td></tr>
-<tr><td>stack · cash · borrowed (N× the equity)</td><td class="dim">the
-portfolio's coins at mark; its unspent quote; the venue's loan when it
-runs on margin, and the stack as a multiple of the row's equity. The
-margin floor trims every leg together when free margin dips under it, and
-the row then aims lower until free margin is comfortable.</td></tr>
-<tr><td>weight → actual · hedge ratio → actual</td><td class="dim">per
-asset: the target share of the stack and where it sits; the hedge the row
-wants and the hedge it holds, as coins.</td></tr>
-</table><p><a href="/">&larr; fleet</a></p>"""
+# D157: a glossary — each word the panel shows, what other platforms call
+# it, and what it means here. Spec and decision codes stay in this comment
+# and the code, never on the page (U53, U52, U56, U57, U58, U63, U64, U65,
+# U68, U59, D63, D76, D78, D81, R12 are the entries' sources).
+KEY = """<h1>key — the panel's words, and what other platforms call them</h1>
+<p class="dim">Hover a state word, a label or a figure on a card for its
+meaning there. Where Bybit, Pionex or 3Commas use another word, it is said
+under "also called".</p>
+<table><tr><th>word</th><th>also called</th><th>what it means here</th></tr>
+<tr><td>Total P&amp;L</td><td class="dim">total profit, PnL</td><td class="dim">realised
+after fees + funding + floating P&amp;L. The honest sum, over the span the card
+names beside it (since the bot was last flat, or the last few hours).</td></tr>
+<tr><td>ROI</td><td class="dim">return</td><td class="dim">Total P&amp;L as a
+percentage of the bot's investment.</td></tr>
+<tr><td>Grid profit</td><td class="dim">arbitrage profit, matched profit</td><td class="dim">what
+the completed buy-and-sell trips made, each sell against the grid level it
+bought at, after fees. A grid's heartbeat.</td></tr>
+<tr><td>Floating P&amp;L</td><td class="dim">unrealised P&amp;L, trend PnL, unmatched
+PnL; "unreal" in the table</td><td class="dim">what the bot holds now, at the mark price,
+against what it cost. It moves every second and becomes real only when sold. On a
+grid's card it is the rest of the total once grid profit is taken out, so funding
+and what a moved range realised sit in it too.</td></tr>
+<tr><td>realised after fees</td><td class="dim">realized profit</td><td class="dim">profit
+from buys and sells already matched, in the money coin, less the fees. It never
+moves again.</td></tr>
+<tr><td>fees</td><td class="dim">trading fees</td><td class="dim">what the exchange charged
+for every fill in the span. Already taken out of every "after fees" figure: total =
+realised − fees + funding + floating P&amp;L.</td></tr>
+<tr><td>funding</td><td class="dim">funding fee</td><td class="dim">what the bot's
+perpetual position paid (−) or received (+) in funding over the same span, from
+the exchange's own record. Spot has none; — when it could not be read.</td></tr>
+<tr><td>Runtime · per day · APR</td><td class="dim">running time, grid APR, total APR</td><td class="dim">how
+long the bot has run in the figure's span, its grid profit (a DCA's or a trade's
+realised profit) after fees per day, and that as a yearly rate on its investment,
+as Bybit counts it: profit ÷ investment ÷ days × 365, a run under a day counted as
+a day. A big APR on a short run is arithmetic, not a promise.</td></tr>
+<tr><td>USDT · USDC · USD · BTC …</td><td class="dim">quote coin, settle coin</td><td class="dim">every
+money figure names its coin: a USDT/USDC perpetual's or a spot bot's money is its
+settle coin (Bybit USDT or USDC, Hyperliquid USDC); a coin-margined bot's
+investment, size, loss and P&amp;L are dollars ($1 contracts) and its margin is
+the coin itself. An account's total joins the coins its bots use.</td></tr>
+<tr><td>Running · in position</td><td class="dim">running</td><td class="dim">the bot
+runs and holds a position; its exits rest on the exchange or wait for the price
+to come near.</td></tr>
+<tr><td>Running · no position</td><td class="dim">running</td><td class="dim">the bot
+runs and holds nothing; its orders rest or wait. A bot rests only the orders within
+a few percent of the price (5% unless set) and places the rest as the price comes
+near, so a wide grid shows one or two orders, which is correct; the card's
+"orders" line says what rests and what waits.</td></tr>
+<tr><td>Waiting to start</td><td class="dim">pending</td><td class="dim">saved to
+its account but not running yet: it starts when the account's engine is next
+started or restarted (on the control page).</td></tr>
+<tr><td>Stopped (by its rule)</td><td class="dim">stopped, completed, terminated</td><td class="dim">the
+bot stopped for good by its own rule: its stop loss, its loss limit or its round
+count; or the exchange refused it at start and it was set aside, the rest of the
+account running on. Its orders are cancelled. Its reason is on the control page;
+starting it again is deliberate.</td></tr>
+<tr><td>Stopped (engine off)</td><td class="dim">paused</td><td class="dim">the
+account's engine is not running: nothing is placed or watched. Orders already on
+the exchange stay there.</td></tr>
+<tr><td>Retired</td><td class="dim">deleted, closed</td><td class="dim">stood down for
+good by its card's <b>stop</b>: orders cancelled, its position closed or left open, as chosen.</td></tr>
+<tr><td>bot code</td><td class="dim">bot ID</td><td class="dim">the short name on a
+card's footer, read out beside it: <b>linBTCUSDTl</b> = USDT perpetual · BTCUSDT ·
+long (<b>lin</b> a USDT/USDC perpetual, <b>inv</b> a coin-margined one, <b>spo</b>
+spot; the last letter the side). A confirm box asks for it typed.</td></tr>
+<tr><td>grid level</td><td class="dim">grid, rung</td><td class="dim">one price in a
+grid where a buy or a sell rests. "Number of grids" counts them.</td></tr>
+<tr><td>range</td><td class="dim">price range</td><td class="dim">a grid's lowest to
+highest price: on the card a bar, its ticks the grid levels, the dot today's price.</td></tr>
+<tr><td>range moved up / down N levels</td><td class="dim">trailing, range moved</td><td class="dim">a
+grid that follows the price has moved its range by N grid levels from where it
+started; the card judges the price against the range it trades now.</td></tr>
+<tr><td>edge lo/hi</td><td class="dim">distance to range</td><td class="dim">in the
+table: how far the price is from each end of the range, as % of the price. A small
+number is near that edge.</td></tr>
+<tr><td>open@avg</td><td class="dim">position, entry price</td><td class="dim">in the
+table: what the bot holds right now, at its average cost.</td></tr>
+<tr><td>bought / sold</td><td class="dim">filled volume</td><td class="dim">the coins
+traded each way in the span.</td></tr>
+<tr><td>stop-now est.</td><td class="dim">if closed now</td><td class="dim">roughly what
+you would receive if you closed this bot's position right now: the position at the
+price, less the exchange fee. An estimate, never a promise.</td></tr>
+<tr><td>watcher · no limit</td><td class="dim">position alert</td><td class="dim">how much
+of this bot's own position limit its position uses, when it has one: an independent
+check that warns if a position outgrows it. "no limit" means it has none of its own;
+the account checks (margin, equity floor, drawdown, a silent engine) still cover it.</td></tr>
+<tr><td>(estimated)</td><td class="dim">—</td><td class="dim">a number from the
+engine's own last snapshot rather than the exchange's records: seconds old, and said
+so.</td></tr>
+<tr><td>all-time</td><td class="dim">total since creation</td><td class="dim">a bot's
+whole result since its first recorded fill, from the panel's own record of fills;
+"the record is behind" when that record has not caught up yet.</td></tr>
+<tr><td>safety checks</td><td class="dim">risk monitor</td><td class="dim">the
+independent checks that run every few minutes beside the bots (margin, equity floor,
+each bot's position limit, a silent engine) and warn when one fails. "not running"
+means nothing is checking.</td></tr>
+<tr><td>order book thin for this size</td><td class="dim">low liquidity</td><td class="dim">the
+market's order book near the price is small beside what this account's bots trade
+there; a large order would move the price.</td></tr>
+<tr><td>est. liquidation price</td><td class="dim">estimated liquidation price</td><td class="dim">on
+a new bot's form and review: where this bot, standing alone on its own investment,
+would be liquidated if the price moved steadily against it with every level filled.
+Under cross margin the account's free balance holds it longer; the exchange's own
+figure is the one that counts.</td></tr>
+<tr><td>least investment that works</td><td class="dim">minimum investment</td><td class="dim">the
+smallest investment the engine accepts for a setup as typed: below it a grid level's
+order is under the exchange's smallest, or a DCA's orders do not fit.</td></tr>
+<tr><td>profit per grid level</td><td class="dim">profit/grid</td><td class="dim">what
+one level earns each time it sells, after the maker fee on both legs, as a share of
+that level's order.</td></tr>
+<tr><td>* (star)</td><td class="dim">partial</td><td class="dim">this bot's numbers
+come from a span that opened mid-round, so they are partial. Widen the span for the
+whole story.</td></tr>
+<tr><td>trips / per trip</td><td class="dim">arbitrage times, matched trades</td><td class="dim">a
+trip is a sell that closed a buy; per trip is what each made against its own grid
+level, not against the book's average. A grid that bought cheaper on the way down
+shows a falling average, and profit against that average is not what the trip
+earned.</td></tr>
+<tr><td>rounds</td><td class="dim">deals, cycles, loops</td><td class="dim">a DCA's
+completed rounds: an entry, its safety orders, and the take profit that closed it.</td></tr>
+<tr><td>safety order</td><td class="dim">add-on order, DCA order, addition</td><td class="dim">a
+DCA's extra buy (a short: sell) as the price moves against it, each one perhaps
+larger than the last (the multiplier), so the average entry follows the price.</td></tr>
+<tr><td>the ladder</td><td class="dim">summary box, max price drop covered</td><td class="dim">a
+DCA card's own sum: for each step, where it fills from the base price, its size, what
+is then committed, the average entry, and how far the price must come back from that
+fill for the whole position to reach its take profit. The summary line is the drop (a
+short: the rise) the ladder covers before it runs out. Percentages of the base price,
+so it holds before a round and during one.</td></tr>
+<tr><td>mark price</td><td class="dim">mark</td><td class="dim">the exchange's fair
+price for a perpetual, which it uses for floating P&amp;L and liquidation.</td></tr>
+<tr><td>liquidates at · % away</td><td class="dim">liquidation price, est. liq. price</td><td class="dim">where
+the exchange says this position is liquidated, and how far the mark price is from
+it. Red when it is close.</td></tr>
+<tr><td>MMR</td><td class="dim">maintenance margin rate, risk ratio</td><td class="dim">the
+account's maintenance margin as a share of its equity; the exchange liquidates at
+100%.</td></tr>
+<tr><td>leverage</td><td class="dim">—</td><td class="dim">position size ÷ the money
+put up. The account box's "account leverage" is everything held ÷ the account's
+equity; "if every order filled" is the same with every resting and waiting order
+filled.</td></tr>
+<tr><td>investment</td><td class="dim">total investment, margin, amount</td><td class="dim">what
+the bot puts up, in the money coin; at a leverage, its position may reach investment ×
+leverage.</td></tr>
+<tr><td>hold benchmark</td><td class="dim">vs just holding</td><td class="dim">on a
+rehearsal: what the same money would have done just holding over the same span.</td></tr>
+<tr><td>wallet · this bot's book · not this bot's</td><td class="dim">—</td><td class="dim">a spot
+bot with a stated holding: the coin's whole wallet balance, what this bot's book says
+it owns (the stated holding plus its own fills since), and the difference, coins
+that are not its. Where the kept record can say, how much of that the coin-margined
+bots on the same coin realised there, and what is left unexplained; red when more
+than half is unexplained (an outside hand, or a record behind). Funding settles in
+the coin too and is not counted.</td></tr>
+<tr><td>… trade (card)</td><td class="dim">one-off position</td><td class="dim">a single
+long or short with its own exit: its take profit, its stop watched at the mark, who
+opened it when. <b>close trade</b> ends it early with one reduce-only market order;
+<b>clear</b>, once it has ended, frees its market and side. Opened from <b>new
+trade</b>.</td></tr>
+<tr><td>numbers (button)</td><td class="dim">details</td><td class="dim">the position's
+own page, live: the position as the exchange shows it, then every number laid open. A
+card on the front page is slim: its money, run rate and range, and only what needs
+you now, in red.</td></tr>
+<tr><td>details / assets (fold)</td><td class="dim">—</td><td class="dim">on the
+position's page, the card's lower half (holding, kind, margin, market, limits; a
+portfolio's assets) behind one word. Click to fold or open; it is remembered.</td></tr>
+<tr><td>price, 24 h / 7 d</td><td class="dim">chart</td><td class="dim">on a position's
+page: the price the engine read each minute, the range's grid levels (edges dashed),
+the bot's own buys and sells as dots, liquidation in red. Hover a dot or the line for
+its time.</td></tr>
+<tr><td>equity, 24 h / 7 d</td><td class="dim">account value</td><td class="dim">the
+account's equity as the engine's own snapshot saw it, one point a minute or so: the
+low, the high and the change over the span; hover a point for its time. The small
+line in the strip at the top is the same day. The engine's reading of the
+exchange's wallet, not the exchange's own chart.</td></tr>
+<tr><td>N bots (fold)</td><td class="dim">—</td><td class="dim">an account's cards,
+behind its heading and its box. <b>accounts: full / folded</b> sets them all; <b>fold
+cards / open cards</b> beside the count folds or opens this one account's cards.</td></tr>
+<tr><td>PORTFOLIO · carry / tilt / basis &amp; shape</td><td class="dim">—</td><td class="dim">the
+hedged portfolio bot: several coins on spot at target weights, each hedged by its own
+perpetual short. <b>carry</b> is the funding its shorts received; <b>tilt</b> what
+leaning the hedges with the market's regime made or cost; <b>basis &amp; shape</b>
+what is left of the total since the start after those two and after the loan's
+interest: the spot/perp gap and the coin-margined contract's shape. <b>interest</b>
+is what the exchange charged on the loan.</td></tr>
+<tr><td>stack · cash · borrowed (N× the equity)</td><td class="dim">—</td><td class="dim">the
+portfolio's coins at the mark price; its unspent cash; the exchange's loan when it
+runs on margin, and the stack as a multiple of the bot's equity. The margin floor
+trims every leg together when free margin dips under it, and the bot then aims lower
+until free margin is comfortable.</td></tr>
+<tr><td>weight → actual · hedge ratio → actual</td><td class="dim">—</td><td class="dim">per
+coin: the target share of the stack and where it sits; the hedge the bot wants and the
+hedge it holds, as coins.</td></tr>
+</table><p><a href="/">&larr; your bots</a></p>"""
 
 
 # U112: the theme, set in the head before the page paints (no flash): the

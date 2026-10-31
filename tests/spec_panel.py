@@ -86,9 +86,9 @@ def spec_P2_the_token_becomes_a_cookie_and_the_page_renders_the_contract():
         req = urllib.request.Request(f'{base}/',
                                      headers={'Cookie': 'gg=tok123'})
         html = op.open(req).read().decode()
-        assert 'spoADAUSDTl' in html and 'HOLDING' in html
+        assert 'spoADAUSDTl' in html and 'Running · in position' in html
         assert '<svg' in html and 'circle' in html      # the range strip
-        assert 'watchdog swept 41s ago' in html
+        assert 'safety checks ran 41s ago' in html
         # U56: the numbers are the position's own page, behind the same cookie
         req = urllib.request.Request(f'{base}/position?fleet=0&bot=spoADAUSDTl',
                                      headers={'Cookie': 'gg=tok123'})
@@ -357,7 +357,7 @@ def spec_V7_a_quiet_bot_is_shown_not_omitted():
     for face in (False, True):                    # the cards and the table
         html = render([('hl', c)], table=face)
         assert 'linDOGEs' in html
-        assert 'HOLDING' in html and '730 (belief)' in html
+        assert 'Running · in position' in html and '730 (estimated)' in html
         assert 'no fills' in html
     # every row carries the full column count — a short row shears the
     # table and lands cells under the wrong headers (live 2026-08-08)
@@ -415,7 +415,7 @@ def spec_V8_the_export_is_the_same_renderer_frozen():
     from panel.server import render
     live = render([('demo', CONTRACT)])
     frozen = render([('demo', CONTRACT)], static='Fri, 08 Aug 2026')
-    assert 'spoADAUSDTl' in frozen and 'HOLDING' in frozen
+    assert 'spoADAUSDTl' in frozen and 'Running · in position' in frozen
     assert 'http-equiv="refresh"' in live
     assert 'http-equiv="refresh"' not in frozen
     assert '/?show=control' in live and 'show=control' not in frozen and '/control' not in frozen
@@ -448,7 +448,7 @@ def spec_T8_the_rehearsal_page_names_grid_profit_and_the_average_cost_apart():
            'bars': 3, 'equity_curve': [0.0, -2.0, -1.0]}
     html = verdict({'symbol': 'X', 'side': 'long', 'lower': 1, 'upper': 2,
                     'rungs': 3}, out)
-    assert 'grid profit (the matched trips, R12)' in html and '7.20' in html
+    assert 'grid profit (the matched trips)' in html and '7.20' in html
     assert 'realised at average cost' in html and '3.47' in html
     assert 'each exit against its own lot' in html
 
@@ -518,10 +518,14 @@ def spec_V9_the_key_defines_every_word_the_page_uses():
     """A dashboard that needs a translator failed the thesis: the key
     defines each column, state, and symbol the page can show."""
     from panel.server import KEY
-    for term in ('realized', 'unreal', 'stop-now', 'watcher', 'DEAD',
-                 'no limit', '(belief)', 'ZERO-SPREAD', 'hold benchmark',
-                 'trips', 'max depth', '* (star)'):
+    for term in ('realised', 'unreal', 'stop-now', 'watcher', 'Stopped (by its rule)',
+                 'no limit', '(estimated)', 'all-time', 'safety checks', 'hold benchmark', 'Total P&amp;L', 'Grid profit',
+                 'Floating P&amp;L', 'Runtime', 'APR', 'ROI', 'bot code', 'grid level',
+                 'safety order', 'MMR', 'trips', 'rounds', '* (star)'):
         assert term in KEY, f'key missing: {term}'
+    # D157: the stale entries are gone, and the fees line says what it means
+    assert 'ZERO-SPREAD' not in KEY and 'max depth' not in KEY
+    assert 'excluded from nothing' not in KEY
 
 
 def spec_F3_the_supervisor_detaches_stops_and_never_mistakes_a_stale_pid():
@@ -618,9 +622,9 @@ def spec_U45_the_money_sits_in_its_own_box_per_bot_and_per_exchange():
     card = html.split('class="card ')[1]
     assert '<div class="pnl neg">' in card           # 5.04 - 2.07 - 4.83
     assert 'realised after fees <b class="pos">+2.97</b>' in card
-    assert 'open <b class="neg">-4.83</b>' in card
+    assert 'Floating P&amp;L</span> <b class="neg">-4.83</b>' in card
     head = html.split('class="cards"')[0]
-    assert 'this exchange</span> <span class="big neg">-1.86</span>' in head
+    assert 'Total P&amp;L</span> <span class="big neg">-1.86</span>' in head
     c = copy.deepcopy(CONTRACT)                      # two bots: summed
     c['bots']['spoXRPUSDTl'] = dict(c['bots']['spoADAUSDTl'], realized=10.0,
                                     fees=1.0, unreal_at_mark=None,
@@ -628,7 +632,7 @@ def spec_U45_the_money_sits_in_its_own_box_per_bot_and_per_exchange():
     head = render([('demo', c)]).split('class="cards"')[0]
     assert '<span class="big pos">+7.14</span>' in head    # -1.86 + 9
     assert 'realised after fees <b class="pos">+11.97</b>' in head
-    assert 'open <b class="neg">-4.83</b>' in head         # flat adds nothing
+    assert 'Floating P&amp;L</span> <b class="neg">-4.83</b>' in head         # flat adds nothing
 
 
 def spec_U50_the_exchange_boxes_ride_in_a_strip_pinned_to_the_top():
@@ -650,10 +654,10 @@ def spec_U50_the_exchange_boxes_ride_in_a_strip_pinned_to_the_top():
     assert 'href="#fleet0"' in demo and '<span class="big num neg">-1.86 <span class="dim">USDT</span></span>' in demo
     assert '>1 bots</span><span></span><span class="dim">leverage —</span>' in demo
     assert 'href="#fleet1"' in hl and '<span class="big num pos">+13.10 <span class="dim">USDT</span></span>' in hl
-    assert '<b class="neg num">1 dead</b><span class="dim">leverage 2.78x</span>' in hl
+    assert '1 stopped</b><span class="dim">leverage 2.78x</span>' in hl and ' dead<' not in hl
     assert '.hero{display:grid;grid-template-columns:repeat(7,max-content)' in CSS   # squared; the 7th is U63's line
     assert '.hero .fleet{display:contents}' in CSS
-    assert 'this exchange</span> <span class="big pos">+13.10</span>' in rest   # the box agrees
+    assert 'Total P&amp;L</span> <span class="big pos">+13.10</span>' in rest   # the box agrees
     assert '<h1 id="fleet0">' in rest and '<h1 id="fleet1">' in rest
     assert '.hero{position:sticky;top:0' in CSS
     assert '<h1 id="fleet0">' in render([('demo', CONTRACT)], table=True)      # the table too
@@ -724,9 +728,9 @@ def spec_U87_the_polish_pass_quiet_heading_line_and_buttons_without_stray_dots()
     from panel.server import CSS, render
     page = render([('demo', CONTRACT)])
     h1 = page.split('<h1 id="fleet0">', 1)[1].split('</h1>', 1)[0]
-    assert '<span class="meta"><span class="dim">watchdog' in h1 and 'refreshes every' in h1.split('class="meta"', 1)[1]
+    assert '<span class="meta"><span class="dim">safety checks' in h1 and 'refreshes every' in h1.split('class="meta"', 1)[1]
     foots = [f.split('</div>', 1)[0] for f in page.split('class="dim foot">')[1:]]
-    assert foots and all('·' not in f and '>edit</a> <a' in f for f in foots)
+    assert foots and all('·' not in f.rsplit('<span>', 1)[1] and '>edit</a> <a' in f for f in foots)   # the links; the bot code's decode keeps its dots (D157)
     assert 'h1 .meta{display:block;font-size:.78em;font-weight:normal' in CSS
     assert '.card .foot>span:last-child{display:flex;flex-wrap:wrap;gap:.25em}' in CSS
     assert 'nav.side{border:var(--bw) solid var(--edge);border-radius:8px' in CSS
@@ -762,7 +766,7 @@ def spec_U88_every_form_on_one_grid_and_each_part_of_a_page_boxed():
     assert quick.count('<div class="fsec">') == 2
     trade = trade_form(['demo'])
     rows = re.findall(r'<tr>(.*?)</tr>', trade, re.S)
-    assert len(rows) == 10 and all(r.count('<td') == 3 and '<span class="u">' in r for r in rows)
+    assert len(rows) == 9 and all(r.count('<td') == 3 and '<span class="u">' in r for r in rows)
     assert '<i class="un">%</i>' in trade and '<i class="un">x</i>' in trade
     res = results_page([('demo', {'since_first': {}}), ('hl', {'since_first': {}})])
     assert res.count('<div class="fsec"><h2>') == 2
@@ -841,7 +845,7 @@ def spec_U53_every_money_figure_names_its_coin():
     assert 'margin IM 300.00 USDT · MM 15.00 USDT' in page
     assert 'investment 3,000 USDT' in page
     assert 'loss limit: down 12.40 of 50 USDT' in page
-    assert 'this exchange</span> <span class="big neg">-1.86</span> USDT <span' in page
+    assert 'Total P&amp;L</span> <span class="big neg">-1.86</span> USDT <span' in page
     assert '<span class="big num neg">-1.86 <span class="dim">USDT</span></span>' in page
     inv = copy.deepcopy(CONTRACT)                 # a margin held in the coin itself
     inv['bots']['invBTCUSDl'] = dict(inv['bots'].pop('spoADAUSDTl'), inverse=True,
@@ -939,12 +943,12 @@ def spec_V11_a_watchdog_that_is_off_says_OFF_not_a_number():
     off; late within the hour is still an alarm."""
     from panel.server import sweep_note
     assert sweep_note({'watchdog': {'swept_s_ago': 41}}) == (
-        '<span class="dim">watchdog swept 41s ago</span>')
+        '<span class="dim">safety checks ran 41s ago</span>')      # D157 (U124)
     late = sweep_note({'watchdog': {'swept_s_ago': 1500}})
-    assert 'class="neg"' in late and 'late: swept 25 min ago' in late
+    assert 'class="neg"' in late and 'late: last ran 25 min ago' in late
     for off in ({'watchdog': {'swept_s_ago': 602233}},
                 {'watchdog': {'swept_s_ago': None}}, {}):
-        assert sweep_note(off) == '<span class="dim">watchdog OFF</span>'
+        assert sweep_note(off) == '<span class="dim">safety checks: not running</span>'
 
 
 def spec_U10_a_refresh_does_not_shut_what_the_reader_opened():
@@ -1194,13 +1198,13 @@ def spec_X15_a_dead_bots_card_offers_the_close_and_says_DEAD():
     from panel.server import render
     for c in (_dead(True), _dead(False)):          # fills in the window or
         page = render([('demo', c)])               # not: dead is said either way
-        assert 'class="neg st st-dead"' in page and '>DEAD</span>' in page
+        assert 'class="neg st st-dead"' in page and '>Stopped (by its rule)</span>' in page
         assert "href='/close?fleet=0&amp;bot=linAVAXUSDTs'>close position" in page
     assert '/close?fleet=0&amp;bot=spoADAUSDTl' not in render([('demo', _dead())])
     flat = _dead(True)                             # stood down flat, as HL
     flat['bots']['linAVAXUSDTs']['position'] = 0.0  # AVAX did after its last
     page = render([('demo', flat)])                # round (2026-10-06)
-    assert '>DEAD</span>' in page and '/close?fleet=0&bot=linAVAXUSDTs' not in page
+    assert '>Stopped (by its rule)</span>' in page and '/close?fleet=0&bot=linAVAXUSDTs' not in page
     seen = _dead(False)                            # no fills in the window,
     seen['watchdog']['belief']['bots']['linAVAXUSDTs']['position'] = 0.0
     assert '/close?fleet=0&bot=linAVAXUSDTs' not in render([('demo', seen)])
@@ -1359,6 +1363,9 @@ def spec_U43_several_units_restart_together_or_none_does():
         pages = []
 
         labels = ('demo', 'hl')
+        fleets = ()
+        _units_typed = ps.Handler._units_typed
+        _account_typed = ps.Handler._account_typed
 
         def _tombs_path(self, fi=0):
             from pathlib import Path
@@ -1448,7 +1455,7 @@ def spec_U35_the_card_says_what_rests_and_the_state_words_explain_themselves():
     assert 'resting: 1 buy' in page and 'within 5% of them' in page
     assert 'st st-holding' in page
     from panel.server import KEY
-    assert 'Hover any state word' in KEY                  # the key page
+    assert 'Hover a state word' in KEY                  # the key page
 
 
 # --- U36: every card says what kind of thing the bot is -----------------------
@@ -1762,7 +1769,7 @@ def spec_U57_the_card_judges_the_price_against_the_slid_window_and_a_quiet_bot_s
     c['watchdog']['belief']['bots']['spoADAUSDTl'] = {'alive': True, 'position': 910.57, 'offset': -10}
     c['bots']['spoADAUSDTl']['mark'] = 0.17
     html = render([('demo', c)])
-    assert 'OUTSIDE' not in html and 'window slid -10 rungs from home' in html
+    assert 'OUTSIDE' not in html and 'range moved down 10 levels from where it started' in html
     assert 'above the bottom' in html and 'below the top' in html
     # a quiet bot (no fills in the window) with a mark from the readout: placed, not blank
     q = copy.deepcopy(CONTRACT)
@@ -1791,7 +1798,7 @@ def spec_U68_a_card_is_slim_and_its_numbers_page_is_live():
     belief['spoADAUSDTl'] = {'alive': True, 'position': 910.57}
     b = c['bots']['spoADAUSDTl']
     slim = card(0, 'spoADAUSDTl', b, c, belief)
-    assert '<div class="card long slim">' in slim and 'HOLDING' in slim
+    assert '<div class="card long slim">' in slim and 'Running · in position' in slim
     assert '<span class="big' in slim and '% </span>' not in slim and 'on 1,000</span>' in slim  # the return on the investment
     assert '<div class="rng">' in slim and "numbers</a>" in slim                  # the range, the door to the rest
     for gone in ('investment 1,000', 'margin IM', '<div class="numbers">', 'stop-now', 'grid on spot'):
@@ -1887,7 +1894,7 @@ def spec_U59_an_account_folds_to_its_heading_and_box_and_the_side_panel_folds_ev
     for i in (0, 1):
         assert f'<details class="acct" data-k="acct:{i}" open><summary>{len(c["bots"])} bots</summary><div class="cards">' in html
         h1 = html.index(f'<h1 id="fleet{i}">')
-        box = html.index('<span class="dim">this exchange</span>', h1)
+        box = html.index('Total P&amp;L</span> <span class="big', h1)
         assert h1 < box < html.index(f'data-k="acct:{i}"', h1)      # heading, box, then the fold
     assert '<a href="#" data-fold="folded" data-cls="acct">folded</a>' in html
     assert '<a href="#" data-fold="open" data-cls="acct">full</a>' in html
@@ -2002,7 +2009,7 @@ def spec_U64b_grid_profit_is_the_matched_trips_and_the_run_starts_at_the_first_f
     assert '-100.00</b>/day' in run_rate(dict(b, gap_trips=0), c, 1000.0)   # no trip: realised
     young = {'fills': 2, 'realized': 0.0, 'fees': 1.0, 'counted_from': None,
              'first_ms': gen - 38 * 60_000}
-    assert 'running 38 h' not in run_rate(young, c) and 'running 1 h' in run_rate(young, c)
+    assert 'Runtime 38 h' not in run_rate(young, c) and 'Runtime 1 h' in run_rate(young, c)
 
 
 def spec_U64_a_card_says_how_long_it_has_run_and_its_grid_profit_per_day_and_a_year():
@@ -2017,19 +2024,19 @@ def spec_U64_a_card_says_how_long_it_has_run_and_its_grid_profit_per_day_and_a_y
          'counted_since_ms': gen - 4 * 86_400_000}
     c = {'generated_ms': gen, 'window_hours': 24}
     line = run_rate(b, c, capital=1000.0)
-    assert 'running 4.0 d' in line and '+25.00</b>/day' in line and '+912.5%' in line   # 100/1000/4*365
+    assert 'Runtime 4.0 d' in line and '+25.00</b>/day' in line and '+912.5%' in line   # 100/1000/4*365
     short = dict(b, counted_since_ms=gen - 6 * 3_600_000)
-    assert 'running 6 h' in run_rate(short, c, 1000.0) and '+100.00</b>/day' in run_rate(short, c, 1000.0)   # a day at least
+    assert 'Runtime 6 h' in run_rate(short, c, 1000.0) and '+100.00</b>/day' in run_rate(short, c, 1000.0)   # a day at least
     cap = dict(b, counted_from='cap', first_ms=gen - 2 * 86_400_000)
-    assert 'running 2.0 d' in run_rate(cap, c)  and 'APR' not in run_rate(cap, c)          # no investment, no rate
+    assert 'Runtime 2.0 d' in run_rate(cap, c)  and 'APR' not in run_rate(cap, c)          # no investment, no rate
     win = dict(b, counted_from=None)
-    assert 'running 1.0 d' in run_rate(win, c, 1000.0)
+    assert 'Runtime 1.0 d' in run_rate(win, c, 1000.0)
     assert run_rate(dict(b, fills=0), c, 1000.0) == '' and run_rate(b, {}, 1000.0) == ''
     assert 'class="neg">-' in run_rate(dict(b, realized=-500.0), c, 1000.0)
     from panel.server import render
     live = copy.deepcopy(CONTRACT)
     live['generated_ms'] = gen                       # the fixture's clock reads zero: no span, no line
-    assert '<div class="rate">running 6 h · grid profit' in render([('demo', live)])   # the fixture's 6 h window
+    assert '<div class="rate">Runtime 6 h · Grid profit' in render([('demo', live)])   # the fixture's 6 h window
     assert '<div class="rate">' not in render([('demo', copy.deepcopy(CONTRACT))])
 
 
@@ -2053,7 +2060,7 @@ def spec_U75_the_bug_hunts_findings_stay_fixed():
     c['bots']['linXRPUSDTl'] = None                                            # configured, never started
     c['watchdog']['belief']['bots'].pop('linXRPUSDTl', None)
     row = render([('demo', c)], table=True).split('linXRPUSDTl')[1].split('</tr>')[0]
-    assert 'NOT STARTED' in row and 'RESTING' not in row
+    assert 'Waiting to start' in row and 'Running · no position' not in row
     bids = [(99.9, 1), (99.8, 1)]
     asks = [(100.1, 1), (100.25, 1)]
     assert abs(depth_reach_pct(bids, asks, 100.0) - 0.2) < 1e-9               # the nearer edge of the book served
@@ -2101,7 +2108,7 @@ def spec_U76_the_bug_hunts_nits_stay_fixed():
         subprocess.run = saved_run
         Handler._cache.pop(str(fleet), None)
     page = render([('demo', got)])
-    assert 'readout unavailable' in page and 'KeyError: boom' in page
+    assert "couldn't load this account" in page and 'KeyError: boom' in page
     # a perpetual's edit page has no spot rows; a spot bot's keeps them
     perp = advanced_page('grid', {'symbol': 'BTCUSDT', 'market_type': 'linear', 'side': 'long'}, ['bybit demo'], edit='linBTCUSDTl')
     spot = advanced_page('grid', {'symbol': 'BTCUSDT', 'market_type': 'spot', 'side': 'long'}, ['bybit demo'], edit='spoBTCUSDTl')
@@ -2359,7 +2366,7 @@ def spec_U90_a_grid_card_splits_its_total_into_grid_profit_and_trend():
     c = copy.deepcopy(CONTRACT)
     c['bots']['spoADAUSDTl'].update(gap_realized=30.0, gap_trips=12)
     card = render([('demo', c)]).split('class="card ')[1]
-    assert '<div class="split"><span>grid profit</span>' in card
+    assert '<div class="split"><span><span class="st" title="the completed buy-and-sell trips, each against its own grid level, after fees">Grid profit</span></span>' in card
 
 
 def spec_U93_the_audit_of_2026_10_16_the_panels_smaller_numbers():
@@ -2445,12 +2452,12 @@ def spec_U96_the_table_and_the_card_agree_on_state_and_window():
     c['watchdog']['belief']['bots']['spoADAUSDTl'] = {'alive': False, 'position': 910.57, 'offset': 2}
     table = render([('demo', c)], table=True)
     row = table.split('spoADAUSDTl')[1].split('</tr>')[0]
-    assert '>DEAD<' in row and 'HOLDING' not in row
-    assert 'window slid +2 rungs from home' in row
+    assert '>Stopped (by its rule)<' in row and 'Running · in position' not in row
+    assert 'range moved up 2 levels from where it started' in row
     gap = (0.23 - 0.155) / 15
     lo = 0.155 + 2 * gap
     assert f"{(0.2017 - lo) / 0.2017 * 100:.1f}%" in row
-    assert 'DEAD' in render([('demo', c)]).split('spoADAUSDTl')[1]
+    assert 'Stopped (by its rule)' in render([('demo', c)]).split('spoADAUSDTl')[1]
 
 
 def spec_P6b_only_the_panels_own_scripts_run_and_its_forms_carry_a_secret():

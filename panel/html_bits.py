@@ -62,6 +62,70 @@ def named(typed, botid):
     return bool(botid) and (typed or '').strip().lower() == botid.lower()
 
 
+MARKET_WORD = {'inverse': ' inverse', 'spot': ' spot'}
+
+
+def plain_name(row):
+    """D157: a bot's plain name, from its own fields — "BTCUSDT long grid",
+    "BTCUSD long DCA inverse", "SOLUSDT short trade", "carry portfolio".
+    The one spelling: the card says it, and a confirm box on Demo or Testnet
+    takes it as well as the bot's code. None when the row says too little."""
+    if not isinstance(row, dict):
+        return None
+    if row.get('strategy') == 'portfolio':
+        return f"{row.get('name')} portfolio" if row.get('name') else None
+    side, symbol = row.get('side'), row.get('symbol')
+    if side not in ('long', 'short') or not symbol:
+        return None
+    kind = ('trade' if row.get('trade') else
+            'DCA' if row.get('strategy') == 'martingale' else 'grid')
+    market = MARKET_WORD.get(row.get('market_type') or 'linear', '')
+    return f"{str(symbol).replace('-', '')} {side} {kind}{market}"
+
+
+def row_of_botid(botid, strategy=None, trade=False):
+    """The fields plain_name reads, from a bot's code alone (I1): what the
+    card has when no fleet row is at hand."""
+    mt = {'inv': 'inverse', 'spo': 'spot'}.get(botid[:3], 'linear')
+    if botid.startswith('pfo'):
+        return {'strategy': 'portfolio', 'name': botid[3:]}
+    return {'market_type': mt, 'symbol': botid[3:-1],
+            'side': 'short' if botid.endswith('s') else 'long',
+            'strategy': strategy or 'grid', 'trade': trade}
+
+
+def _squash(text):
+    return ' '.join(str(text or '').lower().split())
+
+
+def confirmed(typed, botid, row=None, mainnet=False):
+    """D157 (the owner's answer): a typed confirmation takes the bot's code,
+    as always (U18), and on Demo or Testnet its plain name too — derived
+    from the row, which must be this bot's. Mainnet takes the code only,
+    exactly as before: its typing is unchanged."""
+    if named(typed, botid):
+        return True
+    if mainnet or not row:
+        return False
+    from gridgremlin.apply import row_botid
+    try:
+        if row_botid(row) != botid:
+            return False
+    except (KeyError, TypeError):
+        return False
+    said = plain_name(row)
+    return bool(said) and _squash(typed) == _squash(said)
+
+
+def to_type(botid, row=None, mainnet=False):
+    """D157: the words a confirm box asks for, shown on the page: the plain
+    name with the code as the other spelling, or on Mainnet the code."""
+    said = None if mainnet else plain_name(row)
+    if not said:
+        return f'its code <code>{esc(botid)}</code>'
+    return f'its name <code>{esc(said)}</code> <span class="dim">(or its code {esc(botid)})</span>'
+
+
 def refusal_box(title, why, extra=''):
     """U11: a refusal is the first thing on the page, boxed, in plain
     words: what happened (nothing was saved), the engine's reason, and
@@ -87,3 +151,37 @@ def units_of(botid, terms):
     mt = {'lin': 'linear', 'inv': 'inverse', 'spo': 'spot'}.get(botid[:3], 'linear')
     u = money_units(None, mt, botid[3:-1])
     return u['quote'], u['margin_coin']
+
+
+CODE_RE = re.compile(r' ?\((?:[A-Z]\d{1,3}[a-z]?|§\d+)\)')
+
+
+def uncoded(text):
+    """D157: an engine warning shown as advice (not a refusal, which stays
+    verbatim) loses its spec code: the code is ours, not the reader's."""
+    return CODE_RE.sub('', str(text))
+
+
+def decode_botid(botid, quote=None):
+    """D157: a bot's code read out — linBTCUSDTl is "USDT perpetual ·
+    BTCUSDT · long" (I1: the market type's first three letters, the market,
+    the side's initial); a portfolio's pfo<name> is "portfolio · <name>".
+    The code stays the word a confirm box asks for; this says what it is."""
+    head, mid = botid[:3], botid[3:-1]
+    if head == 'pfo':
+        return f'portfolio · {botid[3:]}'
+    side = {'l': 'long', 's': 'short'}.get(botid[-1:], '?')
+    if head == 'inv':
+        market = 'coin-margined perpetual'
+    elif head == 'spo':
+        market = 'spot'
+    else:
+        coin = quote or units_of(botid, None)[0]
+        market = f"{coin if coin in ('USDT', 'USDC') else 'USDT/USDC'} perpetual"
+    return f'{market} · {mid} · {side}'
+
+
+def bot_code(botid, quote=None):
+    """D157: the card footer's bot code, decoded beside it."""
+    return (f'<span class="code" title="this bot\'s code: the name a confirm box asks you '
+            f'to type">{esc(botid)} <span class="dim">= {esc(decode_botid(botid, quote))}</span></span>')

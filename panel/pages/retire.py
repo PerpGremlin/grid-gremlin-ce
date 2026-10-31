@@ -3,7 +3,7 @@ stand down keeping the position, stand down closing everything — and its
 removal from the fleet inside it. The panel holds no keys: it writes the
 request, and the running fleet's bot acts on it under its own links (the
 road a trade's close takes, L7). A mixin the Handler inherits."""
-from ..html_bits import named, refusal_box
+from ..html_bits import confirmed, plain_name, refusal_box, to_type
 from panel.chart import _f
 from pathlib import Path
 import html
@@ -11,19 +11,22 @@ import json
 import time
 import urllib.parse
 
-# the steps, gentlest first: (value, label, what it does)
+# D157: stop is a choice, as on the platforms — close the position or leave
+# it open — and pause, the gentlest, after them: (value, label, what it does).
+# The values are the engine's own retire steps (D145); none is picked for you.
 STEPS = (
-    ('pause', 'pause',
-     'opens and adds nothing; its exits, take profit and stop keep working, and '
-     'its position and orders stay. <b>resume</b> undoes it.'),
-    ('hold', 'stand down, keep the position',
+    ('close', 'stop and close the position',
+     'cancels every order it owns, closes its whole position with one market order '
+     'that can only reduce it, and stops it for good. It cannot be undone.'),
+    ('hold', 'stop and leave the position open',
      'cancels every order it owns and stops it for good; the position stays open '
      'on the exchange with nothing managing it, and <b>close position</b> on its '
      'card closes it when you choose.'),
-    ('close', 'stand down and close everything',
-     'cancels every order it owns, closes its whole position with one market order '
-     'that can only reduce it, and stops it for good. It cannot be undone.'),
+    ('pause', 'pause instead',
+     'opens and adds nothing; its exits, take profit and stop keep working, and '
+     'its position and orders stay. <b>resume</b> undoes it.'),
 )
+CHOICES = ('close', 'hold', 'pause')
 WAIT_S = 15.0          # how long a stand-down with removal waits for the bot
 
 
@@ -80,7 +83,8 @@ class RetirePages:
         b = html.escape(botid)
         held = self._snapshot_held(fi, botid)
         real = self._mainnet(self.fleets[min(fi, len(self.fleets) - 1)], row.get('venue', 'bybit'))
-        top = (f'<h1>retire {b}</h1><p class="say">'
+        said = html.escape(plain_name(row) or botid)
+        top = (f'<h1>stop {said} <span class="dim">{b}</span></h1><p class="say">'
                + (f'It holds <b>{held:.10g}</b>, as the engine\'s last snapshot says. ' if held else
                   'The engine\'s last snapshot shows it holding nothing. ' if seen else
                   'The engine has not reported this bot — it has not started. ')
@@ -100,21 +104,20 @@ class RetirePages:
             return self._page(
                 top + said + '<form method="post" action="/retire">' + hidden
                 + '<input type="hidden" name="do" value="remove">'
-                + f'type the bot\'s name to take its row out of the fleet: <input name="confirm" '
-                f'size="18" placeholder="{b}"> <button class="danger">remove</button></form>'
-                '<p class="dim">the row and its watchdog line leave the files together; a '
+                + f'type {to_type(botid, row, real)} to take it off the account: <input name="confirm" '
+                f'size="22" placeholder="{b if real else said}"> <button class="danger">remove</button></form>'
+                '<p class="dim">the bot and its watchdog line leave the account\'s files together; a '
                 'backup is kept beside each.</p>')
         if req and req.get('action') in ('hold', 'close'):
             return self._page(
-                top + f'<p>Retire asked by {html.escape(str(req["by"]))} at {html.escape(str(req["t"]))}: '
+                top + f'<p>Stop asked by {html.escape(str(req["by"]))} at {html.escape(str(req["t"]))}: '
                 + html.escape(dict((s[0], s[1]) for s in STEPS)[req['action']])
-                + '. The running fleet acts within a cycle (a stopped fleet, at its next start); '
+                + '. The running bot acts within a cycle (on a stopped account, when it next starts); '
                 '<a href="">reload</a> to see it stood down'
                 + (' and remove its row' if req.get('remove') else '') + '.</p>')
         paused = req and req.get('action') == 'pause'
         steps = ''.join(
             f'<p><label><input type="radio" name="do" value="{v}"'
-            + (' checked' if v == ('hold' if paused else 'pause') else '')
             + (' disabled' if v == 'pause' and paused else '')
             + f'> <b>{label}</b></label> — {what}</p>' for v, label, what in STEPS)
         return self._page(
@@ -124,13 +127,15 @@ class RetirePages:
                + '<input type="hidden" name="do" value="resume">'
                f'<input type="hidden" name="confirm" value="{b}">'
                '<button>resume</button></form>' if paused else '')
-            + '<form method="post" action="/retire">' + hidden + steps
+            + '<form method="post" action="/retire">' + hidden
+            + '<p class="say"><b>Close the position, or leave it open?</b></p>' + steps
             + '<p><label><input type="checkbox" name="remove" value="1"> and <b>remove</b> it from the '
-            'fleet once it has stood down</label> <span class="dim">(not with pause)</span></p>'
-            + f'type the bot\'s name: <input name="confirm" size="18" placeholder="{b}"> '
+            'account once it has stopped</label> <span class="dim">(not with pause)</span></p>'
+            + f'type {to_type(botid, row, real)}: <input name="confirm" size="22" '
+              f'placeholder="{b if real else said}"> '
             + ('<br><span class="neg">real money</span> — to close everything, type the size a second '
                'time: <input name="size" size="14" placeholder="the size above"> ' if real and held else '')
-            + '<button class="danger">retire</button></form>')
+            + '<button class="danger">stop it</button></form>')
 
     def _retire_act(self, form):
         if not self.units and not self.supervise:
@@ -143,11 +148,17 @@ class RetirePages:
         row, why = self._retire_bot(fi, botid)
         if row is None:
             return self._page(refusal_box('not retired', why))
-        if not named(form.get('confirm'), botid):
-            return self._page(refusal_box('not retired', f'the typed name must be exactly {botid} — '
-                                                         'a click is not a decision'))
+        real = self._mainnet(f, row.get('venue', 'bybit'))
+        if not confirmed(form.get('confirm'), botid, row, mainnet=real):       # D157
+            said = None if real else plain_name(row)
+            return self._page(refusal_box('not retired', 'the typed name must be exactly '
+                                          + (f'{said} or {botid}' if said else botid)
+                                          + ' — a click is not a decision'))
+        if do not in CHOICES + ('resume', 'remove'):
+            return self._page(refusal_box('not stopped', 'choose one: close the position, '
+                                                         'leave it open, or pause'))
         b = html.escape(botid)
-        back = f'<p><a href="/retire?fleet={fi}&amp;bot={b}">back to its retire page</a> · <a href="/">your bots</a></p>'
+        back = f'<p><a href="/retire?fleet={fi}&amp;bot={b}">back to its stop page</a> · <a href="/">your bots</a></p>'
         if do == 'resume':
             done = drop(requests_path(f), botid, only_pause=True)
             return self._page(f'<h1>{b}: ' + ('resumed' if done else 'was not paused') + '</h1>'
@@ -169,9 +180,9 @@ class RetirePages:
             return self._page(refusal_box('not retired', f'{botid} is already asked to '
                                                          f'{req["action"]} ({req["t"]}) — that stands'))
         if do == 'pause':
-            return self._page(f'<h1>{b}: paused</h1><p>The running fleet pauses it within a cycle: '
+            return self._page(f'<h1>{b}: paused</h1><p>The running bot pauses within a cycle: '
                               'it opens and adds nothing, and its exits and stop keep working. '
-                              'Its retire page offers <b>resume</b>.</p>' + back)
+                              'Its stop page offers <b>resume</b>.</p>' + back)
         if req.get('remove'):
             # the bot acts within a cycle; wait for it, then take the row out
             end = time.time() + WAIT_S
@@ -179,12 +190,12 @@ class RetirePages:
                 if self._retire_state(fi, botid)[1]:
                     return self._retire_remove(fi, botid, back)
                 time.sleep(0.5)
-        return self._page(f'<h1>{b}: retire asked</h1><p>The running fleet '
+        return self._page(f'<h1>{b}: stop asked</h1><p>The running bot '
                           + ('cancels its orders and closes its whole position at market'
-                             if do == 'close' else 'cancels its orders and keeps its position')
-                          + ' within a cycle, and the bot stands down for good (a stopped fleet '
-                          'does it at its next start).'
-                          + (' It has not stood down yet; its retire page offers the removal once '
+                             if do == 'close' else 'cancels its orders and leaves its position open')
+                          + ' within a cycle, and stops for good (on a stopped account, when it '
+                          'next starts).'
+                          + (' It has not stopped yet; its stop page offers the removal once '
                              'it has.' if req.get('remove') else '') + '</p>' + back)
 
     def _retire_remove(self, fi, botid, back):

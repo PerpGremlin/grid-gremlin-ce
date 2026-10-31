@@ -53,7 +53,7 @@ def rehearse_form(values=None):
         'page. A rehearsal is not '
         'a promise —\nsame candles are never same fills. The replay plans '
         'against a synthetic\n1bp spread so guard-band drops happen as '
-        'they would live (§9).</p>\n'
+        'they would live.</p>\n'                                  # §9
         '<p><a href="#" data-back>&larr; back</a> · '
         '<a href="/">back to your bots</a></p>')
 
@@ -120,7 +120,7 @@ def verdict(draft, out, typed=None, bot_json=None, days='7'):
     rows = ''.join(
         f'<tr><td>{k}</td>{money(v)}</tr>' for k, v in
         ([('profit from closed rounds', out['grid_profit'])] if dca else
-         [('grid profit (the matched trips, R12)', out['grid_profit']),
+         [('grid profit (the matched trips)', out['grid_profit']),    # R12
           ('realised at average cost', out['realized'])])
         + [('fees', -out['fees'])]
         + ([('funding (the market\'s own)', -out['funding'])]
@@ -272,7 +272,7 @@ def other_side_html(bot, fi):
     return ('<p class="say"><b>The other side.</b> A '
             f"{'short' if long else 'long'} grid of the same width, rungs, "
             f"money and leverage {'above' if long else 'below'} {edge:,.6g} "
-            'would make this a reversal pair meeting there (D54). Its own '
+            'would make this a reversal pair meeting there. Its own '   # D54
             'gates, its own name:</p>'
             '<form method="post" action="/setup">'
             '<input type="hidden" name="gg" value="1">'
@@ -283,33 +283,38 @@ def other_side_html(bot, fi):
             '<button class="quiet">make the other side &rarr;</button></form>')
 
 
-def next_step_html(mode, unit, units):
+def next_step_html(mode, unit, units, start=''):
     """U31 (owner, after applying a bot: "it doesnt appear as if anything
     has happened, or any direction as to where to go?"): the written page
-    says what starts now and what waits, and names the step."""
+    says what starts now and what waits, and names the step. D157: a new
+    bot's page carries `start`, the "start it now" button, when control
+    can start it; nothing starts without the click."""
     if mode == 'edit':
         return ('<p><b>Next:</b> changed terms — leverage, investment, '
                 'stops, limits, take profit, trailing, repeat — are applied '
-                'by the running fleet within seconds (F12; the log says what '
-                'it applied). A changed range, grid count or ladder size '
-                'waits for the fleet\'s next restart.</p>')
-    what = ('the bot leaves the fleet' if mode == 'remove'
+                'by the running bot within seconds (the log says what '
+                'it applied). A changed range, grid count, price following '
+                'or ladder size waits until its account\'s engine restarts.</p>')   # F12
+    if mode == 'create' and start:
+        return ('<p><b>Next:</b> it does not start on its own — it starts when '
+                'you press the button.</p>' + start)
+    what = ('the bot leaves its account' if mode == 'remove'
             else 'this bot starts')
     if unit:
-        how = (f'on <a href="/control">control</a>, choose <b>restart</b>, '
-               f'type <b>{unit}</b> and press do it — or restart that unit '
-               'from the terminal')
+        how = (f'on <a href="/control">control</a>, choose <b>restart</b> and type '
+               f'the account\'s name <span class="dim">(its engine is the unit <b>{esc(unit)}</b>)</span>')
     elif units:
-        how = ('on <a href="/control">control</a>, restart the unit that '
-               'runs this fleet (' + ', '.join(units) + ')')
+        how = ('on <a href="/control">control</a>, restart the account that runs it '
+               '<span class="dim">(' + esc(', '.join(units)) + ')</span>')
     else:
-        how = ('restart the fleet process that runs this file (this panel '
-               'has no control over units)')
-    return (f'<p><b>Next:</b> {what} at the fleet\'s next restart, and not '
-            f'before. To restart now: {how}. A restart parks the fleet for '
-            'a few seconds — positions and venue-resting orders survive '
-            'it — and the new row is probed at start; a row the venue '
-            'refuses keeps the whole fleet down until it is fixed.</p>')
+        how = ('restart the engine that runs this account on the computer that runs it '
+               '(this panel cannot start bots: its control is off)')
+    return (f'<p><b>Next:</b> {what} when its account\'s engine next restarts, and not '
+            f'before. To restart now: {how}. A restart parks every bot of the account for '
+            'a few seconds — positions and orders resting on the exchange survive '
+            'it — and the new bot is checked as it starts; one the exchange '
+            'refuses is set aside (its card reads stopped) and the rest '
+            'run.</p>')   # D157: as D52 says (F8)
 
 
 # U11: every page off the main one starts with the way back to it. U21
@@ -336,15 +341,15 @@ def unit_refusal(typed, units, tombs, fleet_bots=None):
                  if named(typed, b)), None)
     if live:
         b, u = live
-        return (f'<b>{esc(b)}</b> is a bot, not a unit. Bots start and stop with '
-                'their fleet: to load a new or removed bot, choose '
-                f'<b>restart</b> and type <b>{esc(u or "the unit that runs its fleet")}'
-                '</b>.')
+        return (f'<b>{esc(b)}</b> is a bot, not an account. Bots start and stop with '
+                'their account: to load a new or removed bot, choose '
+                f'<b>restart</b> and type <b>{esc(u or "the unit that runs its account")}'
+                '</b> (or the account\'s name).')
     bot = next((t for t in tombs if named(typed, t)), None)
     if bot:
         return (f'<b>{esc(bot)}</b> is a stopped bot, not a unit. To revive it, '
                 'type its name in the small box beside its tombstone '
                 '(further down this page) and press <b>revive</b>; the unit '
                 'box above is for ' + esc(', '.join(units)) + '.')
-    return ('type one of the armed unit names exactly (' + esc(', '.join(units))
-            + ') — a click is not a decision (§12).')
+    return ('type an account\'s name, or one of the armed unit names exactly ('
+            + esc(', '.join(units)) + ') — a click is not a decision.')   # §12

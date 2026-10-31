@@ -48,8 +48,22 @@ class HLVenueClient(ExchangeClient):
         return link
 
     def fills_history(self, market_type, symbol, since_ms, now_ms):
-        return hl_truth.read_fills(self.user_fills_by_time(since_ms),
-                                   {symbol}, self._user())
+        """R1: HL answers at most 2000 fills for the whole account, oldest
+        first, with no cursor — the live thirty-day read stopped at
+        2026-10-29 18:34 and every newer fill was missing. Paged by halving
+        the window (R18's own way), a second that will not page refused;
+        `fills_answered` is the account's count, for the cap warning."""
+        from ...kept_fills import hl_history
+        raw = hl_history(self, int(since_ms), int(now_ms), strict=True)
+        self.fills_answered = len(raw)
+        return hl_truth.read_fills(raw, {symbol}, self._user())
+
+    def order_status(self, market_type, symbol, link_id):
+        """G23: one order's status by its cloid (info `orderStatus`,
+        read-only). None: HL does not know it."""
+        r = self._transport({'type': 'orderStatus', 'user': self._user(),
+                             'oid': link_to_cloid(link_id)})
+        return hl_truth.order_state(r)
 
     def read_wallet(self):
         return hl_truth.read_wallet(self)

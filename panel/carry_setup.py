@@ -36,6 +36,12 @@ ESSENTIAL = (
     ('perp_leverage', ('perp_leverage',), 'num', 'Perp leverage',
      'set on every hedge at each start; blank = whatever the venue holds', False),
 )
+# D157: a choice's words, as Bybit names its markets; the value is the file's
+CHOICE_WORDS = {
+    'hedge_product': {'inverse': 'coin-margined (BTCUSD)', 'usdt': 'USDT perpetual (BTCUSDT)',
+                      'usdc': 'USDC perpetual (BTCPERP)'},
+    'trigger': {'clock': 'on a clock', 'drift': 'on a drift', 'either': 'either'},
+}
 ADVANCED = (
     ('spot_borrow', ('spot_borrow',), 'flag', 'Borrow on spot',
      'lets the basket borrow USDT on spot (spot leverage turns it on)', False),
@@ -162,6 +168,16 @@ def row_from_form(form):
     total = sum(abs(sh) for _, sh in shares)
     if not total:
         raise ValueError('Coins and weights: the shares add up to nothing')
+    # D157: the cap is checked here in the form's own units, a share of the
+    # basket, before the leverage scales both; the engine's refusal speaks
+    # of the stack (350% vs 250% at 5x), which the form never showed
+    cap = Decimal(str((row.get('risk') or {}).get('max_weight', 0.5)))
+    over = [(c, abs(sh) / total) for c, sh in shares if abs(sh) / total > cap + Decimal('1e-9')]
+    if over:
+        c, part = over[0]
+        raise ValueError(f'{c} is {_pct(float(part))}% of the basket, above "Most in one coin" '
+                         f'({_pct(float(cap))}%). Raise "Most in one coin" to at least '
+                         f'{_pct(float(part))}%, or give {c} a smaller share')
     row['assets'] = [{'coin': c, 'weight': float(sh / total * lev)} for c, sh in shares]
     if lev != 1:
         mw = (row.get('risk') or {}).get('max_weight', 0.5)
@@ -401,8 +417,13 @@ def _input(n, kind, value, fixed=False):
     if kind == 'flag':
         return f'<input type="checkbox" name="{n}" value="1"{" checked" if value else ""}>'
     if kind.startswith('choice:'):
-        opts = ''.join(f'<option{" selected" if o == value else ""}>{o}</option>'
-                       for o in [''] + kind[7:].split('|'))
+        # D157: the words shown, the file's value sent (unchanged)
+        def opt(o):
+            lb = CHOICE_WORDS.get(n, {}).get(o, o)
+            sel = ' selected' if o == value else ''
+            return (f'<option{sel}>{o}</option>' if lb == o else
+                    f'<option value="{o}"{sel}>{html.escape(lb)}</option>')
+        opts = ''.join(opt(o) for o in [''] + kind[7:].split('|'))
         return f'<select name="{n}">{opts}</select>'
     size = 34 if kind in ('assets', 'products') else 22 if n == 'max_loss_since' else 12
     return f'<input name="{n}" size="{size}" value="{v}">'
@@ -426,7 +447,7 @@ def carry_page(values, fleets, chosen=0, alert='', edit=None):
              'its coins and short would be left with nothing managing them. The running bot '
              'takes the change at its fleet\'s restart.</span></h1>' if edit else
              '<h1>set up a carry bot <span class="dim">— coins on spot, each held '
-             'short on its perpetual, the funding collected (D78). Bybit only. '
+             'short on its perpetual, the funding collected. Bybit only. '
              'Nothing is saved until you have read the summary and typed the '
              'bot\'s name.</span></h1>')
     where = (f'<input type="hidden" name="fleet" value="{chosen}">'

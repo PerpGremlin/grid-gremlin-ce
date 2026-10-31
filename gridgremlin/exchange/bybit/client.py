@@ -190,6 +190,18 @@ class Client:
                       'orderFilter': 'StopOrder', 'limit': 50}, signed=True)
         return r.get('list', [])
 
+    def order_status(self, market_type, symbol, link_id):
+        """G23: one order's status by its link (read-only): the live
+        book's recent orders first, the history after. None: not found."""
+        from .truth import order_state
+        for path in ('/v5/order/realtime', '/v5/order/history'):
+            r = self.get(path, {'category': market_type, 'symbol': symbol,
+                                'orderLinkId': link_id}, signed=True)
+            rows = r.get('list') or []
+            if rows:
+                return order_state(rows[0])
+        return None
+
     def fills_history(self, market_type, symbol, since_ms, now_ms):
         from . import truth as _t
         return _t.read_fills(self, market_type, symbol, since_ms, now_ms)

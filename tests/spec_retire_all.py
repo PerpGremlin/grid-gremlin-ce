@@ -216,9 +216,9 @@ def spec_D149_leftover_tombstones_clear_from_the_dash():
         h.fleets, h.labels, h.units, h.supervise = [str(f)], ['demo'], ('grid-gremlin3-demo',), False
         h._page = lambda body: body
         page = h._tombs_html()
-        assert "action='/clear-tombstones'" in page and '2 left from bots no longer in the fleet' in page
-        assert page.count('no longer in the fleet</i>') == 2
-        assert 'not cleared' in h._clear_orphans_act({'fleet': '0', 'confirm': 'demo'})
+        assert "action='/clear-tombstones'" in page and '2 left from bots no longer on the account' in page
+        assert page.count('no longer on the account</i>') == 2
+        assert 'not cleared' in h._clear_orphans_act({'fleet': '0', 'confirm': 'dem'})
         done = h._clear_orphans_act({'fleet': '0', 'confirm': 'fleet.demo.json'})
         assert '2 tombstones cleared' in done
         left = json.loads(Path(tp).read_text())

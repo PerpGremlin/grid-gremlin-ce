@@ -43,7 +43,10 @@ def spec_U79_a_trade_on_mainnet_asks_for_its_capital_twice():
         assert not (d / 'logs' / 'trades-f.json').exists() or json.loads((d / 'logs' / 'trades-f.json').read_text()) == []
         wrong = _call(base, '/trade', dict(form, retype_capital='2000'))
         assert 'trade refused' in wrong
-        ok = _call(base, '/trade', dict(form, retype_capital='200'))
+        review = _call(base, '/trade', dict(form, retype_capital='200'))      # D157: reviewed first
+        assert 'name="retype_capital" value="200"' in review and 'queued' not in review
+        assert 'trade refused' in _call(base, '/trade', dict(form, retype_capital='2000', go='1'))
+        ok = _call(base, '/trade', dict(form, retype_capital='200', go='1'))
         assert 'linBTCUSDTl: queued' in ok
     finally:
         close()

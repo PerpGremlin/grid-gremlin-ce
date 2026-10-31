@@ -253,6 +253,27 @@ eventually pin (T1).
   say. `exit_floor: rung` is the default; `basis` keeps G6. *(D35: "thats how every
   exchange grid bot works, and how 3c worked"; the sparse-ladder and seed artefacts of
   the count proxy, JOURNAL 2026-09-28)*
+  *(2026-10-31: the walk stops at the last flat, the point where undoing the
+  fills from the holding leaves nothing held, and counts the closes nobody
+  linked on the bot's exit side (a venue close, a hand's) — except on spot,
+  where the wallet is shared (D58). The fleets' hand flatten of 2026-10-21
+  was such a close; dropped, a holding the newer fills did not cover was
+  covered from lots sold in it. One lot per ORDER: partial fills are summed
+  under their link, where they had named the rung once per execution. A
+  residue under half a step is no lot: five sells netted against five buys
+  left 1e-18, and `take > 0` named a sold lot as held and placed its exit
+  again — on main with a perfect fill list, found by R9's rehearsal. The
+  lots older than two days are walked from the thirty-day read; the
+  pairing specs' venue answered every fill to every window, so that split
+  never ran in a spec until this date.)*
+  *(2026-10-31, the review: an unlinked exit-side fill is a close only where
+  the venue does not say otherwise — Bybit's closedSize, HL's 'Close'
+  direction; a fill that reduced nothing (a hand opening the opposite side
+  in hedge mode) is no close. Where the venue says nothing, every unlinked
+  exit-side fill counts as a close: the price of seeing a hand flatten.
+  A forced fill on Bybit (BustTrade, AdlTrade) reduces; on HL a flip
+  ('Long > Short') reduces by its closing part, and so does our own
+  liquidation.)*
 - **G27** What the venue's quantity step does to the ladder is said — at
   the panel's review and at the fleet's start — when it bends it: rungs
   uneven by more than a quarter (a lower rung holding twice an upper one is
@@ -313,7 +334,7 @@ eventually pin (T1).
   holding (2% plus one step of slack). While they do not, BOTH sides are frozen —
   nothing placed, nothing cancelled — because which lots are held is unknown either
   way: a missing exit fill re-places that exit, a missing entry fill re-buys that
-  rung. The plan itself is left whole, so S5 still sees its exits. After `RUNGS_LAG_CYCLES` (20)
+  rung. The plan itself is left whole, so S5 still sees its exits. After `RUNGS_LAG_SECONDS` (60; 20 cycles until 2026-10-31)
   the change is taken as one no fill of ours will explain (an outside hand, a
   venue close): one warning, and pairing resumes from the fills there are. The
   baseline is in memory: a restart's first derivation is not checked. *(measured
@@ -322,6 +343,46 @@ eventually pin (T1).
   exit was placed again. The first cut froze exits only and planned entries from
   the last good account: over the next 3.2 hours no trip lost money, but 5 of 56
   still closed at zero spread, from entries bought twice)*
+  *(2026-10-31: one list per derivation. The net check, the walk and the
+  baseline come from ONE read — the two-day read when it covers the
+  holding, else the thirty-day read, which is then the one checked. The
+  check had run on the two-day read and the walk on a second, unchecked
+  thirty-day read; when that read had not caught up, the stale lots were
+  cached (keyed by the holding alone) and became the baseline, and the
+  next change escalated and paired from the bad list: 28 orders on the
+  demo grids and 23 on HL, 2026-10-22..30, that the whole account would
+  never have planned. Reads only move forward: every fill read is
+  remembered in memory, and a read missing one an earlier read listed
+  inside its window is lagging — never cached, never a baseline; past the
+  wait it still pairs (the escalation) but is not kept. The cache is keyed
+  on (holding, newest fill id), and an own order that left the book
+  unasked re-reads the fills at an unchanged holding. The wait is a time,
+  not cycles: the poll is 1 s on demo and 2 s on HL. A read that fails
+  still falls back to the block.)*
+  *(2026-10-31, the review: an own order that left the book unasked — the
+  book read each cycle, the orders placed that cycle and those whose
+  cancel came back 'gone' included — is awaited in the fills: until a fill
+  of its link is listed, or the wait runs out (then taken as cancelled
+  from outside, said once), nothing is placed or cancelled. The first cut
+  re-read on it, found the newest fill unchanged and concluded an outside
+  cancel at once, and an exit and the entry below it filling in one poll
+  re-placed the exit and re-bought the rung. A read that fails while one
+  is awaited keeps the cached lots and the freeze, never the block. Reads
+  move forward over the last hour only: a fill older than that leaving the
+  venue's answer is no lag a wait ends. The escalation's warning is urgent
+  (D60): a bot pairing from fills that do not add up needs the owner.)*
+  *(2026-10-31, the second review: an awaited order is settled at once
+  when the venue's own status of it — asked once a link, read-only: Bybit's
+  order list by link then its history, HL's orderStatus by cloid — says it
+  ended with nothing executed (a post-only reject, self-trade prevention,
+  an outside cancel); waiting the minute out froze the whole bot for every
+  reject. A status read that fails, or says nothing, is asked again and
+  settles nothing; 'filled' waits for the fill to be listed. When the last
+  awaited order settles, G26's own wait starts afresh: a minute spent on an
+  order is not spent on a lag in the fills. A gap that remains: during an
+  outage of the fill reads longer than the wait, an awaited order expires
+  as cancelled from outside, unverified; the proposal that freezes on a
+  failed read closes it.)*
 
 ## W — the window
  When a lagging list catches up, the log says after how many cycles
@@ -684,7 +745,7 @@ eventually pin (T1).
 - **V6b** A spot bot owns only its own coins (D58): it holds min(its own
   fills' net, the wallet's balance of the coin) unless the row states
   `assumed_avg_entry`; an unexplained rise of half a lot freezes orders until
-  the fill is listed (G26's class), and past RUNGS_LAG_CYCLES is said once.
+  the fill is listed (G26's class), and past RUNGS_LAG_SECONDS is said once.
 - **V6c** A stated holding is the book's start (D76): with `holding` and
   `holding_since` (together, spot only, `holding_since_ms` derived), the
   bot's own count is that figure plus its link-attributed fills from that
@@ -698,6 +759,8 @@ eventually pin (T1).
   word, the money box, the range strip, the holding; a card says when the
   price has left its range; the dense table is still served at `/table`.
 - **V11** A watchdog that is off says OFF, not a number.
+  *(2026-10-31, D157: in a person's words, "safety checks: not running";
+  a sweep is "safety checks ran Ns ago" (U124).)*
 - **V14** The truth carries the venue's own margin on a position: `position_im`
   and `position_mm` (Bybit's positionIM / positionMM; Hyperliquid's marginUsed as
   the initial figure and no maintenance figure, which is said as None). The bot
@@ -950,6 +1013,11 @@ eventually pin (T1).
   with it, the request and the tombstone go. A stand-down asked with
   remove waits for the tombstone, then removes. Not for a trade (close
   trade) or a portfolio row (its flatten).
+  *(2026-10-31, D157: the card's link reads **stop** and its page asks
+  "Close the position, or leave it open?" — **stop and close the position**
+  (close) and **stop and leave the position open** (hold) first, **pause
+  instead** after them, none picked for you; a stop with no choice is
+  refused and nothing is written (U127).)*
 - **X15f** Retire all (D149): `python3 -m gridgremlin.retire_all
   <fleet.json> [--dry] [--sell] [--clear]` retires every row of a stopped
   fleet as X15c does and every open trade with it (D81), flattens each
@@ -964,6 +1032,9 @@ eventually pin (T1).
   the answer says what is left. A row the engine refuses (D52) is never
   retired, so a clear is refused naming it, before anything is touched.
   *(the review of 2026-10-27)*
+  *(2026-10-31, D157: the panel's retire all, and its clear of leftover
+  tombstones, take the account's name as the cards say it as well as the
+  fleet file's name, except on an account that may reach Mainnet (U125).)*
 - **X15g** What the tools close carries the bot's own link: close's
   market order (X15, and retire's through it, X15c/X15f) is linked as the
   stop-flatten's is (I5), rung 0 at a generation from the clock, through
@@ -1358,6 +1429,20 @@ eventually pin (T1).
 - **R1** Fill history is venue-derived and link-attributed (I1's rule: ours iff the
   rung parses), deduped by execution id (I4), every cursor followed to the end or
   refused (E5) — never a local guess of what filled. *(the exchange is the state)*
+  *(2026-10-31: Hyperliquid answers at most 2000 fills for the whole
+  account, oldest first, with no cursor. The engine's thirty-day read on
+  the testnet account stopped at 2026-10-29 18:34 and every newer fill was
+  missing, so G23 found no cover and the plan fell back to the block,
+  suppressing nothing. The facade now pages a full answer by halving the
+  window (R18's way) and refuses a second that still answers the cap
+  (`partial_read`). The cap warning counts the account's answer
+  (`fills_answered`), not the coin's: judged after the per-coin filter, it
+  never fired.)* *(The review, 2026-10-31: paged by a time cursor — the next
+  call starts at the last fill's time, the overlap dropped by trade id, one
+  call per 2000 fills — not by halving, which re-asked both halves after
+  every full answer, about 1,000 weight a thirty-day read against the
+  1,200 a minute the box's IP shares. R18's collection pages the same way;
+  2000 fills in one millisecond cannot be paged and are refused.)*
 - **R2** Per-bot profit is average-cost accounting over time-ordered fills: a reduce
   realises against the basis, a flip re-anchors at the flip price — in the
   contract's own PnL coin (A4): base for inverse, quote elsewhere. *(the
@@ -1382,7 +1467,8 @@ eventually pin (T1).
   atomically under a lock; a file that will not parse is refused by name,
   never restarted empty. Each venue key records how far collection reached;
   the first run backfills 90 days, then each run reads on from its mark less
-  an hour. Hyperliquid's 2000-fill answer is halved until every half fits. A
+  an hour. Hyperliquid's 2000-fill answer is paged by its last fill's time
+  (R1, 2026-10-31). A
   venue that cannot be read keeps its mark and costs no other; a market
   taken out of the fleet is still collected. The readout merges the kept
   fills with its own fresh ones into each bot's book from its FIRST CLEAN
@@ -1493,6 +1579,11 @@ eventually pin (T1).
   bot is churning at zero spread. *(spot ran ~100% before G15; linear runs low)*
   Under G23 the ratio should read ZERO: a lot's exit is one rung above its own by
   construction, so any same-rung exit is a defect to chase, not a ratio to watch.
+  *(2026-10-31: pinned on a rehearsal — the real Bot on the candle venue, a
+  ten-lot descent then a fast saw three days on, the fill list lagging 3 s
+  and the thirty-day read 15 s behind it: by identity, no rung bought while
+  its lot is held and no exit filled without a lot under it. Without G26's
+  check it read 34; with the float residue counted as a lot, 20.)*
 - **R9b** R9 judges only a bot's own exits, and only as zero spread: an
   entry-side fill is never an exit (a window opened after the exits shows
   a phantom opposite position); an unlinked close (the venue's, a hand's)
@@ -1659,6 +1750,8 @@ eventually pin (T1).
   ends with sentiment and each coin's regime, naming the venues where it is
   thin. A bot whose market was not read carries nothing; no readings yet is
   said as such. Display only, like the rest of K.
+  *(2026-10-31, D157: "THIN for this fleet" reads "order book thin for this
+  size" (U124).)*
 
 - **K10** Calm or wild: the market readings carry each coin's two-state
   hidden Markov model of its Bybit hourly returns (`ggdata/hmm.py`,
@@ -1732,6 +1825,8 @@ eventually pin (T1).
   moved by the offset times the lattice's gap, and the card says how far
   it slid. The readout carries every configured bot's mark, so a quiet
   bot shows where the price sits in its range too.
+  *(2026-10-31, D157: said as "range moved up N levels from where it
+  started" (U124).)*
 - **U58** A card's lower half folds (on the position's page since U68). What sits under the money box and the
   range bar — holding, kind, liquidation, market, margin, investment, loss
   limit; a portfolio's assets table — sits behind one summary word, open
@@ -1777,6 +1872,8 @@ eventually pin (T1).
   fees per day, and — where the bot states its investment — Bybit's grid
   APR: grid profit / investment / days x 365, a run under a day counted as
   one day.
+  *(2026-10-31, D157: in Bybit's words, "Runtime · Grid profit … /day ·
+  APR", the formula on the APR's hover (U115).)*
 - **U64b** Grid profit is the matched trips' (R12) after fees; a bot with
   no matched trip keeps realised. The run starts at the later of its span's
   start and its first fill. *(the second audit, 2026-10-13: a long grid read
@@ -1840,6 +1937,8 @@ eventually pin (T1).
   starred. Every other setting folds into one Advanced box, open only when a
   value in it is set. A setup missing required settings names all of them
   at once; an alternative (the gap, the take-profit steps) satisfies it.
+  *(2026-10-31, D157: the essentials in the platforms' order, coin to
+  money, and a second Expert fold (U123).)*
 - **U106** A fleet file may name its `venue` (bybit or hyperliquid). Setup
   sets a new bot up on the venue of the fleet's first row, or, with none,
   on the venue the file names (Bybit when it names none); the engine
@@ -1850,6 +1949,8 @@ eventually pin (T1).
   today's price (the coin minimum binds on a dear coin: 0.001 BTC), never
   the dollar minimum alone, and never "raise the leverage" (a size is the
   order's whole value).
+  *(2026-10-31, D157: asked again under the inputs as they are typed, the
+  same function (U122).)*
 - **U107b** A DCA sized in coins (D89) is told its smallest order in coins,
   rounded up to the market's step, its money beside it — never a money
   figure for a size typed in coins.
@@ -1876,6 +1977,9 @@ eventually pin (T1).
   with no cap of its own shows the engine's (50 % of the stack, H1) as its
   share of the basket, so the save writes the same cap; a new row's blank
   is still 50 % of the basket (U108b).
+- **U108e** (D157, 2026-10-31) The carry form refuses a coin over "Most in
+  one coin" in its own units, a share of the basket, and says what to change;
+  the engine's check on the stack (H1) stays behind it unchanged.
 - **U109** The right half's tables fit the half: latest trades in four
   columns (the account under the bot, the side with its role, the size at
   its price), a bot's fills in six (the date over the time), their text
@@ -1909,6 +2013,154 @@ eventually pin (T1).
   each trip's figure and the total change where an exit was a duplicate, a
   same-rung re-buy or took a partial fill — the card's grid profit and the
   paper bots page's per trip with them.)*
+- **U114** A bot's state is said in a person's words, as Bybit and Pionex
+  say Running / Stopped: **Running · in position** (HOLDING), **Running · no
+  position** (RESTING, FLAT), **Waiting to start** (NOT STARTED), **Stopped
+  (by its rule)** (DEAD: its stop, loss limit or round count ended it, or the
+  exchange refused it at start, D52), **Stopped (engine off)** (STOPPED) and
+  **Retired**, on the card, the table and the strip ("N stopped"). Each
+  carries its meaning on hover; the engine's state stays the key and the
+  CSS class. *(D157)*
+- **U115** A card's money reads as the platforms': **Total P&L · ROI**, then
+  **Grid profit** and **Floating P&L** (U90's grid profit and trend; R5's
+  open), then **Runtime**, the profit a day and **APR** (U64). Each label's
+  hover says what it sums. The account box leads with Total P&L, its window
+  caveat (U98) on that label's hover. Labels only: every figure is the one
+  before. *(D157)*
+- **U116** A choice shows words and sends the file's own value: "USDT/USDC
+  perpetual" for linear, "close the position and stop" for stop_bot,
+  "geometric (the same % apart)" for percent, and so on, on the grid, DCA and
+  carry forms; a default left unstated is named in words and still sent as
+  nothing (U33, U46). The form a browser posts back for every shipped row is
+  the row again (U2, U19). *(D157)*
+- **U117** No spec, decision or section code is shown on a page — not on a
+  card, a form, the review page, control, the trade page or the key. They
+  stay in the code, its comments and hovers; an engine refusal is still said
+  verbatim (P3), and an engine warning shown as advice loses its code. The
+  check strips scripts, styles, comments, tags and refusals and reads the
+  rest; its sabotage plants a code on a page and finds it. *(D157)*
+- **U118** The key page is a glossary: each word the panel shows, what Bybit,
+  Pionex or 3Commas call it, and what it means here; nothing it lists is
+  absent from the panel (ZERO-SPREAD and max depth were). A card's footer
+  reads its bot code out: `linBTCUSDTl` = USDT perpetual · BTCUSDT · long, a
+  portfolio's `pfo<name>` = portfolio · name. *(D157)*
+- **U119** The panel's texts agree with what the code does (the retail audit,
+  2026-10-31): an edit's hot terms apply within seconds and its range waits
+  for a restart (F12) on the edit page and the chart's note as on the
+  written page; a refused row is set aside and the rest run (D52); the trade
+  page says **close trade**, as the card; the trade form's second typing of
+  the investment shows only where an account may reach Mainnet (the gate
+  itself unchanged, D64); a refused quick setup comes back with what was
+  typed; the blank DCA door opened from the quick setup starts again after
+  its take profit, as the preset does. A panel without control offers no
+  retire or close link, which would answer 404. *(D157)*
+- **U120** Quick setup's **How careful?** says in each option the leverage
+  it picks and the grid it draws: "balanced — 5x leverage on a grid (±10%,
+  31 grids), 3x on buy-the-dips". The words are read from the same tables the
+  preset reads, so they cannot part from the row; the value posted is the
+  bare word and the values are unchanged. Its sabotage: the old option text,
+  and words that drift from the table, are both caught. *(D157, the owner's
+  answer)*
+- **U121** The review page shows, before the box the name is typed in, the
+  bot's **leverage** (and what it trades in the market), an **estimated
+  liquidation price** and the engine's own build warnings (the slide's
+  high-leverage line and the adverse-slide line, said where the engine's log
+  says them at start). A grid's liquidation is the backtest's
+  `alone_liquidation` (T10), the rehearsal's own figure, over one steady
+  move against the bot from today's price (0.5% a bar, an hour a bar),
+  every level filling on the way; a DCA bot's, which the backtest cannot
+  replay, is the what-if's straight move (U9: the engine's schedule, the
+  adapter's money) at the point its own investment plus that loss meets the
+  backtest's maintenance rate. A stop or loss limit that closes it first is
+  said instead; spot has none. The bot stands alone on its own investment,
+  and the page says the account's cross margin holds it longer and the
+  exchange's figure is the one that counts. Display only (D29): nothing is
+  capped or refused. The spec reads the page's figure against the backtest
+  run on the reviewed row; its sabotage moves the figure and is caught.
+  *(D157, the owner's answer)*
+- **U122** The setup forms show what a setup means as it is typed, as
+  Bybit and Pionex do: profit per grid level after fees (each gap of the
+  home lattice at the engine's lot, the maker fee on both legs, as the
+  backtest charges it; a DCA's first round instead), the size per order
+  (the engine's lot; a DCA's schedule), the least investment that works
+  (the engine's own checks — the placeable rung, the ladder that fits —
+  bisected over the investment) against what the account has free to
+  trade from its last readout (red when the bot asks for more; no readout
+  is started for it), and the estimated liquidation price (U121). The
+  server answers (`/numbers`, `panel/consequence.py`); the page's script
+  sends the form as it stands and swaps the answer in, the newest winning.
+  The same answer refuses a bad value before the review, in the engine's
+  own words (P3): the validators, the market's smallest order (U107) and
+  the whole fleet's gate, as the review asks them; settings still missing
+  are named at once (U105). A refusal at the review's gate comes back as
+  typed: the quick form as the quick form, the advanced form in its own
+  size unit. Its sabotage drops a gate from the live check and the refusal
+  is missed. *(D157)*
+- **U123** The advanced forms ask in the platforms' order: coin, direction,
+  range, levels, leverage, money (a DCA: coin, direction, gap, add-ons, take
+  profit, leverage, money, order sizes). What only an expert reaches for
+  folds a second time, under **Expert**: the alarm's **position limit (in
+  coins)**, which opened the form with no unit, the risk profile, the jitter
+  guard, how each piece is sold, the placement window, where the price lands
+  after a move, the auto-filled stamps and the first order's timers; it opens
+  when a value in it is set. Every field is posted once, so a row and its
+  form round-trip as before (U2, U19, U116). The quick form's mid price
+  shows only when the reversal preset is picked (by style, no script), and
+  the carry bot sits apart from the grid and DCA doors, shown only where an
+  account can hold one. *(D157, the audit's twelfth and thirteenth)*
+- **U124** The card and the account box say the audit's last words in a
+  person's: (estimated) for (belief), **safety checks** ran / late / not
+  running for watchdog swept / late / OFF, **all-time** for kept history
+  ("the record is behind" for "the ledger is behind"), **couldn't load this
+  account** for readout unavailable, **order book thin for this size** for
+  THIN for this fleet, **range moved up N levels from where it started**
+  for window slid +N rungs from home. The key says each, and the create
+  flow's new words. *(D157)*
+- **U125** A typed confirmation on Demo or Testnet takes the bot's **plain
+  name** — "BTCUSDT long grid", "BTCUSD long DCA inverse", "SOLUSDT short
+  trade", "carry portfolio" — as well as its code, in any capitals and
+  spacing. One function reads the name from the bot's own fields
+  (`panel.html_bits.plain_name`); the card says the same words, and the page
+  shows them as the text to type with the code beside. Every gate: create,
+  edit, remove, stop, close, close trade, the portfolio's leverage, carry,
+  revive and a trade's clear; control, retire all and the leftover
+  tombstones take the account's name as well as the unit or file name. An
+  account that may reach Mainnet takes the code (or the unit or file name)
+  only, exactly as before, and its second typing is unchanged. Its sabotage
+  takes the plain name on Mainnet too, and the check names every gate that
+  let it through. *(D157, the owner's answer)*
+- **U126** **Start it now.** After a new bot is written, its page offers one
+  button for the engine that runs its account — the unit control would
+  restart (by the tag they share, U31), or the laptop supervisor's process.
+  An account's engine runs all its bots, so the button says so plainly: a
+  running engine is restarted and its other bots restart with it (each
+  parked a few seconds; positions and resting orders stay), a stopped one
+  is started and every bot in it starts. Nothing starts without the click.
+  The post (`/start`) acts only for a bot in that account's file, says
+  "already running" with no restart when the engine's last snapshot has it,
+  and every check the engine makes at its start still follows (D52's set
+  aside included). An account that may reach Mainnet shows no button and
+  the post is refused: its unit name stays typed on control. With control
+  off there is no button, and the page says how a bot starts. Its sabotage
+  reads a Mainnet account as play money and the check sees the button and
+  the restart. *(D157, the owner's answer)*
+- **U127** **Stop is a choice**, as on the platforms: the card's **stop**
+  opens "Close the position, or leave it open?" — the engine's own two
+  stand-downs (X15e's close and hold), then pause — with none picked; a
+  stop with no choice is refused and nothing is written. Its sabotage
+  pre-picks one and is caught. *(D157)*
+- **U128** **New trade** is reviewed before it opens, as a new bot is: the
+  form's press validates the trade (the bot validator, the one position per
+  side) and shows one line — "Long BTCUSDT, 200 USDT at 3x, take profit +2%,
+  stop −1%, at market." — with **open the trade** and **change something**
+  (the typing kept). Mainnet's second typing is unchanged (U79). Its
+  sabotage opens on the first press and is caught. *(D157)*
+- **U129** Control speaks of accounts: each line leads with the account's
+  name and **running** or **stopped**, the unit (or file) a detail beside
+  it; the choices say what they do ("restart — loads new and removed
+  bots", "stop — its bots park, positions stay open"); the written page,
+  the stop page, the tombstones and the trade page say account, not fleet.
+  *(D157)*
 - **U111** A carry bot's hedge may differ by coin — inverse, usdt or usdc,
   the common one above and the others named ("SOL usdt") — and the form
   shows each coin's three perpetuals side by side: what a short was paid
@@ -2064,6 +2316,8 @@ eventually pin (T1).
   apart; a query link carries `&amp;`, never a bare `&`; the help column
   of the form keeps its width beside a long dropdown. The README lists the
   watchdog's and the agent's keys. *(the bug hunt, 2026-10-11)*
+  *(2026-10-31, D157: "readout unavailable" reads "couldn't load this
+  account" (U124).)*
 - **U78** The front page's right half is what the owner picked (D96): a
   bot's name on its card opens it there by an address
   (`/?fleet=N&bot=ID`), so the page's own refresh keeps it live and the
@@ -2109,6 +2363,9 @@ eventually pin (T1).
   fleet types its investment twice (L5: a trade is a bot). *(the audit: the
   check read only a held readout, so a restart or a failed readout let a
   real-money jump through; the trade page had no second typing at all)*
+  *(2026-10-31, D157: the trade is reviewed in one line first (U128); the
+  second typing is checked before the review and again at the open, and
+  rides the review page as typed.)*
 - **U80** A tool run for a fleet — the panel's and the phone's readout,
   the panel's close — runs from the checkout the fleet file lives in, so
   the pinned live copy's fleet is read by its own code and its own `.env`
@@ -2183,6 +2440,8 @@ eventually pin (T1).
   2026-10-14: a grid "could be thousands of dollars in profit, but
   simultaneously look underwater … exchanges seem to have the idea"; "yes on
   the cards")*
+  *(2026-10-31, D157: **trend** reads **Floating P&L**, as Bybit and the
+  rest say it; each label's hover says what it sums (U115).)*
 - **U91** The exchange's equity box draws four lines: a day, a week, a
   month and the whole history, the last two each with its Sharpe ratio
   (each UTC day's last equity against the day before's, their mean over
@@ -2234,6 +2493,8 @@ eventually pin (T1).
 - **U98** The exchange box says its window: each bot as its card counts it,
   mostly since it was last flat — not the equity line's window (audit
   2026-10-16).
+  *(2026-10-31, D157: said on the hover of the box's Total P&L, not as a
+  line of text (U115).)*
 - **U99** A portfolio row's leverage on the panel (D143). Its card's edit
   shows one box for the spot (1 to `SPOT_LEVERAGE_MOST`) and one per coin
   for its perps (1–125; blank keeps that coin's setting in the file), and
@@ -2291,6 +2552,9 @@ eventually pin (T1).
   ended. A trade's card names it a trade, states its exit and who opened it
   when, offers **close trade** while it holds (the close page, one
   reduce-only market order) and **clear** once it has ended.
+  *(2026-10-31, D157: the form's press shows a one-line review before the
+  trade opens (U128); the clear box takes the trade's plain name, "SOLUSDT
+  short trade", off Mainnet (U125).)*
 - **L6b** A running trade is never cleared: the clear is refused, its row
   and its close trade kept. Cleared, nothing would own its position after
   the next restart. *(independent audit 2026-10-16)*
@@ -2800,6 +3064,9 @@ that pins it (T1).
   gate, unchanged). Gate 1 runs the build's link check, so the panel cannot accept
   a row the fleet would refuse to build. A DCA bot whose first order is below the
   venue's minimum at today's price is refused at the form, with the numbers.
+  *(2026-10-31, D157: a quick setup refused at the gate comes back as the
+  quick form, as typed, not as the advanced form drawn from its derived row;
+  an advanced one keeps its own size unit (U122).)*
 - **U7** Edit is the same advanced form, filled in from the row: every setting of
   the bot can change; its identity (symbol, side, market type — I2) is shown and
   fixed, and a forged one is refused by the engine's own identity check. The row is
@@ -2870,6 +3137,8 @@ that pins it (T1).
 - **U18** The typed name is the decision; its capitals and stray spaces are not.
   Apply, close and revive accept the bot's name in any case, trimmed; anything
   else is refused with the name spelled out and "capitals do not matter".
+  *(2026-10-31, D157: on Demo and Testnet the bot's plain name is taken as
+  well (U125); Mainnet takes the name as before.)*
 - **U19** The panel writes the file a hand would write: one writer, the committed
   files' own format; a typed whole number written whole; the engine's default
   venue left out; an edited row keeps its key order. Every shipped config
@@ -2877,6 +3146,8 @@ that pins it (T1).
   applied untouched writes the file it read.
 - **U20** A bot's name typed into the unit box is pointed to its tombstone's own
   revive box; the tombstone table says how to revive.
+  *(2026-10-31, D157: the box asks for the account's name, its unit a
+  detail; a live bot's name is pointed at "the account's name" (U129).)*
 - **U21** Every page off the main one opens with "← back" (one step) beside
   "back to your bots".
 - **U22** The cards page carries "numbers: show all · hide all"; no word on it
@@ -2928,6 +3199,13 @@ that pins it (T1).
   (by the tag they share) with the way to restart it from control, and the
   restart's own small risk in a sentence; an edit says the hot terms apply
   within seconds and the cold ones wait. Then the way back to the cards.
+  *(2026-10-31, D157: the restart's small risk now says what D52 does: a row
+  the exchange refuses is set aside, its card stopped, and the rest of the
+  fleet runs; "keeps the whole fleet down" was not so.)*
+  *(2026-10-31, D157 part 3: a new bot's page carries **start it now**
+  where control can start it (U126), and then says only that nothing starts
+  without the click; without it, the restart in an account's words, the
+  unit a detail, and with control off, how a bot starts.)*
 - **U32** A bot's name pasted where a market was wanted is named as one: every
   "lists no such market" refusal, on both venues and in the terminal, says
   "looks like a bot's name, not a market; the coin inside it is X, type that"
@@ -2948,6 +3226,8 @@ that pins it (T1).
   A bot's name typed into the unit box is answered with its fleet's unit and
   the word restart. "start" on a running unit does nothing and says so,
   pointing at restart, instead of "done".
+  *(2026-10-31, D157: the card reads **Waiting to start**, "starts at its
+  account's next restart" (U114).)*
 - **U35** The state words explain themselves and the card says what rests.
   NOT STARTED, RESTING, HOLDING, FLAT and DEAD each carry their meaning on
   hover and their own colour; the key page defines them and the placement rule
@@ -2955,6 +3235,8 @@ that pins it (T1).
   "resting: 1 buy · waiting: 3 sells — placed when the price comes within 5% of
   them (the nearest at 0.2054)" — so a grid that rests little is read as
   waiting, not broken.
+  *(2026-10-31, D157: the words shown are a person's (U114); the engine's
+  states stay the keys and the colours.)*
 - **U36** Every card says what kind of thing the bot is, in one line, first:
   the market (futures USDT/USDC-margined, futures coin-margined, spot, spot on
   margin), the leverage or "no leverage", and for a DCA whether its add-ons
@@ -2991,6 +3273,8 @@ that pins it (T1).
   names, separated by spaces or commas; every one must be an armed unit or
   nothing is done (each refusal as for one name), and one systemctl call
   carries them all.
+  *(2026-10-31, D157: a part between commas that is an account's name, off
+  Mainnet, stands for its unit (U125, U129).)*
 - **U44** A holding is said in coins, value and cost. Every card states its
   position as the coins held, what they are worth at the mark, and what they
   cost at the average (an inverse position, counted by the venue in dollars,
@@ -3004,6 +3288,8 @@ that pins it (T1).
   bots — each counted as its own card says (R14), so the box never claims one
   window for all. *(owner, 2026-10-05: "maybe we could make it more visible…
   in its own box around where it is placed now")*
+  *(2026-10-31, D157: the box leads with **Total P&L**, "open" reads
+  **Floating P&L** (U115).)*
 - **U46** The panel reads cleanly. Every link is a button (the quiet
   button's look; a switch's current choice filled; a destructive door —
   remove, close — red-edged), and the dots that separated links as text are
@@ -3018,6 +3304,8 @@ that pins it (T1).
   and the table's LONG/SHORT badge into the bot's name. *(owner, 2026-10-06:
   "i see leverageheld as one word on all cards … make all clickable links
   buttons … just simply state the options available")*
+  *(2026-10-31, D157: each option shows words and sends the file's value,
+  the default named in words too (U116).)*
 - **U47** One readout per fleet at a time. A fresh readout is served as it
   is; a stale one is served at once while ONE background refresh runs (the
   page says its age), a failed refresh keeping the last; with none yet, the
@@ -3053,6 +3341,7 @@ that pins it (T1).
   same contract as the box, so the two never disagree; one grid, so every
   column lines up whatever the words' lengths. Cards, table and the static
   export alike.
+  *(2026-10-31, D157: "N dead" reads "N stopped", its meaning on hover.)*
 - **U51** Every page link and every view switch sits in one side panel beside
   the cards — pages, arrange, numbers (cards only), size in, leverage, theme
   — 14em wide, pinned under the strip while the page

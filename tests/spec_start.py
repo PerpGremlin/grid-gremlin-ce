@@ -177,8 +177,8 @@ def spec_S6_the_reset_list_is_complete_and_documented():
                                    # never brings it early
                   '_stop_base',    # X10: re-read from the venue's fills
                   '_round_t0',     # M19: re-read from the venue's fills
-                  '_spot_seen', '_spot_lag',   # D58: the wallet's last
-                                   # reading and its lag count; a restart
+                  '_spot_seen', '_spot_lag_since',   # D58: the wallet's
+                                   # last reading and its lag clock; a restart
                                    # starts the tell again from the venue
                   '_round_rungs', '_round_rungs_at',   # M24: re-read from
                                    # the venue's fills, this round's only
@@ -197,9 +197,15 @@ def spec_S6_the_reset_list_is_complete_and_documented():
                   '_gap_said',    # M20: an unplaceable remainder, said
                                   # once; a restart says it again
                   '_last_mark',   # U65: the price last read, re-read next cycle
-                  '_rungs_seen', '_rungs_lag'}   # G26: no baseline after a
-    # restart, so the first derivation is not lag-checked — a restart within
-    # seconds of an exit fill can still mis-pair once
+                  '_rungs_seen', '_rungs_lag', '_rungs_lag_since',
+                  '_rungs_lag_said', '_fills_known',   # G26: no baseline and
+                  # no fills remembered after a restart, so the first
+                  # derivation is not lag-checked — a restart within seconds
+                  # of an exit fill can still mis-pair once
+                  '_rungs_awaited', '_rungs_links',   # G23: the next cycle
+                  '_cancelled_links', '_placed_links',   # compares the book
+                  '_rungs_asked'}   # G23: a restart asks again
+                  # with this one; a restart re-reads the fills
     state = {k for k, v in vars(bot).items()
              if k.startswith('_') and not callable(v)
              and k not in ('_now', '_entry_side', '_exit_side', '_min_gap',

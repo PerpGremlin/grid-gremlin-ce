@@ -59,15 +59,34 @@ def merge(kept_fills, new_fills):
                                                   str(f['exec_id'])))
 
 
-def hl_history(client, start_ms, end_ms):
-    """HL caps an answer at 2000 fills and says nothing of order; a window
-    that hits the cap is halved until every half fits, whatever the order."""
-    raw = client.user_fills_by_time(start_ms, end_ms)
-    if len(raw) < HL_CAP or end_ms - start_ms <= 1000:
-        return raw
-    mid = (start_ms + end_ms) // 2
-    return (hl_history(client, start_ms, mid)
-            + hl_history(client, mid + 1, end_ms))
+def hl_history(client, start_ms, end_ms, strict=False):
+    """HL answers at most 2000 fills a call, OLDEST first (the engine's
+    thirty-day read stopped at 2026-10-29 18:34, every newer fill missing).
+    Paged by a time cursor: the next call starts at the last fill's time,
+    the overlap dropped by trade id — one call per 2000 fills. Halving the
+    window re-asked both halves after every full answer, about 1,000
+    weight a thirty-day read on a busy account against the 1,200 a minute
+    the box's IP shares. A full answer inside one millisecond cannot be
+    paged: `strict` (the engine's read, R1) refuses it, never reads short."""
+    out, seen, start = [], set(), int(start_ms)
+    while True:
+        raw = client.user_fills_by_time(start, end_ms)
+        for r in raw:
+            k = (r.get('tid'), r.get('side'), r.get('time'))
+            if k not in seen:
+                seen.add(k)
+                out.append(r)
+        if len(raw) < HL_CAP:
+            return out
+        last = max(int(r.get('time') or 0) for r in raw)
+        if last <= start:
+            if strict:
+                from .exchange.errors import VenueError
+                raise VenueError(f'fills at {start}: {len(raw)} in one '
+                                 'millisecond, the venue cap — a partial '
+                                 'read is refused (R1)', kind='partial_read')
+            return out
+        start = last
 
 
 def _since(kept, key, now_ms, backfill_days):

@@ -11,7 +11,9 @@ from .ladder import (SEED_RUNG, anchor_from_rung, fee_floor_for, grid_rungs,
                      sellable_base, slide_is_adverse, slide_offset, split,
                      stop_level_for)
 from .window import window
-from .bot_constants import HISTORY_WINDOW_DAYS, RUNGS_LAG_CYCLES, VENUE_STOP
+from .bot_constants import HISTORY_WINDOW_DAYS, RUNGS_LAG_SECONDS, VENUE_STOP
+
+FORWARD_MS = 3_600_000     # G26: reads only move forward, over the last hour
 
 
 class BasisMixin:
@@ -88,21 +90,34 @@ class BasisMixin:
         survive restarts. Bounded: an epoch-0 pull was ~3,000 requests (the
         audit's H1); 30 days is five. G23's walk asks for a short window
         first."""
-        hist = getattr(self.client, 'fills_history', None)
-        if hist is None:
+        if getattr(self.client, 'fills_history', None) is None:
             return []
         now_ms = int(self._now() * 1000)
         if since_ms is None:
             since_ms = now_ms - days * 86_400_000
-        fills = hist(self.cfg['market_type'], self.cfg['symbol'], since_ms,
-                     now_ms)
-        if len(fills) >= 2000 and not self._history_capped_warned:
-            self._history_capped_warned = True
-            self.notify.event('warn', self.botid,
-                              'fill history hit the venue cap — reinvest/'
-                              'cooldown are reading a truncated window')
+        fills = self._read_fills(since_ms, now_ms)
         return [f for f in fills
                 if rung_of(f['link_id'], self.botid) is not None]
+
+    def _read_fills(self, since_ms, now_ms):
+        """R1: one read of the symbol's fills. HL answers at most 2000
+        fills for the whole ACCOUNT, oldest first; its facade pages a full
+        answer and refuses one it cannot page. The count that meets the cap
+        is the account's (`fills_answered`), not this symbol's: judged
+        after the per-coin filter, the warning never fired while the live
+        thirty-day read stopped short (2026-10-29)."""
+        fills = self.client.fills_history(self.cfg['market_type'],
+                                          self.cfg['symbol'], since_ms, now_ms)
+        answered = getattr(self.client, 'fills_answered', None)
+        if not isinstance(answered, int):
+            answered = len(fills)
+        if answered >= 2000 and not self._history_capped_warned:
+            self._history_capped_warned = True
+            self.notify.event('warn', self.botid,
+                              f'the account answered {answered} fills — past '
+                              "the venue's 2000-fill cap; read in pages, and "
+                              'refused where it cannot be (R1)')
+        return fills
 
     def _derive_basis(self, held):
         """G15: a venue that reports no average entry (spot: the position IS
@@ -166,74 +181,252 @@ class BasisMixin:
         fills, newest first, every link carrying its absolute rung (G17).
         Netting is LIFO like G15's cost walk: a sell consumes the newest
         buys, which under bottom-up exits is exactly the lot that exit
-        closed. Exact pairing by identity, no local state, re-derived on
-        every change of the holding and on every restart (E3). When the
-        account cannot cover the holding (adoption, a lagging fill list)
-        the answer is None and the plan falls back to the block the
-        average pins — never a guess dressed as a fact. The seed's fill
+        closed. Exact pairing by identity, re-derived on every change of
+        the holding, on every own order that left the book unasked, and on
+        every restart (E3). When the account cannot cover the holding
+        (adoption) the answer is None and the plan falls back to the block
+        the average pins — never a guess dressed as a fact. The seed's fill
         carries SEED_RUNG, a rung no lattice has: it sets no floor and
-        suppresses nothing (S3: seeded lots came from nowhere below)."""
+        suppresses nothing (S3: seeded lots came from nowhere below).
+
+        One list per derivation (2026-10-31): the list the walk covers the
+        holding from is the list G26 checks and the list a baseline is
+        taken from — the two-day read when it covers, else the thirty-day
+        read in its place. A read that misses a fill an earlier read listed
+        has gone backwards: it is lagging, never cached, never a baseline.
+        The walk stops at the last flat (an unlinked close counts: the
+        flatten of 2026-10-21 was sold by hand), and an order filled in
+        parts is one lot."""
         if not held:
             return None
-        cached = self._rungs_cache
-        if cached and abs(cached[0] - held) < 1e-12:
-            self._rungs_lag = 0
-            return cached[1]
+        cached = self._rungs_cache                # (held, newest id, rungs)
+        same = bool(cached) and abs(cached[0] - held) < 1e-12
+        awaited = self._rungs_awaited             # link -> when it left
+        if same and not awaited:
+            self._rungs_lag, self._rungs_lag_since = 0, None
+            return cached[2]
         entry = self._entry_side.lower()
         want = abs(held)
         slack = want * 0.02 + self.adapter.qty_step
-        escalated = False
+        now = self._now()
+        links = set()
         for days in (2, HISTORY_WINDOW_DAYS):     # the newest cover almost always
             try:
-                fills = self._own_fills(days)
+                listed = self._own_fills_all(days)
             except (VenueError, OSError):
+                # an own order left the book and the fills cannot say
+                # whether it filled: G26's freeze, the cached lots kept —
+                # never the block, which re-placed the exit just filled
+                self._settle_awaited(now, None)
+                if self._rungs_awaited:
+                    if self._rungs_lag_since is None:
+                        self._rungs_lag_since = now
+                    return cached[2] if cached else None
+                return cached[2] if same else None
+            if listed is None:
+                self._rungs_awaited = {}          # no account: nothing to wait on
                 return None
-            if days == 2 and self._fills_lag(fills, want, entry):
-                # G26: the position moved and the fill list has not caught
-                # up. Covering the holding from it now names the wrong lots
-                # (an exit that just filled is missing, so its lot still
-                # looks held; an entry is missing, so its rung looks
-                # empty). The caller places and cancels nothing this cycle.
-                self._rungs_lag += 1
-                if self._rungs_lag < RUNGS_LAG_CYCLES:
-                    return cached[1] if cached else None
-                escalated = True
-                if self._rungs_lag == RUNGS_LAG_CYCLES:
-                    self.notify.event(
-                        'warn', self.botid,
-                        'our fills do not account for the change in the '
-                        f'position after {RUNGS_LAG_CYCLES} cycles — an '
-                        'outside hand or a venue close; pairing exits from '
-                        'the fills there are (G26)')
-            remaining, deficit, lots = want, 0.0, []
-            for f in sorted(fills, key=lambda f: f['time_ms'], reverse=True):
-                qty = abs(f['qty'])
-                if str(f.get('side', '')).lower() != entry:
-                    deficit += qty
-                    continue
-                usable = qty - min(deficit, qty)
-                deficit -= min(deficit, qty)
-                take = min(usable, remaining)
-                if take > 0:
-                    lots.append(rung_of(f['link_id'], self.botid))
-                    remaining -= take
-                if remaining <= slack:
-                    break
+            fills = self._account_fills(listed)
+            links |= {f.get('link_id') for f in fills}
+            # every read is remembered as it is checked: the thirty-day
+            # read is held to what the two-day read just listed
+            behind = self._fills_behind(fills, now * 1000.0
+                                        - days * 86_400_000, now * 1000.0)
+            lots, remaining = self._walk_lots(fills, want, entry)
             if remaining <= slack:
-                rungs = sorted(r for r in lots if r != SEED_RUNG)
-                self._rungs_cache = (held, rungs)
-                self._rungs_seen = (
-                    want, frozenset(self._fill_id(f) for f in fills),
-                    max((f['time_ms'] for f in fills), default=0))
-                if self._rungs_lag and not escalated:
-                    # G26, measured: how long the venue's fill list lagged
-                    # the position — the log's, for the loose end's count
-                    self.notify.event('net', self.botid,
-                                      f'fill list caught up after {self._rungs_lag} '
-                                      'cycle(s) (G26)')
-                self._rungs_lag = 0       # this account is the new baseline
-                return rungs
-        return None
+                break
+        self._settle_awaited(now, links)
+        pending = bool(self._rungs_awaited)
+        newest = max(fills, key=lambda f: f['time_ms'], default=None)
+        key = self._fill_id(newest) if newest else None
+        if (not pending and not behind and same and cached[1] == key
+                and not self._rungs_lag):
+            return cached[2]              # an outside cancel: the same lots
+        escalated = False
+        if pending or behind or self._fills_lag(fills, want, entry):
+            # G26: the position moved — or an own order left the book — and
+            # the fill list has not caught up. Covering the holding from it
+            # now names the wrong lots (an exit that just filled is
+            # missing, so its lot still looks held; an entry is missing, so
+            # its rung looks empty). The caller places and cancels nothing
+            # meanwhile.
+            self._rungs_lag += 1
+            if self._rungs_lag_since is None:
+                self._rungs_lag_since = now
+            if pending or now - self._rungs_lag_since < RUNGS_LAG_SECONDS:
+                return cached[2] if cached else None
+            escalated = True
+            if not self._rungs_lag_said:
+                self._rungs_lag_said = True
+                self.notify.event(
+                    'warn', self.botid,
+                    'our fills do not account for the change in the '
+                    f'position after {RUNGS_LAG_SECONDS:g}s — an outside '
+                    'hand or a venue close; pairing exits from the fills '
+                    'there are (G26)', urgent=True)
+        if remaining > slack:
+            return None                           # adoption: the block
+        rungs = sorted(r for r in lots if r != SEED_RUNG)
+        if behind:
+            # past the wait a list that went backwards still pairs (G26's
+            # escalation), but it is never cached and never a baseline: the
+            # next read is checked against the last list that held
+            return rungs
+        self._rungs_cache = (held, key, rungs)
+        self._rungs_seen = (
+            want, frozenset(self._fill_id(f) for f in fills),
+            max((f['time_ms'] for f in fills), default=0))
+        if self._rungs_lag and not escalated:
+            # G26, measured: how long the venue's fill list lagged
+            # the position — the log's, for the loose end's count
+            self.notify.event('net', self.botid,
+                              f'fill list caught up after {self._rungs_lag} '
+                              'cycle(s) (G26)')
+        self._rungs_lag, self._rungs_lag_since = 0, None
+        self._rungs_lag_said = False      # this account is the new baseline
+        return rungs
+
+    def _settle_awaited(self, now, links):
+        """G23: an own order that left the book unasked is settled when a
+        fill of its link is listed (it filled); when the venue's own status
+        of the order says it ended with nothing executed (a post-only
+        reject, self-trade prevention, an outside cancel — asked once a
+        link, read-only; a read that fails or says nothing is asked again,
+        never taken as settled); or once G26's wait has run out with none
+        listed: taken as cancelled from outside, said once. `links` None:
+        the fills could not be read — only the status and the wait settle.
+        When the last one settles G26's own wait starts afresh: a wait spent
+        on an order says nothing of a lag in the fills."""
+        awaited = self._rungs_awaited
+        if not awaited:
+            return
+        for link in list(awaited):
+            if links is not None and link in links:
+                del awaited[link]
+                self._rungs_asked.discard(link)
+            elif self._order_never_filled(link):
+                del awaited[link]
+            elif now - awaited[link] >= RUNGS_LAG_SECONDS:
+                del awaited[link]
+                self._rungs_asked.discard(link)
+                self.notify.event('warn', self.botid,
+                                  f'{link} left the book and no fill of it '
+                                  f'is listed after {RUNGS_LAG_SECONDS:g}s '
+                                  '— taken as cancelled from outside (G23)')
+        if not awaited:
+            self._rungs_lag_since = None
+
+    def _order_never_filled(self, link):
+        """G23: the venue's status of one order that left the book — True
+        only when it ended with nothing executed. Asked once a link: an
+        answer of 'filled' or 'open' is kept (wait for the fill to be
+        listed); a read that fails, or a venue that cannot say, is asked
+        again next cycle and settles nothing (E5)."""
+        if link in self._rungs_asked:
+            return False
+        ask = getattr(self.client, 'order_status', None)
+        if ask is None:
+            return False
+        try:
+            state = ask(self.cfg['market_type'], self.cfg['symbol'], link)
+        except (VenueError, OSError):
+            return False
+        if state == 'cancelled':
+            return True
+        if state in ('filled', 'open'):
+            self._rungs_asked.add(link)
+        return False
+
+    def _rungs_frozen(self, now):
+        """G26: inside the wait, nothing is placed or cancelled — nor while
+        an own order that left the book is not yet settled (G23)."""
+        return bool(self._rungs_awaited) or (
+            self._rungs_lag_since is not None
+            and now - self._rungs_lag_since < RUNGS_LAG_SECONDS)
+
+    def _account_fills(self, listed):
+        """G23/G26's one list, from one read of the symbol: our own fills
+        (I1) and the closes nobody linked on our exit side — the venue's
+        (a hosted TP, a liquidation) or a hand's (the flatten of
+        2026-10-21). Dropping the unlinked closes let the walk cover a
+        holding from lots sold before a flatten. Not on spot: there the
+        wallet is shared, and an unlinked sale is coins that were never
+        the bot's (D58). Where the venue says whether a fill reduced a
+        position (Bybit's closedSize, HL's 'Close' direction), one that did
+        not is no close: in hedge mode a hand may open the opposite side on
+        our symbol. Where it does not say, an unlinked exit-side fill is
+        taken as a close — the trade-off SPEC G23 states."""
+        exit_ = self._exit_side.lower()
+        closes = self.cfg['market_type'] != 'spot'
+        return [f for f in listed
+                if rung_of(f.get('link_id'), self.botid) is not None
+                or (closes and not f.get('link_id')
+                    and str(f.get('side', '')).lower() == exit_
+                    and f.get('reduces') is not False)]
+
+    def _walk_lots(self, fills, want, entry):
+        """G23's walk: newest first, LIFO, one lot per ORDER (an order
+        filled in parts is one lot, its parts summed under its link), and
+        no further back than the last flat — where undoing the fills from
+        the holding leaves nothing held. Returns (the lots' rungs, the
+        quantity left uncovered)."""
+        orders, merged = {}, []
+        for f in sorted(fills, key=lambda f: f['time_ms']):
+            link = f.get('link_id') or ''
+            if link and link in orders:
+                lot = orders[link]
+                lot['qty'] += abs(f['qty'])
+                lot['time_ms'] = f['time_ms']     # the lot completes here
+                continue
+            lot = {'time_ms': f['time_ms'], 'qty': abs(f['qty']),
+                   'entry': str(f.get('side', '')).lower() == entry,
+                   'rung': rung_of(link, self.botid)}
+            if link:
+                orders[link] = lot
+            merged.append(lot)
+        slack = want * 0.02 + self.adapter.qty_step
+        flat = self.adapter.qty_step * 0.5
+        remaining, deficit, pos, lots = want, 0.0, want, []
+        for lot in sorted(merged, key=lambda x: x['time_ms'], reverse=True):
+            qty = lot['qty']
+            if not lot['entry']:
+                deficit += qty
+                pos += qty
+                continue
+            pos -= qty
+            usable = qty - min(deficit, qty)
+            deficit -= min(deficit, qty)
+            take = min(usable, remaining)
+            if take > flat:
+                # never `> 0`: five sells netted against five buys leave a
+                # float residue of 1e-18, and that dust named a sold lot as
+                # held — its exit placed again (the rehearsal, 2026-10-31)
+                lots.append(lot['rung'])
+                remaining -= take
+            if remaining <= slack or pos <= flat:
+                break                         # covered, or the last flat
+        return lots, remaining
+
+    def _fills_behind(self, fills, since_ms, now_ms):
+        """G26, reads only move forward: an own fill an earlier read listed
+        within the last hour, inside this read's window, and missing from
+        it now means this list is behind the last (Bybit's thirty-day read
+        behind its two-day read; HL's capped answer stopping short,
+        2026-10-22..30). Only the last hour: the lag is of the NEWEST
+        fills (it cleared in 1-5 cycles, 2026-10-11), and an older fill
+        that leaves the venue's answer — a demo reset, a venue that
+        forgets — is not a lag any wait ends; held as one it froze the
+        bot and re-read every cycle for the rest of the window."""
+        known = self._fills_known
+        ids = {self._fill_id(f) for f in fills}
+        horizon = max(since_ms + 60_000, now_ms - FORWARD_MS)
+        behind = any(t > horizon and i not in ids for i, t in known.items())
+        for f in fills:
+            if f['time_ms'] > now_ms - FORWARD_MS:
+                known[self._fill_id(f)] = f['time_ms']
+        for i in [i for i, t in known.items() if t <= now_ms - FORWARD_MS]:
+            del known[i]
+        return behind
 
     @staticmethod
     def _fill_id(f):
@@ -394,8 +587,7 @@ class BasisMixin:
         if hist is None:
             return None       # the venue offers no account — unknowable
         now_ms = int(self._now() * 1000)
-        return hist(self.cfg['market_type'], self.cfg['symbol'],
-                    now_ms - days * 86_400_000, now_ms)
+        return self._read_fills(now_ms - days * 86_400_000, now_ms)
 
     def _round_fills(self):
         """M12/M13/R8: this bot's round history INCLUDING venue-created
@@ -458,7 +650,7 @@ class BasisMixin:
         listed fills do not explain (a settlement is a thousandth of a lot)
         means nothing is placed or cancelled until it is listed (G26's
         lesson: a filled order neither resting nor listed is re-bought).
-        Past RUNGS_LAG_CYCLES the rise is said once as coins from an outside
+        Past RUNGS_LAG_SECONDS the rise is said once as coins from an outside
         hand, which are not ours. Returns (held, lagging)."""
         # D76: a stated holding is the book's start — the coins this bot
         # owned at `holding_since`, plus its own fills from that moment;
@@ -489,16 +681,19 @@ class BasisMixin:
             return held, False
         rose = (wallet_size - prev[0]) - (own - prev[1])
         if rose >= half_lot:
-            self._spot_lag += 1
-            if self._spot_lag < RUNGS_LAG_CYCLES:
+            now = self._now()
+            if self._spot_lag_since is None:
+                self._spot_lag_since = now
+            if now - self._spot_lag_since < RUNGS_LAG_SECONDS:
                 self._spot_seen = prev       # judge against the same base
                 return held, True
             self.notify.event('warn', self.botid,
                               f'the wallet gained {rose:.10g} that our own '
-                              f'fills do not explain after {RUNGS_LAG_CYCLES} '
-                              'cycles — coins from an outside hand, not this '
-                              "bot's; trading on from its own (D58)", urgent=True)
-        self._spot_lag = 0
+                              'fills do not explain after '
+                              f'{RUNGS_LAG_SECONDS:g}s — coins from an outside '
+                              "hand, not this bot's; trading on from its own "
+                              '(D58)', urgent=True)
+        self._spot_lag_since = None
         return held, False
 
     def _held(self, truth):

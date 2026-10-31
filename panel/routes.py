@@ -395,6 +395,9 @@ class Handler(RehearsePages, CarryFlowPages, CreateFlowPages, FleetAdminPages, C
         q = dict(urllib.parse.parse_qsl(query))
         view = q.get('view', 'all')
         labelled = self._labelled()
+        if self.path != '/data' and not self.units and not self.supervise:
+            # D157: retire and close need control; unarmed, no card offers them
+            labelled = [(lb, dict(c, control_off=True)) for lb, c in labelled]
         pane = None
         if self.path != '/data' and base != '/table':
             pane = (self._pick_pane(labelled, q) if q.get('bot')
@@ -443,10 +446,14 @@ class Handler(RehearsePages, CarryFlowPages, CreateFlowPages, FleetAdminPages, C
             return self._chart_post(form)
         if self.path == '/whatif':
             return self._whatif_post(form)
+        if self.path == '/numbers':                           # D157
+            return self._numbers_post(form)
         if self.path in ('/unit', '/revive'):
             return self._control_act(form, self.path)
         if self.path == '/close':
             return self._close_act(form)
+        if self.path == '/start':
+            return self._start_act(form)                      # D157
         if self.path == '/retire':
             return self._retire_act(form)                     # D145
         if self.path == '/retire-all':

@@ -255,7 +255,7 @@ def spec_L6_the_panels_trade_form_opens_refuses_with_the_typing_kept_and_clears(
         taken = _call(base, '/trade', {'action': 'open', 'fleet': '0', 'side': 'long', 'symbol': 'ETHUSDT',
                                        'capital': '200', 'tp': '1'})
         assert 'one position per side' in taken
-        ok = _call(base, '/trade', {'action': 'open', 'fleet': '0', 'side': 'long', 'symbol': 'btcusdt',
+        ok = _call(base, '/trade', {'action': 'open', 'go': '1', 'fleet': '0', 'side': 'long', 'symbol': 'btcusdt',
                                     'capital': '200', 'leverage': '3', 'tp': '0.6', 'stop': '0.6', 'maker': '1'})
         assert 'linBTCUSDTl: queued' in ok
         rows = json.loads((d / 'logs' / 'trades-f.json').read_text())
@@ -300,8 +300,8 @@ def spec_L6_a_trades_rate_line_says_profit_not_grid_profit():
     gen = 10 * 86_400_000
     b = {'fills': 2, 'realized': 3.0, 'fees': 0.14, 'counted_from': 'flat', 'counted_since_ms': gen - 86_400_000}
     t = run_rate(b, {'generated_ms': gen, 'window_hours': 24}, 200.0, trade=True)
-    assert 'grid' not in t and ' profit <b' in t and ' APR <b' in t
-    assert 'grid profit' in run_rate(b, {'generated_ms': gen, 'window_hours': 24}, 200.0)
+    assert 'grid' not in t.lower() and 'Profit <b' in t and 'APR</span> <b' in t
+    assert 'Grid profit' in run_rate(b, {'generated_ms': gen, 'window_hours': 24}, 200.0)
 
 
 # --- L7: the close request -------------------------------------------------------------
@@ -376,7 +376,7 @@ def spec_L7_the_panels_close_trade_asks_the_fleet_for_a_running_trade():
     try:
         Handler.units = ('some.service',)
         assert 'linBTCUSDTl: queued' in _call(base, '/trade', {
-            'action': 'open', 'fleet': '0', 'side': 'long', 'symbol': 'BTCUSDT',
+            'action': 'open', 'go': '1', 'fleet': '0', 'side': 'long', 'symbol': 'BTCUSDT',
             'capital': '200', 'leverage': '3', 'tp': '0.6', 'stop': '0.6'})
         page = _call(base, '/close?fleet=0&bot=linBTCUSDTl')
         assert 'close trade linBTCUSDTl' in page and 'sent by the trade itself' in page
@@ -431,7 +431,7 @@ def spec_X15d_closing_a_live_trade_on_real_money_asks_its_size_twice():
     try:
         Handler.units = ('some.service',)
         assert 'linBTCUSDTl: queued' in _call(base, '/trade', {
-            'action': 'open', 'fleet': '0', 'side': 'long', 'symbol': 'BTCUSDT',
+            'action': 'open', 'go': '1', 'fleet': '0', 'side': 'long', 'symbol': 'BTCUSDT',
             'capital': '200', 'leverage': '3', 'tp': '0.6', 'stop': '0.6'})
         assert 'type the size a second time' not in _call(base, '/close?fleet=0&bot=linBTCUSDTl')
         fleet = json.loads((d / 'f.json').read_text())

@@ -1,7 +1,7 @@
 """The table view (U12): one row per bot. Out of render.py (D91 step 3)."""
 from gridgremlin.report import card_total
 import time
-from .card import _side_tag, settle, slid_range
+from .card import _side_tag, settle, slid_range, state_tag
 from .drawings import strip
 from .fleet_bits import sweep_note
 from .html_bits import REFRESH_S, esc, money, qarg
@@ -51,11 +51,11 @@ def section(idx, label, contract, view='all'):
                       else '<td class="dim">no limit</td>')
             rows.append(
                 f'<tr><td>{_side_tag(botid)}{esc(botid)}</td>'
-                f'<td class="{cls}">{state}</td>'
+                f'<td class="{cls}">{state_tag(state)}</td>'
                 f'<td class="dim">0</td><td class="dim">no fills</td>'
                 f'<td class="dim">—</td><td class="dim">—</td>'   # D63
                 f'<td class="dim">'
-                + (f'{pos:.10g} (belief)' if abs(pos) > 1e-12 else '—')
+                + (f'{pos:.10g} (estimated)' if abs(pos) > 1e-12 else '—')
                 + '</td><td class="dim">—</td><td class="dim">—</td>'
                   '<td class="dim">—</td><td class="dim">—</td>'
                   '<td class="dim">—</td><td class="dim">—</td>'
@@ -92,7 +92,7 @@ def section(idx, label, contract, view='all'):
             edge = '<td class="dim">—</td><td class="dim">—</td>'
         rows.append(
             f'<tr><td>{_side_tag(botid)}{esc(botid)}{note}</td>'
-            f'<td class="{"neg" if state == "DEAD" else "dim"}">{state}</td>'
+            f'<td class="{"neg" if state == "DEAD" else "dim"}">{state_tag(state)}</td>'
             f"<td>{b['fills']}</td>{money(b['realized'])}"
             f"{money(b['fees'], cls=False)}{money(b.get('funding'))}"
             f"<td>{openat}</td>"
@@ -100,8 +100,9 @@ def section(idx, label, contract, view='all'):
             f"<td>{b['bought']:,.4g}</td><td>{b['sold']:,.4g}</td>"
             f"{edge}<td>{settle(b, floor)}</td>{watch}"
             f"<td class='dim'><a href='/edit?fleet={idx}&amp;bot={qarg(botid)}'>edit"
-            f"</a> <a href='/retire?fleet={idx}&amp;bot={qarg(botid)}'>"
-            f"retire</a> <a href='/setup?fleet={idx}&amp;copy={qarg(botid)}'>copy</a>"
+            + ("</a> " if contract.get('control_off') else      # D157: no 404 behind a link
+               f"</a> <a href='/retire?fleet={idx}&amp;bot={qarg(botid)}'>stop</a> ")
+            + f"<a href='/setup?fleet={idx}&amp;copy={qarg(botid)}'>copy</a>"
             "</td></tr>")
     return f"""
 <h1 id="fleet{idx}">{esc(label)} {tier_badge(contract)} — last {contract['window_hours']:g}h {sweep_note(contract)}

@@ -79,4 +79,4 @@ def stop(fleet):
         return f'not running ({st})'
     os.kill(pid, signal.SIGTERM)
     _pid_path(fleet).unlink(missing_ok=True)
-    return f'sent SIGTERM to pid {pid} — parked, not flattened (E3)'
+    return f'sent SIGTERM to pid {pid} — parked, not flattened'

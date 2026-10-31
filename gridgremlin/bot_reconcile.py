@@ -38,10 +38,13 @@ class ReconcileMixin:
                     self.notify.event('warn', self.botid, f'amend: {e}')
 
         uncancelled = set()
+        self._cancelled_links = set()   # G23: gone by OUR hand, not filled
+        self._placed_links = set()      # G23: rested by our hand this cycle
         for order in cancels:                       # E2: cancels before creates
             try:
                 self.client.cancel_order(cfg['market_type'], cfg['symbol'],
                                          order['order_id'])
+                self._cancelled_links.add(order.get('link_id'))
                 self.notify.event('cancel', self.botid,
                                   f"{order['side']}@{order['price']:.10g}")
             except VenueError as e:
@@ -76,6 +79,7 @@ class ReconcileMixin:
                     adapter.fmt_qty(want['qty']), adapter.fmt_price(want['price']),
                     link, idx, want['reduce_only'], borrow=self._borrow)
                 placed_now.add(key)
+                self._placed_links.add(link)
                 if want['side'] == self._exit_side:
                     placed_exit_links.add(link)
                 self.notify.event('placed', self.botid,

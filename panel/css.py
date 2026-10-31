@@ -40,6 +40,9 @@ th{color:var(--dim);font-weight:normal}td:first-child,th:first-child
 .dim{color:var(--dim)}h1{font-size:1.1em;color:var(--accent);margin:var(--gap) 0 var(--gap-s)}
 p{margin:var(--gap-s) 0}
 input.derived{color:var(--dim);font-style:italic}
+#numbers{max-width:62em;margin:.4em 0}#numbers .refusal{font-size:1em;margin:.3em 0}
+table.numbers td:first-child{white-space:nowrap;color:var(--dim)}
+tr.only-reversal{display:none}form:has(input[name=preset][value=reversal]:checked) tr.only-reversal{display:table-row}
 .refusal{border:2px solid var(--neg);color:var(--neg);padding:.7em 1em;
 margin:0 0 1em;max-width:62em;font-size:1.1em}
 .refusal a{color:var(--accent)}

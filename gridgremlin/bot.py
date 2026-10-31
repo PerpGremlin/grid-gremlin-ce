@@ -13,7 +13,7 @@ from .ladder import (SEED_RUNG, anchor_from_rung, fee_floor_for, grid_rungs,
                      sellable_base, slide_floor, slide_is_adverse, slide_offset,
                      split, stop_level_for)
 from .window import window
-from .bot_constants import (FLAT_CONFIRMATIONS, RUNGS_LAG_CYCLES, DEFER_ESCALATE_CYCLES, FLAP_LIMIT, FLAP_COOLDOWN, BACKOFF_BASE, BACKOFF_CEILING, HISTORY_WINDOW_DAYS, VENUE_STOP, STOP_RUNG)  # noqa: F401  (re-exported: the specs read them here)
+from .bot_constants import (FLAT_CONFIRMATIONS, RUNGS_LAG_SECONDS, DEFER_ESCALATE_CYCLES, FLAP_LIMIT, FLAP_COOLDOWN, BACKOFF_BASE, BACKOFF_CEILING, HISTORY_WINDOW_DAYS, VENUE_STOP, STOP_RUNG)  # noqa: F401  (re-exported: the specs read them here)
 from .bot_basis import BasisMixin
 from .bot_reconcile import ReconcileMixin
 from .bot_round import RoundMixin
@@ -87,7 +87,7 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
                          if cfg['strategy'] == 'grid' else 0.0)   # M8: no lattice
         self.alive = True
         self._spot_seen = None         # D58: (wallet, own net) last cycle
-        self._spot_lag = 0             # D58: cycles the fill list lagged
+        self._spot_lag_since = None    # D58: since when the fill list lagged
         self.capped = None             # D56: the account cap's reason, set
                                        # by the fleet each cycle; None = free
         self.notional_now = 0.0        # D56: |held| at mark, in quote
@@ -117,7 +117,17 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
         self._basis_cache = None       # G15: (held, basis) from fills
         self._rungs_cache = None       # G23: (held, [rung per lot]) from fills
         self._rungs_seen = None        # G26: (|held|, fill ids, newest ms) of
-        self._rungs_lag = 0            # the last derivation; cycles it lagged
+        self._rungs_lag = 0            # the last derivation; cycles it lagged,
+        self._rungs_lag_since = None   # since when, and whether the wait's
+        self._rungs_lag_said = False   # end was said
+        self._rungs_awaited = {}       # G23: own link that left the book
+                                       # unasked -> when; settled by its fill
+        self._rungs_links = None       # G23: own links resting after last cycle
+        self._rungs_asked = set()      # G23: awaited links whose status said
+                                       # filled or open: not asked again
+        self._cancelled_links = set()  # G23: cancelled by us last reconcile
+        self._placed_links = set()     # G23: placed by us last reconcile
+        self._fills_known = {}         # G26: fill id -> ms of every fill read
         self._close_streak = 0         # M14: cycles waiting for the venue's
                                        # account of a closing fill
         self._defer_cycles = 0         # G15: cycles exits were withheld
@@ -462,7 +472,10 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
         else:
             self._basis_cache = None   # a cached cost describes a holding
             self._rungs_cache = None
-            self._rungs_lag = 0        # G26: the baseline stays — the fills
+            self._rungs_lag, self._rungs_lag_since = 0, None   # G26: the
+            self._rungs_lag_said = False   # baseline stays — the fills
+            self._rungs_awaited = {}       # flat: no lot to name
+            self._rungs_asked = set()
                                        # since it still net to the change
                                        # that no longer exists (H2 2026-08-07)
 
@@ -535,9 +548,20 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
                             if not o['reduce_only']
                             and o['side'] == self._entry_side}))
         else:
+            # G23: an own order that left the book unasked (filled, or
+            # cancelled from outside) is awaited in the fills even when the
+            # holding is unchanged — an exit and the entry below it filling
+            # in one poll leave the size as it was and the lots not. Until
+            # its fill is listed, or G26's wait runs out, nothing moves.
+            mine = {o['link_id'] for o in truth['orders']
+                    if rung_of(o['link_id'], self.botid) is not None}
+            if (held and self._rungs_links is not None
+                    and cfg.get('exit_floor', 'rung') == 'rung'):
+                for link in self._rungs_links - mine:
+                    self._rungs_awaited.setdefault(link, now)
             held_rungs = (self._held_rungs(held)
                           if cfg.get('exit_floor', 'rung') == 'rung' else None)
-            lagging = 0 < self._rungs_lag < RUNGS_LAG_CYCLES      # G26
+            lagging = self._rungs_frozen(now)                     # G26
             desired = plan_grid(cfg, adapter, ref, held, basis, bid, ask,
                                 resting_exits, offset=self.offset,
                                 held_rungs=held_rungs)
@@ -598,6 +622,12 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
             to_cancel, to_create = [], []
         amends, cancels, placed_now, placed_exit_links, skipped = self._reconcile(
             to_cancel, to_create, bid, ask, now)
+        if cfg['strategy'] != 'martingale':    # G23: what rests now, ours:
+            # an order placed this cycle is watched too, and one whose
+            # cancel came back 'gone' had left already — filled, as like as
+            # not — so it stays watched
+            self._rungs_links = ((mine - self._cancelled_links)
+                                 | self._placed_links)
 
         # G9: the floor core is never for sale, so a holding that IS the
         # core has no exits by design — S5 reads the sellable, not the held

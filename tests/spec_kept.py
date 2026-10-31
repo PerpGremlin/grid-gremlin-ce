@@ -45,7 +45,8 @@ def _bx(t, eid, symbol='BTCUSDT', side='Buy', price='100'):
 
 class HL:
     """userFillsByTime that, like the venue, answers at most HL_CAP fills —
-    the NEWEST in the window, so a capped answer hides the older ones."""
+    the OLDEST in the window (the live thirty-day read stopped short of the
+    newest, 2026-10-29), so a capped answer hides the newer ones."""
     address = '0xabc'
 
     def __init__(self, n, base=NOW - DAY):
@@ -58,7 +59,7 @@ class HL:
         self.calls += 1
         got = [r for r in self.rows if r['time'] >= start_ms
                and (end_ms is None or r['time'] <= end_ms)]
-        return got[-HL_CAP:]
+        return sorted(got, key=lambda r: r['time'])[:HL_CAP]
 
 
 def spec_R18_one_fill_once_the_newer_read_wins():
@@ -71,11 +72,14 @@ def spec_R18_one_fill_once_the_newer_read_wins():
     assert len(merge(out, [other])) == 4      # an id is a venue's, not global
 
 
-def spec_R18_a_capped_hl_answer_is_split_until_every_part_fits():
+def spec_R18_a_capped_hl_answer_is_paged_by_its_last_fills_time():
+    """One call per 2000 fills, the overlap dropped: 4,007 fills in three
+    calls. SABOTAGE: halving re-asks both halves (more calls); stopping at
+    the first answer hides the newest 2,007."""
     hl = HL(2 * HL_CAP + 7)
     got = hl_history(hl, 0, NOW)
-    assert len({r['tid'] for r in got}) == 2 * HL_CAP + 7   # nothing hidden
-    assert hl.calls > 1
+    assert len(got) == len({r['tid'] for r in got}) == 2 * HL_CAP + 7
+    assert hl.calls == 3, hl.calls
 
 
 def spec_R18_backfill_first_then_onward_from_where_collection_reached():
@@ -196,12 +200,12 @@ def spec_R18_the_card_says_since_first_trade_or_why_not():
           'truncated': False, 'behind': None}
     c = {'since_first': {'linBTCUSDTl': sf}}
     line = since_first_line(c, 'linBTCUSDTl')
-    assert 'kept history, since 1970-01-02' in line and '+28.50' in line
+    assert 'all-time, since 1970-01-02' in line and '+28.50' in line
     assert '3 trips' in line
     assert since_first_line({}, 'linBTCUSDTl') == ''        # nothing kept
     c2 = {'since_first': {'linBTCUSDTl': dict(sf, behind=NOW - 7),
                           'linETHUSDTl': sf}}
-    assert 'the ledger is behind' in since_first_line(c2, 'linBTCUSDTl')
+    assert 'the record is behind' in since_first_line(c2, 'linBTCUSDTl')
     assert '+28.50' not in since_first_line(c2, 'linBTCUSDTl')
     whole = since_first_line({'since_first': {'linBTCUSDTl': {
         'fills': 9, 'whole': False, 'first_ms': DAY, 'behind': None}}},

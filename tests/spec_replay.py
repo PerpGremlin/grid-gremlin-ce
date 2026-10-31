@@ -350,3 +350,79 @@ def spec_D59_a_spot_dca_bot_rests_its_exit_as_a_sell_and_turns_rounds():
             assert frag in str(e), (bad, str(e))
         else:
             raise AssertionError(f'{bad} was accepted')
+
+
+# --- R9 under G23: zero, through lagging and inconsistent fill lists ----------
+# 2026-10-22..30: 28 orders on the demo grids and 23 on HL that a whole
+# account would never have planned. The real Bot runs a grid on the candle
+# venue while its fill list lags the position by seconds and the thirty-day
+# read lags the two-day read further, as Bybit's did.
+
+def _identity_defects(fills, botid):
+    """By identity, from the venue's whole account: a rung bought while its
+    lot is held, or an exit filled with no lot one rung below it."""
+    from gridgremlin.apply import rung_of
+    held, bad = set(), []
+    for f in sorted(fills, key=lambda f: f['time_ms']):
+        r = rung_of(f['link_id'], botid)
+        if r is None:
+            continue
+        if f['side'] == 'buy':
+            if r in held:
+                bad.append(('re-buy', r, f['time_ms']))
+            held.add(r)
+        else:
+            if r - 1 not in held:
+                bad.append(('exit with no lot', r, f['time_ms']))
+            held.discard(r - 1)
+    return bad
+
+
+def spec_R9_a_grid_reads_zero_through_lagging_and_inconsistent_fill_lists():
+    """A slow fall over three days buys ten lots; three days on, a fast saw
+    trades the lower ones while the old lots stay held, so every walk needs
+    the thirty-day read. The list lags 3 s; the long read lags 15 s.
+    SABOTAGE: drop G26's check and the lagging list re-buys held rungs and
+    re-places filled exits (34 here); count a float residue as a lot (G23's
+    `take > 0`) and a sold lot's exit is placed again (20)."""
+    import math
+    from gridgremlin.bot import Bot
+    from gridgremlin.events import Notifier
+    cfg = validate_config({'market_type': 'linear', 'symbol': 'BTCUSDT',
+                           'side': 'long', 'capital': 1000.0, 'leverage': 10,
+                           'upper': 70000.0, 'lower': 50000.0, 'rungs': 21,
+                           'spacing_type': 'fixed'})
+    v = BarVenue(ADAPTER, 'long', MAKER, TAKER)
+    v.hosts_position_tp = False
+
+    def listed(mt, sym, a, b):
+        now = v.now * 1000
+        return [f for f in v.fills if a <= f['time_ms'] <= b
+                and now - f['time_ms'] >= 3_000
+                and not (b - a > 3 * 86_400_000
+                         and now - f['time_ms'] < 15_000)]
+    v.fills_history = listed
+    lines = []
+    bot = Bot(cfg, ADAPTER, v, Notifier(sink=lines.append), gen_seed=1,
+              clock=lambda: v.now)
+
+    def walk(prices, t, span, cycles):
+        prev = v.price or prices[0]
+        for p in prices:
+            for k, px in enumerate((prev, min(prev, p) - 50,
+                                    max(prev, p) + 50, p)):
+                v.advance(px, t + span * k / 4.0)
+                for _ in range(cycles):
+                    bot.cycle()
+                    v.now += 1.0
+            prev = p
+            t += span
+        return t
+
+    t = walk([65000 - 10000 * i / 72 for i in range(72)], 0.0, 3600.0, 8)
+    walk([58000 + 3000 * math.sin(i / 3.0) for i in range(240)],
+         t + 3 * 86_400.0, 20.0, 2)
+    assert bot.alive and len(v.fills) > 100, len(v.fills)
+    bad = _identity_defects(v.fills, bot.botid)
+    assert bad == [], bad[:5]
+    assert not [ln for ln in lines if 'do not account' in ln]

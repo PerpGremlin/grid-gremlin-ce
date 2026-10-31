@@ -4,16 +4,16 @@ from .html_bits import WATCHDOG_OFF_S, money, refusal_box
 
 
 def sweep_note(contract):
+    """The watchdog's last sweep, in a person's words (D157, U124): "safety
+    checks", which is what it runs; "watchdog swept" said nothing to one."""
     wd = contract.get('watchdog') or {}
     ago = wd.get('swept_s_ago')
-    if ago is None:
-        return '<span class="dim">watchdog OFF</span>'
-    if ago > WATCHDOG_OFF_S:
-        return '<span class="dim">watchdog OFF</span>'
+    if ago is None or ago > WATCHDOG_OFF_S:
+        return '<span class="dim">safety checks: not running</span>'
     if ago > 900:              # it should sweep every 5 minutes: it is late
-        return (f'<span class="neg">watchdog late: swept {ago / 60:.0f} '
+        return (f'<span class="neg">safety checks late: last ran {ago / 60:.0f} '
                 'min ago</span>')
-    return f'<span class="dim">watchdog swept {ago}s ago</span>'
+    return f'<span class="dim">safety checks ran {ago}s ago</span>'
 
 
 def setup_button(draft, note, rungs=None, label='set up this bot &rarr;',

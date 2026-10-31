@@ -1,7 +1,7 @@
 """Setting up and editing a bot (U19): the setup page, the review with its chart, what-if and fit, the create and apply flow. Moved out of routes.py whole (D91 step 3): a mixin
 the Handler inherits."""
 from ..forms import next_step_html, other_half_html, other_side_html, rehearse_bot_form, unit_for_fleet
-from ..html_bits import named, qarg, refusal_box, tidy
+from ..html_bits import confirmed, plain_name, qarg, refusal_box, tidy, to_type
 from gridgremlin.apply import row_botid
 from panel.chart import _f
 from pathlib import Path
@@ -57,35 +57,12 @@ class CreateFlowPages:
                 adapter = public_adapter(vbot)               # defaults (A1)
                 if is_mg:
                     # the engine learns this only at the first cycle
-                    # ("base order below minimum") — say it at the form
+                    # ("base order below minimum") — say it at the form (U107)
                     from gridgremlin.config import ConfigError as _CE
-                    m0 = public_mark(vbot)
-                    # U107: the smallest order in money at today's price —
-                    # the coin minimum binds on a dear coin (0.001 BTC ≈ 82)
-                    least = max(adapter.min_notional or 0.0, adapter.min_qty * m0)
-                    for what, key in (('first order', 'base_order_size'),
-                                      ('add-on order', 'safety_order_size')):
-                        size = vbot.get(key)
-                        if not size:
-                            continue
-                        coins = vbot.get('size_in') == 'coin'     # D89
-                        q0 = adapter.round_qty(size if coins else size / m0)
-                        if q0 <= 0 or not adapter.meets_minimum(q0, m0):
-                            # U107b: said in the unit the size is typed in
-                            import math
-                            step = adapter.qty_step
-                            least_c = (math.ceil(least / m0 / step - 1e-9) * step
-                                       if coins else None)
-                            raise _CE(
-                                f"the {what} ({size:g}{' coins' if coins else ''}) "
-                                "is under this market's smallest order: "
-                                + (f"about {least_c:.4g} coins at today's price "
-                                   f"({least:.4g} at {m0:g}) — " if coins else
-                                   f"about {least:.4g} at today's price "
-                                   f"({adapter.min_qty:g} coins at {m0:g}) — ") +
-                                f'raise the {what} size to at least that (it is '
-                                "the order's whole value, leverage included), or "
-                                'raise the investment the quick setup draws it from')
+                    from panel.create import order_minimum_problem
+                    problem = order_minimum_problem(vbot, adapter, public_mark(vbot))
+                    if problem:
+                        raise _CE(problem)
                 if mode == 'edit':
                     botid, fleet, wd = edit_proposal(
                         fleet_raw, wd_raw, proposal['orig'],
@@ -105,19 +82,27 @@ class CreateFlowPages:
         new_fleet = dump_config(fleet)
         new_wd = dump_config(wd)
         from panel.create import retype_refusal, size_jumps
+        real = self._mainnet(fleet_p, (proposal.get('bot') or {}).get('venue', 'bybit'))
         jumps = (size_jumps(fleet_raw, mode, proposal.get('orig'),
                             proposal.get('bot'))
-                 if self._mainnet(fleet_p, (proposal.get('bot') or {})
-                                  .get('venue', 'bybit')) else [])   # D64
+                 if real else [])                                     # D64
+        # D157: the row the plain name is read from — the reviewed bot, or
+        # for a removal the row leaving the file
+        named_row = (proposal.get('bot') if mode != 'remove' else
+                     next((b for b in fleet_raw.get('bots') or []
+                           if isinstance(b, dict) and (b.get('symbol') or b.get('name'))
+                           and row_botid(b) == botid), None))
         if apply:
             again = retype_refusal(jumps, form)
             if again:
                 return self._page(refusal_box('not applied', again))
-            if not named(form.get('confirm'), botid):
+            if not confirmed(form.get('confirm'), botid, named_row, mainnet=real):
+                said = None if real else plain_name(named_row)
                 return self._page(refusal_box(
-                    'not applied', f'the name typed must be {botid} '
-                    '(capitals do not matter) — a click is not a decision '
-                    '(§11). Go back and type it in the box.'))
+                    'not applied', 'the name typed must be '
+                    + (f'{said} or {botid}' if said else botid)
+                    + ' (capitals do not matter) — a click is not a decision'
+                    '. Go back and type it in the box.'))
             atomic_write(fleet_p, new_fleet)
             atomic_write(wd_p, new_wd)
             if mode in ('create', 'remove'):
@@ -126,16 +111,17 @@ class CreateFlowPages:
                 from gridgremlin.forget import forget_bot
                 forget_bot(fleet_p, fleet_raw, botid)
             return self._page(
-                f'<h1>{html.escape(botid)}: written</h1><p>bot and watcher landed '
-                'together in the fleet file; a backup is kept beside each '
+                f'<h1>{html.escape(botid)}: written</h1><p>the bot and its '
+                'watcher landed together in the account\'s file; a backup is kept beside each '
                 'file.</p>'
                 + other_half_html(proposal.get('pair'))
                 + (other_side_html(proposal['bot'], fi)
                    if mode == 'create' and not proposal.get('pair') else '')
                 + next_step_html(mode, unit_for_fleet(fleet_p, self.units),
-                                 self.units)
+                                 self.units,
+                                 self._start_html(fi, botid) if mode == 'create' else '')
                 + '<p><a href="/">back to your bots</a> — the new card is '
-                'there, marked as waiting for the restart.</p>')
+                'there, marked as waiting to start.</p>')
         if mode == 'remove':
             ladder_html = '<p class="dim">removal: no ladder to dry-run — '\
                           'the diff is the whole change.</p>'
@@ -165,6 +151,8 @@ class CreateFlowPages:
                 f"<td>{o['qty']:,.6g}</td></tr>" for o in ladder)
             from gridgremlin.ladder import rounding_note
             note = rounding_note(vbot, adapter)                       # G27
+            from panel.html_bits import uncoded
+            note = uncoded(note) if note else note                    # D157
             ladder_html = (f'<p class="dim">the ladder at mark '
                            f'{mark:,.6g} (dry-run — nothing placed)</p>'
                            + (f'<p class="neg">{html.escape(note)}</p>' if note else '') +
@@ -177,8 +165,8 @@ class CreateFlowPages:
         if proposal.get('pair'):                           # D54
             say = ('<p class="dim">the long half of a reversal grid, below '
                    f"the mid {float(proposal['pair']['mid']):,.6g}; the "
-                   'short half above it follows once this one is written '
-                   '(D54).</p>')
+                   'short half above it follows once this one is written'
+                   '.</p>')
         if mode == 'remove':
             say += self._still_held(fi, botid)              # U97
         if mode != 'remove':
@@ -227,26 +215,32 @@ class CreateFlowPages:
                 say += ('<p>' + rehearse_bot_form(json.dumps(proposal['bot']))
                         + '</p>')
             say += '</div>'
+        # D157: leverage, the estimated liquidation and the engine's own
+        # warnings, right above the typed name — shown, never a cap (D29)
+        risk = ('' if mode == 'remove' else
+                self._risk_box(fi, vbot, merged, adapter, mark))
         verb = {'create': 'create this bot', 'edit': 'apply the change',
                 'remove': 'remove this bot'}[mode]
         # U17: the apply box sits right under the summary; the file diff
         # and the dry-run orders fold away for whoever wants them
         return self._page(
-            f'<h1>{html.escape(botid)} — {html.escape(mode)}: gates passed</h1>' + say +
-            '<div class="fsec go">'                     # U88: the one action, its own box
+            f'<h1>{html.escape(botid)} — {html.escape(mode)}: gates passed</h1>' + say + risk +
+            '<div class="fsec go">'                   # U88: the one action, its own box
             f'<form method="post" action="/apply" class="apply">'
             f'<input type="hidden" name="gg" value="1">'
             f'<input type="hidden" name="fleet" value="{fi}">'
             f'<input type="hidden" name="proposal" value="{pj}">'
-            f'<b>To {verb}</b>, type its name <code>{html.escape(botid)}</code> here: '
-            f'<input name="confirm" size="16" placeholder="{html.escape(botid)}"> '
+            f'<b>To {verb}</b>, type {to_type(botid, named_row, real)} here: '
+            f'<input name="confirm" size="22" placeholder="'
+            f'{html.escape((None if real else plain_name(named_row)) or botid)}"> '
             + ''.join(f'<br><b class="neg">Mainnet:</b> type the new {k} '
                       f'(<code>{n:g}</code>) again: <input name="retype_{k}" '
                       'size="12">' for k, _, n in jumps)
             + f'<button>{verb}</button></form>'
-            '<p class="dim">this writes the fleet file. A running fleet '
-            'takes changed terms within seconds; a new bot, a removed one '
-            'or a changed range waits for a restart (F12).</p></div>'
+            '<p class="dim">this writes the account\'s file. A running bot '
+            'takes changed terms within seconds; a new bot waits until it is '
+            'started — nothing starts it on its own; a removed one or a changed '
+            'range waits for its account\'s engine to restart.</p></div>'
             '<details><summary>the change to the file</summary>'
             f'<pre class="dim">{html.escape(diffs)}</pre></details>'
             '<details><summary>the orders it would place</summary>'
@@ -352,6 +346,24 @@ class CreateFlowPages:
                      'that bot to change it</a>, or pick another coin or '
                      'the other direction below.')
         note = refusal_box(title, why, extra)
+        try:                     # D157 (U122): what was typed, as it was typed
+            typed = json.loads(form.get('typed') or 'null')
+        except ValueError:
+            typed = None
+        if isinstance(typed, dict) and all(isinstance(v, str) for v in typed.values()):
+            from panel.setup import SCHEMAS, advanced_page, quick_page
+            try:
+                if typed.get('how') == 'quick':
+                    return self._page(note + quick_page(
+                        self._fleet_labels(), fi, symbols=self._symbols(fi),
+                        carry=self._carry_ok(), values=typed))
+                if typed.get('strategy', 'grid') in SCHEMAS:
+                    return self._page(advanced_page(
+                        typed.get('strategy', 'grid'), typed, self._fleet_labels(), fi,
+                        alert=note, edit=form.get('orig') or None,
+                        symbols=self._symbols(fi)))
+            except Exception:                               # noqa: BLE001
+                pass                       # a form the page cannot draw: the bot's
         try:                                     # U84: only a bot redraws
             bot = json.loads(form.get('bot_json') or 'null')
         except ValueError:
@@ -393,7 +405,13 @@ class CreateFlowPages:
         if q.get('adv') in ('grid', 'martingale'):
             return self._page(advanced_page(q['adv'], {}, labels, fi,
                                             symbols=self._symbols(fi)))
-        return self._page(quick_page(labels, fi, symbols=self._symbols(fi)))
+        return self._page(quick_page(labels, fi, symbols=self._symbols(fi),
+                                     carry=self._carry_ok()))
+
+    def _carry_ok(self):
+        """D157: a carry bot is Bybit's alone — its link shows only where
+        an account here can hold one."""
+        return any(self._fleet_venue(i) == 'bybit' for i in range(len(self.fleets)))
 
     def _bars_for(self, cfg):
         """Public candles, kept five minutes: a drag redraws, it does not
@@ -466,6 +484,145 @@ class CreateFlowPages:
         self.end_headers()
         self._out(body)
 
+    _marks = {}                      # (venue, market, symbol) -> (t, mark)
+
+    def _adapter_for(self, cfg):
+        """The market's rounding rules, kept five minutes (as the what-if)."""
+        import panel.create as pc
+        key = self._market_key(cfg)
+        hit = type(self)._adapters.get(key)
+        if not hit or time.time() - hit[0] >= 300:
+            hit = type(self)._adapters[key] = (time.time(), pc.public_adapter(cfg))
+        return hit[1]
+
+    def _mark_for(self, cfg):
+        """Today's price for the live numbers, kept thirty seconds: a form
+        typed into asks often. The review reads it fresh."""
+        import panel.create as pc
+        key = self._market_key(cfg)
+        hit = type(self)._marks.get(key)
+        if not hit or time.time() - hit[0] >= 30:
+            hit = type(self)._marks[key] = (time.time(), pc.public_mark(cfg))
+        return hit[1]
+
+    def _free(self, fi):
+        """What the account has free to trade, from its last readout — never
+        a readout started for it: (amount or None, the money it is in)."""
+        from panel.strip_view import free_share, venue_money
+        _, data = type(self)._cache.get(self.fleets[fi], (0.0, None))
+        if not data:
+            return None, ''
+        got = free_share((data.get('watchdog') or {}).get('belief') or {})
+        money = html.unescape(venue_money(data))
+        return (got[0] if got else None), ('' if money == 'quote' else money)
+
+    @staticmethod
+    def _money_of(cfg, adapter):
+        """The money a bot's investment is counted in, when no readout
+        says: the market's settle coin; nothing for a coin-margined one."""
+        coin = getattr(adapter, 'settle_coin', None)
+        return '' if cfg.get('market_type') == 'inverse' or not coin else coin
+
+    def _risk_box(self, fi, vbot, raw, adapter, mark):
+        """D157, before the typed name: the leverage, the estimated
+        liquidation (the backtest's own, U121), the engine's build warnings
+        (the ones its log prints at start) and the numbers the form showed.
+        Display only (D29): nothing here caps or refuses."""
+        from gridgremlin.config import slide_adverse_warning, slide_leverage_warning
+        from panel.consequence import block, least_capital, numbers
+        from panel.html_bits import uncoded
+        free, money = self._free(fi)
+        money = money or self._money_of(vbot, adapter)
+        try:
+            n = numbers(vbot, adapter, mark, free=free,
+                        least=least_capital(raw, adapter, mark))
+            body = block(vbot, n, money)
+        except Exception as e:                              # noqa: BLE001
+            body = f'<p class="dim">no numbers: {html.escape(str(e))}</p>'
+        warns = ''.join(
+            '<p class="neg"><b>the engine warns:</b> '
+            f'{html.escape(uncoded(w))}</p>'
+            for w in (slide_leverage_warning(vbot), slide_adverse_warning(vbot)) if w)
+        return ('<div class="fsec risk"><h1 class="dim">leverage and liquidation</h1>'
+                + warns + body + '</div>')
+
+    def _numbers_post(self, form):
+        """D157: the setup form as it stands -> the numbers it means, or the
+        engine's refusal, in words, before the review (U122). The row is
+        built and judged as the review builds and judges it: the quick
+        preset or the advanced form, the fleet's risk profile, the engine's
+        validators, the order minimum, the whole fleet's gate. Nothing is
+        written; a refusal is the engine's own, verbatim (P3)."""
+        from gridgremlin.config import (apply_profile, validate_config,
+                                        validate_profiles)
+        from panel.consequence import block, least_capital, numbers
+        from panel.create import (edit_proposal, merge_proposal,
+                                  order_minimum_problem, validate_whole)
+        from panel.setup import (bot_from_form, missing_required, quick_bot,
+                                 resolve_size)
+        fi = min(int(_f(form.get('fleet')) or 0), len(self.fleets) - 1)
+        venue = self._fleet_venue(fi)
+        symbol = (form.get('symbol') or '').strip().upper()
+        linear = {'venue': venue, 'market_type': 'linear', 'symbol': symbol}
+        if form.get('how') == 'quick':
+            if not symbol or not (form.get('capital') or '').strip():
+                return self._fragment('<p class="dim">the numbers show here once '
+                                      'a coin and an investment are typed.</p>')
+        else:
+            miss = missing_required(form.get('strategy', 'grid'), form)
+            if miss:
+                return self._fragment('<p class="dim">the numbers show here once '
+                                      'these are filled: '
+                                      + html.escape('; '.join(miss)) + '.</p>')
+        try:
+            if form.get('how') == 'quick':
+                bot = quick_bot(form, venue, self._mark_for(linear))
+            else:
+                bot = bot_from_form(resolve_size(form, lambda: self._mark_for(linear)),
+                                    venue)
+            fleet_raw = json.loads(Path(self.fleets[fi]).read_text())
+            wd_raw = json.loads(Path(fleet_raw['watchdog']).read_text())
+            raw = apply_profile(dict(bot), validate_profiles(
+                fleet_raw.get('risk_profiles'), 'fleet'))        # D57
+            vbot = validate_config(json.loads(json.dumps(raw)))
+            adapter = self._adapter_for(vbot)
+            mark = self._mark_for(vbot)
+        except Exception as e:                              # noqa: BLE001
+            return self._fragment(self._live_refusal(e))
+        refusal = None
+        try:
+            if vbot['strategy'] == 'martingale':
+                refusal = order_minimum_problem(vbot, adapter, mark)
+            if refusal is None:
+                proposal = {'bot': bot, 'watchdog': {'max': _f(form.get('ceiling'))}}
+                if form.get('mode') == 'edit' and form.get('orig'):
+                    _, fleet, wd = edit_proposal(fleet_raw, wd_raw, form['orig'], bot,
+                                                 proposal['watchdog']['max'])
+                else:
+                    _, fleet, wd = merge_proposal(fleet_raw, wd_raw, proposal)
+                refusal = validate_whole(fleet, wd, lambda cfg: adapter
+                                         if cfg.get('symbol') == vbot['symbol']
+                                         and cfg.get('venue', 'bybit') == vbot.get('venue', 'bybit')
+                                         and cfg.get('market_type') == vbot['market_type']
+                                         else self._adapter_for(cfg))
+        except Exception as e:                              # noqa: BLE001
+            refusal = str(e)
+        free, money = self._free(fi)
+        money = money or self._money_of(vbot, adapter)
+        try:
+            body = block(vbot, numbers(vbot, adapter, mark, free=free,
+                                       least=least_capital(raw, adapter, mark)), money)
+        except Exception as e:                              # noqa: BLE001
+            body = f'<p class="dim">no numbers: {html.escape(str(e))}</p>'
+        return self._fragment((self._live_refusal(refusal) if refusal else '') + body)
+
+    @staticmethod
+    def _live_refusal(why):
+        """U122: the engine's refusal under the inputs, verbatim (P3) — the
+        form keeps everything typed, since nothing was sent anywhere."""
+        return ('<div class="refusal"><b>not yet</b> — the review would refuse '
+                f'this:<br>{html.escape(str(why))}</div>')
+
     def _setup_post(self, form):
         from panel.create import public_mark
         from panel.setup import (advanced_page, bot_from_form,
@@ -509,6 +666,10 @@ class CreateFlowPages:
                     else 'long'
                 if strategy == 'martingale':
                     vals['strategy'] = 'martingale'
+                    # D157: the quick preset starts again after its take
+                    # profit; the advanced door it opens says the same,
+                    # rather than the engine's one-round default
+                    vals['repeat'] = '1'
                 return self._page(advanced_page(
                     strategy, vals, labels, fi,
                     note='<p class="dim">the advanced form, with what you '
@@ -539,22 +700,24 @@ class CreateFlowPages:
                              'setup at today\'s price — change anything.'
                              + (' This is the long half of a reversal '
                                 'grid; the short half above the mid is '
-                                'its own bot, made the same way (D54).'
+                                'its own bot, made the same way.'
                                 if pair else '') + '</p>'))
             else:
                 from panel.setup import missing_required, resolve_size
                 miss = missing_required(form.get('strategy', 'grid'), form)   # U105
                 if miss:
                     raise ValueError('still needed: ' + '; '.join(miss))
-                form = resolve_size(form, lambda: public_mark({   # U24
+                sized = resolve_size(form, lambda: public_mark({   # U24
                     'venue': venue, 'market_type': 'linear',
                     'symbol': (form.get('symbol') or '').strip().upper()}))
-                bot = bot_from_form(form, venue)
+                bot = bot_from_form(sized, venue)    # D157: `form` stays as typed
         except Exception as e:                              # noqa: BLE001
             note = refusal_box('not yet', e)
             if how == 'quick':
                 from panel.setup import quick_page
-                return self._page(note + quick_page(labels, fi))
+                return self._page(note + quick_page(labels, fi, symbols=self._symbols(fi),
+                                                    carry=self._carry_ok(),
+                                                    values=form))      # D157: kept, not blanked
             return self._page(advanced_page(
                 form.get('strategy', 'grid'), form, labels, fi, alert=note,
                 edit=form.get('orig') or None))
@@ -572,4 +735,8 @@ class CreateFlowPages:
                                   'orig': orig,
                                   'bot_json': json.dumps(bot),
                                   'ceiling': form.get('ceiling', ''),
-                                  'pair': pair if how == 'quick' else ''})
+                                  'pair': pair if how == 'quick' else '',
+                                  # D157: a refusal at the gate comes back
+                                  # as typed — the quick form as the quick form
+                                  'typed': json.dumps(form) if how in ('quick', 'advanced')
+                                  else ''})

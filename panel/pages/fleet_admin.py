@@ -60,8 +60,8 @@ class FleetAdminPages:
         if mode == 'remove':
             return (f'<h1>remove {html.escape(botid)}</h1><p class="dim">the bot and its '
                     'watchdog line leave together; the remaining fleet must '
-                    'still validate (F1). The running fleet is untouched until '
-                    'restarted (§11).</p>' + self._still_held(fi, botid) +    # U97
+                    'still validate. The running fleet is untouched until '
+                    'restarted.</p>' + self._still_held(fi, botid) +    # U97
                     f'<form method="post" action="/create">'
                     f'<input type="hidden" name="gg" value="1">'
                     f'<input type="hidden" name="mode" value="remove">'
@@ -101,8 +101,10 @@ class FleetAdminPages:
             return self._deny(404, 'control is not armed on this panel')
         fi = int(_f(form.get('fleet')) or 0)
         name = Path(self.fleets[min(fi, len(self.fleets) - 1)]).name
-        if form.get('confirm', '').strip() != name:
-            return self._page(refusal_box('not cleared', f'type the fleet file name exactly: {name}'))
+        if form.get('confirm', '').strip() != name and self._account_typed(
+                form.get('confirm')) != min(fi, len(self.fleets) - 1):          # D157
+            return self._page(refusal_box('not cleared', 'type the account\'s name or its file '
+                                          f'name exactly: {name}'))
         tp = self._tombs_path(fi)
         try:
             tombs = json.loads(tp.read_text() or '{}') if tp.exists() else {}
@@ -124,31 +126,44 @@ class FleetAdminPages:
         clears = ''.join(
             f"<form method='post' action='/clear-tombstones' style='margin:.3em 0'>"
             f"<input type='hidden' name='gg' value='1'><input type='hidden' name='fleet' value='{fi}'>"
-            f"{html.escape(str(lb))}: {len(orph)} left from bots no longer in the fleet — type "
-            f"<b>{html.escape(Path(self.fleets[fi]).name)}</b> "
+            f"{html.escape(str(lb))}: {len(orph)} left from bots no longer on the account — type "
+            + (f"<b>{html.escape(self._account(fi))}</b> <span class='dim'>(or "
+               f"{html.escape(Path(self.fleets[fi]).name)})</span> "
+               if self._account_typed(self._account(fi)) == fi else
+               f"<b>{html.escape(Path(self.fleets[fi]).name)}</b> ") +
             f"<input name='confirm' size='18'> <button>clear them</button></form>"
             for fi, lb, _tp, tombs in self._tombs_all()
             for orph in [self._orphans(fi, tombs)] if orph)
         trows = ''.join(
             f"<tr><td class='dim'>{html.escape(str(lb))}</td><td>{html.escape(b)}</td>"
             f"<td class='dim'>{html.escape(str(v.get('reason')))}"
-            + (" · <i>no longer in the fleet</i>" if b not in self._fleet_rows(fi) else '')
+            + (" · <i>no longer on the account</i>" if b not in self._fleet_rows(fi) else '')
             + "</td>"
             f"<td><form method='post' action='/revive' style='margin:0'>"
             f"<input type='hidden' name='gg' value='1'>"
             f"<input type='hidden' name='fleet' value='{fi}'>"
-            f"<input name='confirm' size='14' placeholder='{html.escape(b, quote=True)}'>"
+            f"<input name='confirm' size='14' placeholder='{html.escape(said, quote=True)}'>"
             f"<button>revive</button></form></td></tr>"
             for fi, lb, _tp, tombs in self._tombs_all()
-            for b, v in tombs.items()) or \
+            for b, v in tombs.items()
+            for said in [self._revive_word(fi, b)]) or \
             '<tr><td class="dim" colspan="4">no tombstones</td></tr>'
         return ('<h1>tombstones <span class="dim">— revival is deliberate, '
-                'with the evidence (X7)</span></h1>'
-                '<p class="dim">to revive a stopped bot, type its name in '
-                'the box on its own row and press revive (capitals do not '
-                'matter). One file per fleet; the row says whose.</p>'
-                '<div class="fsec"><table><tr><th>fleet</th><th>bot</th><th>reason</th><th></th></tr>'
+                'with the evidence</span></h1>'
+                '<p class="dim">to revive a stopped bot, type its name (or its '
+                'code) in the box on its own row and press revive (capitals do not '
+                'matter). One file per account; the row says whose.</p>'
+                '<div class="fsec"><table><tr><th>account</th><th>bot</th><th>reason</th><th></th></tr>'
                 + trows + '</table></div>' + clears +
-                '<p class="dim">a revival takes effect at the next fleet '
-                'start — the file is the truth; the process reads it at '
-                'build.</p>')
+                '<p class="dim">a revival takes effect when the account\'s '
+                'engine next starts — the file is the truth; the engine reads it '
+                'as it starts.</p>')
+
+    def _revive_word(self, fi, botid):
+        """D157: what a tombstone's revive box shows to type: the bot's
+        plain name off Mainnet, while its row is still in the file; else
+        its code."""
+        from ..html_bits import plain_name
+        if self._real(self.fleets[min(fi, len(self.fleets) - 1)]):
+            return botid
+        return plain_name(self._row_of(fi, botid)) or botid

@@ -151,7 +151,7 @@ def moods_html(labelled):
     if not seen:
         return ''
     rows = ''.join(f'<tr><td>{esc(coin)}</td><td class="{"neg" if m.get("thin") else ""}">'
-                   f'{esc(m["line"])}{" · THIN" if m.get("thin") else ""}</td></tr>'
+                   f'{esc(m["line"])}{" · thin book" if m.get("thin") else ""}</td></tr>'
                    for coin, m in sorted(seen.items()))
     return f'<h3>the markets</h3><table class="ov moods">{rows}</table>'
 

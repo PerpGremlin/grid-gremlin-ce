@@ -1,7 +1,7 @@
 """D143: a portfolio row's leverage, reviewed and written (panel/lever.py is
 the pure half): a mixin the Handler inherits."""
 from gridgremlin.apply import row_botid
-from ..html_bits import named, refusal_box
+from ..html_bits import confirmed, plain_name, refusal_box, to_type
 from pathlib import Path
 import html
 import json
@@ -27,7 +27,7 @@ class LeverPages:
             return self._page(refusal_box('not reviewed', f'{botid}: no portfolio row of that name in this fleet'))
         if self._mainnet(fleet_p, raw['bots'][i].get('venue', 'bybit')):
             return self._page(refusal_box('not reviewed', 'this fleet may reach real money: its '
-                                          'leverage is changed in the fleet file by hand (D64)'))
+                                          'leverage is changed in the fleet file by hand'))
         spot = _f(form.get('spot'))
         perp, typed = {}, {}
         for k, v in form.items():
@@ -58,9 +58,10 @@ class LeverPages:
             return self._page('<h1>nothing to change</h1><p class="dim">the file already says this.</p>'
                               '<p><a href="/">back to your bots</a></p>')
         if form.get('confirm') is not None:
-            if not named(form.get('confirm'), botid):
-                return self._page(refusal_box('not applied', f'the name typed must be {botid} '
-                                              '(capitals do not matter) — a click is not a decision (§11)'))
+            if not confirmed(form.get('confirm'), botid, raw['bots'][i]):   # D157; Mainnet refused above
+                return self._page(refusal_box('not applied', 'the name typed must be '
+                                              f'{plain_name(raw["bots"][i])} or {botid} '
+                                              '(capitals do not matter) — a click is not a decision'))
             atomic_write(fleet_p, new_text)
             return self._page(f'<h1>{html.escape(botid)}: written</h1><p>The running fleet applies it '
                               'within a few seconds and says so on the phone; the stack moves at '
@@ -78,5 +79,5 @@ class LeverPages:
             + ''.join(f'<input type="hidden" name="{e(k, quote=True)}" value="{e(v, quote=True)}">'
                       for k, v in typed.items()) +
             f'<input type="hidden" name="seen" value="{e(json.dumps(seen), quote=True)}">'
-            f'<label>type <b>{e(botid)}</b> to write it <input name="confirm" size="14"></label> '
+            f'<label>type {to_type(botid, raw["bots"][i])} to write it <input name="confirm" size="20"></label> '
             '<button>write it</button></form><p><a href="/">back, change nothing</a></p>')

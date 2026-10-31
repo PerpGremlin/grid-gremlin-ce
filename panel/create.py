@@ -122,7 +122,7 @@ def retype_refusal(jumps, form):
             why = ('a new bot' if was is None
                    else f'raising it past double ({was:g} → {now:g})')
             return (f"{key}: type the new {key}, {now:g}, a second time — "
-                    f'on Mainnet {why} asks for it twice (D64)')
+                    f'on Mainnet {why} asks for it twice')
     return None
 
 
@@ -312,6 +312,39 @@ def public_bars(cfg, days=30, bar_minutes=240):
     from ggdata.candles import candles                           # D91: one candle fetcher
     return candles(cfg.get('venue') or 'bybit', cfg['market_type'], cfg['symbol'], bar_minutes,
                    start, end, network='testnet')
+
+
+def order_minimum_problem(vbot, adapter, m0):
+    """U107: a DCA order under the market's smallest at today's price, in
+    words (the engine learns it only at the first cycle, "base order below
+    minimum"), said in the unit the size is typed in (U107b); None when
+    both orders clear it. Moved out of the create flow whole (D157) so the
+    form's live check and the review ask the same question."""
+    import math
+    # the smallest order in money at today's price — the coin minimum binds
+    # on a dear coin (0.001 BTC ≈ 82)
+    least = max(adapter.min_notional or 0.0, adapter.min_qty * m0)
+    for what, key in (('first order', 'base_order_size'),
+                      ('add-on order', 'safety_order_size')):
+        size = vbot.get(key)
+        if not size:
+            continue
+        coins = vbot.get('size_in') == 'coin'     # D89
+        q0 = adapter.round_qty(size if coins else size / m0)
+        if q0 <= 0 or not adapter.meets_minimum(q0, m0):
+            step = adapter.qty_step
+            least_c = (math.ceil(least / m0 / step - 1e-9) * step
+                       if coins else None)
+            return (f"the {what} ({size:g}{' coins' if coins else ''}) "
+                    "is under this market's smallest order: "
+                    + (f"about {least_c:.4g} coins at today's price "
+                       f"({least:.4g} at {m0:g}) — " if coins else
+                       f"about {least:.4g} at today's price "
+                       f"({adapter.min_qty:g} coins at {m0:g}) — ") +
+                    f'raise the {what} size to at least that (it is '
+                    "the order's whole value, leverage included), or "
+                    'raise the investment the quick setup draws it from')
+    return None
 
 
 def martingale_preview(cfg, mark):

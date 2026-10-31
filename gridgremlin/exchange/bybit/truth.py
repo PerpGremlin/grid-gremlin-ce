@@ -186,6 +186,23 @@ def read_symbol_truth(client, market_type, symbol, funding_interval_minutes=480.
 SEVEN_DAYS_MS = 7 * 24 * 3600 * 1000      # the venue's max span per query
 
 
+def order_state(row):
+    """G23: an order that left the book, by the venue's own status:
+    'filled' if any of it executed (its fill is to be awaited), 'cancelled'
+    if it ended with nothing executed (a post-only reject, self-trade
+    prevention, an outside cancel), 'open' if it still rests, None if the
+    status says nothing usable."""
+    status = str(row.get('orderStatus') or '')
+    done = _f(row.get('cumExecQty'), 0.0) > 0
+    if status in ('Filled', 'PartiallyFilled', 'PartiallyFilledCanceled'):
+        return 'filled'
+    if status in ('Cancelled', 'Rejected', 'Deactivated'):
+        return 'filled' if done else 'cancelled'
+    if status in ('New', 'Untriggered', 'Triggered'):
+        return 'open'
+    return None
+
+
 def read_fills(client, category, symbol, start_ms, end_ms):
     """R1: history in 7-day windows, each cursor followed to the end or
     refused (E5); only execType Trade — funding and settlement rows never
@@ -244,7 +261,12 @@ def read_fills(client, category, symbol, start_ms, end_ms):
                               'link_id': e.get('orderLinkId') or '',
                               # F40: the order a fill belongs to — the venue's
                               # closed P&L is a row per order
-                              'order_id': e.get('orderId') or ''})
+                              'order_id': e.get('orderId') or '',
+                              # G23: did it reduce a position (closedSize)?
+                              # A hand-opened opposite side in hedge mode
+                              # is not a close of ours. Spot does not say.
+                              'reduces': (None if category == 'spot'
+                                          else forced or closed > 0)})
             cursor = page.get('nextPageCursor')
             if not cursor:
                 break

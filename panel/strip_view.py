@@ -81,7 +81,7 @@ def exchange_since_first(contract):
             whole += t
     left = f' <span class="dim">({out} bot(s) left out: not whole)</span>' \
         if out else ''
-    return ('<div class="parts">kept history '
+    return ('<div class="parts">all-time '
             f'<b class="{_num_cls(whole)}">{whole:+,.2f}</b>{left}</div>')
 
 
@@ -153,7 +153,7 @@ def hero_strip(labelled):
             + (f' <span class="neg">+ {gap} unpriced</span>' if gap else '')        # U95
             + '</span>'
             f'<span class="dim num">{len(c["bots"])} bots</span>'
-            + (f'<b class="neg num">{dead} dead</b>' if dead else '<span></span>')
+            + (f'<b class="neg num st" title="stopped by their own rule (a stop loss, a loss limit, a round count) or refused at start">{dead} stopped</b>' if dead else '<span></span>')   # D157
             + f'<span class="dim">{lev}</span>'
             + (f'<span class="spark" title="equity, 24 h">{spark}</span>' if spark else '<span></span>')
             + '</div>')

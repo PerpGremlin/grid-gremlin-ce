@@ -149,7 +149,7 @@ def spec_X15e_the_card_offers_retire_and_the_retire_page_holds_every_step():
     try:
         Handler.units = ('some.service',)
         page = _call(base, '/retire?fleet=0&bot=linETHUSDTl')
-        assert 'retire linETHUSDTl' in page and 'has not started' in page
+        assert 'stop ETHUSDT long grid <span class="dim">linETHUSDTl</span>' in page and 'has not started' in page
         assert 'value="remove"' in page                              # never started: removable
         (d / 's').write_text(json.dumps({'t': 0, 'bots': {'linETHUSDTl': {'position': 0.5}}}) + '\n')
         page = _call(base, '/retire?fleet=0&bot=linETHUSDTl')
@@ -222,7 +222,7 @@ def spec_X15e_closing_everything_on_real_money_asks_the_size_twice():
         form = {'fleet': '0', 'bot': 'linETHUSDTl', 'do': 'close', 'confirm': 'linETHUSDTl'}
         assert 'not retired' in _call(base, '/retire', dict(form, size='0.4'))
         assert not (d / 'logs' / 'retire-f.json').exists()
-        assert 'retire asked' in _call(base, '/retire', dict(form, size='0.5'))
+        assert 'stop asked' in _call(base, '/retire', dict(form, size='0.5'))
     finally:
         Handler.units = saved
         close()
@@ -295,10 +295,10 @@ def spec_U104_a_stopped_or_retired_bot_is_not_drawn_from_the_last_picture():
              'alive': True, 'position': 730.0, 'orders': {'entry': 2, 'exit': 1}}}}}}
     belief = c['watchdog']['belief']['bots']
     live = card(0, 'linDOGEs', None, c, belief)
-    assert 'holding 730 (belief)' in live and '>HOLDING<' in live
-    for key, val, word in (('retired', ['linDOGEs'], 'RETIRED'), ('stopped', 'inactive', 'STOPPED')):
+    assert 'holding 730 (estimated)' in live and '>Running · in position<' in live
+    for key, val, word in (('retired', ['linDOGEs'], 'Retired'), ('stopped', 'inactive', 'Stopped (engine off)')):
         html = card(0, 'linDOGEs', None, dict(c, **{key: val}), belief)
-        assert f'>{word}<' in html and 'HOLDING' not in html and '(belief)' not in html, word
+        assert f'>{word}<' in html and 'Running · in position' not in html and '(estimated)' not in html, word
         # the reviewer (2026-10-27): a stop parks and never flattens, a hold
         # keeps its position — "holding nothing" claimed what nobody read
         assert 'last seen holding 730' in html and 'the exchange has the word' in html, word
@@ -348,7 +348,7 @@ def spec_U104b_a_halted_portfolio_card_says_stopped_and_its_last_seen_book():
     belief = {'pfocarry': {'alive': True, 'portfolio': pv}}
     live = card(0, 'pfocarry', None, c, belief)
     assert 'since its anchor' in live and 'last seen' not in live      # running: as before
-    for key, val, word in (('stopped', 'inactive', 'STOPPED'), ('retired', ['pfocarry'], 'RETIRED')):
+    for key, val, word in (('stopped', 'inactive', 'Stopped (engine off)'), ('retired', ['pfocarry'], 'Retired')):
         cc = dict(c, **{key: val})
         for full in (False, True):
             html = card(0, 'pfocarry', None, cc, belief, full=full)

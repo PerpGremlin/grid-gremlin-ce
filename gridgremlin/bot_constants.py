@@ -1,7 +1,8 @@
 """The bot's constants (E9, G26, G15, B5, B7, M12, X11, X12): one place, imported by
 the bot and its mixins."""
 FLAT_CONFIRMATIONS = 3  # E9: consecutive flat reads before standing down
-RUNGS_LAG_CYCLES = 20       # G26: cycles the exit side waits for the fill list
+RUNGS_LAG_SECONDS = 60.0    # G26: how long both sides wait for the fill list
+                            # (a time, not cycles: polls differ by venue)
 DEFER_ESCALATE_CYCLES = 60  # G15: withheld-exit cycles before the operator
                             # is told the cost is not reconstructable
 FLAP_LIMIT = 3          # B5: strikes before a (rung, side) cools

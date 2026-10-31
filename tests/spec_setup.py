@@ -391,6 +391,7 @@ def _served_fleet():
         pc.public_mark, pc.public_adapter, pc.public_bars = saved
         H._bars.clear()
         H._adapters.clear()
+        H._marks.clear()                  # D157: the live numbers' price
     return f'http://{H.host_ok}', d, close
 
 
@@ -427,6 +428,14 @@ def spec_P1_the_panel_holds_its_boundary_behind_the_token():
             _tombs_all = Handler._tombs_all
             _orphans = Handler._orphans
             _fleet_rows = Handler._fleet_rows
+            _account = Handler._account
+            _account_typed = Handler._account_typed
+
+            def _real(self, f):
+                return False
+
+            def _revive_word(self, fi, b):
+                return b
         page = Handler._tombs_html(Me())
         assert '<script>1</script>' not in page and '&lt;script&gt;' in page
         assert '<b>x</b>' not in page
@@ -725,8 +734,8 @@ def spec_U7_an_edit_cannot_change_what_the_bot_is():
 
 def spec_U2_a_choice_left_at_default_stays_out_of_the_file():
     page = advanced_page('grid', {}, ['f.json'])
-    assert ('<select name="exit_floor"><option value="" selected>rung'
-            '</option><option>basis</option></select>') in page    # U46
+    assert ('<select name="exit_floor"><option value="" selected>one grid above where it was bought'
+            '</option><option value="basis">never below the average cost</option></select>') in page    # U46, D157
     assert '<select name="side"><option' in page
     assert '<select name="side"><option value=""' not in page
     bot = bot_from_form({'symbol': 'BTCUSDT', 'side': 'long',
@@ -782,7 +791,10 @@ def spec_U6_a_first_order_below_the_venue_minimum_is_refused_at_the_form():
             'preset': 'dca_long', 'caution': 'careful', 'symbol': 'SOLUSDT',
             'capital': '40'})
         assert 'smallest order' in page and 'raise the investment' in page
-        assert 'advanced setup' in page and 'value="40"' in page
+        # D157 (U122): it comes back as the quick form, as typed (it was
+        # redrawn as the advanced form from the derived row)
+        assert 'set up a bot' in page and 'name="capital" value="40"' in page
+        assert 'value="dca_long" checked' in page and 'value="careful" selected' in page
         ok = _call(base, '/setup', {
             'how': 'quick', 'then': 'gates', 'fleet': '0',
             'preset': 'dca_long', 'caution': 'careful', 'symbol': 'SOLUSDT',
@@ -1213,8 +1225,8 @@ def spec_U4_the_sentence_says_leave_position_and_the_hold_limit():
     assert ('A round still open after 2 hours is closed at the market '
             'price, in profit or loss.') in says
     grid = advanced_page('grid', {}, ['a.json'])
-    assert '<option>leave_position</option>' in grid
-    assert '<option>end_round</option>' not in grid    # a grid has no round
+    assert '<option value="leave_position">stop, and leave the position open</option>' in grid
+    assert 'value="end_round"' not in grid    # a grid has no round
 
 
 def spec_U9_the_whatif_keeps_a_left_position_moving():
@@ -1847,13 +1859,16 @@ def spec_U31_the_written_page_names_the_next_step():
     assert unit_for_fleet('/x/configs/fleet.hl.testnet.json', units) == 'grid-gremlin3-hl'
     assert unit_for_fleet('configs/fleet.demo.json', ()) is None
     created = next_step_html('create', 'grid-gremlin3-demo', units)
-    assert 'this bot starts at the fleet\'s next restart' in created
+    assert 'this bot starts when its account\'s engine next restarts' in created
     assert '<b>grid-gremlin3-demo</b>' in created and 'href="/control"' in created
-    assert 'keeps the whole fleet down' in created           # the honest risk
-    assert 'leaves the fleet' in next_step_html('remove', 'grid-gremlin3-demo', units)
+    assert 'is set aside' in created and 'the rest run' in created            # D52, as it is
+    assert 'leaves its account' in next_step_html('remove', 'grid-gremlin3-demo', units)
     edited = next_step_html('edit', 'grid-gremlin3-demo', units)
-    assert 'within seconds' in edited and 'waits for the fleet' in edited
-    assert 'no control over units' in next_step_html('create', None, ())
+    assert 'within seconds' in edited and 'waits until its account' in edited
+    assert 'its control is off' in next_step_html('create', None, ())
+    # D157: with the start button, the page says nothing starts without it
+    button = next_step_html('create', 'grid-gremlin3-demo', units, '<form action="/start"></form>')
+    assert 'does not start on its own' in button and 'action="/start"' in button
 
 
 # --- U32: a bot's name where a market was wanted ------------------------------
@@ -1901,8 +1916,8 @@ def spec_U33_every_blank_says_its_default_from_the_engine_itself():
     assert 'name="place_within_pct" value="" size="14" placeholder="default 5%"' in page
     assert 'name="capital" value="" size="10" placeholder="required"' in page
     assert '(default' not in page                             # U46: named
-    assert '<option value="" selected>percent</option>' in page
-    assert '<option value="" selected>rung</option>' in page
+    assert '<option value="" selected>geometric (the same % apart)</option>' in page
+    assert '<option value="" selected>one grid above where it was bought</option>' in page
     assert 'placeholder="default 0.5"' in page                   # slide ref
     dca = advanced_page('martingale', {}, ['f.json'])
     assert 'placeholder="default 40"' in dca and 'placeholder="required"' in dca
@@ -1918,7 +1933,7 @@ def spec_U34_the_panel_tells_the_truth_about_a_bot_that_waits():
     units = ('grid-gremlin3-demo', 'grid-gremlin3-hl')
     fleet_bots = {'linFARTCOINUSDTl': 'grid-gremlin3-demo'}
     why = unit_refusal('linfartcoinusdtl', units, {}, fleet_bots)
-    assert 'is a bot, not a unit' in why and 'grid-gremlin3-demo' in why
+    assert 'is a bot, not an account' in why and 'grid-gremlin3-demo' in why
     assert 'restart' in why
     # the file vs the engine's last snapshot
     d = _P(tempfile.mkdtemp()); (d / 'configs').mkdir(); (d / 'logs').mkdir()
@@ -1943,9 +1958,9 @@ def spec_U34_the_panel_tells_the_truth_about_a_bot_that_waits():
                 'watchdog': {'belief': {'age_s': 3, 'bots': {
                     'linBTCUSDTl': {'alive': True, 'position': 0.0}}}}}
     page = render([('demo', contract)])
-    assert 'NOT STARTED' in page and "waits for the fleet's restart" in page
+    assert 'Waiting to start' in page and "starts at its account's next restart" in page
     import re as _re
-    assert len(_re.findall(r'>RESTING<', page)) == 1      # the running one's tag
+    assert len(_re.findall(r'>Running · no position<', page)) == 1      # the running one's tag
 
 
 def spec_U46_a_dropdown_names_its_default_and_states_what_it_has():
@@ -1958,20 +1973,23 @@ def spec_U46_a_dropdown_names_its_default_and_states_what_it_has():
     from panel.setup import _field
     sel = _field('start_order_type',
                  'choice:market|maker', 'Start', '', None, default='market')
-    assert ('<option value="" selected>market</option><option>maker</option>'
+    # D157: each choice in words, its value the file's own
+    assert ('<option value="" selected>market order (at once)</option>'
+            '<option value="maker">limit, post-only (the lower fee)</option>'
             in sel) and 'default' not in sel
     stated = _field('start_order_type',
                     'choice:market|maker', 'Start', '', 'market',
                     default='market')
-    assert '<option selected>market</option><option>maker</option>' in stated
+    assert ('<option value="market" selected>market order (at once)</option>'
+            '<option value="maker">limit, post-only (the lower fee)</option>') in stated
     assert 'value=""' not in stated                   # never silently dropped
     candle = _field('stop_candle',
                     'choice:1m|5m|15m|30m|1h|4h', 'Candle', '', None)
-    assert '<option value="" selected>none</option><option>1m</option>' in candle
+    assert '<option value="" selected>no candle wait</option><option>1m</option>' in candle
     action = _field('stop_action',
                     'choice:stop_bot|leave_position', 'When', '', None)
-    assert ('<option value="" selected>stop_bot</option>'
-            '<option>leave_position</option>') in action
+    assert ('<option value="" selected>close the position and stop</option>'
+            '<option value="leave_position">stop, and leave the position open</option>') in action
 
 
 def spec_ops_no_live_unit_runs_the_retired_agent():
@@ -2220,7 +2238,7 @@ def spec_U83_a_trade_names_a_market_the_venue_lists():
             assert 'class="refusal"' in page and 'trade refused' in page and why in page, bad
             assert '<x>' not in page
             assert not trades.exists() or json.loads(trades.read_text()) == [], bad
-        ok = _call(base, '/trade', dict(form, symbol='btcusdt'))
+        ok = _call(base, '/trade', dict(form, symbol='btcusdt', go='1'))
         assert 'linBTCUSDTl: queued' in ok
         assert json.loads(trades.read_text())[0]['symbol'] == 'BTCUSDT'
     finally:
@@ -2565,7 +2583,8 @@ def spec_U111_a_running_carry_bot_is_edited_from_its_edit_tab():
         page = _call(base, '/setup-carry', edit)
         assert 'edit: gates passed' in page and 'save the change' in page, page[:800]
         seen = html_unescape(re.search(r'name="seen" value="([^"]+)"', page).group(1))
-        done = _call(base, '/setup-carry', dict(edit, step='apply', seen=seen, confirm='pfobasket'))
+        done = _call(base, '/setup-carry', dict(edit, step='apply', seen=seen,
+                                                confirm='basket portfolio'))   # D157: its plain name
         assert 'pfobasket: written' in done and 'new terms at the fleet' in done, done[:600]
         rows = [r for r in json.loads((d / 'f.json').read_text())['bots'] if r.get('strategy') == 'portfolio']
         assert len(rows) == 1 and rows[0]['capital'] == 2000 and rows[0]['rebalance']['trigger'] == 'drift'
@@ -2598,7 +2617,7 @@ def spec_U111c_a_hedges_move_to_another_perpetual_is_allowed_and_said_the_rest_s
     said = stranded(was, row(hedge={'HYPE': {'product': 'usdt', 'ratio': 1.0},
                                     'BTC': {'product': 'inverse', 'ratio': 1.0}}))
     assert said == ["HYPE's hedge moves from inverse to usdt on the next read: the new short opens, then "
-                    'the old one closes, a slice of at most 5,000 USDT a read (H17)'], said
+                    'the old one closes, a slice of at most 5,000 USDT a read'], said
     assert stranded(was, row()) == []
     for now, words in ((row(assets=[{'coin': 'BTC', 'weight': 1.0}], risk={'max_weight': 1.0}), 'HYPE is taken out'),
                        (row(assets=[{'coin': 'BTC', 'weight': 0.5}, {'coin': 'HYPE', 'weight': -0.5}]),
@@ -2659,6 +2678,27 @@ def spec_U108c_the_carry_form_reads_a_row_whole_or_says_why_not():
     back = row_from_form({'name': 'b', 'capital': '1', 'assets': 'BTC 1, SOL -1',
                           'hedge_each': 'SOL usdc'})
     assert validate_portfolio(back)['short_products'] == {'SOL': 'usdc'}
+
+
+def spec_U108e_the_carry_form_refuses_its_cap_in_its_own_units():
+    """U108e (D157): a coin over "Most in one coin" is refused by the form as a
+    share of the basket — never the engine's stack figure (350% vs 250% at 5x),
+    which the form never showed; the cap still holds (sabotage: drop the form's
+    check and the engine still refuses, in the stack's words)."""
+    from panel.carry_setup import row_from_form
+    for lev in ('1', '5'):
+        try:
+            row_from_form({'name': 'b', 'capital': '1000', 'assets': 'BTC 70, ETH 30',
+                           'spot_leverage': lev})
+        except ValueError as e:
+            said = str(e)
+            assert 'BTC is 70% of the basket' in said and '(50%)' in said, said
+            assert 'at least 70%' in said and '350' not in said and '250' not in said, said
+        else:
+            raise AssertionError(f'BTC at 70% passed a 50% cap at {lev}x')
+    row = row_from_form({'name': 'b', 'capital': '1000', 'assets': 'BTC 70, ETH 30',
+                         'spot_leverage': '5', 'max_weight': '70'})
+    assert row['risk']['max_weight'] == 3.5
 
 
 def spec_U108d_a_carry_edit_never_loosens_the_cap_on_one_coin():

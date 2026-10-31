@@ -153,6 +153,36 @@ def _addr(s):
     return str(s or '').strip().lower()
 
 
+def order_state(answer):
+    """G23: HL's orderStatus answer as 'filled' (some of it executed),
+    'cancelled' (ended with nothing executed), 'open', or None."""
+    if not isinstance(answer, dict) or answer.get('status') != 'order':
+        return None
+    wrap = answer.get('order') or {}
+    status = str(wrap.get('status') or '')
+    order = wrap.get('order') or {}
+    done = _f(order.get('origSz'), 0.0) - _f(order.get('sz'), 0.0) > 0
+    if status == 'filled':
+        return 'filled'
+    if status in ('open', 'triggered'):
+        return 'open'
+    if status.endswith('anceled') or status.endswith('ejected'):
+        return 'filled' if done else 'cancelled'
+    return None
+
+
+def _reduces(direction, liquidated_us):
+    """G23: did the fill reduce a position — 'Close Long'/'Close Short', a
+    flip ('Long > Short': its closing part), or our own liquidation. None
+    where HL does not say."""
+    if liquidated_us:
+        return True
+    if not direction:
+        return None
+    d = str(direction)
+    return d.startswith('Close') or '>' in d
+
+
 def read_fills(raw, coins, address):
     """R1: the shared fill shape; tid is the execution id, the cloid decodes
     back to the link. Rows outside `coins` are not ours to ledger.
@@ -193,7 +223,8 @@ def read_fills(raw, coins, address):
                     'qty': _f(f.get('sz'), 0.0),
                     'fee': _f(f.get('fee'), 0.0),
                     'link_id': cloid_to_link(f.get('cloid'))
-                    or (f.get('cloid') or '')})
+                    or (f.get('cloid') or ''),
+                    'reduces': _reduces(f.get('dir'), liquidated_us)})
     out.sort(key=lambda f: f['time_ms'])
     return out
 

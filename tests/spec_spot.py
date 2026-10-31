@@ -328,13 +328,21 @@ def spec_D58_our_buy_in_flight_freezes_orders_until_it_is_listed():
 
 
 def spec_D58_an_outside_hand_on_the_coin_is_said_once_and_not_ours():
+    from gridgremlin.bot import RUNGS_LAG_SECONDS
     venue, lines = FakeSpotVenue(mark=0.1950, base=0.0), []
-    bot = _spot_bot(venue, lines)
+    later = [0.0]                            # the wait is a time (G26)
+    bot = Bot(_spot_cfg(), SpotAdapter(ADA_SPEC), venue,
+              Notifier(sink=lines.append), gen_seed=1,
+              clock=lambda: time.time() + later[0])
     bot.cycle()
     bot.cycle()
     venue.base += 500.0                      # the operator buys some ADA
-    from gridgremlin.bot import RUNGS_LAG_CYCLES
-    for _ in range(RUNGS_LAG_CYCLES + 1):
+    bot.cycle()                              # the wait starts
+    later[0] += RUNGS_LAG_SECONDS - 2.0
+    bot.cycle()
+    assert not [ln for ln in lines if 'outside hand' in ln]   # still waiting
+    for _ in range(3):
+        later[0] += 1.0
         bot.cycle()
     warns = [ln for ln in lines if 'outside hand' in ln]
     assert len(warns) == 1 and 'D58' in warns[0]

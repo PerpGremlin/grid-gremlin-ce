@@ -1349,6 +1349,32 @@ stands unless the owner corrects it.
   venue it could not read is said as unread. Nothing is paged (D60): drift
   is a figure to correct, not an emergency. Installing it is the owner's
   (re-render the digest unit).
+- **D157 — The panel for a retail trader, in three parts (2026-10-31).**
+  The owner made it a priority that someone who has run bots on Bybit,
+  Pionex or 3Commas can use the panel without a translator. An audit of the
+  panel and a survey of those platforms' own help pages set the plan; the
+  owner approved it whole, in three PRs. Engine behaviour, the mainnet double
+  gate (D25, D64, D97) and D29 are out of scope throughout: leverage is only
+  ever shown, never capped. **1, words and small bugs (no flow change):** a
+  bot's state in a person's words (Running · in position, Running · no
+  position, Waiting to start, Stopped (by its rule)); the card's money as the
+  platforms say it (Total P&L · ROI · Grid profit · Floating P&L · Runtime ·
+  APR), the account box's caveat on hover; dropdowns that show words and send
+  the file's own values; no spec or decision code in visible text; the key
+  page a glossary, and the bot code read out on each card; the audit's
+  contradictions fixed to what the code does (U114–U119). **2, the create
+  flow:** a quick door and an advanced one; consequence numbers under the
+  inputs; bad values refused before submit, a refused form keeping what was
+  typed; the advanced form's core fields first in the platforms' order; the
+  review page showing leverage, an estimated liquidation price and the
+  engine's own high-leverage warning before the typed name. **3, start and
+  stop:** a start from the create page, and a stop that asks whether to close
+  the position or leave it. The owner's three answers: a typed confirmation
+  on Demo or Testnet accepts the bot's plain name ("BTCUSDT long grid"), and
+  Mainnet's second typing is unchanged; a new bot gets
+  a "start it now" button, and nothing starts on its own; quick setup's "How
+  careful?" states the leverage it picks, its values unchanged, and the
+  review page shows an estimated liquidation price.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

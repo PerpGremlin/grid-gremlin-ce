@@ -16,6 +16,8 @@ class PositionPages:
         fi = min(int(_f(q.get('fleet')) or 0), len(self.fleets) - 1)
         botid = q.get('bot', '')
         contract = self._contract(self.fleets[fi])
+        if not self.units and not self.supervise:
+            contract = dict(contract, control_off=True)     # D157: no retire or close link
         belief = ((contract.get('watchdog') or {}).get('belief') or {}).get('bots', {})
         if botid not in (contract.get('bots') or {}) and botid not in belief:
             return self._deny(404, f'{botid}: not in this fleet')

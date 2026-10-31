@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 
 from common.fmt import float_or as _f
-from panel.html_bits import named, refusal_box
+from panel.html_bits import confirmed, plain_name, refusal_box, to_type
 
 
 def stranded(was, now):
@@ -41,7 +41,7 @@ def stranded(was, now):
             if kind == 'hedges' and n.get('ratio'):
                 said.append(f"{c}'s hedge moves from {p0} to {p1} on the next read: the new short "
                             'opens, then the old one closes, a slice of at most '
-                            f"{now['rebalance']['move_slice']:,.0f} USDT a read (H17)")
+                            f"{now['rebalance']['move_slice']:,.0f} USDT a read")
                 continue
             raise ValueError(f'{c} moves from its {p0} perpetual to {p1}: the {p0} short would '
                              'stay open with nothing managing it — flatten the bot first, or '
@@ -134,10 +134,10 @@ class CarryFlowPages:
         try:
             if self._mainnet(fleet_p, 'bybit'):
                 raise ValueError('a carry bot on a Mainnet fleet is written in the '
-                                 'fleet file, not here (D64)')
+                                 'fleet file, not here')
             if self._fleet_venue(fi) != 'bybit':
                 raise ValueError('a carry bot trades Bybit — this fleet trades '
-                                 f'{self._fleet_venue(fi)} (D78)')
+                                 f'{self._fleet_venue(fi)}')
             row = row_from_form(form)
             read_as = hedge_readings(form)               # U111d: each entry as read
             cfg = validate_portfolio(json.loads(json.dumps(row)), 'the carry bot')
@@ -177,7 +177,7 @@ class CarryFlowPages:
                 if (mt, sym) in taken:
                     raise ValueError(f'{sym} ({mt}) is already traded by {taken[(mt, sym)]} '
                                      'in this fleet — one bot per market; the fleet would '
-                                     'refuse to start (I2)')
+                                     'refuse to start')
             wd = json.loads(wd_text)
             refusal = validate_whole(fleet, wd, public_adapter) if wd_p else None
             if refusal:
@@ -189,10 +189,11 @@ class CarryFlowPages:
             if form.get('seen') != json.dumps(seen):
                 return self._carry_page(fi, form, refusal_box(
                     'not applied', 'the fleet file changed since you reviewed it — review again'))
-            if not named(form.get('confirm'), botid):
+            if not confirmed(form.get('confirm'), botid, row,                     # D157
+                             mainnet=self._mainnet(fleet_p, 'bybit')):
                 return self._carry_page(fi, form, refusal_box(
-                    'not applied', f'the name typed must be {botid} (capitals do not '
-                    'matter) — a click is not a decision (§11)'))
+                    'not applied', f'the name typed must be {plain_name(row)} or {botid} '
+                    '(capitals do not matter) — a click is not a decision'))
             atomic_write(fleet_p, new_fleet)
             if not form.get('edit'):
                 # X16: a new carry row is a first sight — an old row's book of
@@ -203,8 +204,9 @@ class CarryFlowPages:
                 f'<h1>{html.escape(botid)}: written</h1><p>the carry bot is in the '
                 'fleet file; a backup is kept beside it.'
                 + (' The running bot takes its new terms at the fleet\'s restart, and says '
-                   'what changed (H2).' if form.get('edit') else '') + '</p>'
-                + next_step_html('create', unit_for_fleet(fleet_p, self.units), self.units)
+                   'what changed.' if form.get('edit') else '') + '</p>'
+                + next_step_html('create', unit_for_fleet(fleet_p, self.units), self.units,
+                                 '' if form.get('edit') else self._start_html(fi, botid))
                 + '<p><a href="/">back to your bots</a></p>')
         hidden = ''.join(f'<input type="hidden" name="{html.escape(k, quote=True)}" '
                          f'value="{html.escape(str(v), quote=True)}">'
@@ -229,12 +231,12 @@ class CarryFlowPages:
             '<input type="hidden" name="gg" value="1">' + hidden +
             '<input type="hidden" name="step" value="apply">'
             f'<input type="hidden" name="seen" value="{html.escape(json.dumps(seen), quote=True)}">'
-            f'<b>To {"save this change" if form.get("edit") else "create this bot"}</b>, type its name '
-            f'<code>{html.escape(botid)}</code> here: '
-            f'<input name="confirm" size="16" placeholder="{html.escape(botid)}"> '
+            f'<b>To {"save this change" if form.get("edit") else "create this bot"}</b>, type '
+            f'{to_type(botid, row)} here: '
+            f'<input name="confirm" size="22" placeholder="{html.escape(plain_name(row) or botid)}"> '
             f'<button>{"save the change" if form.get("edit") else "create this bot"}</button></form>'
-            '<p class="dim">this writes the fleet file. A new bot waits for the '
-            'fleet\'s restart (F12); at its start it buys its spot and opens its '
+            '<p class="dim">this writes the account\'s file. A new bot waits until it '
+            'is started; at its start it buys its spot and opens its '
             'hedges.</p></div>'
             '<details><summary>the change to the file</summary>'
             f'<pre class="dim">{html.escape(unified_diff(fleet_text, new_fleet, fleet_p.name))}</pre>'

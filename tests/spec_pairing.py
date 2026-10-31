@@ -148,28 +148,53 @@ def spec_G7_the_descent_arms_every_rung_by_identity():
 
 # --- through the live bot: the fill, the dip, the exit one rung up ----------
 
-def _recording(venue):
+class _Clock:
+    """The bot's clock and the venue's stamps, one time: advanced by hand."""
+
+    def __init__(self, t=1_800_000_000.0):
+        self.t = t
+
+    def __call__(self):
+        return self.t
+
+    def stamp(self, fills):
+        """A fill's time: now, never in the bot's future, after the last."""
+        last = max((f['time_ms'] for f in fills), default=0)
+        return max(last + 1, int(self.t * 1000) - 1000)
+
+
+def _fill_row(fills, clock, side, price, qty, link, exec_id=None):
+    return {'time_ms': clock.stamp(fills), 'side': side, 'price': float(price),
+            'qty': float(qty), 'fee': 0.0, 'link_id': link,
+            'exec_id': exec_id or str(len(fills)), 'symbol': 'BTCUSDT',
+            'market_type': 'linear'}
+
+
+def _recording(venue, clock):
     """FakeVenue has no fill history; record fills so G23's walk can read
-    the venue's own account, link ids and all."""
+    the venue's own account, link ids and all — over the window it ASKS
+    for, as the venue answers (the first cut answered every fill to every
+    window, so the two-day/thirty-day split never ran here, 2026-10-31)."""
     fills = []
     orig = venue.fill
 
     def fill(order_id, avg):
         o = next(x for x in venue.orders if x['order_id'] == order_id)
-        fills.append({'time_ms': 1000 * (len(fills) + 1), 'side': o['side'],
-                      'price': float(avg), 'qty': float(o['qty']), 'fee': 0.0,
-                      'link_id': o['link_id'], 'exec_id': str(len(fills)),
-                      'symbol': 'BTCUSDT', 'market_type': 'linear'})
+        fills.append(_fill_row(fills, clock, o['side'], avg, o['qty'],
+                               o['link_id']))
         orig(order_id, avg)
     venue.fill = fill
-    venue.fills_history = lambda mt, sym, a, b: list(fills)
+    venue.fills_history = lambda mt, sym, a, b: [
+        f for f in fills if a <= f['time_ms'] <= b]
     return fills
 
 
 def spec_G23_a_live_fill_then_a_dip_pairs_and_rearms_by_identity():
     venue, lines = FakeVenue(mark=60500.0), []
-    _recording(venue)
-    bot = Bot(_cfg(), ADAPTER, venue, Notifier(sink=lines.append), gen_seed=1)
+    clock = _Clock()
+    _recording(venue, clock)
+    bot = Bot(_cfg(), ADAPTER, venue, Notifier(sink=lines.append), gen_seed=1,
+              clock=clock)
     bot.cycle()
     buy = next(o for o in venue.orders if o['side'] == 'Buy'
                and float(o['price']) == 60000.0)
@@ -305,11 +330,13 @@ def _accumulating(venue):
 
 def spec_G25_live_exits_rest_through_an_adverse_slide_and_come_back():
     venue, lines = FakeVenue(mark=60500.0), []
-    _recording(venue)
+    clock = _Clock()
+    _recording(venue, clock)
     _accumulating(venue)
     stop = {'watch': 'mark_price', 'rungs_beyond': 3}
     bot = Bot(_cfg(slide=dict(BOTH), max_position_base='unbounded', stop=stop),
-              ADAPTER, venue, Notifier(sink=lines.append), gen_seed=1)
+              ADAPTER, venue, Notifier(sink=lines.append), gen_seed=1,
+              clock=clock)
     bot.cycle()
     for px in (60000.0, 59000.0, 58000.0):             # three lots bought
         buy = next(o for o in venue.orders if o['side'] == 'Buy'
@@ -332,7 +359,10 @@ def spec_G25_live_exits_rest_through_an_adverse_slide_and_come_back():
     venue.cancel_order('linear', 'BTCUSDT', top)
     bot.cycle()
     assert 61000.0 not in [float(o['price']) for o in venue.orders]
-    # ...until the mark comes back inside the placement window
+    # ...until the mark comes back inside the placement window (and G23's
+    # wait has settled the order as cancelled from outside: no fill of it
+    # listed in a minute, 2026-10-31)
+    clock.t += 61.0
     venue.mark = 59500.0
     bot.cycle()
     assert 61000.0 in [float(o['price']) for o in venue.orders
@@ -345,11 +375,13 @@ def spec_G25_a_resting_exit_outlives_the_fill_history():
     exit already rests on the venue, and that order is the proof: it stays.
     Sabotage: drop the resting-order rule and the diff cancels it."""
     venue, lines = FakeVenue(mark=60500.0), []
-    fills = _recording(venue)
+    clock = _Clock()
+    fills = _recording(venue, clock)
     _accumulating(venue)
     stop = {'watch': 'mark_price', 'rungs_beyond': 3}
     bot = Bot(_cfg(slide=dict(BOTH), max_position_base='unbounded', stop=stop),
-              ADAPTER, venue, Notifier(sink=lines.append), gen_seed=1)
+              ADAPTER, venue, Notifier(sink=lines.append), gen_seed=1,
+              clock=clock)
     bot.cycle()
     for px in (60000.0, 59000.0, 58000.0):
         buy = next(o for o in venue.orders if o['side'] == 'Buy'
@@ -362,8 +394,11 @@ def spec_G25_a_resting_exit_outlives_the_fill_history():
     assert bot.offset == -12
     before = sorted(float(o['price']) for o in venue.orders
                     if o['side'] == 'Sell')
-    fills.clear()                                 # 30 days on: aged out
-    bot._rungs_cache = None
+    clock.t += 31 * 86_400.0                      # 31 days on: aged out of
+    bot._rungs_cache = None                       # the window the bot reads
+    assert fills and not venue.fills_history('linear', 'BTCUSDT',
+                                             int(clock.t * 1000) - 30 * 86_400_000,
+                                             int(clock.t * 1000))
     for _ in range(3):
         bot.cycle()
     after = sorted(float(o['price']) for o in venue.orders
@@ -433,8 +468,10 @@ def _two_lots_then_the_lower_exit_fills(lag=True):
     The 60k exit fills. The venue's POSITION says so at once; its fill list
     says so a few seconds later."""
     venue, lines = FakeVenue(mark=60500.0), []
-    fills = _recording(venue)
-    bot = Bot(_cfg(), ADAPTER, venue, Notifier(sink=lines.append), gen_seed=1)
+    clock = _Clock()
+    fills = _recording(venue, clock)
+    bot = Bot(_cfg(), ADAPTER, venue, Notifier(sink=lines.append), gen_seed=1,
+              clock=clock)
     bot.cycle()
     held, cost = 0.0, 0.0
     for px in (60000.0, 59000.0):
@@ -455,9 +492,9 @@ def _two_lots_then_the_lower_exit_fills(lag=True):
     venue.position = dict(venue.position, size=f'{held - sold:.3f}',
                           avgPrice='60000')
     venue.mark = 59900.0                           # and price fell back
-    late = {'time_ms': 9000, 'side': 'Sell', 'price': 60000.0, 'qty': sold,
-            'fee': 0.0, 'link_id': exit_['link_id'], 'exec_id': 'late',
-            'symbol': 'BTCUSDT', 'market_type': 'linear'}
+    clock.t += 1.0
+    late = _fill_row(fills, clock, 'Sell', 60000.0, sold, exit_['link_id'],
+                     'late')                       # stamped when it filled
     if not lag:
         fills.append(late)
     return venue, bot, fills, late, lines
@@ -477,7 +514,7 @@ def spec_G26_a_lagging_fill_list_never_re_places_the_exit_that_just_filled():
     bot.cycle()
     assert _sells(venue.orders) == [61000.0]       # the 60k lot's own exit
     assert _buys(venue.orders)[-1] == 59000.0      # and 59k is armed again
-    assert bot._rungs_cache[1] == [10]
+    assert bot._rungs_cache[2] == [10]
 
 
 def spec_G26_how_long_the_fill_list_lagged_is_logged_when_it_catches_up():
@@ -506,10 +543,22 @@ def spec_G26_a_prompt_fill_list_costs_nothing():
 
 def spec_G26_a_change_the_fills_never_explain_stops_freezing_and_says_so():
     """An outside hand or a liquidation changes the position with no fill
-    of ours. Waiting forever would leave the holding without exits."""
-    from gridgremlin.bot import RUNGS_LAG_CYCLES
+    of ours. Waiting forever would leave the holding without exits.
+    Here the exit's order also left the book with no fill listed: it is
+    awaited first (G23, a minute, then an outside cancel), and G26's own
+    wait starts when it settles (2026-10-31, the second review). SABOTAGE:
+    keep G26's clock from the order's wait and the bot escalates the
+    moment the order settles."""
+    from gridgremlin.bot import RUNGS_LAG_SECONDS
     venue, bot, _, _, lines = _two_lots_then_the_lower_exit_fills()
-    for _ in range(RUNGS_LAG_CYCLES + 2):
+    bot.cycle()
+    assert not any('do not account' in ln for ln in lines)
+    for _ in range(int(RUNGS_LAG_SECONDS) - 1):        # HL's 2 s poll
+        bot._now.t += 2.0
+        bot.cycle()
+    assert not any('do not account' in ln for ln in lines)   # still waiting
+    for _ in range(3):
+        bot._now.t += 2.0
         bot.cycle()
     assert sum('do not account for the change' in ln for ln in lines) == 1
     assert _sells(venue.orders)                    # exits are maintained again
@@ -521,8 +570,10 @@ def spec_G26_through_flat_and_back_the_new_lot_gets_its_exit_at_once():
     holding: sold to flat and bought again, the fills since still net to
     the change, and nothing waits."""
     venue, lines = FakeVenue(mark=60500.0), []
-    fills = _recording(venue)
-    bot = Bot(_cfg(), ADAPTER, venue, Notifier(sink=lines.append), gen_seed=1)
+    clock = _Clock()
+    fills = _recording(venue, clock)
+    bot = Bot(_cfg(), ADAPTER, venue, Notifier(sink=lines.append), gen_seed=1,
+              clock=clock)
     bot.cycle()
     for _ in range(2):
         buy = next(o for o in venue.orders if o['side'] == 'Buy'
@@ -533,11 +584,9 @@ def spec_G26_through_flat_and_back_the_new_lot_gets_its_exit_at_once():
         assert _sells(venue.orders) == [61000.0]       # same cycle
         exit_ = venue.orders[[float(o['price']) for o in venue.orders]
                              .index(61000.0)]
-        fills.append({'time_ms': 1000 * (len(fills) + 1), 'side': 'Sell',
-                      'price': 61000.0, 'qty': float(exit_['qty']),
-                      'fee': 0.0, 'link_id': exit_['link_id'],
-                      'exec_id': f'x{len(fills)}', 'symbol': 'BTCUSDT',
-                      'market_type': 'linear'})
+        clock.t += 1.0
+        fills.append(_fill_row(fills, clock, 'Sell', 61000.0, exit_['qty'],
+                               exit_['link_id'], f'x{len(fills)}'))
         venue.orders.remove(exit_)
         venue.position = None                          # flat
         venue.mark = 60500.0
@@ -553,8 +602,10 @@ def spec_G26_a_lagging_entry_fill_is_never_bought_twice():
     bought again (two lots at one level). While the fills do not add up,
     nothing moves on either side."""
     venue, lines = FakeVenue(mark=60500.0), []
-    fills = _recording(venue)
-    bot = Bot(_cfg(), ADAPTER, venue, Notifier(sink=lines.append), gen_seed=1)
+    clock = _Clock()
+    fills = _recording(venue, clock)
+    bot = Bot(_cfg(), ADAPTER, venue, Notifier(sink=lines.append), gen_seed=1,
+              clock=clock)
     bot.cycle()
     buy = next(o for o in venue.orders if o['side'] == 'Buy'
                and float(o['price']) == 60000.0)
@@ -565,9 +616,8 @@ def spec_G26_a_lagging_entry_fill_is_never_bought_twice():
     nxt = next(o for o in venue.orders if o['side'] == 'Buy'
                and float(o['price']) == 59000.0)
     q2 = float(nxt['qty'])
-    late = {'time_ms': 9000, 'side': 'Buy', 'price': 59000.0, 'qty': q2,
-            'fee': 0.0, 'link_id': nxt['link_id'], 'exec_id': 'late',
-            'symbol': 'BTCUSDT', 'market_type': 'linear'}
+    clock.t += 1.0
+    late = _fill_row(fills, clock, 'Buy', 59000.0, q2, nxt['link_id'], 'late')
     venue.orders.remove(nxt)                       # 59k fills; the list lags
     venue.position = dict(venue.position, size=f'{q1 + q2:.3f}',
                           avgPrice=str((60000 * q1 + 59000 * q2) / (q1 + q2)))
@@ -582,3 +632,541 @@ def spec_G26_a_lagging_entry_fill_is_never_bought_twice():
     bot.cycle()
     assert _sells(venue.orders) == [60000.0, 61000.0]  # both lots' exits
     assert 59000.0 not in _buys(venue.orders)          # held, not re-bought
+
+
+# --- G23/G26: one list per derivation, reads only move forward (2026-10-31) ---
+# Measured on the demo and HL fleets 2026-10-22..30: 28 and 23 orders a full
+# account would never have planned — a rung re-bought while its lot was held,
+# an exit re-placed after it filled. The check ran on the two-day read, the
+# walk on a second, unchecked thirty-day read that had not caught up.
+
+def _honest(venue, fills, hidden):
+    """The venue's answer over the window asked, a fill in `hidden` missing
+    from any read longer than three days (Bybit's thirty-day read behind
+    its two-day read)."""
+    venue.fills_history = lambda mt, sym, a, b: [
+        f for f in fills if a <= f['time_ms'] <= b
+        and not (b - a > 3 * 86_400_000 and f['exec_id'] in hidden)]
+
+
+def _lots_bought_three_days_ago():
+    """Buy 60k (rung 10) and 59k (rung 9); exits rest at 61k and 60k; three
+    days pass, so the two-day read holds none of the lots."""
+    venue, lines = FakeVenue(mark=60500.0), []
+    clock = _Clock()
+    fills, hidden = _recording(venue, clock), set()
+    _honest(venue, fills, hidden)
+    bot = Bot(_cfg(), ADAPTER, venue, Notifier(sink=lines.append), gen_seed=1,
+              clock=clock)
+    bot.cycle()
+    held, cost = 0.0, 0.0
+    for px in (60000.0, 59000.0):
+        buy = next(o for o in venue.orders if o['side'] == 'Buy'
+                   and float(o['price']) == px)
+        clock.t += 1.0
+        venue.fill(buy['order_id'], buy['price'])
+        held, cost = held + float(buy['qty']), cost + float(buy['qty']) * px
+        venue.position = dict(venue.position, size=f'{held:.3f}',
+                              avgPrice=str(cost / held))
+        venue.mark = px - 400.0
+        bot.cycle()
+    assert _sells(venue.orders) == [60000.0, 61000.0]
+    clock.t += 3 * 86_400.0
+    bot.cycle()
+    return venue, bot, fills, hidden, clock, held, lines
+
+
+def spec_G23_lots_older_than_two_days_are_walked_from_the_thirty_day_read():
+    """The fixture answers the window asked, so the two-day read covers
+    nothing here and the thirty-day read names the lots. SABOTAGE: walk the
+    two-day read alone and the derivation is None (the block)."""
+    venue, bot, fills, _, clock, held, _ = _lots_bought_three_days_ago()
+    buy = next(o for o in venue.orders if o['side'] == 'Buy'
+               and float(o['price']) == 58000.0)
+    clock.t += 1.0
+    venue.fill(buy['order_id'], buy['price'])
+    venue.position = dict(venue.position,
+                          size=f"{held + float(buy['qty']):.3f}")
+    venue.mark = 57600.0
+    bot.cycle()
+    assert bot._rungs_cache[2] == [8, 9, 10], bot._rungs_cache
+    assert _sells(venue.orders) == [59000.0, 60000.0, 61000.0]
+
+
+def spec_G26_one_list_a_thirty_day_read_behind_the_two_day_read_moves_nothing():
+    """The 60k exit fills. The two-day read lists it and nets to the change;
+    the thirty-day read — the one the walk needs, the lots being three days
+    old — does not list it yet, so its lot still looks held. Walked from
+    that second read the 60k exit was placed again (demo, 2026-10-28..30).
+    One list: the thirty-day read is the one checked, and it is behind the
+    two-day read. SABOTAGE: check the two-day read and walk the thirty-day
+    read (the old code) and the 60k exit is placed again."""
+    venue, bot, fills, hidden, clock, held, _ = _lots_bought_three_days_ago()
+    exit_ = next(o for o in venue.orders if o['side'] == 'Sell'
+                 and float(o['price']) == 60000.0)
+    sold = float(exit_['qty'])
+    venue.orders.remove(exit_)
+    clock.t += 1.0
+    fills.append(_fill_row(fills, clock, 'Sell', 60000.0, sold,
+                           exit_['link_id'], 'sold'))
+    hidden.add('sold')
+    venue.position = dict(venue.position, size=f'{held - sold:.3f}',
+                          avgPrice='60000')
+    venue.mark = 59900.0
+    before = sorted(o['order_id'] for o in venue.orders)
+    for _ in range(3):
+        clock.t += 1.0
+        bot.cycle()
+        assert sorted(o['order_id'] for o in venue.orders) == before
+    hidden.clear()                                 # the long read catches up
+    clock.t += 1.0
+    bot.cycle()
+    assert _sells(venue.orders) == [61000.0]
+    assert _buys(venue.orders)[-1] == 59000.0      # the sold lot's rung re-arms
+    assert bot._rungs_cache[2] == [10]
+
+
+def spec_G26_a_read_missing_a_fill_already_seen_is_frozen():
+    """Reads only move forward. The 59k lot's exit filled and was listed;
+    59k was bought again. The next read lists the new buy but has lost the
+    exit: its new fills net to the change, and walked, the old 59k lot
+    looks held beside the new one. A read missing a fill an earlier read
+    listed is behind: nothing placed or cancelled, nothing cached, no
+    baseline. SABOTAGE: drop the forward check and the new lot's exit is
+    placed from the read that went backwards."""
+    venue, lines = FakeVenue(mark=60500.0), []
+    clock = _Clock()
+    fills, hidden = _recording(venue, clock), set()
+    venue.fills_history = lambda mt, sym, a, b: [
+        f for f in fills if a <= f['time_ms'] <= b
+        and f['exec_id'] not in hidden]
+    bot = Bot(_cfg(), ADAPTER, venue, Notifier(sink=lines.append), gen_seed=1,
+              clock=clock)
+    bot.cycle()
+    held, cost = 0.0, 0.0
+    for px in (60000.0, 59000.0):
+        buy = next(o for o in venue.orders if o['side'] == 'Buy'
+                   and float(o['price']) == px)
+        clock.t += 1.0
+        venue.fill(buy['order_id'], buy['price'])
+        held, cost = held + float(buy['qty']), cost + float(buy['qty']) * px
+        venue.position = dict(venue.position, size=f'{held:.3f}',
+                              avgPrice=str(cost / held))
+        venue.mark = px - 400.0
+        bot.cycle()
+    exit_ = next(o for o in venue.orders if o['side'] == 'Sell'
+                 and float(o['price']) == 60000.0)
+    sold = float(exit_['qty'])
+    venue.orders.remove(exit_)
+    clock.t += 1.0
+    fills.append(_fill_row(fills, clock, 'Sell', 60000.0, sold,
+                           exit_['link_id'], 'sold'))
+    venue.position = dict(venue.position, size=f'{held - sold:.3f}')
+    venue.mark = 59900.0
+    clock.t += 1.0
+    bot.cycle()
+    assert _sells(venue.orders) == [61000.0] and bot._rungs_cache[2] == [10]
+    again = next(o for o in venue.orders if o['side'] == 'Buy'
+                 and float(o['price']) == 59000.0)
+    clock.t += 1.0
+    fills.append(_fill_row(fills, clock, 'Buy', 59000.0, again['qty'],
+                           again['link_id'], 'again'))
+    venue.orders.remove(again)
+    venue.position = dict(venue.position, size=f'{held:.3f}')
+    hidden.add('sold')                             # the read went backwards
+    venue.mark = 59600.0
+    before = sorted(o['order_id'] for o in venue.orders)
+    for _ in range(3):
+        clock.t += 1.0
+        bot.cycle()
+        assert sorted(o['order_id'] for o in venue.orders) == before
+        assert bot._rungs_cache[2] == [10]         # never cached from it
+    hidden.clear()
+    clock.t += 1.0
+    bot.cycle()
+    assert bot._rungs_cache[2] == [9, 10]
+    assert _sells(venue.orders) == [60000.0, 61000.0]
+
+
+def _reader(fills, clock):
+    venue = FakeVenue(mark=60500.0)
+    venue.fills_history = lambda mt, sym, a, b: [
+        f for f in fills if a <= f['time_ms'] <= b]
+    return Bot(_cfg(), ADAPTER, venue, Notifier(sink=[].append), gen_seed=1,
+               clock=clock)
+
+
+def spec_G23_the_walk_stops_at_an_unlinked_flatten():
+    """The fleets were flattened by hand on 2026-10-21: unlinked sells, which
+    the walk dropped as not ours — so a holding the newer fills did not
+    cover was covered from lots sold in the flatten. The walk stops at the
+    last flat; what
+    the fills after it cannot cover is adoption (None, the block).
+    SABOTAGE: drop the unlinked closes from the walk and the flattened lots
+    come back as held rungs."""
+    clock, fills = _Clock(), []
+    bot = _reader(fills, clock)
+    b = bot.botid
+    for rung, px in ((10, 60000.0), (9, 59000.0)):
+        clock.t += 60.0
+        fills.append(_fill_row(fills, clock, 'Buy', px, LOT, f'{b}-{rung}-a'))
+    clock.t += 60.0
+    fills.append(_fill_row(fills, clock, 'Sell', 59100.0, 2 * LOT, ''))  # flatten
+    clock.t += 60.0
+    fills.append(_fill_row(fills, clock, 'Buy', 58000.0, LOT, f'{b}-8-b'))
+    assert bot._held_rungs(LOT) == [8]                # covered after the flat
+    fresh = _reader(fills, clock)                     # a restart: no baseline
+    assert fresh._held_rungs(2 * LOT) is None         # never the sold lots
+
+
+def spec_G23_an_order_filled_in_parts_is_one_lot():
+    """Partial fills made one lot per execution: an order filled in three
+    parts named its rung three times, and the plan counted three lots at
+    their own rung's weight (G25) — the exits short, the cap spent.
+    SABOTAGE: walk executions instead of orders and the rung is named
+    three times."""
+    clock, fills = _Clock(), []
+    bot = _reader(fills, clock)
+    link = f'{bot.botid}-10-a'
+    for part in (0.003, 0.002, 0.002):
+        clock.t += 1.0
+        fills.append(_fill_row(fills, clock, 'Buy', 60000.0, part, link))
+    clock.t += 1.0
+    fills.append(_fill_row(fills, clock, 'Buy', 59000.0, LOT,
+                           f'{bot.botid}-9-a'))
+    assert bot._held_rungs(2 * LOT) == [9, 10]
+
+
+def spec_G23_a_float_residue_is_never_a_lot():
+    """Ten lots bought 65k down to 56k (0.007 above 60k, 0.008 below), five
+    sold on the way back up. The sells net the five newest buys to a float
+    residue of 1e-18, and `take > 0` named the sold 60k lot as held: its
+    exit at 61k was placed again and filled with no lot under it (found by
+    the rehearsal, 2026-10-31; main had it with a perfect list). SABOTAGE:
+    count any positive take and rung 10 comes back."""
+    clock, fills = _Clock(), []
+    bot = _reader(fills, clock)
+    b = bot.botid
+    for rung in range(15, 5, -1):
+        clock.t += 60.0
+        fills.append(_fill_row(fills, clock, 'Buy', 50000.0 + 1000 * rung,
+                               0.007 if rung >= 10 else 0.008,
+                               f'{b}-{rung}-a'))
+    for rung in range(6, 11):
+        clock.t += 60.0
+        fills.append(_fill_row(fills, clock, 'Sell', 51000.0 + 1000 * rung,
+                               0.007 if rung >= 10 else 0.008,
+                               f'{b}-{rung + 1}-b'))
+    assert bot._held_rungs(0.035) == [11, 12, 13, 14, 15]
+
+
+# --- G23: an own order that left the book is awaited in the fills (review,
+# 2026-10-31) -------------------------------------------------------------------
+
+def _one_lot(notifier=None):
+    """One lot bought at 60k (rung 10): its exit rests at 61k, 59k is armed.
+    The venue's fills are a list the spec can hold back (`hidden`)."""
+    venue, lines = FakeVenue(mark=60500.0), []
+    clock = _Clock()
+    fills, hidden = [], set()
+
+    def fill(order_id):
+        o = next(x for x in venue.orders if x['order_id'] == order_id)
+        clock.t += 0.5
+        fills.append(_fill_row(fills, clock, o['side'], o['price'], o['qty'],
+                               o['link_id']))
+        venue.orders = [x for x in venue.orders if x['order_id'] != order_id]
+        return fills[-1]
+    venue.fills_history = lambda mt, sym, a, b: [
+        f for f in fills if a <= f['time_ms'] <= b
+        and f['exec_id'] not in hidden]
+    bot = Bot(_cfg(), ADAPTER, venue,
+              notifier or Notifier(sink=lines.append), gen_seed=1,
+              clock=clock)
+    bot.cycle()
+    buy = next(o for o in venue.orders if o['side'] == 'Buy'
+               and float(o['price']) == 60000.0)
+    fill(buy['order_id'])
+    venue.position = {'positionIdx': 1, 'side': 'Buy', 'size': '0.007',
+                      'avgPrice': '60000', 'leverage': '10',
+                      'unrealisedPnl': '0'}
+    venue.mark = 59400.0
+    for _ in range(2):
+        clock.t += 2.0
+        bot.cycle()
+    assert _sells(venue.orders) == [61000.0] and bot._rungs_cache[2] == [10]
+    return venue, bot, fills, hidden, clock, fill, lines
+
+
+def _book(venue):
+    return sorted(o['order_id'] for o in venue.orders)
+
+
+def spec_G23_an_exit_and_the_entry_below_in_one_poll_are_awaited_in_the_fills():
+    """The 61k exit and the 59k entry fill in one poll: the holding is what
+    it was, the fill list has neither yet. The first cut re-read the fills
+    on the vanished links, found the newest fill unchanged, concluded an
+    outside cancel and cleared the trigger — and re-placed 61k and bought
+    59k again with lot 9 held (the review's repro). Each link is awaited
+    until a fill of it is listed: nothing moves meanwhile, then the lots are
+    paired from the list. SABOTAGE: never await the vanished links and 61k
+    is placed again over a sold lot."""
+    venue, bot, fills, hidden, clock, fill, _ = _one_lot()
+    s = next(o for o in venue.orders if o['side'] == 'Sell')
+    hidden.add(fill(s['order_id'])['exec_id'])
+    b = next(o for o in venue.orders if o['side'] == 'Buy'
+             and float(o['price']) == 59000.0)
+    hidden.add(fill(b['order_id'])['exec_id'])
+    before = _book(venue)
+    for _ in range(5):
+        clock.t += 2.0
+        bot.cycle()
+        assert _book(venue) == before, _book(venue)
+    hidden.clear()
+    clock.t += 2.0
+    bot.cycle()
+    assert bot._rungs_cache[2] == [9]
+    assert _sells(venue.orders) == [60000.0]           # lot 9's own exit
+    assert 59000.0 not in _buys(venue.orders)          # held, not re-bought
+
+
+def spec_G23_an_order_cancelled_from_outside_is_settled_after_the_wait():
+    """No fill of it is ever listed: after G26's wait it is taken as
+    cancelled from outside, said once, and re-placed. SABOTAGE: never
+    settle by the wait and the bot stays frozen."""
+    venue, bot, fills, hidden, clock, fill, lines = _one_lot()
+    s = next(o for o in venue.orders if o['side'] == 'Sell')
+    venue.cancel_order('linear', 'BTCUSDT', s['order_id'])
+    for _ in range(25):
+        clock.t += 2.0
+        bot.cycle()
+        assert 61000.0 not in _sells(venue.orders)
+    for _ in range(6):
+        clock.t += 2.0
+        bot.cycle()
+    assert _sells(venue.orders) == [61000.0]
+    assert sum('taken as cancelled from outside' in ln for ln in lines) == 1
+
+
+def spec_G23_a_failed_read_after_an_order_left_never_plans_from_a_guess():
+    """The 61k exit fills (holding down to nothing? no: an entry fills with
+    it, the size unchanged) and the next reads fail. Inside the wait the
+    cached lots are kept and nothing moves — the first cut fell back to the
+    block the average pins and placed from it. SABOTAGE: on a failed read
+    return the block (None) without the freeze and the book moves."""
+    from gridgremlin.exchange.errors import VenueError
+    venue, bot, fills, hidden, clock, fill, _ = _one_lot()
+    s = next(o for o in venue.orders if o['side'] == 'Sell')
+    fill(s['order_id'])
+    b = next(o for o in venue.orders if o['side'] == 'Buy'
+             and float(o['price']) == 59000.0)
+    fill(b['order_id'])
+    honest = venue.fills_history
+
+    def down(mt, sym, a, b):
+        raise VenueError('executions: timed out')
+    venue.fills_history = down
+    before = _book(venue)
+    for _ in range(5):
+        clock.t += 2.0
+        bot.cycle()
+        assert _book(venue) == before
+        assert bot._rungs_cache[2] == [10]
+    venue.fills_history = honest
+    clock.t += 2.0
+    bot.cycle()
+    assert _sells(venue.orders) == [60000.0] and bot._rungs_cache[2] == [9]
+
+
+def spec_G23_an_order_placed_this_cycle_is_watched_too():
+    """The book was taken before the cycle's own placements, so an order
+    placed this cycle was not watched: had it filled before the next cycle
+    beside another of ours placed with it, the size unchanged, nothing
+    would have re-read the fills. Every order resting after the cycle is
+    watched. SABOTAGE: watch only what rested before the placements and
+    the orders the first cycle placed are not watched."""
+    venue, lines = FakeVenue(mark=60500.0), []
+    bot = Bot(_cfg(), ADAPTER, venue, Notifier(sink=lines.append), gen_seed=1,
+              clock=_Clock())
+    bot.cycle()
+    placed = {o['link_id'] for o in venue.orders}
+    assert placed and placed <= bot._rungs_links
+
+
+def spec_G23_a_cancel_that_comes_back_gone_is_still_awaited():
+    """A cancel the venue answers 'gone' found the order already gone —
+    filled, as like as not. Subtracted as our own cancel, its fill was
+    never awaited. SABOTAGE: subtract 'gone' cancels and the stray's fill,
+    held back, never freezes the bot."""
+    from gridgremlin.exchange.errors import VenueError
+    venue, bot, fills, hidden, clock, fill, _ = _one_lot()
+    stray = {'order_id': 'stray', 'link_id': f'{bot.botid}-3-zz',
+             'side': 'Buy', 'price': 53000.0, 'qty': '0.009',
+             'reduce_only': False, 'position_idx': 1}
+    venue.orders.append(stray)                        # ours, not planned
+    real_cancel = venue.cancel_order
+
+    def cancel(mt, sym, oid):
+        if oid == 'stray':                            # it filled first
+            hidden.add(fill('stray')['exec_id'])
+            raise VenueError('order not exists', kind='gone')
+        return real_cancel(mt, sym, oid)
+    venue.cancel_order = cancel
+    clock.t += 2.0
+    bot.cycle()
+    assert f'{bot.botid}-3-zz' in bot._rungs_links
+    clock.t += 2.0
+    bot.cycle()
+    assert bot._rungs_awaited and bot._rungs_frozen(clock())
+
+
+def spec_G26_a_fill_older_than_the_hour_that_leaves_the_answer_is_not_a_lag():
+    """Reads only move forward over the last hour. A fill two hours old
+    that leaves the venue's answer for good (a demo reset, a venue that
+    forgets) is no lag a wait ends: held as one, the bot froze and re-read
+    every cycle for the rest of the window. SABOTAGE: remember fills for
+    the whole window and the bot freezes."""
+    clock, fills = _Clock(), []
+    bot = _reader(fills, clock)
+    b = bot.botid
+    fills.append(_fill_row(fills, clock, 'Buy', 60000.0, LOT, f'{b}-10-a',
+                           'old'))
+    clock.t += 7200.0
+    fills.append(_fill_row(fills, clock, 'Buy', 59000.0, LOT, f'{b}-9-a'))
+    assert bot._held_rungs(2 * LOT) == [9, 10]
+    fills.pop(0)                                      # forgotten by the venue
+    clock.t += 60.0
+    fills.append(_fill_row(fills, clock, 'Sell', 60000.0, LOT, f'{b}-10-b',
+                           'sold'))
+    assert bot._held_rungs(LOT) is None               # adoption: the block
+    assert not bot._rungs_frozen(clock())             # not a lag
+
+
+def spec_G26_the_escalation_reaches_the_phone():
+    """Past the wait the bot pairs from fills that do not add up — the
+    owner needs to know now: urgent (D60), not a plain warn that needs five
+    in fifteen minutes to page. SABOTAGE: a plain warn."""
+    said = []
+
+    class Rec(Notifier):
+        def event(self, kind, botid, text, icon='', urgent=False):
+            said.append((kind, text, urgent))
+    venue, bot, fills, hidden, clock, fill, _ = _one_lot(Rec())
+    venue.position = dict(venue.position, size='0.014')   # an outside hand
+    for _ in range(35):
+        clock.t += 2.0
+        bot.cycle()
+    esc = [u for k, t, u in said if 'do not account' in t]
+    assert esc == [True], esc
+
+
+def spec_G23_an_unlinked_fill_that_reduced_nothing_is_no_close():
+    """In hedge mode a hand may open the opposite side on our symbol: an
+    unlinked sell that closed nothing (Bybit's closedSize 0, HL's 'Open
+    Short'). Counted as a close, it sold our lots in the walk. Where the
+    venue says, only a reduce is a close. SABOTAGE: count every unlinked
+    exit-side fill and the lots are lost."""
+    clock, fills = _Clock(), []
+    bot = _reader(fills, clock)
+    b = bot.botid
+    for rung, px in ((10, 60000.0), (9, 59000.0)):
+        clock.t += 60.0
+        fills.append(_fill_row(fills, clock, 'Buy', px, LOT, f'{b}-{rung}-a'))
+    clock.t += 60.0
+    fills.append(dict(_fill_row(fills, clock, 'Sell', 59100.0, 2 * LOT, ''),
+                      reduces=False))                 # a short, by hand
+    assert bot._held_rungs(2 * LOT) == [9, 10]
+
+
+# --- G23: the venue's own status settles an order that left the book
+# (2026-10-31, the second review) -----------------------------------------------
+
+def spec_G23_an_order_the_venue_rejected_is_settled_by_its_status_at_once():
+    """A post-only order is accepted, then cancelled by the venue (B5); no
+    fill will ever list it. Waiting the minute out froze the whole bot —
+    in a fast market a minute per reject, new lots without exits. The
+    venue's status of the order, asked once, says it ended with nothing
+    executed: settled at once, the exit re-placed. SABOTAGE: never ask and
+    the bot is frozen for the minute."""
+    venue, bot, fills, hidden, clock, fill, lines = _one_lot()
+    asked = []
+
+    def status(mt, sym, link):
+        asked.append(link)
+        return 'cancelled'
+    venue.order_status = status
+    s = next(o for o in venue.orders if o['side'] == 'Sell')
+    venue.orders = [o for o in venue.orders if o is not s]    # rejected
+    for _ in range(2):
+        clock.t += 2.0
+        bot.cycle()
+    assert _sells(venue.orders) == [61000.0]
+    assert asked == [s['link_id']]
+    assert not any('cancelled from outside' in ln for ln in lines)
+
+
+def spec_G23_a_status_read_that_fails_or_says_filled_settles_nothing():
+    """The status is asked for an answer, never assumed: a read that fails
+    is asked again and keeps the wait (E5); 'filled' keeps it until the
+    fill is listed. SABOTAGE: take a failed read as settled, or 'filled'
+    as settled, and the exit is placed again over a lot already sold."""
+    from gridgremlin.exchange.errors import VenueError
+    venue, bot, fills, hidden, clock, fill, _ = _one_lot()
+    answers = ['down', 'down', 'filled']
+
+    def status(mt, sym, link):
+        a = answers.pop(0) if answers else 'filled'
+        if a == 'down':
+            raise VenueError('timed out', kind='rate_limit')
+        return a
+    venue.order_status = status
+    s = next(o for o in venue.orders if o['side'] == 'Sell')
+    hidden.add(fill(s['order_id'])['exec_id'])        # filled, not listed
+    b = next(o for o in venue.orders if o['side'] == 'Buy'
+             and float(o['price']) == 59000.0)
+    hidden.add(fill(b['order_id'])['exec_id'])        # size unchanged
+    before = _book(venue)
+    for _ in range(6):
+        clock.t += 2.0
+        bot.cycle()
+        assert _book(venue) == before
+    assert answers == []                               # asked until answered
+    hidden.clear()
+    clock.t += 2.0
+    bot.cycle()
+    assert bot._rungs_cache[2] == [9] and _sells(venue.orders) == [60000.0]
+
+
+def spec_G23_what_reduces_is_the_venues_word():
+    """HL: 'Close Long', a flip ('Long > Short', its closing part) and our
+    own liquidation reduce; 'Open Short' does not. Bybit: a forced fill
+    (BustTrade, AdlTrade) reduces like any close. SABOTAGE: HL's 'Close'
+    alone, or Bybit's closedSize alone, and the flip, our liquidation and
+    the forced close are no closes."""
+    from gridgremlin.exchange.hyperliquid.truth import read_fills as hl_read
+    from gridgremlin.exchange.bybit.truth import read_fills as bb_read
+    me = '0x' + 'ab' * 20
+
+    def row(i, d, liq=None):
+        return {'coin': 'SOL', 'tid': i, 'time': i, 'side': 'A', 'px': '1',
+                'sz': '1', 'fee': '0', 'cloid': None, 'dir': d,
+                'liquidation': liq}
+    got = hl_read([row(1, 'Close Long'), row(2, 'Long > Short'),
+                   row(3, 'Open Short'),
+                   row(4, 'Open Short', {'liquidatedUser': me})],
+                  {'SOL'}, me)
+    assert [f['reduces'] for f in got] == [True, True, False, True]
+
+    class Bybit:
+        def executions_page(self, category, symbol, start, end, cursor=None):
+            return {'list': [
+                {'execId': 'x', 'execType': 'BustTrade', 'execTime': '5',
+                 'symbol': symbol, 'side': 'Sell', 'execPrice': '1',
+                 'execQty': '1', 'execFee': '0', 'orderLinkId': '',
+                 'closedSize': '0'},
+                {'execId': 'y', 'execType': 'Trade', 'execTime': '6',
+                 'symbol': symbol, 'side': 'Sell', 'execPrice': '1',
+                 'execQty': '1', 'execFee': '0', 'orderLinkId': '',
+                 'closedSize': '0'}], 'nextPageCursor': None}
+    fills = bb_read(Bybit(), 'linear', 'SOLUSDT', 0, 10)
+    assert [f['reduces'] for f in fills] == [True, False]
