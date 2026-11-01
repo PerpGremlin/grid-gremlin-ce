@@ -111,8 +111,32 @@ class CarryFlowPages:
     def _carry_page(self, fi, values=None, alert=''):
         from panel.carry_setup import carry_page
         values = values or {}
-        return self._page(carry_page(values, self._fleet_labels(), fi, alert=alert)
+        return self._page(carry_page(values, self._fleet_labels(), fi, alert=alert,
+                                     account=self._account_lines(fi))
                           + self._funding(values))
+
+    def _carry_account(self, fleet_p, fleet_raw, botid, account):
+        """U136: the account as the exchange holds it, from the engine's last
+        wallet read — this bot's own when it runs, else a carry bot's on the
+        same account in this fleet; without one, what the first read will do."""
+        from gridgremlin.apply import row_botid
+        from panel.lever import account_html, borrowed_html, bot_snapshot
+        ids = [botid] if botid else []
+        ids += [row_botid(b) for b in fleet_raw.get('bots') or []
+                if b.get('strategy') == 'portfolio' and b.get('account') == account
+                and row_botid(b) != botid]
+        for b in ids:
+            view, _ = bot_snapshot(fleet_p, b)
+            if view is not None and 'wallet_coins' in view:
+                return ((borrowed_html(view) if b == botid else '') + account_html(view)
+                        + ('' if b == botid else
+                           f'<p class="dim">Read beside {html.escape(b)}, on the same account; the '
+                           'bot\'s own column is that bot\'s.</p>'))
+        return ('<div class="fsec"><p class="dim">The account\'s balances show here once a carry bot on '
+                'it has run a read. At this bot\'s first read the engine sets aside what is already '
+                'in the account as the account\'s own, counts only the coins it buys as its own, and '
+                'leaves the rest alone; the exchange still counts them toward the account\'s margin.'
+                '</p></div>')
 
     def _carry_post(self, form):
         from gridgremlin.apply import row_botid
@@ -212,6 +236,8 @@ class CarryFlowPages:
         hidden = ''.join(f'<input type="hidden" name="{html.escape(k, quote=True)}" '
                          f'value="{html.escape(str(v), quote=True)}">'
                          for k, v in form.items() if k not in ('step', 'confirm', 'seen'))
+        account = self._carry_account(fleet_p, fleet_raw, botid if form.get('edit') else None,
+                                      row.get('account'))
         legs = ''.join(f'<tr><td>{kind}</td><td>{html.escape(sym)}</td><td>{mt}</td>'
                        f'<td>{put:,.2f}</td></tr>'
                        for kind, _, mt, sym, put in leg_markets(cfg))
@@ -223,7 +249,7 @@ class CarryFlowPages:
             + (f'<p class="say">Hedges read as: {html.escape("; ".join(read_as))}.</p>'
                if read_as else '') +
             '<table><tr><th>leg</th><th>market</th><th>kind</th><th>USDT at its weight</th></tr>'
-            f'{legs}</table></div>' + self._funding(form) +
+            f'{legs}</table></div>' + account + self._funding(form) +
             '<div class="fsec"><form method="post" action="/setup-carry">'
             '<input type="hidden" name="gg" value="1">' + hidden +
             '<input type="hidden" name="step" value="change">'

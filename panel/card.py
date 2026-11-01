@@ -795,7 +795,10 @@ def portfolio_card(idx, botid, contract, belief, full=False):
         facts = (f"<div class=\"dim\">stack <b>{v.get('stack_value') or 0:,.2f}</b> {q}"
                 f" · cash {v.get('cash') or 0:,.2f}"
                 + (f" · parked {v['parked']:,.2f}" if v.get('parked') else '')
-                + (f" · borrowed <b>{v['borrowed']:,.2f}</b> ({v['leverage']:.2f}× the equity"
+                + (f" · borrowed <b>{v['borrowed']:,.2f}</b>"
+                   + (f" (from the account's spare {v['borrowed_spare']:,.2f}, the exchange's real "
+                      f"loan {v['borrowed_venue']:,.2f})" if 'borrowed_spare' in v else '')
+                   + f" ({v['leverage']:.2f}× the equity"
                    + (f", {v['borrow_apr']:.2%}/yr" if v.get('borrow_apr') is not None else '')
                    + (f", interest paid {v['interest']:,.2f}" if v.get('interest') else '') + ')'
                    if v.get('borrowed') and v.get('leverage') else '')
@@ -870,6 +873,8 @@ def holdings_table(v, q, now_ms):
                      f"{money(h['realized'] + sum(g['realized'] for g in hedged))}</tr>")
     if v.get('borrowed'):
         rows += (f"<tr><td>loan</td><td>−{v['borrowed']:,.2f} {q}</td><td colspan=3 class='dim'>"
+                 + (f"from the account's spare {v['borrowed_spare']:,.2f}, the exchange's real loan "
+                    f"{v['borrowed_venue']:,.2f}; " if 'borrowed_spare' in v else '')
                  + (f"{v['borrow_apr']:.2%}/yr" if v.get('borrow_apr') is not None else '')
                  + "</td>" + money(-(v.get('interest') or 0.0)) + "<td class='dim'>interest paid</td></tr>")
     for coin, bal in sorted((v.get('stables') or {}).items()):

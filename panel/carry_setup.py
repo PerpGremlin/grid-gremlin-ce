@@ -429,7 +429,7 @@ def _input(n, kind, value, fixed=False):
     return f'<input name="{n}" size="{size}" value="{v}">'
 
 
-def carry_page(values, fleets, chosen=0, alert='', edit=None):
+def carry_page(values, fleets, chosen=0, alert='', edit=None, account=''):
     """The form: what the basket needs first, every other setting folded.
     `edit`: the running bot's id — its fleet and name fixed (U111)."""
     from panel.setup import fleet_select
@@ -461,7 +461,7 @@ def carry_page(values, fleets, chosen=0, alert='', edit=None):
         '<input type="hidden" name="gg" value="1">' + (where if edit else '') +
         '<div class="fsec"><h1 class="dim">What the bot needs</h1><table>'
         + ('' if edit else where)
-        + rows(ESSENTIAL) + '</table></div>'
+        + rows(ESSENTIAL) + '</table>' + account + '</div>'
         f'<details class="adv"{" open" if adv_open else ""}><summary>Advanced</summary>'
         '<div class="fsec"><table>' + rows(ADVANCED) + '</table></div></details>'
         '<button>Next: review the bot &rarr;</button></form>'

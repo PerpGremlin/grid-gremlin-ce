@@ -1113,7 +1113,7 @@ def fleet_select(fleets, chosen=0):
     return f'<select name="fleet">{opts}</select>'
 
 
-def quick_page(fleets, chosen=0, symbols=(), values=None, carry=True):
+def quick_page(fleets, chosen=0, symbols=(), values=None, carry=True, account=''):
     """`values`: what was typed, when a refused quick setup comes back
     (D157: it came back blank, the preset and the money lost). `carry`:
     whether any account here can hold a carry bot (Bybit only)."""
@@ -1168,7 +1168,7 @@ def quick_page(fleets, chosen=0, symbols=(), values=None, carry=True):
         'the price the two halves meet at. Above today\'s price and the '
         'long half is the one working now, the short half waits above it; '
         'below, the other way round</td></tr></table>'   # D54
-        + NUMBERS_BOX + '</div>'
+        + account + NUMBERS_BOX + '</div>'
         '<button name="then" value="gates">Next: review the bot &rarr;'
         '</button> '
         '<button name="then" value="advanced" class="quiet">Open in the '
@@ -1189,7 +1189,7 @@ SPOT_ONLY = ('assumed_avg_entry', 'holding', 'holding_since', 'spot_borrow', 'sp
 
 
 def advanced_page(strategy, values, fleets, chosen=0, note='', edit=None,
-                  alert='', symbols=()):
+                  alert='', symbols=(), account=''):
     """edit=<botid> turns the same form into the edit door: every setting
     of an existing bot, its identity fixed."""
     groups = []
@@ -1207,7 +1207,7 @@ def advanced_page(strategy, values, fleets, chosen=0, note='', edit=None,
     # U105: what the bot needs, open and first; required ones starred
     first = ''.join(field(every[n], mark=n in needed) for n in essential if n in every)
     groups.append('<details open><summary>What the bot needs</summary>'
-                  f'<table>{first}</table>' + NUMBERS_BOX +
+                  f'<table>{first}</table>' + account + NUMBERS_BOX +
                   '<p class="dim">* required. Everything '
                   'else is under Advanced, and a blank there takes the engine\'s '
                   'default.</p></details>')

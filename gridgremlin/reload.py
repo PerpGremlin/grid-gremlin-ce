@@ -43,13 +43,16 @@ def _portfolio_terms(cfg):
     return {k: v for k, v in cfg.items() if not k.startswith('_') and k != 'account'}
 
 
-def _portfolio_cold(cfg):
+def _portfolio_cold(cfg, keeps=False):
     """D143: a portfolio row's terms less what may move live — its spot
     leverage (the margin block and its loan's right), the weights' sizes
     (the coins, their sides and holdings stay), the per-asset cap and the
-    perps' leverage. Equal here, a change is applied live; else a restart."""
+    perps' leverage. Equal here, a change is applied live; else a restart.
+    H18 (D160): `terms_move` alone changes nothing the engine does, and
+    with `keeps` (a spot leverage change that keeps the coins) the capital
+    the panel wrote beside it moves live too."""
     t = _portfolio_terms(cfg)
-    for k in ('margin', 'spot_borrow', 'perp_leverage'):
+    for k in ('margin', 'spot_borrow', 'perp_leverage', 'terms_move') + (('capital',) if keeps else ()):
         t.pop(k, None)
     t['assets'] = [{'coin': a['coin'], 'long': a['weight'] > 0, 'holding': a.get('holding', 0.0)}
                    for a in t.get('assets') or []]
@@ -166,7 +169,12 @@ class FleetWatch:
         Taking a margin row's loan block away is a restart's too: the row
         would stop counting a loan it still owes."""
         old_m, new_m = bot.cfg.get('margin'), new.get('margin')
-        if _portfolio_cold(bot.cfg) != _portfolio_cold(new) or (old_m and not new_m):
+
+        def lev_of(cfg):
+            return (cfg.get('margin') or {}).get('spot_leverage', 1.0)
+        keeps = new.get('terms_move') == 'keep_stack' and lev_of(bot.cfg) != lev_of(new)
+        if (_portfolio_cold(bot.cfg, keeps) != _portfolio_cold(new, keeps)
+                or (old_m and not new_m)):
             self.notifier.event('warn', bot.botid,
                                 'the file changed the portfolio row — it learns new '
                                 'terms at the next restart; only its leverage is '
@@ -187,12 +195,10 @@ class FleetWatch:
                                     f'perp leverage {levs(want, want)} REFUSED: {why}. Nothing '
                                     'else of this row is applied (D143)', urgent=True)
                 return 'refused'
-
-        def lev_of(cfg):
-            return (cfg.get('margin') or {}).get('spot_leverage', 1.0)
         said = []
         if lev_of(bot.cfg) != lev_of(new):
-            said.append(f'spot leverage {lev_of(bot.cfg):g}x -> {lev_of(new):g}x')
+            said.append(f'spot leverage {lev_of(bot.cfg):g}x -> {lev_of(new):g}x'
+                        + (', the coins kept (H18): the money moves at the next read' if keeps else ''))
         moved = [c for c in list(new_p) + [c for c in old_p if c not in new_p]
                  if old_p.get(c) != new_p.get(c)]
         if moved:

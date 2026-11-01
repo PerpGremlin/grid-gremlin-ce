@@ -1398,6 +1398,30 @@ stands unless the owner corrects it.
   only when it can open the dialog. The answer no longer stands in the box
   as a placeholder, which read as already filled in. Engine behaviour, the
   mainnet double gate (D25, D64, D97) and D29 are untouched.
+- **D160 — Keep the coins, free up money (2026-11-01).** Raising a carry
+  bot's spot leverage always grew its stack: the coins are the leverage
+  times the bot's money. The owner asked for a second way, "in case you
+  just want to free up margin". The leverage page now offers both. **Grow
+  the position** is as before. **Keep the coins** leaves the stack as it
+  is: the bot's own money becomes the stack divided by the new leverage,
+  and the difference moves between the bot's cash and the account's own
+  money beside it (H13), booked as capital taken out or put in, never as a
+  profit or a loss. Nothing is bought or sold and nothing moves on the
+  exchange. Lowering the leverage this way puts money in, at most what the
+  account's own holds, refused in plain words otherwise; raising it a
+  long way on a large loan, or lowering a large loan to a small one, are
+  the same move read in either direction. The panel writes the new capital
+  beside the new leverage and a flag, `terms_move: "keep_stack"`, rather
+  than the engine inferring it from capital and leverage moving together:
+  that pair already means "grow, with more money" under H2, and a flag
+  says the intent where it is read. The engine applies it once, live or at
+  a restart, from its own read (H18). The same day the owner asked that
+  what was already in the account be shown: the review and the card show
+  the account as the exchange holds it, the bot's borrowed split into the
+  account's spare money and the exchange's real loan, and each account's
+  balances, floating debt and available balance in the account box and
+  beside every setup form's money field (U135–U138). Display only for the
+  last; D29, the mainnet double gate and the margin floor are unchanged.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

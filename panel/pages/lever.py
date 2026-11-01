@@ -15,7 +15,8 @@ class LeverPages:
         hand (D64)."""
         from panel.chart import _f
         from panel.create import atomic_write, dump_config, unified_diff, validate_whole, public_adapter
-        from panel.lever import lever_row, said
+        from panel.lever import (KEEP_DRIFT, account_html, borrowed_html, bot_snapshot, grow_said,
+                                 keep_numbers, keep_row, keep_said, lever_row, said, spot_of)
         fi = min(max(int(_f(form.get('fleet')) or 0), 0), len(self.fleets) - 1)
         fleet_p = Path(self.fleets[fi])
         text = fleet_p.read_text()
@@ -34,10 +35,45 @@ class LeverPages:
             if k.startswith('perp_') and (v or '').strip():
                 typed[k] = v.strip()
                 perp[k[5:].upper()] = _f(v.strip())
+        how = 'keep' if form.get('how') == 'keep' else 'grow'
+        old_row = raw['bots'][i]
+        quote = old_row.get('spot_quote', 'USDT')
+        figures = ''
         try:
             if spot is None or any(x is None for x in perp.values()):
                 raise ValueError('type the leverage as a number, like 3')
-            new_row = lever_row(raw['bots'][i], spot, perp)
+            new_row = lever_row(old_row, spot, perp)
+            new_row.pop('terms_move', None)              # U135: growing clears an earlier keep
+            view, t = bot_snapshot(fleet_p, botid)
+            if how == 'keep':
+                if spot_of(new_row) == spot_of(old_row):
+                    raise ValueError('keep the coins changes the spot leverage: type a new one')
+                if not old_row.get('margin'):
+                    raise ValueError('this bot has never borrowed, so the engine keeps no spare money '
+                                     'beside it to move: grow the position instead')
+                if view is None:
+                    raise ValueError(f'keep the coins is worked from the bot\'s figures of the last '
+                                     f'few minutes, and {t}')
+                numbers = keep_numbers(view, new_row)
+                reviewed = _f(form.get('keep_money'))
+                if (form.get('confirm') is not None and reviewed is not None
+                        and abs(reviewed - numbers['after']) > KEEP_DRIFT * max(abs(numbers['after']), 1.0)):
+                    raise ValueError('the bot\'s money moved more than '
+                                     f'{KEEP_DRIFT:.0%} since you reviewed it — review again')
+                new_row = keep_row(new_row, numbers if reviewed is None or form.get('confirm') is None
+                                   else dict(numbers, after=reviewed))
+                figures = keep_said(numbers, quote, t) + borrowed_html(
+                    view, (view.get('cash') or 0.0) - numbers['moved'], view.get('wallet_quote'), quote)
+            elif view is not None and spot_of(new_row) != spot_of(old_row):
+                long_w = sum(float(a['weight']) for a in new_row['assets'] if float(a['weight']) > 0)
+                more = long_w * (view.get('value') or 0.0) - (view.get('stack_value') or 0.0)
+                figures = grow_said(view, new_row, quote) + borrowed_html(
+                    view, (view.get('cash') or 0.0) - more,
+                    None if view.get('wallet_quote') is None else view['wallet_quote'] - more, quote)
+            elif view is not None:
+                figures = borrowed_html(view, quote=quote)
+            if view is not None:
+                figures += account_html(view, quote)
         except ValueError as e:
             return self._page(refusal_box('not reviewed', e))
         fleet = json.loads(text)
@@ -64,18 +100,23 @@ class LeverPages:
                                               '(capitals do not matter) — a click is not a decision'))
             atomic_write(fleet_p, new_text)
             return self._page(f'<h1>{html.escape(botid)}: written</h1><p>The running fleet applies it '
-                              'within a few seconds and says so on the phone; the stack moves at '
-                              'its next read. A backup of the file is kept beside it.</p>'
+                              'within a few seconds and says so on the phone; '
+                              + ('the money moves at its next read and the coins stay. ' if how == 'keep'
+                                 else 'the stack moves at its next read. ')
+                              + 'A backup of the file is kept beside it.</p>'
                               '<p><a href="/">back to your bots</a></p>')
         e = html.escape
         words = ''.join(f'<p class="say">{e(w)}</p>' for w in said(raw['bots'][i], new_row))
         return self._page(
-            f'<h1>{e(botid)}: the leverage change</h1>{words}'
+            f'<h1>{e(botid)}: the leverage change</h1>{words}{figures}'
             f'<pre>{e(unified_diff(text, new_text, fleet_p.name))}</pre>'
             '<form method="post" action="/lever"><input type="hidden" name="gg" value="1">'
             f'<input type="hidden" name="fleet" value="{fi}">'
             f'<input type="hidden" name="orig" value="{e(botid, quote=True)}">'
             f'<input type="hidden" name="spot" value="{e(form.get("spot", ""), quote=True)}">'
+            f'<input type="hidden" name="how" value="{how}">'
+            + (f'<input type="hidden" name="keep_money" value="{new_row["capital"]}">'
+               if how == 'keep' else '')
             + ''.join(f'<input type="hidden" name="{e(k, quote=True)}" value="{e(v, quote=True)}">'
                       for k, v in typed.items()) +
             f'<input type="hidden" name="seen" value="{e(json.dumps(seen), quote=True)}">'

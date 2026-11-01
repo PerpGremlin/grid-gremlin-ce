@@ -12,7 +12,8 @@ from .config import (ConfigError, _enum, _flag, _fraction, _num,
 
 PORTFOLIO_KEYS = ('strategy', 'name', 'venue', 'account', 'capital', 'assets',
                   'hedge', 'rebalance', 'regime', 'funding_rule', 'risk',
-                  'margin', 'spot_borrow', 'spot_quote', 'perp_leverage')
+                  'margin', 'spot_borrow', 'spot_quote', 'perp_leverage', 'terms_move')
+TERMS_MOVES = ('keep_stack',)  # H18 (D160): how a leverage change meets the stack
 PERP_LEVERAGE_MOST = 125.0   # the gate's ceiling; the venue's own (leverageFilter) is checked at the build
 PRODUCTS = ('usdt', 'usdc', 'inverse')
 TRIGGERS = ('clock', 'drift', 'either')
@@ -175,6 +176,19 @@ def validate_portfolio(row, where='row'):
         n = _num(cfg, 'perp_leverage', where, least=1.0, most=PERP_LEVERAGE_MOST)
         cfg['perp_leverage'] = {c: float(n) for c in perps}
 
+    # --- H18 (D160): a leverage change that keeps the coins ------------------------
+    if cfg.get('terms_move') is None:
+        cfg.pop('terms_move', None)
+    else:
+        if cfg['terms_move'] not in TERMS_MOVES:
+            _refuse(f"{where}: 'terms_move' is 'keep_stack' or absent — 'keep_stack' changes the "
+                    "leverage and keeps the coins, moving money between the row and the account (H18)")
+        if not cfg.get('margin'):
+            _refuse(f"{where}: 'terms_move' moves money between the row and the account's own, "
+                    "which a row keeps only with a 'margin' block — give it one first (H18)")
+        if not any(a['weight'] > 0 for a in out):
+            _refuse(f"{where}: 'terms_move' keeps the spot coins — this row holds none (H18)")
+
     # --- the clock -----------------------------------------------------------------
     reb = cfg.get('rebalance') or {}
     w = f'{where}.rebalance'
@@ -281,6 +295,31 @@ def leg_markets(cfg):
             mt, sym = leg_market(coin, cfg['short_products'][coin])
             out.append(('short', coin, mt, sym, put))
     return out
+
+
+def keep_stack_move(value, stack, long_weight):
+    """H18 (D160), pure: a leverage change that keeps the coins. The stack
+    stays; the row's own money becomes stack / the new long weights' sum
+    (H1: the coins held are that sum × the row's money — the spot leverage,
+    for a row with no outright short). Returns the money moved OUT of the
+    row: positive frees money to the account's own, negative takes it in.
+    The engine books it and the panel's review shows it from this one
+    function, so the two never differ but by the moment they read."""
+    if not long_weight or long_weight <= 0:
+        raise ValueError('keep the coins needs a long weight — this row holds no spot coins')
+    return value - stack / long_weight
+
+
+def borrowed_split(borrowed, wallet_quote):
+    """U137 (D160), pure: the row's borrowed, in two. The venue's real
+    loan is what the wallet's quote is below zero; the row's part of it is
+    at most the row's borrowed (a sibling may borrow too), and the rest of
+    the row's borrowed is the account's spare quote it stands on (H13's
+    `outside_cash`), which the venue lends nothing for. Returns (from the
+    account's spare, the venue's loan); the two add up to `borrowed`."""
+    borrowed = max(borrowed or 0.0, 0.0)
+    venue = min(max(-(wallet_quote or 0.0), 0.0), borrowed)
+    return borrowed - venue, venue
 
 
 def regime_word(reading):

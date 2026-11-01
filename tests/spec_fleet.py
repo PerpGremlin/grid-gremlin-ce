@@ -1330,6 +1330,45 @@ def spec_F12_a_portfolio_leverage_refused_applies_nothing_and_other_changes_wait
         assert row.cfg['capital'] == 1000.0 and row.cfg['margin']['spot_leverage'] == 2.0
 
 
+def _keep_change(raw):
+    p = raw['bots'][1]
+    p['margin']['spot_leverage'] = 4.0
+    p['assets'] = [{'coin': 'BTC', 'weight': 2.0}, {'coin': 'ETH', 'weight': 2.0}]
+    p['risk']['max_weight'] = 2.0
+    p['capital'] = 500
+    p['terms_move'] = 'keep_stack'
+
+
+def spec_F12_H18_a_leverage_change_that_keeps_the_coins_moves_its_capital_live():
+    """D160: the panel writes the new capital beside the leverage and the
+    flag; the running fleet applies them together, and the row's next read
+    books the move (H18). The capital alone, flag or not, is a restart's."""
+    import json
+    watch, row, raw, fleet, lines, venue = _pfo_world()
+    _keep_change(raw)
+    fleet.write_text(json.dumps(raw))
+    assert watch.apply() == {'pfocarry': 'applied'}
+    assert row.cfg['capital'] == 500.0 and row.cfg['terms_move'] == 'keep_stack'
+    assert any('the coins kept (H18)' in ln for ln in lines), lines
+    raw['bots'][1]['capital'] = 400                                    # the capital alone, the flag standing
+    fleet.write_text(json.dumps(raw))
+    assert watch.apply() == {'pfocarry': 'restart'} and row.cfg['capital'] == 500.0
+
+
+def spec_F12_H18_sabotage_were_the_capital_cold_beside_the_flag_the_live_change_would_wait():
+    import json
+    import gridgremlin.reload as rl
+    watch, row, raw, fleet, lines, venue = _pfo_world()
+    _keep_change(raw)
+    fleet.write_text(json.dumps(raw))
+    saved = rl._portfolio_cold
+    rl._portfolio_cold = lambda cfg, keeps=False: saved(cfg)           # the guard removed
+    try:
+        assert watch.apply() == {'pfocarry': 'restart'} and row.cfg['capital'] == 1000.0
+    finally:
+        rl._portfolio_cold = saved
+
+
 def spec_A8_an_instrument_of_another_kind_is_refused():
     """A8: Bybit answers a linear query for BTCUSD with the inverse contract;
     read as linear its 1-contract lot was 1 coin. The kind asked for must be

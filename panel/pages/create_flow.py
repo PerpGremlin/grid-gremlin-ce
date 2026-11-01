@@ -361,11 +361,11 @@ class CreateFlowPages:
             from panel.setup import SCHEMAS, advanced_page, quick_page
             try:
                 if typed.get('how') == 'quick':
-                    return self._page(note + quick_page(
+                    return self._page(note + self._with_acct(quick_page, fi)(
                         self._fleet_labels(), fi, symbols=self._symbols(fi),
                         carry=self._carry_ok(), values=typed))
                 if typed.get('strategy', 'grid') in SCHEMAS:
-                    return self._page(advanced_page(
+                    return self._page(self._with_acct(advanced_page, fi)(
                         typed.get('strategy', 'grid'), typed, self._fleet_labels(), fi,
                         alert=note, edit=form.get('orig') or None,
                         symbols=self._symbols(fi)))
@@ -379,7 +379,7 @@ class CreateFlowPages:
             from panel.setup import advanced_page, form_from_bot
             try:
                 vals = dict(form_from_bot(bot), ceiling=form.get('ceiling', ''))
-                return self._page(advanced_page(
+                return self._page(self._with_acct(advanced_page, fi)(
                     bot.get('strategy', 'grid'), vals, self._fleet_labels(),
                     fi, alert=note, edit=form.get('orig') or None))
             except Exception:                               # noqa: BLE001
@@ -402,7 +402,7 @@ class CreateFlowPages:
                 return self._deny(404, f"{q['copy']}: not in this fleet")
             vals = form_from_bot(src)
             vals['symbol'] = ''        # one bot per market and side (I2)
-            return self._page(advanced_page(
+            return self._page(self._with_acct(advanced_page, fi)(
                 src.get('strategy', 'grid'), vals, labels, fi,
                 note=f'<p class="dim">copied from {q["copy"]}: every '
                      'setting is carried over — choose the coin, and '
@@ -410,9 +410,9 @@ class CreateFlowPages:
         if q.get('adv') == 'carry':                              # U108
             return self._carry_page(fi)
         if q.get('adv') in ('grid', 'martingale'):
-            return self._page(advanced_page(q['adv'], {}, labels, fi,
+            return self._page(self._with_acct(advanced_page, fi)(q['adv'], {}, labels, fi,
                                             symbols=self._symbols(fi)))
-        return self._page(quick_page(labels, fi, symbols=self._symbols(fi),
+        return self._page(self._with_acct(quick_page, fi)(labels, fi, symbols=self._symbols(fi),
                                      carry=self._carry_ok()))
 
     def _carry_ok(self):
@@ -511,6 +511,19 @@ class CreateFlowPages:
         if not hit or time.time() - hit[0] >= 30:
             hit = type(self)._marks[key] = (time.time(), pc.public_mark(cfg))
         return hit[1]
+
+    def _account_lines(self, fi):
+        """U138: the account's wallet lines for a form, from its last
+        readout — never a readout started for it; "not read" without one."""
+        from panel.strip_view import account_lines
+        _, data = type(self)._cache.get(self.fleets[fi], (0.0, None))
+        return ('<div class="fsec acct-now"><h1 class="dim">the account now</h1>'
+                + account_lines(data) + '</div>')
+
+    def _with_acct(self, page, fi):
+        """U138: a setup form with the account's lines beside its money field."""
+        import functools
+        return functools.partial(page, account=self._account_lines(fi))
 
     def _free(self, fi):
         """What the account has free to trade, from its last readout — never
@@ -649,7 +662,7 @@ class CreateFlowPages:
                 vals = json.loads(form.get('values', '{}'))
                 import html as _h
                 note = form.get('note', '').strip()
-                return self._page(advanced_page(
+                return self._page(self._with_acct(advanced_page, fi)(
                     vals.get('strategy', 'grid'), vals, labels, fi,
                     edit=form.get('orig') or None,
                     note=(f'<p class="dim">{_h.escape(note)}</p>' if note
@@ -677,7 +690,7 @@ class CreateFlowPages:
                     # profit; the advanced door it opens says the same,
                     # rather than the engine's one-round default
                     vals['repeat'] = '1'
-                return self._page(advanced_page(
+                return self._page(self._with_acct(advanced_page, fi)(
                     strategy, vals, labels, fi,
                     note='<p class="dim">the advanced form, with what you '
                          'typed carried over — fill in the rest; a blank '
@@ -700,7 +713,7 @@ class CreateFlowPages:
                            ('symbol', 'capital', 'size_unit', 'caution',
                             'stop_on', 'max_loss')}})
                 if form.get('then') == 'advanced':
-                    return self._page(advanced_page(
+                    return self._page(self._with_acct(advanced_page, fi)(
                         bot.get('strategy', 'grid'), form_from_bot(bot),
                         labels, fi,
                         note='<p class="dim">filled in from the quick '
@@ -722,10 +735,10 @@ class CreateFlowPages:
             note = refusal_box('not yet', e)
             if how == 'quick':
                 from panel.setup import quick_page
-                return self._page(note + quick_page(labels, fi, symbols=self._symbols(fi),
+                return self._page(note + self._with_acct(quick_page, fi)(labels, fi, symbols=self._symbols(fi),
                                                     carry=self._carry_ok(),
                                                     values=form))      # D157: kept, not blanked
-            return self._page(advanced_page(
+            return self._page(self._with_acct(advanced_page, fi)(
                 form.get('strategy', 'grid'), form, labels, fi, alert=note,
                 edit=form.get('orig') or None))
         orig = form.get('orig', '') if form.get('mode') == 'edit' else ''

@@ -68,6 +68,20 @@ def read_wallet(result):
         'coins': coins})
 
 
+def wallet_coins(acct):
+    """U138: each coin of the account's wallet as the venue states it —
+    {coin: {balance, usd, borrow, interest}}: its wallet balance, its USD
+    value, what the venue has lent in it and the interest accrued on that.
+    A coin at zero everywhere is left out; a blank field is None."""
+    out = {}
+    for c in acct.get('coin') or []:
+        row = {'balance': _f(c.get('walletBalance'), 0.0), 'usd': _f(c.get('usdValue')),
+               'borrow': _f(c.get('borrowAmount'), 0.0), 'interest': _f(c.get('accruedInterest'), 0.0)}
+        if row['balance'] or row['borrow']:
+            out[c.get('coin')] = row
+    return out
+
+
 def account_figures(client):
     """R19 for Bybit, which states no account leverage: the sum of its own
     positionValue over every open position (linear in its settle coin;
@@ -95,8 +109,10 @@ def account_figures(client):
                 break
     acct = (client.wallet_balance().get('list') or [{}])[0]
     margin = _f(acct.get('totalMarginBalance'))
+    # U138: the same read's wallet, coin by coin, and what is free to trade
     return {'notional': notional, 'equity': margin, 'collateral': margin,
-            'source': 'bybit'}
+            'source': 'bybit', 'wallet': wallet_coins(acct),
+            'available': _f(acct.get('totalAvailableBalance'))}
 
 
 def read_positions(result):

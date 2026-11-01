@@ -71,7 +71,8 @@ def account_figures(client):
     return {'notional': _f(summary.get('totalNtlPos'), 0.0),
             'equity': _f(summary.get('accountValue')),
             'collateral': wallet['equity'],
-            'source': 'hyperliquid'}
+            'source': 'hyperliquid',
+            'available': wallet.get('available')}     # U138: no coin-by-coin wallet here
 
 
 def read_positions(state, coin):

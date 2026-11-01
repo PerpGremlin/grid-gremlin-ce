@@ -64,6 +64,46 @@ def exchange_free(contract):
             f' <span class="dim">· what the exchange lets you open more with{old}</span></div>')
 
 
+READOUT_STALE_S = 600      # U138: a readout older than this is "not read"
+
+
+def account_lines(contract, now=None):
+    """U138, the one renderer: each account's wallet as its readout states
+    it — the coins and stables with their USDT value, the floating debt
+    per coin (the venue's borrowed amount, or a balance below zero, and the
+    interest accrued when the read carries it), and the available balance
+    to trade (the venue's own figure). "not read" for each line the readout
+    lacks, and for all of them when the readout is missing or stale. The
+    account box, the create, carry and leverage forms all show this."""
+    import time as _t
+    now = _t.time() if now is None else now
+    gen = (contract or {}).get('generated_ms')
+    fresh = bool(contract) and gen is not None and now - gen / 1000.0 <= READOUT_STALE_S
+    figs = (contract or {}).get('account') or {}
+    out = []
+    for venue in sorted(figs) or ['the account']:
+        fig = figs.get(venue) if fresh else None
+        name = esc(TIER_NAMES.get((venue, (fig or {}).get('tier')), venue))
+        wallet = (fig or {}).get('wallet')
+        if wallet is None:
+            bal = debt = 'not read'
+        else:
+            bal = ' · '.join(f"{esc(c)} {w['balance']:,.8g}"
+                             + (f" (≈ {w['usd']:,.2f} USDT)" if w.get('usd') is not None else '')
+                             for c, w in sorted(wallet.items())) or 'empty'
+            owed = [(c, max(w.get('borrow') or 0.0, -(w.get('balance') or 0.0), 0.0), w.get('interest') or 0.0)
+                    for c, w in sorted(wallet.items())]
+            debt = ' · '.join(f'{esc(c)} {d:,.8g}' + (f' (+ {i:,.8g} interest)' if i else '')
+                              for c, d, i in owed if d > 0) or 'none'
+        avail = (fig or {}).get('available')
+        avail = 'not read' if avail is None else f'{avail:,.2f} USDT'
+        out.append(f'<div class="parts acctlines"><b>{name}</b> '
+                   f'<div>balances: <span class="dim">{bal}</span></div>'
+                   f'<div>floating debt: <span class="dim">{debt}</span></div>'
+                   f'<div>available to trade: <b>{avail}</b></div></div>')
+    return ''.join(out)
+
+
 def exchange_since_first(contract):
     """R18: the exchange box's kept line — every bot's whole result summed;
     a bot whose figure cannot be whole is named as left out, never

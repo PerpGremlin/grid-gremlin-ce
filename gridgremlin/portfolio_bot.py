@@ -12,7 +12,7 @@ import time
 
 from .config import SPOT_LEVERAGE_MOST
 from .exchange.errors import VenueError
-from .portfolio import hedge_ratio, plan_portfolio, regime_word
+from .portfolio import borrowed_split, hedge_ratio, keep_stack_move, plan_portfolio, regime_word
 
 READ_EVERY_S = 60.0          # the risk rules want a read a minute; the plan is daily
 OVERLAP_MS = 10 * 60 * 1000  # fills are re-read this far back and deduped by id
@@ -236,6 +236,8 @@ class PortfolioBot:
         self._old_legs = {}            # H17: the markets hedges move off, built once
         self._moving_now = {}          # H17: {coin: (old leg, its size)} this read, for a flatten
         self._old_left = {}            # H17: {coin: the old short's coins left after this read's slice}
+        self._keep_due = None          # H18: (seen, now) terms whose leverage keeps the coins, this read
+        self._keep_held = None         # H18: why this read plans nothing (the account cannot cover the move)
         self.row = state.get(self.botid)
 
     # --- the state row ---------------------------------------------------------
@@ -319,11 +321,82 @@ class PortfolioBot:
                           f"{moved:+,.2f} {q} moved {way} the account: the account's, "
                           "not the row's (H13)")
 
-    def _learn_terms(self, prices, wallet=None):
+    def _keeps_stack(self, seen, now):
+        """H18 (D160): the file's `terms_move: keep_stack` beside a changed
+        leverage — the coins stay and the money moves. Only a leverage
+        change (its weights and capital with it) keeps the coins: a changed
+        coin list, quote or holding beside it is learned as H2 always had
+        it, said."""
+        if self.cfg.get('terms_move') != 'keep_stack' or not self.cfg.get('margin'):
+            return False
+        if now['leverage'] == seen.get('leverage', 1.0):
+            return False
+        same = (now['spot_quote'] == seen.get('spot_quote')
+                and now.get('holdings') == seen.get('holdings')
+                and [(c, w > 0) for c, w in now['assets']]
+                == [(c, w > 0) for c, w in seen.get('assets') or []])
+        if not same:
+            self.notify.event('warn', self.botid,
+                              "keep the coins applies to a leverage change alone; the coins, quote "
+                              "or holdings changed beside it, so this change is learned as before "
+                              "and the stack is planned at the new leverage (H18)", urgent=True)
+        return same
+
+    @staticmethod
+    def _covers(outside, moved):
+        """H18: money in comes from the account's own and is bounded by it."""
+        return moved >= 0 or outside + moved >= -1e-6
+
+    def _keep_stack(self, stack, value):
+        """H18 (D160): the leverage changes and the coins stay. The row's
+        own money becomes stack / the new long weights' sum; the difference
+        moves between the row's cash and the account's own (`outside_cash`)
+        and is capital out (or in) — `contributed` moves with it, so it is
+        never a profit or a loss. Nothing is bought or sold, and no tick is
+        forced. Money in is bounded by what the account's own holds: short,
+        nothing moves, the terms stay unlearned and the row plans nothing
+        until the account can cover it or the file changes, said. Booked
+        once: the terms are learned with the move, in the one row the state
+        keeps. Returns the row's value after."""
+        seen, now = self._keep_due
+        self._keep_due = None
+        row, q = self.row, self.cfg.get('spot_quote', 'USDT')
+        a, b = seen.get('leverage', 1.0), now['leverage']
+        long_w = sum(w for _, w in now['assets'] if w > 0)
+        if stack <= 0:
+            self.notify.event('info', self.botid,
+                              f'spot leverage {a:g}× → {b:g}×: no coins held to keep, so nothing '
+                              'moves — the stack is planned at the new leverage (H18)')
+            self._learn_terms({}, None, plain=True)
+            return value
+        moved = keep_stack_move(value, stack, long_w)
+        out = row.get('outside_cash', 0.0)
+        if not self._covers(out, moved):
+            self._keep_held = (f'spot leverage {a:g}× → {b:g}× keeping the coins needs {-moved:,.2f} {q} '
+                               f"from the account's own, which holds {out:,.2f}: nothing moved and "
+                               'nothing is planned until the account can cover it or the file changes (H18)')
+            self._say_once('keep_stack', 'warn', self._keep_held)
+            return value
+        row['cash'] -= moved
+        row['outside_cash'] = max(out + moved, 0.0)
+        self._contribute(-moved)
+        way = (f"{moved:,.2f} {q} freed to the account's own" if moved >= 0
+               else f"{-moved:,.2f} {q} taken in from the account's own")
+        self.notify.event('info', self.botid,
+                          f'spot leverage {a:g}× → {b:g}×, the coins kept ({stack:,.2f} {q}): the row\'s '
+                          f'money {value:,.2f} → {value - moved:,.2f}, {way} (now {row["outside_cash"]:,.2f}); '
+                          'capital moved, not a profit or a loss; nothing bought or sold (H18)')
+        row['terms_seen'] = now
+        return value - moved
+
+    def _learn_terms(self, prices, wallet=None, plain=False):
         """H2: the row's terms changed under it (a restart on an edited
         file): a raised capital is cash to spend, a lowered one is said and
         not sold down (the owner sells by hand), a changed asset list is
-        said — and the next read plans at once, not at the next tick."""
+        said — and the next read plans at once, not at the next tick.
+        H18: a leverage change that keeps the coins is booked after the
+        read values the row (`_keep_stack`), not here."""
+        self._keep_due = self._keep_held = None
         row, now = self.row, self._terms()
         seen = row.get('terms_seen')
         if seen is None:
@@ -336,6 +409,9 @@ class PortfolioBot:
                               f"terms first kept: baseline capital {seen['capital']:,.2f} USDT (H2)")
         if seen == now:
             row['terms_seen'] = now
+            return
+        if not plain and self._keeps_stack(seen, now):
+            self._keep_due = (seen, now)
             return
         if now.get('holdings') != seen.get('holdings'):
             self._adopt(seen.get('holdings'), prices)
@@ -1325,6 +1401,7 @@ class PortfolioBot:
         # paying from a sale instead — the carry fleet's second restart)
         quote = cfg.get('spot_quote', 'USDT')
         wq = float((wallet.get('coins') or {}).get(quote, {}).get('wallet_balance', 0.0))
+        wallet_quote = wq                  # U136: the account's quote as the venue holds it
         if cfg.get('margin'):
             # the balance, less what the siblings and the row's linear books
             # put there (the owner, 2026-10-11)
@@ -1418,6 +1495,8 @@ class PortfolioBot:
             self.notify.event('warn', self.botid,
                               f'anchor re-set at {value:,.2f}: contributions before this build were not '
                               'counted apart from profit — the loss limit counts from now (H4)')
+        if self._keep_due:
+            value = self._keep_stack(stack, value)               # H18: before the loss is judged
         basis_value = row['anchor_value'] + row['contributed']    # what the book was given
         loss = basis_value - value
         self._last_pos = stack
@@ -1483,7 +1562,7 @@ class PortfolioBot:
                     continue
             active.append(a)
         plan = {'tick': False, 'orders': []}
-        if active:
+        if active and not self._keep_held:                       # H18: held, nothing is planned
             all_long = sum(a['weight'] for a in cfg['assets'] if a['weight'] > 0)
             act_long = sum(a['weight'] for a in active if a['weight'] > 0)
             if act_long and act_long < all_long:
@@ -1630,8 +1709,16 @@ class PortfolioBot:
                         if k in STABLES and abs(v.get('wallet_balance') or 0.0) > 1e-9},
             'stack_value': stack, 'cash': row['cash'], 'parked': sum(row['parked'].values()),
             'borrowed': max(-row['cash'], 0.0),
+            # U136/U137: the account as the venue holds it, and the borrowed in two
+            'wallet_coins': dict(wcoins), 'wallet_quote': wallet_quote,
+            'venue_loan': max(-wallet_quote, 0.0),
+            **dict(zip(('borrowed_spare', 'borrowed_venue'),
+                       borrowed_split(max(-row['cash'], 0.0), wallet_quote))),
             'leverage': (stack / (stack + row['cash'])) if stack + row['cash'] > 0 else None,
             'lever_cap': row.get('lever_cap'),
+            # H18: the account's own beside the row, and a keep-the-coins move it cannot cover
+            **({'outside_cash': row['outside_cash']} if 'outside_cash' in row else {}),
+            **({'keep_held': self._keep_held} if self._keep_held else {}),
             'spot_leverage_most': SPOT_LEVERAGE_MOST if cfg.get('margin') else 1.0,
             'assets': [{'coin': a['coin'], 'weight': a['weight'],
                         'actual': (coins.get(a['coin'], 0.0) * prices[a['coin']] / stack) if stack and a['weight'] > 0 else 0.0,

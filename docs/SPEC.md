@@ -2197,6 +2197,49 @@ eventually pin (T1).
   with `tabindex="-1"`, in each theme's own colours; on load the page's
   script scrolls to the first and focuses it. Its sabotage draws one
   without the tabindex, and the script would not find it.
+- **U135** (D160, 2026-11-01) The leverage page of a borrowing row asks
+  how: **grow the position** (the same money, the coins become the
+  leverage × it; the default, and the write clears an earlier
+  `terms_move`) or **keep the coins, free up money**. Keeping, the review
+  shows before the typed name the stack now and after, the bot's money now
+  and after, the money moved and which way, and the account's spare money
+  after — from the bot's portfolio block in the engine's newest snapshot,
+  through the engine's own `keep_stack_move` — and says nothing moves on
+  the exchange, so the free margin and the margin floor read as they did.
+  It refuses, in words: a snapshot over ten minutes old or missing, an
+  engine that does not report `outside_cash`, no coins held, an unchanged
+  leverage, a row that never borrowed, and money in that the spare money
+  cannot cover. The write puts the reviewed money as `capital` and
+  `terms_move: "keep_stack"` beside the new leverage; a money moved more
+  than 5% since the review refuses the write. Growing, the review shows the
+  stack about to follow.
+- **U136** (D160, 2026-11-01) The leverage review, and the carry create and
+  edit reviews, show the account as the exchange holds it: each spot coin
+  and stablecoin from the engine's last wallet read (`wallet_coins`,
+  `wallet_quote`, `stables`), the part the bot treats as its own, and the
+  account's own beside it (`outside_cash`); coins above the bot's own get a
+  line — the bot leaves them alone and the exchange counts them toward the
+  account's margin (D76). A new carry bot reads beside a carry bot on the
+  same account, or says what its first read will do.
+- **U137** (D160, 2026-11-01) The row's borrowed in two, in the engine's
+  view: **from the account's spare quote** and **the exchange's real
+  loan** (the wallet's quote below zero, at most the row's borrowed — a
+  sibling may borrow too); `portfolio.borrowed_split`, the two adding up to
+  the borrowed. The carry card and its holdings table say it; the leverage
+  review shows both now and after. Sabotage: uncapped, a sibling's loan
+  makes the spare part negative.
+- **U138** (D160, 2026-11-01) Each account's lines, one renderer
+  (`strip_view.account_lines`): balances (each coin with its USDT value),
+  floating debt per coin (the venue's borrowed amount or a balance below
+  zero, with accrued interest when read) and available to trade (the
+  venue's own figure). Bybit's come from the readout's existing wallet
+  call (`account_figures` now keeps `wallet` and `available`); Hyperliquid
+  says its available and "not read" for the rest. All three say "not read"
+  when the readout is missing, unread or over ten minutes old. The live
+  panel's account box shows them (an export or the public page does not), and the create (quick and advanced), carry and leverage
+  forms beside their money field, from the readout already kept — never a
+  read started for a page. Sabotage: with no age limit, a day-old readout
+  reads as now.
 - **U111** A carry bot's hedge may differ by coin — inverse, usdt or usdc,
   the common one above and the others named ("SOL usdt") — and the form
   shows each coin's three perpetuals side by side: what a short was paid
@@ -2992,6 +3035,39 @@ that pins it (T1).
   none does. *(a demo basket's HYPE hedge, owner 2026-10-27: the inverse
   book is thin and its basis flaps; "start scaling out of one instrument
   incrementally while doing the same for the other")*
+- **H18** (D160, 2026-11-01) **A leverage change that keeps the coins.**
+  `terms_move: "keep_stack"` on a row with a `margin` block (and a long
+  weight) says that a change of its spot leverage keeps the stack. The
+  engine finds it where H2 learns terms (the terms kept against the
+  file's), whether the file changed under a running fleet (D143's path:
+  the capital beside the flag and a changed leverage now moves live too)
+  or at a restart, and books it at the next read once the row is valued:
+  the money moved out of the row is its value less its stack over the new
+  long weights' sum (`portfolio.keep_stack_move`, the spot leverage for a
+  row with no outright short) — out of the row's cash into the account's
+  own (`outside_cash`, H13) when the leverage rises, the other way when it
+  falls — and `contributed` moves with it, so the total since the anchor
+  is unchanged. Nothing is bought or sold and no tick is forced. The move
+  and the learned terms are written in the one state row, so a second
+  restart, or the same file read again, moves nothing more. Money in is
+  bounded by what the account's own holds: short, nothing moves, the terms
+  stay unlearned, nothing is planned (the risk rules still run), it is
+  said hourly and shown on the card's view (`keep_held`), and the next
+  read that can cover it books it; a changed file decides afresh. With
+  the flag, a change of the coin list, quote or holdings beside the
+  leverage is learned as H2 always had it, said. The capital the file
+  states is the panel's statement only; the engine moves what its own read
+  says. A lowered capital without the flag is still only said (H2), and a
+  leverage change without it grows the stack, as before. Nothing about the
+  margin floor, the mainnet gate or D29 changes: nothing moves on the
+  exchange, so the account's free margin reads as it did. Sabotage: the
+  terms not learned with the move, a restart after a price move moves it
+  again; the move taken from the file's capital, the row lands off its new
+  leverage and its next tick trades; money in unbounded, the row takes
+  money the account does not hold; the capital kept cold, the live change
+  waits for a restart. *(the owner, 2026-11-01: raising the leverage
+  "always grows" the stack; a second way, "in case you just want to free
+  up margin")*
 - **H6** The card says the three truths. A portfolio's card shows the
   stack's value and coins, one line per asset (weight target → actual,
   hedge ratio target → actual, coins hedged, the regime word when the tilt

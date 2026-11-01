@@ -51,10 +51,11 @@ class FleetAdminPages:
             from panel.carry_setup import carry_page, form_from_row
             from panel.lever import lever_form                      # D143
             try:                                                    # U111: the carry form, filled
-                form = carry_page(form_from_row(bot), self._fleet_labels(), fi, edit=botid)
+                form = carry_page(form_from_row(bot), self._fleet_labels(), fi, edit=botid,
+                                  account=self._account_lines(fi))
             except ValueError as e:
                 form = f'<p class="dim">its coins, hedges, clock and risk: the fleet file, by hand — {html.escape(str(e))}.</p>'
-            return (lever_form(fi, botid, bot) + form
+            return (lever_form(fi, botid, bot, account=self._account_lines(fi)) + form
                     + f'<p class="dim"><a href="/edit?fleet={fi}&amp;bot={qarg(botid)}&amp;mode=remove">remove</a> '
                     'is here.</p>')
         if mode == 'remove':
@@ -72,7 +73,8 @@ class FleetAdminPages:
         w = json.loads(Path(fleet_raw['watchdog']).read_text())
         wmax = (w.get('positions', {}).get(botid) or {}).get('max', '')
         vals = dict(form_from_bot(bot), ceiling=wmax)
-        return advanced_page(bot.get('strategy', 'grid'), vals, self._fleet_labels(), fi, edit=botid)
+        return advanced_page(bot.get('strategy', 'grid'), vals, self._fleet_labels(), fi, edit=botid,
+                             account=self._account_lines(fi))
 
     def _fleet_rows(self, fi):
         """The botids a fleet file holds now."""
