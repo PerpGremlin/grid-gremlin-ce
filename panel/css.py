@@ -14,24 +14,31 @@ import time
 from panel.chart import _f
 
 
-# U112 (owner, 2026-10-28: "more themes… windows 95, or Metatrader"): the
-# theme button's cycle, in order; each but the first is a class t-<name> on
-# <html>, its colour tokens overridden at the stylesheet's end
-THEMES = ('dark', 'light', 'win95', 'metatrader')
+# U112 (owner, 2026-10-28: "more themes… windows 95, or Metatrader"; 2026-11-01:
+# the green one renamed classic, "an actual dark theme", and "a retail broker platform…
+# or MetaTrader 5"): the theme button's cycle, in order. The first, classic,
+# is the stylesheet's own :root — the site's look, and the export's, which
+# carries no script; each other is a class t-<name> on <html>, its tokens
+# overridden at the stylesheet's end. A new visitor gets DEFAULT_THEME; a
+# browser that kept a name since renamed is moved once (RENAMED_THEMES).
+THEMES = ('classic', 'dark', 'light', 'broker', 'mt5', 'win95')
+DEFAULT_THEME = 'dark'
+RENAMED_THEMES = {'dark': 'classic', 'metatrader': 'mt5'}
 
 
 CSS = """/* U86: the site's look (terminalgremlin) — its green on near-black, and
 every part in a box with a thick edge (--edge) */
 :root{--bg:#0b0f0c;--fg:#d7e4da;--dim:#7c8c80;--line:#1c2620;--edge:#2c3d31;
 --pos:#36d17a;--neg:#e5534b;--accent:#36d17a;--accent-soft:#36d17a26;
---calm:#5fb3c2;--wild:#e59a4c;--s3:#b48ef0;
+--calm:#5fb3c2;--wild:#e59a4c;--s3:#b48ef0;--raise:#0b0f0c;
 --gap:1em;--gap-s:.5em;--hero:3.2em;--bw:2px}
 :root.t-light{--bg:#f3f5f1;--fg:#1d2620;--dim:#5f6d63;--line:#d5ddd6;--edge:#a9b8ac;
 --pos:#1f8a4c;--neg:#c0392b;--accent:#1f8a4c;--accent-soft:#1f8a4c24;
---calm:#2f7d8c;--wild:#c26a12;--s3:#7a4fc4}
+--calm:#2f7d8c;--wild:#c26a12;--s3:#7a4fc4;--raise:#f3f5f1}
 html{background:var(--bg)}
 body{background:var(--bg);color:var(--fg);font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;margin:2em}
 section.fbox{border:var(--bw) solid var(--edge);border-radius:8px;padding:0 1em .6em;margin:0 0 calc(var(--gap)*1.5)}
+:is(section.fbox,.card,.pane,nav.side,.eqbox,.fsec,.carryform,:is(form,.fakeform)>details){background:var(--raise)}
 .scroll{overflow-x:auto;max-width:100%}table.fleet{width:100%}table.fleet td,table.fleet th{white-space:nowrap}
 table{border-collapse:collapse}td,th{padding:.35em .8em;
 text-align:right;border-bottom:1px solid var(--line)}
@@ -197,6 +204,10 @@ h1 .meta{display:block;font-size:.78em;font-weight:normal;margin-top:.15em}
 .card .foot>span:last-child{display:flex;flex-wrap:wrap;gap:.25em}.card .foot a[href]{margin:0}
 .card:hover{border-color:var(--accent)}.card.long:hover{border-left-color:var(--pos)}.card.short:hover{border-left-color:var(--neg)}
 nav.side{border:var(--bw) solid var(--edge);border-radius:8px;padding:.2em .8em .8em}
+/* U112 (2026-11-01): .side, the long/short badge, also matches nav.side and
+gave the column the badge's colour (--bg): the arrange label was drawn in the
+page's own colour, unseen in every theme; the column's words are --fg */
+nav.side{color:var(--fg)}
 nav.side h3,.pane h3{text-transform:uppercase;letter-spacing:.08em;font-size:.75em}
 .pane h3{border-top:1px solid var(--edge);padding-top:.8em;margin-top:1em}
 .pane h2{border-bottom:var(--bw) solid var(--edge);padding:.5em 0;margin-bottom:.6em}
@@ -262,35 +273,66 @@ raised bevel (--up), a pressed one and every field sunk (--down), navy title
 bars, white tables on a grey grid */
 :root.t-win95{--bg:#c0c0c0;--fg:#000;--dim:#404040;--line:#dfdfdf;--edge:#808080;
 --pos:#006400;--neg:#a00000;--accent:#000080;--accent-soft:#c0c0c0;
---calm:#00607a;--wild:#8a4500;--s3:#5a2d82;
+--calm:#00607a;--wild:#8a4500;--s3:#5a2d82;--raise:#c0c0c0;
+--desk:#008080;--title:#000080;--title-fg:#fff;--title-dim:#dfdfdf;--paper:#fff;--off:#808080;
 --up:inset -1px -1px #000,inset 1px 1px #fff,inset -2px -2px #808080,inset 2px 2px #dfdfdf;
 --down:inset -1px -1px #fff,inset 1px 1px #000,inset -2px -2px #dfdfdf,inset 2px 2px #808080}
-:root.t-win95,:root.t-win95 body{background:#008080}
+:root.t-win95,:root.t-win95 body{background:var(--desk)}
 :root.t-win95 body{font:12px/1.4 "MS Sans Serif","Microsoft Sans Serif",Tahoma,Geneva,sans-serif;font-variant-numeric:tabular-nums}
 :root.t-win95 :is(main,section.fbox,.card,.pane,nav.side,.hero,.eqbox,.fsec,.carryform,:is(form,.fakeform)>details){border:0;box-shadow:var(--up);background:var(--bg)}
-:root.t-win95 main{padding:.2em .8em .8em}:root.t-win95 body>p{color:#fff}
+:root.t-win95 main{padding:.2em .8em .8em}:root.t-win95 body>p{color:var(--title-fg)}
 :root.t-win95 :is(.pnl,.card .pnl,.bar,.gauge){border:0;box-shadow:var(--down);background:var(--bg)}
-:root.t-win95 :is(h1,.pane h2,.fsec>h2){background:#000080;color:#fff;font-weight:bold;padding:.15em .4em}
-:root.t-win95 :is(h1,.pane h2) :is(.meta,.dim){color:#dfdfdf}
-:root.t-win95 :is(a[href]:not(.bname),b.on,button,label.lab:not(.bname),a.off:not(.bname)){background:var(--bg);color:#000;border:0;box-shadow:var(--up);filter:none}
+:root.t-win95 :is(h1,.pane h2,.fsec>h2){background:var(--title);color:var(--title-fg);font-weight:bold;padding:.15em .4em}
+:root.t-win95 :is(h1,.pane h2) :is(.meta,.dim){color:var(--title-dim)}
+:root.t-win95 :is(a[href]:not(.bname),b.on,button,label.lab:not(.bname),a.off:not(.bname)){background:var(--bg);color:var(--fg);border:0;box-shadow:var(--up);filter:none}
 :root.t-win95 :is(a[href]:not(.bname):active,button:active,label.lab:not(.bname):active,a.pick,b.on){box-shadow:var(--down)}
 :root.t-win95 :is(a[href*='mode=remove'],a[href^='/retire'],a[href^='/close'],button.danger){color:var(--neg)}
-:root.t-win95 a.off:not(.bname){color:#808080}
-:root.t-win95 table:not(:is(form,.fakeform) table){background:#fff}
+:root.t-win95 a.off:not(.bname){color:var(--off)}
+:root.t-win95 table:not(:is(form,.fakeform) table){background:var(--paper)}
 :root.t-win95 table:not(:is(form,.fakeform) table) :is(td,th){border:1px solid var(--bg)}
-:root.t-win95 :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),select,.fin){background:#fff;border:0;box-shadow:var(--down)}
-/* U112: metatrader — the MT4 chart window: black, lime up, red down, gold
-price line, the grid dotted dark grey, small Tahoma */
-:root.t-metatrader{--bg:#000;--fg:#fff;--dim:#a0a0a0;--line:#333;--edge:#555;
---pos:#00ff00;--neg:#ff3030;--accent:#ffd700;--accent-soft:#ffd70022;
---calm:#00bfff;--wild:#ff8c00;--s3:#ff00ff}
-:root.t-metatrader body{font:11px/1.35 Tahoma,Verdana,Geneva,sans-serif;font-variant-numeric:tabular-nums}
-:root.t-metatrader :is(td,th,.grp){border-bottom-style:dotted}
-:root.t-metatrader svg line[stroke="var(--line)"]{stroke-dasharray:1 3}
+:root.t-win95 :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),select,.fin){background:var(--paper);border:0;box-shadow:var(--down)}
+/* U112 (2026-11-01): dark — a modern dark trading screen, not a terminal:
+neutral greys, panels a step above the page, one calm muted blue, a
+readable green and red (each AA on both greys), thin edges, a sans face */
+:root.t-dark{--bg:#15171c;--fg:#e6e6e6;--dim:#9aa0a6;--line:#262a32;--edge:#30353e;
+--pos:#3fb97a;--neg:#f2645c;--accent:#6f9fd8;--accent-soft:#6f9fd824;
+--calm:#5fb0c4;--wild:#e0a050;--s3:#b496e8;--raise:#1d2027;--bw:1px;color-scheme:dark}
+:root.t-dark body,:root.t-broker body{font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-variant-numeric:tabular-nums}
+:root.t-dark .card:hover{border-color:var(--dim)}
+/* U112 (2026-11-01): broker — inspired by retail broker platforms (no one
+platform's name, mark or colours): a white page, a deep navy strip and side
+column, a teal accent, soft white cards on thin light edges, more room, the
+numbers bold. Inside the strip and the column the tokens turn to their
+navy set (--head-*), so everything there reads on navy unchanged */
+:root.t-broker{--bg:#f4f6f9;--fg:#14202e;--dim:#5b6878;--line:#e3e8ee;--edge:#d5dce4;
+--pos:#0b7a53;--neg:#c8323b;--accent:#0e7c86;--accent-soft:#0e7c861a;
+--calm:#2b6f8c;--wild:#a85a0c;--s3:#6b4fbf;--raise:#fff;--bw:1px;--gap:1.3em;--gap-s:.65em;
+--shadow:#14202e14;--head-bg:#12223d;--head-fg:#eef2f7;--head-dim:#a9b6c8;--head-line:#22355a;
+--head-edge:#2c4270;--head-pos:#4fd1a1;--head-neg:#ff8a8f;--head-accent:#4cc3cc;--head-soft:#4cc3cc26}
+:root.t-broker :is(.hero,nav.side){--bg:var(--head-bg);--raise:var(--head-bg);--fg:var(--head-fg);--dim:var(--head-dim);
+--line:var(--head-line);--edge:var(--head-edge);--pos:var(--head-pos);--neg:var(--head-neg);
+--accent:var(--head-accent);--accent-soft:var(--head-soft);background:var(--bg);color:var(--fg)}
+:root.t-broker :is(section.fbox,.card,.pane,nav.side,.eqbox,.fsec,.carryform,:is(form,.fakeform)>details){border-radius:12px;box-shadow:0 1px 2px var(--shadow),0 4px 14px var(--shadow)}
+:root.t-broker .card{padding:1em 1.1em}:root.t-broker .pane{padding:.4em 1.3em 1em}
+:root.t-broker :is(.big,.num,.hero .fleet>*){font-weight:700}
+:root.t-broker :is(a[href],b.on,button,label.lab,input,select,.fin){border-radius:6px}
+/* U112 (2026-11-01): mt5 — MetaTrader 5's terminal: white panels in a light
+grey frame, blue title bars, black text, small dense type, the green and
+red it trades in, the grid dotted; square corners */
+:root.t-mt5{--bg:#f0f0f0;--fg:#000;--dim:#555;--line:#d9d9d9;--edge:#a0a0a0;
+--pos:#008000;--neg:#d00000;--accent:#1f5fae;--accent-soft:#1f5fae1f;
+--calm:#00708a;--wild:#b05a00;--s3:#7a2f9a;--raise:#fff;--bw:1px;--gap:.7em;--gap-s:.35em;
+--title:#1f5fae;--title-fg:#fff;--title-dim:#d6e4f5}
+:root.t-mt5 body{font:11px/1.35 Tahoma,"Segoe UI",Verdana,Geneva,sans-serif;font-variant-numeric:tabular-nums}
+:root.t-mt5 :is(h1,.pane h2,.fsec>h2){background:var(--title);color:var(--title-fg);padding:.2em .5em}
+:root.t-mt5 :is(h1,.pane h2) :is(.meta,.dim,a){color:var(--title-dim)}
+:root.t-mt5 :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),select,.fin){background:var(--raise)}
+:root.t-mt5 :is(td,th,.grp){border-bottom-style:dotted;padding-top:.15em;padding-bottom:.15em}
+:root.t-mt5 svg line[stroke="var(--line)"]{stroke-dasharray:1 3}
 /* D159: win95's dialog a raised window, its title bar navy */
 :root.t-win95 dialog.ggconfirm{border:0;box-shadow:var(--up)}
-:root.t-win95 dialog.ggconfirm .what{background:#000080;color:#fff}
-:root.t-win95 .refusal{background:#fff;color:#000}:root.t-win95 .refusal>b:first-child{color:#fff}
+:root.t-win95 dialog.ggconfirm .what{background:var(--title);color:var(--title-fg)}
+:root.t-win95 .refusal{background:var(--paper);color:var(--fg)}:root.t-win95 .refusal>b:first-child{color:var(--title-fg)}
 /* U112: both square, every corner */
-:root.t-win95 *,:root.t-metatrader *{border-radius:0!important}
+:root.t-win95 *,:root.t-mt5 *{border-radius:0!important}
 """

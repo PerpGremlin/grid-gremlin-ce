@@ -1084,6 +1084,20 @@ def funding_of(events, market_type, symbol, entry_side, start_ms, end_ms):
                and start_ms <= e['time_ms'] <= end_ms)
 
 
+def account_venues(fleet, by_venue):
+    """R19b: every exchange this fleet trades on, its account read once each —
+    the grid, DCA and trade rows' venues AND each Portfolio Bot's. A fleet of
+    portfolio rows alone (the slow subaccount, 2026-11-01) read no account at
+    all: its balances said "not read" and D162 recorded nothing."""
+    out = list(by_venue)
+    for cfg in fleet.get('bots') or []:
+        if isinstance(cfg, dict) and cfg.get('strategy') == 'portfolio':
+            v = cfg.get('venue', 'bybit')
+            if v not in out:
+                out.append(v)
+    return out
+
+
 def _funding_pull(by_venue, start_of, now_ms):
     """D63: every perp market's funding from the earliest moment one of its
     books starts (`start_of[(market_type, symbol)]`) — one read per market
@@ -1276,7 +1290,7 @@ def main(argv):
     from .account_change import load_history, recent_path
     history = load_history(recent_path(argv[0]))          # D162: read back, never written here
     account = {}                       # R19: each exchange's own figures
-    for venue in by_venue:
+    for venue in account_venues(fleet, by_venue):
         try:
             if venue == 'hyperliquid':
                 from .exchange.hyperliquid.client import InfoClient

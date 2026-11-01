@@ -86,3 +86,18 @@ def spec_R19_every_surface_says_it_the_same_way():
             return {}, {}
     risk = phone.answer(Box(['configs/fleet.demo.json']), '/risk')
     assert now in risk and filled in risk
+
+
+def spec_R19b_a_fleet_of_portfolio_rows_alone_still_reads_its_account():
+    """R19b (2026-11-01): the account read went by the grid/DCA/trade rows'
+    venues only, so the slow subaccount (one Portfolio Bot) read none — its
+    balances "not read", nothing recorded (D162). Each Portfolio Bot's venue
+    is read too, once. Sabotage: the rows' venues alone miss it."""
+    from gridgremlin.report import account_venues
+    pfo = {'bots': [{'strategy': 'portfolio', 'name': 'basket'}]}
+    assert account_venues(pfo, {}) == ['bybit']
+    both = {'bots': [{'strategy': 'grid', 'symbol': 'BTCUSDT'},
+                     {'strategy': 'portfolio', 'name': 'b', 'venue': 'bybit'}]}
+    assert account_venues(both, {'bybit': [object()]}) == ['bybit']        # once
+    assert account_venues({'bots': []}, {'hyperliquid': [object()]}) == ['hyperliquid']
+    assert list({}) == []                                    # sabotage: rows alone read nothing

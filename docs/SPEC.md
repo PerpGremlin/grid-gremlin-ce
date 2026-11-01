@@ -1562,6 +1562,10 @@ eventually pin (T1).
   leverage after all positions are loaded would be … id prefer if it
   displayed the way hyperliquid does … and then for the figure as if
   everything is filled as a toggle")*
+- **R19b** (2026-11-01) Every exchange a fleet trades on has its account read
+  once per readout — its grid, DCA and trade rows' venues and each Portfolio
+  Bot's. A fleet of portfolio rows alone had read none (its balances "not
+  read", nothing recorded by D162).
 - **R16** An unlinked fill on a bot's exit side is booked to that bot, whoever
   created it: a modify the venue rebuilt without the link, a hand close, a
   venue close without a label. I2 makes it unambiguous — one bot per (market,
@@ -2086,6 +2090,24 @@ eventually pin (T1).
   once. Charts draw with the tokens, so they follow. The export carries
   no script. *(owner, 2026-10-28: "more themes… windows 95,
   or Metatrader")*
+  **(2026-11-01)** Six themes, the button stepping classic → dark →
+  light → broker → mt5 → win95. classic is the green one above, renamed,
+  and still the stylesheet's own `:root` (no class): the export and the
+  published page wear it. dark is new and is what a new visitor gets:
+  neutral greys, panels a step lighter than the page, one muted blue,
+  thin edges, a sans face, and its text, dim text, profit and loss each
+  WCAG AA on both greys. broker is a light look inspired by retail
+  broker platforms (no platform's name, mark or colours): a white page,
+  a deep navy strip and side column, a teal accent, soft white cards,
+  more room, bold numbers. mt5 replaces metatrader: MetaTrader 5's
+  terminal, white panels in a grey frame, blue title bars, black text,
+  small dense type, green and red. A browser that kept `dark` (the green
+  one) is moved to classic and one that kept `metatrader` to mt5, once:
+  the move writes `gg-theme-v` so a kept `dark` after it is the new one.
+  A theme's rules name a colour only through its tokens; only a custom
+  property may hold one. *(owner, 2026-11-01: the green one "classic",
+  "an actual dark theme", "a version that looks like a retail broker platform as
+  well, or MetaTrader 5")*
 - **U113** A grid's fills say each trip, as Bybit and Pionex do: an
   exit's "made" is its gain against the entry it closes (R12, the entry
   by R15/R15b) less both legs' fees — the entry fill's own fee per unit

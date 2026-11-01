@@ -13,7 +13,7 @@ import subprocess
 import sys
 import time
 from panel.chart import _f
-from panel.css import THEMES
+from panel.css import DEFAULT_THEME, RENAMED_THEMES, THEMES
 
 
 # D157: a bot's state as the engine knows it (the keys, kept in code and in
@@ -301,14 +301,21 @@ hedge it holds, as coins.</td></tr>
 
 # U112: the theme, set in the head before the page paints (no flash): the
 # choice kept in the browser across tabs (gg-theme), a tab still on U46's
-# light (gg-light) carried over once; ggTheme(1) steps to the next and every
-# theme button says which is on. Nothing else passes through it.
+# light (gg-light) carried over once; a choice kept under a name since
+# renamed (RENAMED_THEMES) moved once, gg-theme-v marking it done so the new
+# dark is never read as the old; nothing kept, DEFAULT_THEME. ggTheme(1)
+# steps to the next and every theme button says which is on. The first
+# theme is the stylesheet's own :root, so it sets no class. Nothing else
+# passes through it.
+THEME_MOVE = ''.join(f"t==='{old}'?'{new}':" for old, new in RENAMED_THEMES.items()) + 't'
 THEME_JS = ("<script>(function(){var T=" + json.dumps(list(THEMES)).replace(' ', '')
-            + """,r=document.documentElement,t=null;
+            + ",D='" + DEFAULT_THEME + """',r=document.documentElement,t=null;
 try{t=localStorage.getItem('gg-theme');
  if(!t&&sessionStorage.getItem('gg-light'))localStorage.setItem('gg-theme',t='light');
- sessionStorage.removeItem('gg-light');}catch(e){}
-if(T.indexOf(t)<0)t=T[0];
+ sessionStorage.removeItem('gg-light');
+ if(t&&localStorage.getItem('gg-theme-v')!=='2')localStorage.setItem('gg-theme',t=""" + THEME_MOVE + """);
+ localStorage.setItem('gg-theme-v','2');}catch(e){}
+if(T.indexOf(t)<0)t=D;
 window.ggTheme=function(step){if(step){t=T[(T.indexOf(t)+1)%T.length];
   try{localStorage.setItem('gg-theme',t);}catch(e){}}
  T.forEach(function(n){r.classList.toggle('t-'+n,n===t&&n!==T[0]);});

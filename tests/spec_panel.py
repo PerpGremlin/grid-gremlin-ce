@@ -2596,9 +2596,9 @@ def spec_U98_the_exchange_box_says_its_window():
 
 
 def _theme_block(css, name):
-    """U112: a theme's token block, {token: value}; the default's is the first :root."""
+    """U112: a theme's token block, {token: value}; classic's is the first :root."""
     import re
-    sel = ':root{' if name == 'dark' else f':root.t-{name}{{'
+    sel = ':root{' if name == 'classic' else f':root.t-{name}{{'
     body = css.split(sel, 1)[1].split('}', 1)[0]
     return dict(re.findall(r'(--[\w-]+):([^;]+)', body))
 
@@ -2612,43 +2612,133 @@ def _rounded(css, names):
             for v in re.findall(r'border-radius:([^;}]+)', body) if v.strip() not in ('0', '0!important')]
 
 
-def spec_U112_every_theme_overrides_every_colour_the_default_sets():
-    """The owner, 2026-10-28: "more themes… windows 95, or Metatrader".
-    Each theme is the default's colour tokens overridden, every one of them
-    (a token left out would leak the dark look into it), and a class on <html>."""
-    from panel.css import CSS, THEMES
-    assert THEMES == ('dark', 'light', 'win95', 'metatrader')
-    colours = {k for k, v in _theme_block(CSS, 'dark').items() if v.startswith('#')}
-    assert {'--bg', '--fg', '--pos', '--neg', '--accent', '--line', '--edge'} <= colours
+# a theme's own rules name a colour through its tokens only; these words are
+# not a colour of anyone's, so a rule may say them
+_NOT_A_COLOUR = ('transparent', 'none', 'currentcolor', 'inherit')
+_NAMED = ('white', 'black', 'red', 'green', 'blue', 'navy', 'teal', 'silver', 'gray', 'grey',
+          'lime', 'gold', 'orange', 'yellow', 'purple', 'magenta', 'cyan', 'maroon', 'olive')
+
+
+def _theme_literals(css):
+    """U112: every declaration in a theme's rules (a selector naming
+    :root.t-<name>) that writes a colour itself instead of through a token:
+    a custom property may hold one, nothing else may."""
+    import re
+    flat = re.sub(r'/\*.*?\*/', '', css, flags=re.S)
+    found = []
+    for sel, body in re.findall(r'([^{}]*)\{([^{}]*)\}', flat):
+        if ':root.t-' not in sel:
+            continue
+        for decl in body.split(';'):
+            prop, _, value = decl.partition(':')
+            prop, value = prop.strip(), value.strip().lower()
+            if not prop or prop.startswith('--'):
+                continue
+            bare = re.sub(r'var\([^)]*\)', '', value)
+            words = set(re.findall(r'[a-z]+', bare)) - set(_NOT_A_COLOUR)
+            if re.search(r'#[0-9a-f]{3,8}\b|\b(rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(', bare) \
+                    or words & set(_NAMED):
+                found.append(f'{sel.strip()} {prop}:{value}')
+    return found
+
+
+def spec_U112_every_theme_overrides_every_colour_classic_sets():
+    """The owner, 2026-10-28: "more themes… windows 95, or Metatrader";
+    2026-11-01: the green one renamed classic, "an actual dark theme", and
+    "a version that looks like a retail broker platform as well, or MetaTrader 5".
+    Each theme is classic's colour tokens overridden, every one of them (a
+    token left out would leak the green look into it), and a class on <html>."""
+    from panel.css import CSS, DEFAULT_THEME, THEMES
+    assert THEMES == ('classic', 'dark', 'light', 'broker', 'mt5', 'win95')
+    assert DEFAULT_THEME == 'dark' and DEFAULT_THEME in THEMES
+    colours = {k for k, v in _theme_block(CSS, 'classic').items() if v.startswith('#')}
+    assert {'--bg', '--fg', '--pos', '--neg', '--accent', '--line', '--edge', '--raise'} <= colours
     for name in THEMES[1:]:
         mine = _theme_block(CSS, name)
         assert colours <= set(mine), (name, colours - set(mine))
-    assert ':root.light' not in CSS                     # U46's light is t-light now
-    assert _theme_block(CSS, 'win95')['--bg'] == '#c0c0c0' and ':root.t-win95,:root.t-win95 body{background:#008080}' in CSS
-    assert _theme_block(CSS, 'metatrader')['--bg'] == '#000' and _theme_block(CSS, 'metatrader')['--pos'] == '#00ff00'
+    assert ':root.light' not in CSS and ':root.t-classic' not in CSS     # classic is :root itself
+    assert 'metatrader' not in CSS
+    assert _theme_block(CSS, 'classic')['--bg'] == '#0b0f0c' and _theme_block(CSS, 'classic')['--accent'] == '#36d17a'
+    assert _theme_block(CSS, 'win95')['--bg'] == '#c0c0c0' and ':root.t-win95,:root.t-win95 body{background:var(--desk)}' in CSS
+    assert _theme_block(CSS, 'win95')['--desk'] == '#008080'
+    mt5 = _theme_block(CSS, 'mt5')
+    assert mt5['--raise'] == '#fff' and mt5['--fg'] == '#000' and mt5['--pos'] == '#008000'
+    assert ':root.t-mt5 :is(h1,.pane h2,.fsec>h2){background:var(--title)' in CSS
+    broker = _theme_block(CSS, 'broker')
+    assert broker['--raise'] == '#fff' and broker['--head-bg'] == '#12223d'
+    assert ':root.t-broker :is(.hero,nav.side){--bg:var(--head-bg)' in CSS
+    assert 'inspired by retail broker platforms' in CSS and 'cmc' not in CSS.lower()
 
 
-def spec_U112_win95_and_metatrader_are_square_and_the_guard_bites():
+def spec_U112_dark_is_neutral_grey_and_its_words_pass_AA():
+    """The new dark: neutral greys (no channel more than a few steps from the
+    others), panels a step above the page, thin edges, and the text, the dim
+    text, the profit and the loss each WCAG AA (4.5:1) on both greys."""
+    def lum(h):
+        h = h.lstrip('#')
+        c = [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+        c = [x / 12.92 if x <= 0.03928 else ((x + 0.055) / 1.055) ** 2.4 for x in c]
+        return .2126 * c[0] + .7152 * c[1] + .0722 * c[2]
+
+    def ratio(a, b):
+        hi, lo = sorted((lum(a), lum(b)), reverse=True)
+        return (hi + .05) / (lo + .05)
     from panel.css import CSS
-    assert ':root.t-win95 *,:root.t-metatrader *{border-radius:0!important}' in CSS
-    assert _rounded(CSS, ('win95', 'metatrader')) == []
+    dark = _theme_block(CSS, 'dark')
+    for k in ('--bg', '--raise', '--fg', '--dim', '--line', '--edge'):
+        rgb = [int(dark[k][i:i + 2], 16) for i in (1, 3, 5)]
+        assert max(rgb) - min(rgb) <= 16 and rgb[1] <= rgb[2], (k, dark[k])   # grey, not green
+    assert lum(dark['--bg']) < lum(dark['--raise']) < .03 and dark['--bw'] == '1px'
+    for bg in (dark['--bg'], dark['--raise']):
+        for k in ('--fg', '--dim', '--pos', '--neg', '--accent'):
+            assert ratio(dark[k], bg) >= 4.5, (k, bg, round(ratio(dark[k], bg), 2))
+    assert ratio(dark['--bg'], dark['--accent']) >= 4.5         # a button's words on the accent
+    for k in ('--fg', '--edge'):                                # sabotage: classic's greens fail it
+        rgb = [int(_theme_block(CSS, 'classic')[k][i:i + 2], 16) for i in (1, 3, 5)]
+        assert rgb[1] > rgb[2], k
+    assert ratio('#9aa0a6', '#9aa0a6') == 1 and ratio('#000000', '#ffffff') > 20.9   # the yardstick
+
+
+def spec_U112_win95_and_mt5_are_square_and_the_guard_bites():
+    from panel.css import CSS
+    assert ':root.t-win95 *,:root.t-mt5 *{border-radius:0!important}' in CSS
+    assert _rounded(CSS, ('win95', 'mt5')) == []
     assert _rounded(CSS + ':root.t-win95 .card{border-radius:4px}', ('win95',)) == [':root.t-win95 .card']   # sabotage
     assert 'url(' not in CSS                            # the published page's check refuses one
 
 
+def spec_U112_a_theme_names_its_colours_only_in_its_tokens_and_the_guard_bites():
+    """A theme is its tokens plus a few overrides; an override that writes a
+    colour itself would not follow the token, so a chart or a box drawn with
+    the token and one drawn by the override part ways. Only a custom
+    property may hold a colour in a theme's rules."""
+    from panel.css import CSS, THEMES
+    assert _theme_literals(CSS) == []
+    for name in THEMES[1:]:
+        assert f':root.t-{name}{{' in CSS
+    assert _theme_literals(CSS + ':root.t-dark .card{border-color:#333}') == [':root.t-dark .card border-color:#333']   # sabotage
+    assert _theme_literals(CSS + ':root.t-broker .hero{background:rgb(0,0,40)}') != []
+    assert _theme_literals(CSS + ':root.t-mt5 h1{color:white}') != []
+    assert _theme_literals(CSS + ':root.t-mt5 h1{--title:#fff;color:var(--title);background:transparent}') == []
+
+
 def spec_U112_the_button_cycles_every_theme_before_the_page_paints():
-    """The button steps through the themes and says which is on; the choice
-    is set in the head before anything is drawn, kept in the browser
-    (gg-theme), a tab on the old light carried over once; every storage
-    touch in a try. The export carries no script."""
+    """The button steps through the themes in order and says which is on;
+    the choice is set in the head before anything is drawn, kept in the
+    browser (gg-theme), a tab on the old light carried over once; every
+    storage touch in a try. The export carries no script."""
     import json
     import re
     from pathlib import Path
     from panel.css import THEMES
     from panel.server import KEEP_JS, render
     from panel.reference import THEME_JS
+    assert 'var T=["classic","dark","light","broker","mt5","win95"]' in THEME_JS
     assert 'var T=' + json.dumps(list(THEMES)).replace(' ', '') in THEME_JS
-    assert "'theme: '+t" in THEME_JS and "classList.toggle('t-'+n" in THEME_JS
+    assert "t=T[(T.indexOf(t)+1)%T.length]" in THEME_JS                 # the next, wrapping to the first
+    assert "classList.toggle('t-'+n,n===t&&n!==T[0])" in THEME_JS       # classic is :root, no class
+    assert "D='dark'" in THEME_JS and 'if(T.indexOf(t)<0)t=D;' in THEME_JS
+    assert "'theme: '+t" in THEME_JS
     assert "localStorage.getItem('gg-theme')" in THEME_JS and "sessionStorage.getItem('gg-light')" in THEME_JS
     assert 'Storage' not in re.sub(r'try\{[^{}]*\}catch\(e\)\{\}', '', THEME_JS)
     for word in ('fetch(', 'http', 'eval(', 'cookie'):
@@ -2660,6 +2750,43 @@ def spec_U112_the_button_cycles_every_theme_before_the_page_paints():
     for f in Path(__file__).resolve().parents[1].joinpath('panel').rglob('*.py'):   # every live page
         for after in f.read_text().split('<style>{CSS}</style>')[1:]:
             assert after.startswith(('{THEME_JS}', "{'' if static else THEME_JS}")), f.name
+
+
+def _moved(js, kept, done=False):
+    """U112: what THEME_JS's one-time move makes of a kept name — its
+    ternary chain read out of the script and applied as the browser would."""
+    import re
+    if not kept or done:
+        return kept
+    chain = re.search(r"t=((?:t==='\w+'\?'\w+':)+)t\)", js)
+    for old, new in re.findall(r"t==='(\w+)'\?'(\w+)':", chain.group(1)):
+        if kept == old:
+            return new
+    return kept
+
+
+def spec_U112_a_browser_on_a_renamed_theme_is_moved_once():
+    """2026-11-01: the green dark is classic now and metatrader is mt5. A
+    browser that kept "dark" meant the green one, so it lands on classic,
+    and "metatrader" on mt5 — once: the move writes gg-theme-v, and after
+    it a kept "dark" is the new dark. A tab on U46's light is carried over
+    before the move, so it is light, not moved."""
+    from panel.css import RENAMED_THEMES, THEMES
+    from panel.reference import THEME_JS
+    assert RENAMED_THEMES == {'dark': 'classic', 'metatrader': 'mt5'}
+    assert set(RENAMED_THEMES.values()) <= set(THEMES)
+    assert "t=t==='dark'?'classic':t==='metatrader'?'mt5':t" in THEME_JS
+    gate = "if(t&&localStorage.getItem('gg-theme-v')!=='2')localStorage.setItem('gg-theme',t="
+    assert gate in THEME_JS and "localStorage.setItem('gg-theme-v','2');}catch(e){}" in THEME_JS
+    js = THEME_JS
+    assert js.index("sessionStorage.getItem('gg-light')") < js.index(gate) < js.index("setItem('gg-theme-v','2')") \
+        < js.index('if(T.indexOf(t)<0)t=D;')
+    assert _moved(js, 'dark') == 'classic' and _moved(js, 'metatrader') == 'mt5'
+    assert _moved(js, 'dark', done=True) == 'dark'                       # the new dark, kept
+    for name in THEMES:
+        if name not in RENAMED_THEMES:
+            assert _moved(js, name) == name
+    assert _moved(js.replace("t==='metatrader'?'mt5':", ''), 'metatrader') == 'metatrader'   # sabotage: the guard reads the script
 
 
 # --- U146: a frozen bot says so (D158's visibility, 2026-11-01) ---------------
