@@ -204,6 +204,11 @@ class BasisMixin:
         awaited = self._rungs_awaited             # link -> when it left
         if same and not awaited:
             self._rungs_lag, self._rungs_lag_since = 0, None
+            self._rungs_escalated = False                     # D158
+            # D158: back at the size the cached lots describe, with nothing
+            # awaited, there is nothing a read must tell: an outage's freeze
+            # ends here as at a flat, or it outlived the failure forever
+            self._rungs_fail_since, self._rungs_fail_said = None, False
             return cached[2]
         entry = self._entry_side.lower()
         want = abs(held)
@@ -214,18 +219,34 @@ class BasisMixin:
             try:
                 listed = self._own_fills_all(days)
             except (VenueError, OSError):
-                # an own order left the book and the fills cannot say
-                # whether it filled: G26's freeze, the cached lots kept —
-                # never the block, which re-placed the exit just filled
-                self._settle_awaited(now, None)
-                if self._rungs_awaited:
-                    if self._rungs_lag_since is None:
-                        self._rungs_lag_since = now
-                    return cached[2] if cached else None
-                return cached[2] if same else None
+                # D158: a read that fails says
+                # nothing of which lots are held; both sides freeze for as
+                # long as it fails, on a clock of its own, said once past
+                # the wait (urgent: the owner needs it); the cached lots are
+                # kept and the block is for adoption only. An awaited order
+                # is not settled by the clock while nothing can be read.
+                if self._rungs_fail_since is None:
+                    self._rungs_fail_since = now
+                if (now - self._rungs_fail_since >= RUNGS_LAG_SECONDS
+                        and not self._rungs_fail_said):
+                    self._rungs_fail_said = True
+                    self.notify.event(
+                        'warn', self.botid,
+                        f'our fills could not be read for '
+                        f'{RUNGS_LAG_SECONDS:g}s — nothing placed or '
+                        'cancelled until they can (G26, D158)', urgent=True)
+                return cached[2] if cached else None
             if listed is None:
                 self._rungs_awaited = {}          # no account: nothing to wait on
                 return None
+            if self._rungs_fail_since is not None:
+                # D158: the outage is over; G26's wait starts afresh from
+                # this read, never spent by the outage — and so does each
+                # awaited order's
+                self._rungs_fail_since, self._rungs_fail_said = None, False
+                self._rungs_lag_since = None
+                for link in self._rungs_awaited:
+                    self._rungs_awaited[link] = now
             fills = self._account_fills(listed)
             links |= {f.get('link_id') for f in fills}
             # every read is remembered as it is checked: the thirty-day
@@ -256,6 +277,7 @@ class BasisMixin:
             if pending or now - self._rungs_lag_since < RUNGS_LAG_SECONDS:
                 return cached[2] if cached else None
             escalated = True
+            self._rungs_escalated = True      # D158: re-fills held back
             if not self._rungs_lag_said:
                 self._rungs_lag_said = True
                 self.notify.event(
@@ -267,6 +289,8 @@ class BasisMixin:
         if remaining > slack:
             return None                           # adoption: the block
         rungs = sorted(r for r in lots if r != SEED_RUNG)
+        if escalated:
+            rungs = self._as_seen(rungs)              # D158
         if behind:
             # past the wait a list that went backwards still pairs (G26's
             # escalation), but it is never cached and never a baseline: the
@@ -284,6 +308,7 @@ class BasisMixin:
                               'cycle(s) (G26)')
         self._rungs_lag, self._rungs_lag_since = 0, None
         self._rungs_lag_said = False      # this account is the new baseline
+        self._rungs_escalated = escalated   # D158: past it, the list held
         return rungs
 
     def _settle_awaited(self, now, links):
@@ -339,10 +364,58 @@ class BasisMixin:
 
     def _rungs_frozen(self, now):
         """G26: inside the wait, nothing is placed or cancelled — nor while
-        an own order that left the book is not yet settled (G23)."""
-        return bool(self._rungs_awaited) or (
-            self._rungs_lag_since is not None
-            and now - self._rungs_lag_since < RUNGS_LAG_SECONDS)
+        an own order that left the book is not yet settled (G23), nor,
+        D158, while the fills cannot be read at all."""
+        return (bool(self._rungs_awaited) or self._rungs_fail_since is not None
+                or (self._rungs_lag_since is not None
+                    and now - self._rungs_lag_since < RUNGS_LAG_SECONDS))
+
+    def _as_seen(self, rungs):
+        """D158: past G26's wait, the list
+        paired from does not add up. What this session SAW fill (since the
+        process started or the holding was last flat) corrects it: a lot
+        whose exit filled after its entry is gone, a lot bought after its
+        exit last filled is held. Lots older than the session stay as the
+        list has them."""
+        step = 1 if self._entry_side == 'Buy' else -1
+        seen = self._session_rungs
+        out = set(rungs)
+        for (r, bought), t in seen.items():
+            if r == SEED_RUNG:
+                continue                  # off every lattice (S3)
+            if bought:
+                if t > seen.get((r + step, False), -1):
+                    out.add(r)
+                else:
+                    out.discard(r)
+            elif t > seen.get((r - step, True), -1):
+                out.discard(r - step)
+        return sorted(out)
+
+    def _hold_back_refills(self, to_cancel, to_create):
+        """D158: the creates `_refilled` holds back, past G26's
+        wait. A create that pairs with a cancel at its rung, side and price
+        is the same order resized (pair_amends makes it an amend): never
+        dropped, or its cancel would leave the rung with nothing."""
+        resized = {(rung_of(o.get('link_id'), self.botid), o['side'],
+                    round(float(o['price']), 10)) for o in to_cancel}
+        return [o for o in to_create
+                if (o['rung'], o['side'], round(float(o['price']), 10))
+                in resized or not self._refilled(o)]
+
+    def _refilled(self, order):
+        """D158: past G26's wait, an exit at j
+        is not placed again until an entry at j-1 fills after the exit this
+        session saw fill there, and a rung is not bought again until its
+        exit fills after the entry this session saw."""
+        step = 1 if self._entry_side == 'Buy' else -1
+        seen = self._session_rungs
+        r = order['rung']
+        if order['side'] == self._entry_side:
+            bought = seen.get((r, True))
+            return bought is not None and bought > seen.get((r + step, False), -1)
+        sold = seen.get((r, False))
+        return sold is not None and sold > seen.get((r - step, True), -1)
 
     def _account_fills(self, listed):
         """G23/G26's one list, from one read of the symbol: our own fills
@@ -421,9 +494,17 @@ class BasisMixin:
         ids = {self._fill_id(f) for f in fills}
         horizon = max(since_ms + 60_000, now_ms - FORWARD_MS)
         behind = any(t > horizon and i not in ids for i, t in known.items())
+        entry = self._entry_side.lower()
         for f in fills:
             if f['time_ms'] > now_ms - FORWARD_MS:
                 known[self._fill_id(f)] = f['time_ms']
+            r = rung_of(f.get('link_id'), self.botid)
+            if r is not None and f['time_ms'] >= self._session_since_ms:
+                # D158: this session's own fills only — since the process
+                # started or the holding was last flat
+                k = (r, str(f.get('side', '')).lower() == entry)
+                self._session_rungs[k] = max(self._session_rungs.get(k, -1),
+                                             f['time_ms'])
         for i in [i for i, t in known.items() if t <= now_ms - FORWARD_MS]:
             del known[i]
         return behind

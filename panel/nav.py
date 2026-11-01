@@ -72,62 +72,120 @@ SIZE_VIEWS = (('all', 'all'), ('coin', 'coins'), ('value', 'value'),
               ('cost', 'cost'))
 
 
-HALF = (('control', 'control'), ('setup', 'new bot'), ('trade', 'new trade'),
-        ('rehearse', 'rehearse a grid'), ('results', 'results'), ('carry', 'carry'))
+# D161 (2026-11-01): what "new bot" offers — each kind straight to its own
+# creator, one plain line each. (key, words, its page, its half, the line)
+NEW_KINDS = (
+    ('grid', 'Grid', '/setup?kind=grid', '/?show=setup&kind=grid',
+     'a ladder of buy and sell orders around the price: buys the dips, sells the rises'),
+    ('dca', 'DCA', '/setup?kind=dca', '/?show=setup&kind=dca',
+     'buys more as the price falls, sells the lot on a bounce'),
+    ('carry', 'Portfolio Bot', '/setup?adv=carry', '/?show=setup&adv=carry',
+     'coins on spot, each hedged on its perpetual: collects the funding'),
+    ('trade', 'Single trade', '/trade', '/?show=trade',
+     'one long or short with its own take profit and stop'),
+    ('rehearse', 'Rehearse a grid first', '/rehearse', '/?show=rehearse',
+     'runs a grid on past prices: nothing is placed'),
+)
+
+
+# the pages the column links (D161): the rest are reached from these
+HALF = (('control', 'control'), ('results', 'results'))
+
+
+def _choices(half):
+    return ''.join(
+        f'<li><a{" data-pick" if half else ""} href="{(hl if half else page).replace("&", "&amp;")}">'
+        f'{words}</a> <span class="dim">{line}</span></li>'
+        for _, words, page, hl, line in NEW_KINDS)
+
+
+def new_page():
+    """D161: "new bot" without script — the same five choices as links."""
+    return ('<h1>new bot <span class="dim">— pick what kind</span></h1>'
+            f'<ul class="kinds">{_choices(False)}</ul>')
+
+
+def new_dialog(half):
+    """D161 (the owner: "new bot" opens a pop-up — pick the kind, then
+    straight to its creator): the chooser, in D159's style. Escape or
+    cancel closes it; a choice opens that kind's creator (in the right half
+    on the bots' page). Never opens without script: "new bot" is then a
+    link to the same list as a page."""
+    return ('<dialog class="ggnew" aria-label="new bot">'
+            '<p class="what">New bot: what kind?</p>'
+            f'<ul class="kinds">{_choices(half)}</ul>'
+            '<p class="dlgbtn"><button type="button" class="quiet" data-cancel>cancel</button></p>'
+            '</dialog>')
 
 
 def page_links(table=False, view='all'):
-    """U60: every page of the panel, as links — the side panel's first
-    block on the fleet page, a bar across the top of every other page."""
+    """U60, D161: the column's pages — overview first, then new bot,
+    control, results (the snapshot export is inside it), the key. On the
+    bots' page (cards) a page opens in the right half."""
     q = '' if view == 'all' else f'?view={view}'
-    return ((f'<a href="/{q}">cards</a>' if table else f'<a href="/table{q}">table</a>')
-            + (''.join(f'<a href="/{k}">{w}</a>' for k, w in HALF) if table else    # U78d: the half
-               ''.join(f'<a data-pick href="/?show={k}">{w}</a>' for k, w in HALF))
-            + '<a href="/export">export snapshot</a><a href="/key">key</a>')
+    half = not table
+    pick = ' data-pick' if half else ''
+    return (f'<a href="/{q}" data-home{pick}>overview</a>'
+            '<a href="/new" data-new>new bot</a>'
+            + ''.join(f'<a{pick} href="{"/?show=" + k if half else "/" + k}">{w}</a>' for k, w in HALF)
+            + '<a href="/key">key</a>')
+
+
+def view_block(table=False, view='all', here='/'):
+    """D161: the view switches, one control each, every one naming what is
+    on now (as theme does): cards or table; arrange (a choice that goes on
+    change, a go button without script); accounts full or folded (cards
+    only); size in, stepping all → coins → value → cost; leverage now or
+    as if every order filled. table=None: a page that is not the bots'."""
+    q = '' if view == 'all' else f'?view={view}'
+    layout = ('<a href="/table" class="tog">the bots as a table</a>' if table is None else
+              f'<a href="/table{q}" class="tog" title="show the bots as a table">layout: cards</a>'
+              if not table else
+              f'<a href="/{q}" class="tog" title="show the bots as cards">layout: table</a>')
+    opts = ''.join(f'<option value="{k}"{" selected" if k == view else ""}>{w}</option>'
+                   for k, w in VIEWS)
+    arrange = (f'<form method="get" action="{here}" class="arrange"><label>arrange '
+               f'<select name="view" data-go>{opts}</select></label>'
+               '<noscript><button class="quiet">go</button></noscript></form>')
+    # U59: every account's cards behind its heading and its box
+    accounts = ('' if table else
+                '<button type="button" class="quiet tog" data-tog="acct">accounts: full</button>')
+    # U44: what a holding is said in; R19: the leverage now, or if all filled
+    return (f'<h3>view</h3>{layout}{arrange}{accounts}'
+            '<button type="button" class="quiet tog" data-tog="size">size in: all</button>'
+            '<button type="button" class="quiet tog" data-tog="lev">leverage: now</button>')
+
+
+TITLE = '<a href="/" class="ggname" data-home>grid-gremlin</a>'
 
 
 def side_nav():
-    """U60: the column every page outside the fleet page wears, the fleet
-    page's own shape — the pages, a way back, the one warning a form
-    needs, the theme. Opens the page grid; PAGE_END closes it."""
-    return ('<div class="page"><nav class="side"><h3>pages</h3>'
-            '<a href="/">back to your bots</a><a href="/table">table</a>'
-            '<a href="/control">control</a><a href="/setup">new bot</a><a href="/trade">new trade</a>'
-            '<a href="/rehearse">rehearse a grid</a><a href="/results">results</a><a href="/carry">carry</a>'
-            '<a href="/export">export snapshot</a>'
-            '<a href="/key">key</a><a href="#" data-back>&larr; back</a>'
+    """U60, D161: the column every page outside the bots' page wears — the
+    same short list as the bots' page: the name and overview back to the
+    bots, new bot, control, results, the key, a way back, the one warning a
+    form needs, the view, the theme. Opens the page grid; PAGE_END closes
+    it."""
+    return ('<div class="page"><nav class="side">' + TITLE + '<h3>pages</h3>'
+            + page_links(table=True)
+            + '<a href="#" data-back>&larr; back</a>'
             '<span class="dim">leaving a form saves nothing</span>'
-            '<button class="quiet theme" data-theme>theme</button></nav><main>')
+            + view_block(table=None, here='/')
+            + '<button class="quiet theme" data-theme>theme</button>'
+            + new_dialog(False) + '</nav><main>')
 
 
 PAGE_END = '</main></div>'
 
 
 def nav_panel(table, view):
-    """U51 (the owner: the links at the bottom and the switches at the top
-    "may be better as a side panel"): every page link and every view
-    switch in one panel beside the cards, pinned while the page scrolls —
-    pages, arrange, numbers (cards only: nothing folds in the table),
-    size in, leverage, theme. The live page only; the export has no
-    actions to offer."""
+    """U51, D161: the bots' page's column, pinned while the page scrolls:
+    the name and overview (each back to the overview, the arrangement
+    kept), new bot, control, results, key; then the view block and the
+    theme. The live page only; the export has no actions to offer."""
     here = '/table' if table else '/'
-    pages = page_links(table, view)
-    arrange = ''.join(
-        f'<b class="on">{words}</b>' if key == view else
-        f'<a href="{here}{"" if key == "all" else "?view=" + key}">{words}</a>'
-        for key, words in VIEWS)
-    # U58's switch for every card's lower half went with U68: a slim card
-    # has nothing to fold; the numbers live on the position's page (U56)
-    numbers = ('' if table else
-               # U59: every account's cards behind its heading and its box
-               '<h3>accounts</h3><a href="#" data-fold="open" data-cls="acct">full</a>'
-               '<a href="#" data-fold="folded" data-cls="acct">folded</a>')
-    # U44: what a holding is said in, as Bybit's preference
-    size = ''.join(f'<a href="#" data-size="{k}">{w}</a>'
-                   for k, w in SIZE_VIEWS)
-    # R19: the account's leverage now, or as if every order filled
-    lev = ('<a href="#" data-lev="now">now</a>'
-           '<a href="#" data-lev="filled">if all filled</a>')
-    return (f'<nav class="side"><h3>pages</h3>{pages}<h3>arrange</h3>{arrange}'
-            f'{numbers}<h3>size in</h3>{size}<h3>leverage</h3>{lev}'
-            '<button class="quiet theme" data-theme>theme</button></nav>')
+    title = TITLE.replace('href="/"', f'href="/{"" if view == "all" else "?view=" + view}"'
+                          + ('' if table else ' data-pick'))
+    return (f'<nav class="side">{title}<h3>pages</h3>{page_links(table, view)}'
+            f'{view_block(table, view, here)}'
+            '<button class="quiet theme" data-theme>theme</button>'
+            f'{new_dialog(not table)}</nav>')

@@ -64,7 +64,7 @@ def spec_U99_the_panel_reviews_asks_for_the_name_and_writes_onto_what_it_read():
         wrong = _call(base, '/lever', dict(form, seen=seen, confirm='pfoother'))
         assert 'not applied' in wrong and json.loads(f.read_text()) == fleet
         assert '<code>carry</code>' in review                 # D157/U125b: a carry bot's own name
-        ok = _call(base, '/lever', dict(form, seen=seen, confirm='Carry  portfolio'))
+        ok = _call(base, '/lever', dict(form, seen=seen, confirm='Carry  portfolio BOT'))
         assert 'pfocarry: written' in ok
         row = json.loads(f.read_text())['bots'][1]
         assert row['margin']['spot_leverage'] == 3 and row['perp_leverage'] == {'BTC': 4, 'SOL': 2}

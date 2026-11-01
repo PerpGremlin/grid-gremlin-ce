@@ -327,6 +327,9 @@ class Handler(RehearsePages, CarryFlowPages, CreateFlowPages, FleetAdminPages, C
                 'of maintenance margin.</p>')
         if self.path == '/key':
             return self._page(KEY)
+        if self.path.split('?')[0] == '/new':                       # D161: new bot, no script
+            from .nav import new_page
+            return self._page(new_page())
         if self.path == '/trading':
             return self._page(TRADING)
         if self.path == '/control':

@@ -149,7 +149,7 @@ def spec_X15e_the_card_offers_retire_and_the_retire_page_holds_every_step():
     try:
         Handler.units = ('some.service',)
         page = _call(base, '/retire?fleet=0&bot=linETHUSDTl')
-        assert 'stop ETHUSDT long grid <span class="dim">linETHUSDTl</span>' in page and 'has not started' in page
+        assert 'stop ETHUSDT Futures Grid long <span class="dim">linETHUSDTl</span>' in page and 'has not started' in page
         assert 'value="remove"' in page                              # never started: removable
         (d / 's').write_text(json.dumps({'t': 0, 'bots': {'linETHUSDTl': {'position': 0.5}}}) + '\n')
         page = _call(base, '/retire?fleet=0&bot=linETHUSDTl')

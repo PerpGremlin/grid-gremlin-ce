@@ -1,7 +1,7 @@
 """U85: the front page's right half with nothing picked — the whole book
 at a glance instead of an empty half. What needs the owner now, long and
-short by coin across every account, each market's mood, and the latest
-trades. All of it from the readouts already drawn on the left (and the
+short by coin across every account, and the latest trades (D161: the
+markets' readings left the panel; the site shows the market). All of it from the readouts already drawn on the left (and the
 kept ledgers' tails, read by the caller): no venue call, no new state.
 A bot picked by its name still opens in the half (D96, U78)."""
 import time
@@ -46,7 +46,7 @@ def watch_list(labelled):
         belief = _belief(c)
         for botid in sorted(c.get('bots') or {}):
             b, bl = (c['bots'] or {}).get(botid), belief.get(botid) or {}
-            name = botid[3:] + ' portfolio' if _is_portfolio(c, botid) else _plain_name(botid, c, b)
+            name = _plain_name(botid, c, b, side=True)                 # D161
             said = []
             if bl.get('alive') is False:
                 said.append('stopped')
@@ -68,7 +68,7 @@ def watch_list(labelled):
                 if not lo <= mark <= hi:
                     said.append('price above its range' if mark > hi else 'price below its range')
             if ((c.get('market') or {}).get(botid) or {}).get('thin'):
-                said.append('thin market')
+                said.append('order book thin for this size')
             loss = bl.get('loss') or {}
             if loss.get('limit'):
                 used = max(0.0, -loss['result']) / loss['limit']
@@ -141,21 +141,6 @@ def exposure_html(labelled):
     return f'<h3>long and short, by coin</h3>{rows}{note}'
 
 
-def moods_html(labelled):
-    """D67: each market's reading once, however many bots trade it."""
-    seen = {}
-    for _, c in labelled:
-        for botid, m in (c.get('market') or {}).items():
-            if m and m.get('line'):
-                seen.setdefault(coin_of(botid), m)
-    if not seen:
-        return ''
-    rows = ''.join(f'<tr><td>{esc(coin)}</td><td class="{"neg" if m.get("thin") else ""}">'
-                   f'{esc(m["line"])}{" · thin book" if m.get("thin") else ""}</td></tr>'
-                   for coin, m in sorted(seen.items()))
-    return f'<h3>the markets</h3><table class="ov moods">{rows}</table>'
-
-
 def recent_trades(tails, labelled):
     """The latest fills across every account, newest first, each owned by
     its bot (its link's prefix and dash: one id that begins another never
@@ -187,7 +172,7 @@ def trades_html(tails, labelled):
         # bot, the side with its role, the size at its price
         body.append(f'<tr><td>{time.strftime("%m-%d %H:%M", time.gmtime(t / 1000))}</td>'
                     f'<td><a class="bname" data-pick href="/?fleet={idx}&amp;bot={qarg(botid)}">'
-                    f'{esc(_plain_name(botid, c, (c.get("bots") or {}).get(botid)))}</a>'
+                    f'{esc(_plain_name(botid, c, (c.get("bots") or {}).get(botid), side=True))}</a>'
                     f'<br><span class="dim">{esc(label)}</span></td>'
                     f'<td><span class="{"pos" if f.get("side") == "buy" else "neg"}">'
                     f'{esc(f.get("side") or "")}</span> {role}</td>'
@@ -199,7 +184,7 @@ def trades_html(tails, labelled):
 
 def overview_pane(labelled, tails=None):
     """The half with nothing picked: one line of counts, then what needs a
-    look, the book by coin, the markets, the latest trades."""
+    look, the book by coin, the latest trades. No market reading (D161)."""
     bots = running = holding = 0
     for _, c in labelled:
         belief = _belief(c)
@@ -221,5 +206,5 @@ def overview_pane(labelled, tails=None):
             + f' · {holding} holding</p>'
             '<p class="dim">Pick a bot by its name: its fills and what each one made open here.</p>'
             f'<h3>needs a look</h3>{look}'
-            f'{exposure_html(labelled)}{moods_html(labelled)}{trades_html(tails or {}, labelled)}'
+            f'{exposure_html(labelled)}{trades_html(tails or {}, labelled)}'
             '</aside>')

@@ -595,7 +595,7 @@ def spec_V10_a_card_says_the_bot_in_a_glance_and_keeps_every_number():
     from panel.server import render
     html = _everything(CONTRACT)
     assert 'class="cards"' in html and '<table class="fleet">' not in html
-    assert 'ADAUSDT long grid spot' in html          # the name a person says
+    assert 'ADAUSDT Spot Grid' in html          # the name a person says
     assert 'spoADAUSDTl' in html                     # the botid, for confirms
     assert '-1.86</span>' in html                    # 5.04 - 2.07 - 4.83
     assert 'after fees, last 6h' in html
@@ -608,7 +608,7 @@ def spec_V10_a_card_says_the_bot_in_a_glance_and_keeps_every_number():
         assert link in html
     assert '1 bots' in html and 'href="/table"' in html
     table = render([('demo', CONTRACT)], table=True)
-    assert '<table class="fleet">' in table and 'href="/">cards' in table
+    assert '<table class="fleet">' in table and 'href="/" class="tog" title="show the bots as cards">layout: table' in table
 
 
 def spec_U45_the_money_sits_in_its_own_box_per_bot_and_per_exchange():
@@ -674,13 +674,13 @@ def spec_U51_every_link_and_switch_sits_in_one_side_panel():
     cards = render([('demo', CONTRACT)])
     assert cards.count('<nav class="side">') == 1
     nav = cards.split('<nav class="side">', 1)[1].split('</nav>', 1)[0]
-    for h in ('pages', 'arrange', 'size in', 'leverage'):
+    for h in ('pages', 'view'):                                     # D161: the short column
         assert f'<h3>{h}</h3>' in nav, h
-    for href in ('/table', '/?show=control', '/?show=setup', '/?show=rehearse', '/export', '/key'):   # U78d: the half
+    for href in ('/table', '/?show=control', '/?show=results', '/new', '/key'):   # U78d: the half
         assert f'href="{href}"' in nav, href
-    assert '<b class="on">as listed</b>' in nav and 'ggAll(true)' not in nav   # U56: nothing folds
-    assert 'data-size="coin"' in nav and 'data-lev="filled"' in nav
-    assert nav.endswith('>theme</button>')
+    assert '<option value="all" selected>as listed</option>' in nav and 'ggAll(true)' not in nav   # U56: nothing folds
+    assert 'data-tog="size"' in nav and 'data-tog="lev"' in nav
+    assert nav.endswith('</dialog>') and '>theme</button><dialog class="ggnew"' in nav
     assert cards.index('<nav class="side">') < cards.index('<h1 id="fleet0">')
     assert 'arrange: ' not in cards and '&rarr;</a> ·' not in cards     # gone from top and bottom
     table = render([('demo', CONTRACT)], table=True, view='side')
@@ -909,8 +909,8 @@ def spec_U54_the_bots_can_be_arranged_by_strategy_or_by_coin():
     for view in ('strategy', 'market'):
         assert sorted(b for _, rows in grouped(c, view) for b, _ in rows) == sorted(c['bots'])
     page = render([('demo', c)], view='strategy')
-    assert '<div class="grp">grids</div>' in page and '<b class="on">by strategy</b>' in page
-    assert 'href="/?view=market"' in page and 'href="/table?view=strategy"' in page
+    assert '<div class="grp">grids</div>' in page and '<option value="strategy" selected>by strategy</option>' in page
+    assert '<option value="market">by coin</option>' in page and 'href="/table?view=strategy"' in page
 
 
 def spec_V10_a_card_says_when_the_price_has_left_the_range():
@@ -1091,17 +1091,17 @@ def spec_U12_the_bots_can_be_arranged_by_side_or_by_pairs():
     cards = render([('demo', c)], view='pairs')
     assert '<div class="grp">pairs — one market, long and short</div>' \
         in cards
-    assert cards.index('BTCUSDT long') < cards.index('BTCUSDT short') \
-        < cards.index('on their own')
-    assert '<b class="on">pairs</b>' in cards and 'href="/?view=side"' in cards
+    pairs = cards.split('pairs — one market', 1)[1]
+    assert pairs.index('<span class="side long">') < pairs.index('<span class="side short">') \
+        < pairs.index('on their own')
+    assert '<option value="pairs" selected>pairs</option>' in cards and '<option value="side">' in cards   # D161: one choice
     assert 'href="/table?view=pairs"' in cards             # the choice rides
     table = render([('demo', c)], table=True, view='side')
     assert '<th colspan="16" class="grp">shorts</th>' in table
-    assert 'href="/table?view=pairs"' in table and 'href="/?view=side"' \
-        in table
+    assert 'href="/?view=side"' in table and '<option value="side" selected>' in table
     assert 'class="grp"' not in render([('demo', c)])      # as listed
     assert 'arrange:' not in render([('demo', c)], static='then')
-    assert '<b class="on">as listed</b>' in render([('demo', c)], view='nonsense')
+    assert '<option value="all" selected>as listed</option>' in render([('demo', c)], view='nonsense')
 
 
 def spec_U13_the_rehearsal_keeps_what_was_typed():
@@ -1283,7 +1283,7 @@ def spec_U16_a_card_states_its_investment_and_leverage():
                                   'notional': 3000.0}}
     page = _everything(c)
     assert ('investment 3,000 USDT · up to 3,000 USDT in the market') in page
-    assert 'x</b>' not in page                        # 1x is not said
+    assert 'at <b>' not in page                       # 1x is not said beside the investment
     c['terms']['spoADAUSDTl'] = {'capital': 2000.0, 'leverage': 10.0,
                                  'notional': 20000.0}
     page = _everything(c)
@@ -1341,7 +1341,7 @@ def spec_U44_a_holding_is_said_in_coins_value_and_cost():
     assert '0.08 BTC' in inv and 'worth 8,000 USD' in inv and '(0.1 BTC)' in inv
     assert holding_html(0.0, 0.0, 1.0, 'linBTCUSDTl') == 'holding nothing'
     page = render([])
-    assert 'data-size="coin"' in page and '<h3>size in</h3>' in page
+    assert 'data-tog="size">size in: all</button>' in page and '<h3>view</h3>' in page
     assert '.only-coin .u-value' in CSS
 
 
@@ -1871,7 +1871,7 @@ def spec_U58_a_cards_lower_half_folds_and_the_side_panel_folds_every_card_at_onc
     c = copy.deepcopy(CONTRACT)
     html = render([('demo', c)])
     assert '<details class="fold"' not in html                                   # slim: nothing to fold
-    assert 'data-cls="fold"' not in html and 'data-cls="acct">folded</a>' in html  # U59's switch stays
+    assert 'data-cls="fold"' not in html and 'data-tog="acct">accounts: full</button>' in html  # U59's switch stays (D161: one toggle)
     belief = c['watchdog']['belief']['bots']
     bot = next(b for b, v in c['bots'].items() if v is not None and c['ranges'].get(b))
     page = position_page(0, 'demo', bot, c, belief)
@@ -1896,8 +1896,7 @@ def spec_U59_an_account_folds_to_its_heading_and_box_and_the_side_panel_folds_ev
         h1 = html.index(f'<h1 id="fleet{i}">')
         box = html.index('Total P&amp;L</span> <span class="big', h1)
         assert h1 < box < html.index(f'data-k="acct:{i}"', h1)      # heading, box, then the fold
-    assert '<a href="#" data-fold="folded" data-cls="acct">folded</a>' in html
-    assert '<a href="#" data-fold="open" data-cls="acct">full</a>' in html
+    assert '<button type="button" class="quiet tog" data-tog="acct">accounts: full</button>' in html   # D161: one toggle
     assert 'data-cls="fold">folded</a>' not in html                   # U68: the cards' switch is gone
     # one link beside each account's count folds or opens that account's cards alone
     for i in (0, 1):
@@ -1911,7 +1910,7 @@ def spec_U59_an_account_folds_to_its_heading_and_box_and_the_side_panel_folds_ev
     assert 'details.acct[data-k="acct:\'+i+\'"]\');}' in KEEP_JS and 'window.ggFoldIn=function(i)' in KEEP_JS
     assert '"] details.fold' not in KEEP_JS and '<details class="fold"' not in html
     assert "a.textContent=all?'fold cards':'open cards'" in KEEP_JS
-    assert 'data-cls="acct"' not in render([('demo', c)], table=True)   # the table folds nothing
+    assert 'data-tog="acct"' not in render([('demo', c)], table=True)   # the table folds nothing
     out = render([('demo', c)], static='then')
     assert 'data-k="acct:0" open>' in out and 'ggFold' not in out
 

@@ -128,6 +128,11 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
         self._cancelled_links = set()  # G23: cancelled by us last reconcile
         self._placed_links = set()     # G23: placed by us last reconcile
         self._fills_known = {}         # G26: fill id -> ms of every fill read
+        self._rungs_fail_since = None  # D158 (proposed): since when the
+        self._rungs_fail_said = False  # fills could not be read; said once
+        self._rungs_escalated = False  # D158: pairing from a list past G26
+        self._session_rungs = {}       # D158: (rung, entry?) -> ms last seen
+        self._session_since_ms = int(self._now() * 1000)   # D158: the session
         self._close_streak = 0         # M14: cycles waiting for the venue's
                                        # account of a closing fill
         self._defer_cycles = 0         # G15: cycles exits were withheld
@@ -476,6 +481,11 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
             self._rungs_lag_said = False   # baseline stays — the fills
             self._rungs_awaited = {}       # flat: no lot to name
             self._rungs_asked = set()
+            self._rungs_escalated = False  # D158: a flat starts the session
+            self._session_rungs = {}       # afresh — what filled before it
+            self._session_since_ms = int(now * 1000)   # names no lot now
+            self._rungs_fail_since = None  # D158: a flat ends the outage's
+            self._rungs_fail_said = False  # freeze — no lot to keep
                                        # since it still net to the change
                                        # that no longer exists (H2 2026-08-07)
 
@@ -613,6 +623,11 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
             to_cancel = [o for o in to_cancel
                          if o['side'] != self._exit_side]
         _, to_create = diff(live, orders_view, self.botid, qty_step=step)       # windowed
+        if self._rungs_escalated and cfg['strategy'] != 'martingale':
+            # D158: past G26's wait the plan is
+            # drawn from a list that does not add up; what this session saw
+            # fill is not placed again until its pair fills
+            to_create = self._hold_back_refills(to_cancel, to_create)
         if lagging:
             # G26: the plan above was drawn from an account that does not
             # add up — WHICH lots are held is unknown on both sides (a

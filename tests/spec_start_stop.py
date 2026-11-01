@@ -75,17 +75,24 @@ class _Systemctl:
 # --- U125: the plain name, typed ----------------------------------------------
 
 def spec_U125_one_function_spells_the_plain_name_the_card_and_the_box_use():
-    """"BTCUSDT long grid" is read from the bot's own fields, by one
-    function: the card's name is the same words, and a confirm box takes
-    them, any capitals or spacing, for that bot only — on Demo or Testnet."""
+    """D161: "BTCUSDT Futures Grid" is read from the bot's own fields, by
+    one function: the card's name is the same words, and a confirm box
+    takes them with the side ("BTCUSDT Futures Grid long") or the short
+    form ("BTCUSDT grid long"), any capitals or spacing, for that bot only
+    — on Demo or Testnet."""
     from panel.card import _plain_name
-    from panel.html_bits import confirmed, plain_name, row_of_botid, to_type
+    from panel.html_bits import confirmed, full_name, plain_name, row_of_botid, short_name, to_type
     grid = {'market_type': 'linear', 'symbol': 'BTCUSDT', 'side': 'long', 'strategy': 'grid'}
-    assert plain_name(grid) == 'BTCUSDT long grid'
-    assert plain_name(dict(grid, strategy='martingale', side='short')) == 'BTCUSDT short DCA'
-    assert plain_name(dict(grid, market_type='inverse', symbol='BTCUSD')) == 'BTCUSD long grid inverse'
-    assert plain_name(dict(grid, strategy='martingale', trade=True)) == 'BTCUSDT long trade'
-    assert plain_name({'strategy': 'portfolio', 'name': 'carry'}) == 'carry portfolio'
+    assert plain_name(grid) == 'BTCUSDT Futures Grid'
+    assert full_name(grid) == 'BTCUSDT Futures Grid long' and short_name(grid) == 'BTCUSDT grid long'
+    assert plain_name(dict(grid, strategy='martingale', side='short')) == 'BTCUSDT Futures DCA'
+    assert plain_name(dict(grid, market_type='inverse', symbol='BTCUSD')) == 'BTCUSD Inverse Futures Grid'
+    assert plain_name(dict(grid, strategy='martingale', trade=True)) == 'BTCUSDT Perpetual Futures Trade'
+    assert plain_name(dict(grid, market_type='spot', symbol='ETHUSDT', strategy='martingale')) == 'ETHUSDT Spot DCA'
+    assert plain_name(dict(grid, market_type='spot', symbol='ETHUSDT', strategy='martingale',
+                           spot_borrow=True)) == 'ETHUSDT Margined Spot DCA'
+    assert plain_name({'strategy': 'portfolio', 'name': 'carry'}) == 'carry Portfolio Bot'
+    assert full_name({'strategy': 'portfolio', 'name': 'carry'}) == 'carry Portfolio Bot'
     assert plain_name({'symbol': 'BTCUSDT'}) is None
     for botid, kind, trade in (('linBTCUSDTl', 'grid', False), ('spoADAUSDTl', 'grid', False),
                                ('invBTCUSDs', 'martingale', False), ('linSOLUSDTs', 'martingale', True)):
@@ -93,14 +100,18 @@ def spec_U125_one_function_spells_the_plain_name_the_card_and_the_box_use():
                     'terms': {botid: {'trade': trade}}}
         assert _plain_name(botid, contract, None) == plain_name(row_of_botid(botid, kind, trade))
     assert confirmed('linBTCUSDTl', 'linBTCUSDTl')                      # the code, as always
-    assert confirmed('  btcusdt   LONG grid ', 'linBTCUSDTl', grid)
-    assert not confirmed('BTCUSDT long', 'linBTCUSDTl', grid)
-    assert not confirmed('BTCUSDT long grid', 'linBTCUSDTs', grid)     # another bot's words
-    assert not confirmed('BTCUSDT long grid', 'linBTCUSDTl')           # no row: the code only
-    assert not confirmed('BTCUSDT long grid', 'linBTCUSDTl', grid, mainnet=True)
+    assert confirmed('  btcusdt   FUTURES grid  LONG ', 'linBTCUSDTl', grid)
+    assert confirmed('BTCUSDT grid long', 'linBTCUSDTl', grid)          # the short form
+    assert not confirmed('BTCUSDT Futures Grid', 'linBTCUSDTl', grid)   # the side is part of it
+    assert not confirmed('BTCUSDT grid short', 'linBTCUSDTl', grid)
+    assert not confirmed('BTCUSDT long grid', 'linBTCUSDTl', grid)      # the old spelling is gone
+    assert not confirmed('BTCUSDT Futures Grid long', 'linBTCUSDTs', grid)   # another bot's words
+    assert not confirmed('BTCUSDT Futures Grid long', 'linBTCUSDTl')    # no row: the code only
+    assert not confirmed('BTCUSDT Futures Grid long', 'linBTCUSDTl', grid, mainnet=True)
+    assert not confirmed('BTCUSDT grid long', 'linBTCUSDTl', grid, mainnet=True)
     assert confirmed('linBTCUSDTl', 'linBTCUSDTl', grid, mainnet=True)
-    assert '<code>BTCUSDT long grid</code>' in to_type('linBTCUSDTl', grid)
-    assert 'BTCUSDT long grid' not in to_type('linBTCUSDTl', grid, mainnet=True)
+    assert '<code>BTCUSDT Futures Grid long</code>' in to_type('linBTCUSDTl', grid)
+    assert 'BTCUSDT Futures Grid' not in to_type('linBTCUSDTl', grid, mainnet=True)
 
 
 def spec_U125_every_typed_gate_on_demo_takes_the_plain_name():
@@ -110,31 +121,31 @@ def spec_U125_every_typed_gate_on_demo_takes_the_plain_name():
     base, d, close = _served()
     try:
         page = _call(base, '/setup', RISING)
-        assert '<code>BTCUSDT long grid</code>' in page and 'placeholder="BTCUSDT long grid"' not in page   # D159
-        assert '&quot;btcusdt long grid&quot;' in page                     # the pop-up takes it
+        assert '<code>BTCUSDT Futures Grid long</code>' in page and 'placeholder="BTCUSDT Futures Grid long"' not in page   # D159
+        assert '&quot;btcusdt futures grid long&quot;' in page                     # the pop-up takes it
         with _Systemctl('inactive'):
             done = _call(base, '/apply', {'fleet': '0', 'proposal': _proposal(page),
-                                          'confirm': 'btcusdt long grid'})
+                                          'confirm': 'btcusdt grid long'})
         assert 'linBTCUSDTl: written' in done
         stop = _call(base, '/retire?fleet=0&bot=linETHUSDTl')
-        assert '<code>ETHUSDT long grid</code>' in stop
+        assert '<code>ETHUSDT Futures Grid long</code>' in stop
         (d / 's').write_text(json.dumps({'t': 0, 'bots': {'linETHUSDTl': {'position': 0.5}}}) + '\n')
         assert 'linETHUSDTl: paused' in _call(base, '/retire', {
-            'fleet': '0', 'bot': 'linETHUSDTl', 'do': 'pause', 'confirm': 'ETHUSDT long grid'})
+            'fleet': '0', 'bot': 'linETHUSDTl', 'do': 'pause', 'confirm': 'ETHUSDT Futures Grid long'})
         tp = path_for(str(d / 'f.json'), json.loads((d / 'f.json').read_text()))
         Tombstones(str(tp)).add('linETHUSDTl', 'its stop')
         with _Systemctl('inactive'):
             control = _call(base, '/control')
-        assert "type <code>ETHUSDT long grid</code>" in control and "placeholder='ETHUSDT" not in control
-        assert 'tombstone removed' in _call(base, '/revive', {'fleet': '0', 'confirm': 'ethusdt long grid'})
+        assert "type <code>ETHUSDT Futures Grid long</code>" in control and "placeholder='ETHUSDT" not in control
+        assert 'tombstone removed' in _call(base, '/revive', {'fleet': '0', 'confirm': 'ethusdt grid long'})
         ok = _call(base, '/trade', {'action': 'open', 'go': '1', 'fleet': '0', 'side': 'short',
                                     'symbol': 'SOLUSDT', 'capital': '100', 'tp': '1'})
         assert 'linSOLUSDTs: queued' in ok
         Tombstones(str(tp)).add('linSOLUSDTs', 'took profit')
         trades = _call(base, '/trade')
-        assert "type <code>SOLUSDT short trade</code>" in trades and "placeholder='SOLUSDT" not in trades
+        assert "type <code>SOLUSDT Perpetual Futures Trade short</code>" in trades and "placeholder='SOLUSDT" not in trades
         assert 'linSOLUSDTs: cleared' in _call(base, '/trade', {'action': 'clear', 'fleet': '0',
-                                                                 'confirm': 'SOLUSDT short trade'})
+                                                                 'confirm': 'SOLUSDT trade short'})
     finally:
         close()
 
@@ -169,13 +180,13 @@ def _mainnet_takes_the_plain_name(base, d):
     proposal = _proposal(page)
     retype = re.search(r'name="(retype_\w+)"', page)
     with _Systemctl('inactive'):
-        got = _call(base, '/apply', dict({'fleet': '0', 'proposal': proposal, 'confirm': 'BTCUSDT long grid'},
+        got = _call(base, '/apply', dict({'fleet': '0', 'proposal': proposal, 'confirm': 'BTCUSDT Futures Grid long'},
                                          **({retype.group(1): '1000'} if retype else {})))
         if 'not applied' not in got or 'linBTCUSDTl' in json.dumps(json.loads((d / 'f.json').read_text())):
             took.append('create')
         (d / 's').write_text(json.dumps({'t': 0, 'bots': {'linETHUSDTl': {'position': 0.5}}}) + '\n')
         got = _call(base, '/retire', {'fleet': '0', 'bot': 'linETHUSDTl', 'do': 'pause',
-                                      'confirm': 'ETHUSDT long grid'})
+                                      'confirm': 'ETHUSDT Futures Grid long'})
         if 'not retired' not in got:
             took.append('stop')
         calls = []
@@ -183,7 +194,7 @@ def _mainnet_takes_the_plain_name(base, d):
         ps.Handler._run_close = lambda self, fi, botid, dry, expect=None: calls.append(dry) or {
             'held': 0.5, 'closed': 0.5, 'left': 0.0}
         try:
-            got = _call(base, '/close', {'fleet': '0', 'bot': 'linETHUSDTl', 'confirm': 'ETHUSDT long grid',
+            got = _call(base, '/close', {'fleet': '0', 'bot': 'linETHUSDTl', 'confirm': 'ETHUSDT Futures Grid long',
                                          'size': '0.5'})
         finally:
             ps.Handler._run_close = saved
@@ -191,7 +202,7 @@ def _mainnet_takes_the_plain_name(base, d):
             took.append('close')
         tp = path_for(str(d / 'f.json'), json.loads((d / 'f.json').read_text()))
         Tombstones(str(tp)).add('linETHUSDTl', 'its stop')
-        got = _call(base, '/revive', {'fleet': '0', 'confirm': 'ETHUSDT long grid'})
+        got = _call(base, '/revive', {'fleet': '0', 'confirm': 'ETHUSDT Futures Grid long'})
         if 'not revived' not in got:
             took.append('revive')
     return took
@@ -205,7 +216,7 @@ def spec_U125_mainnet_still_takes_the_code_only():
     try:
         assert _mainnet_takes_the_plain_name(base, d) == []
         page = _call(base, '/retire?fleet=0&bot=linETHUSDTl')
-        assert '<code>linETHUSDTl</code>' in page and 'ETHUSDT long grid</code>' not in page
+        assert '<code>linETHUSDTl</code>' in page and 'ETHUSDT Futures Grid long</code>' not in page
         got = _call(base, '/retire', {'fleet': '0', 'bot': 'linETHUSDTl', 'do': 'pause',
                                       'confirm': 'linETHUSDTl'})
         assert 'paused' in got
@@ -263,7 +274,7 @@ def spec_U126_a_written_bot_starts_with_one_click_and_says_who_restarts_with_it(
         with _Systemctl('active') as sc:
             got = _call(base, '/start', {'fleet': '0', 'bot': 'linBTCUSDTl'})
             assert sc.acts() == [['systemctl', '--user', 'restart', UNIT]]
-        assert 'BTCUSDT long grid: starting' in got and 'every bot in it restarted with it' in got
+        assert 'BTCUSDT Futures Grid long: starting' in got and 'every bot in it restarted with it' in got
         with _Systemctl('inactive') as sc:
             _call(base, '/start', {'fleet': '0', 'bot': 'linBTCUSDTl'})
             assert sc.acts() == [['systemctl', '--user', 'start', UNIT]]
@@ -464,18 +475,18 @@ def spec_U129_control_speaks_of_accounts_and_shows_units_as_a_detail():
 
 def spec_U125b_a_carry_bot_takes_its_own_name_off_mainnet():
     """U125b: a carry bot's box takes the name its maker typed on the form
-    ("lvgdbet" for pfolvgdbet) as well as "lvgdbet portfolio" and the code,
+    ("pocket" for pfopocket) as well as "pocket Portfolio Bot" and the code,
     and shows that name to type; Mainnet still takes the code only."""
     from panel.html_bits import confirmed, to_type
-    row = {'strategy': 'portfolio', 'name': 'lvgdbet'}
-    for typed in ('lvgdbet', ' LVGDBET ', 'lvgdbet portfolio', 'pfolvgdbet'):
-        assert confirmed(typed, 'pfolvgdbet', row), typed
+    row = {'strategy': 'portfolio', 'name': 'pocket'}
+    for typed in ('pocket', ' POCKET ', 'pocket Portfolio Bot', 'pfopocket'):
+        assert confirmed(typed, 'pfopocket', row), typed
     for typed in ('', 'lvgdbe', 'basket', 'pfo'):
-        assert not confirmed(typed, 'pfolvgdbet', row), typed
-    assert not confirmed('lvgdbet', 'pfolvgdbet', row, mainnet=True)
-    assert confirmed('pfolvgdbet', 'pfolvgdbet', row, mainnet=True)
-    assert not confirmed('lvgdbet', 'pfobasket', row)     # another bot's row
-    assert '<code>lvgdbet</code>' in to_type('pfolvgdbet', row)
-    assert 'lvgdbet' not in to_type('pfolvgdbet', row, mainnet=True).split('<code>')[1].replace('pfolvgdbet', '')
+        assert not confirmed(typed, 'pfopocket', row), typed
+    assert not confirmed('pocket', 'pfopocket', row, mainnet=True)
+    assert confirmed('pfopocket', 'pfopocket', row, mainnet=True)
+    assert not confirmed('pocket', 'pfobasket', row)     # another bot's row
+    assert '<code>pocket</code>' in to_type('pfopocket', row)
+    assert 'pocket' not in to_type('pfopocket', row, mainnet=True).split('<code>')[1].replace('pfopocket', '')
     grid = {'symbol': 'BTCUSDT', 'side': 'long', 'strategy': 'grid'}
     assert not confirmed('BTCUSDT', 'linBTCUSDTl', grid)  # only a carry bot's name is bare

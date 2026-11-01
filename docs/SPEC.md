@@ -362,8 +362,21 @@ eventually pin (T1).
   wait it still pairs (the escalation) but is not kept. The cache is keyed
   on (holding, newest fill id), and an own order that left the book
   unasked re-reads the fills at an unchanged holding. The wait is a time,
-  not cycles: the poll is 1 s on demo and 2 s on HL. A read that fails
-  still falls back to the block.)*
+  not cycles: the poll is 1 s on demo and 2 s on HL.)*
+  *(D158, 2026-10-31, approved by the owner 2026-11-01: a read that fails
+  freezes both sides for as long as it fails, on a clock of its own (the
+  wait starts afresh at the first read that works), said once past the
+  wait and urgent; the block is for adoption only. A flat, or the holding
+  back at the size the cached lots describe, ends the freeze — neither
+  reads the fills, and the freeze outlived the outage (the second review).
+  No awaited order expires while the reads fail: the gap noted below is
+  closed. Past the wait, the
+  escalation never re-pairs from the failed list as it stands: what this
+  session saw fill (this process's fills since it started or the holding
+  was last flat) corrects the lots — a lot whose exit filled after its
+  entry is gone, one bought after its exit is held — and no exit at j is
+  placed again until an entry at j−1 fills, no rung bought again until its
+  exit fills; a resize of a resting order is never held back.)*
   *(2026-10-31, the review: an own order that left the book unasked — the
   book read each cycle, the orders placed that cycle and those whose
   cancel came back 'gone' included — is awaited in the fills: until a fill
@@ -1757,6 +1770,9 @@ eventually pin (T1).
   said as such. Display only, like the rest of K.
   *(2026-10-31, D157: "THIN for this fleet" reads "order book thin for this
   size" (U124).)*
+  *(2026-11-01, D161: the card no longer says its market's reading; a thin
+  book stays as the card's red "order book thin for this size". The
+  readout's `market` and the digest are unchanged (U143).)*
 
 - **K10** Calm or wild: the market readings carry each coin's two-state
   hidden Markov model of its Bybit hourly returns (`ggdata/hmm.py`,
@@ -1846,11 +1862,16 @@ eventually pin (T1).
   (**fold cards** / **open cards**) folds or opens that account's cards
   alone. The fleets stand in the order the panel was
   given them — the Bybit accounts first, by the owner's word.
+  *(2026-11-01, D161: the side switch is one toggle, **accounts: full** /
+  **accounts: folded** (U141).)*
 - **U60** Every page wears the panel's navigation as the fleet page does:
   a column on the left with the pages, a way back, the forms' one warning
   and the theme; the content beside it. One function names the pages.
   *(first built as a bar across the top, whose class was the progress
   bar's — the links spilled onto the heading; the column, 2026-10-09)*
+  *(2026-11-01, D161: the column is the fleet page's short list — the
+  name, overview, new bot, control, results, key, a way back, the view
+  block and theme (U140).)*
 - **U61** The live page refreshes in place, never whole: the script
   fetches this same URL — the one fetch it makes, same origin, nothing
   else — and swaps the strip and the cards, re-wiring what folds, so
@@ -1988,6 +2009,8 @@ eventually pin (T1).
 - **U125b** (D157, 2026-11-01) A carry bot's confirm box also takes the name its
   maker typed on the form ("basket" for pfobasket) and shows that name to type;
   any other bot's bare symbol is not taken, and Mainnet takes the code only.
+  *(2026-11-01, D161: "basket Portfolio Bot" is its full name now, taken
+  beside the bare name and the code.)*
 - **U109** The right half's tables fit the half: latest trades in four
   columns (the account under the bot, the side with its role, the size at
   its price), a bot's fills in six (the date over the time), their text
@@ -2137,6 +2160,13 @@ eventually pin (T1).
   only, exactly as before, and its second typing is unchanged. Its sabotage
   takes the plain name on Mainnet too, and the check names every gate that
   let it through. *(D157, the owner's answer)*
+  *(2026-11-01, D161: the plain name is SYMBOL, market and kind —
+  "BTCUSDT Futures Grid", "BTCUSD Inverse Futures DCA", "ETHUSDT Margined
+  Spot DCA", "SOLUSDT Perpetual Futures Trade", "carry Portfolio Bot"; the
+  side is the card's tag. A box takes the name with its side ("BTCUSDT
+  Futures Grid long"), the short form ("BTCUSDT grid long"), a carry bot's
+  own name, or the code; Mainnet the code only. The old spelling is no
+  longer taken.)*
 - **U126** **Start it now.** After a new bot is written, its page offers one
   button for the engine that runs its account — the unit control would
   restart (by the tag they share, U31), or the laptop supervisor's process.
@@ -2240,6 +2270,47 @@ eventually pin (T1).
   forms beside their money field, from the readout already kept — never a
   read started for a page. Sabotage: with no age limit, a day-old readout
   reads as now.
+- **U139** (D161, 2026-11-01) One click back to the overview: the column's
+  first entry, **overview**, and the grid-gremlin name above it each go to
+  the front page with no right-half pick, the arrangement kept; on the
+  bots' page they swap in place. Escape does the same when no dialog is
+  open and the cursor is in no field. Sabotage: an Escape that ignores an
+  open dialog or a field is named.
+- **U140** (D161, 2026-11-01) The side column is short: the name,
+  overview, new bot, control, results (the snapshot export is inside it),
+  key; one view block; theme. Every other page wears the same list. New
+  trade, carry, rehearse and export leave the column; every address they
+  had still answers.
+- **U141** (D161, 2026-11-01) The view block: cards or table one switch;
+  arrange one choice that goes on change (a go button without script);
+  accounts full or folded, size in (all, coins, value, cost, stepping) and
+  leverage (now, if all filled) one button each, naming what is on, over
+  the page's own fold, size and leverage switches.
+- **U142** (D161, 2026-11-01) **New bot** opens a chooser (D159's dialog
+  look): Grid, DCA, Portfolio Bot (the carry bot), Single trade and
+  Rehearse a grid first, one plain line each, each straight to its
+  creator — in the right half on the bots' page. Without script it is
+  `/new`, the same five as links. Grid and DCA open the quick setup with
+  that kind's presets alone (`/setup?kind=`). Sabotage: a chooser that
+  lost a kind is named.
+- **U143** (D161, 2026-11-01) The panel draws no market reading: no
+  markets section in the overview, no regime line on a card; a thin book
+  stays as a warning about the bot. The engine's reading is untouched —
+  the readout carries it and the tilt fleet's regime gate reads it.
+  Sabotage: a moods table put back is named.
+- **U144** (D161, 2026-11-01) Every card says its leverage: **set** (the
+  row's, a spot row's loan multiple or 1x, else the exchange's) and **in
+  use** (the position at the mark over the bot's own money; an inverse
+  book in its $1 contracts). A carry card says its spot's (the loan
+  multiple; the stack over its equity) and, when hedged, its perpetuals'
+  (as the exchange holds each leg; the shorts' value over the same
+  equity). Display only (D29). The readout's terms carry `spot_leverage`
+  (and a carry row's `perp_leverage`) for it.
+- **U145** (D161, 2026-11-01) One name per market kind, said by the card
+  and taken by the box: Futures, Inverse Futures, Spot, Margined Spot;
+  Grid, DCA; a trade's futures type spelled out; a carry bot "<name>
+  Portfolio Bot". The card's side is its tag; a list with no tag says the
+  side in words.
 - **U111** A carry bot's hedge may differ by coin — inverse, usdt or usdc,
   the common one above and the others named ("SOL usdt") — and the form
   shows each coin's three perpetuals side by side: what a short was paid
@@ -2480,6 +2551,8 @@ eventually pin (T1).
   prefix and dash). The kept ledgers are read again only when a file
   changes. *(the owner, 2026-10-13: the panel "looks rather bare bones";
   the half sat empty)*
+  *(2026-11-01, D161: the markets' reading left the overview; a thin book
+  is said among what needs a look (U143).)*
 - **U86** The panel wears the site's look: its green on near-black, and one
   thick edge (`--edge`, 2px) on every box — each exchange's section, the
   cards, the money boxes, the strip, the side panel and the right half. The
@@ -2634,6 +2707,8 @@ eventually pin (T1).
   *(2026-10-31, D157: the form's press shows a one-line review before the
   trade opens (U128); the clear box takes the trade's plain name, "SOLUSDT
   short trade", off Mainnet (U125).)*
+  *(2026-11-01, D161: a trade's name spells its futures type, "SOLUSDT
+  Perpetual Futures Trade"; its box takes it with the side.)*
 - **L6b** A running trade is never cleared: the clear is refused, its row
   and its close trade kept. Cleared, nothing would own its position after
   the next restart. *(independent audit 2026-10-16)*
@@ -3460,6 +3535,8 @@ that pins it (T1).
   scrolls, folding into a row under it at phone width. The export, having no actions, has none. Spacing comes
   from one scale (`--gap`, `--gap-s`) shared by cards, boxes, pills and
   buttons.
+  *(2026-11-01, D161: the pages are the short list and the switches one
+  view block, each one control naming what is on (U140, U141).)*
 - **U52** A DCA card folds its ladder: for each step, where it fills from
   the base price, its size, what is then committed, the average entry and
   how far the price must come back for take-profit; the summary line says

@@ -29,7 +29,7 @@ def spec_U85_the_overview_says_what_needs_a_look():
     from panel.overview import overview_pane, watch_list
     said = {botid: words for _, botid, _, words in watch_list([('demo', _contract())])}
     assert 'liquidates 5.0% away' in said[L] and 'range' not in said[L]
-    assert 'stopped' in said[S] and 'thin market' in said[S]
+    assert 'stopped' in said[S] and 'order book thin for this size' in said[S]
     assert I not in said and P not in said
     quiet = {'generated_ms': 0, 'bots': {L: {'position': 0.0, 'mark': 70.0}},
              'ranges': {L: {'lower': 50.0, 'upper': 90.0, 'rungs': 5}},

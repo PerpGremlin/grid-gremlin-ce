@@ -124,7 +124,7 @@ def spec_U130_every_typed_gate_renders_its_pop_up_and_its_inline_box():
     # sabotage: a page that dropped its pop-up, or put the answer back as a placeholder
     page = pages['create']
     assert problems(DIALOG.sub('', page), 'x') and problems(
-        page.replace('name="confirm" size="22"', 'name="confirm" placeholder="BTCUSDT long grid"'), 'x')
+        page.replace('name="confirm" size="22"', 'name="confirm" placeholder="BTCUSDT Futures Grid long"'), 'x')
 
 
 def spec_U131_the_pop_up_shows_to_types_words_and_says_what_happens():
@@ -142,11 +142,11 @@ def spec_U131_the_pop_up_shows_to_types_words_and_says_what_happens():
         close()
     (acc, _m, what, words, _r, f), = forms(page)
     assert words == to_type('linBTCUSDTl', row) and words in f.split('<dialog')[0]
-    assert html.unescape(what) == 'Create the bot BTCUSDT long grid on demo.'
-    assert acc == ['linbtcusdtl', 'btcusdt long grid']
+    assert html.unescape(what) == 'Create the bot BTCUSDT Futures Grid long on demo.'
+    assert acc == ['linbtcusdtl', 'btcusdt futures grid long', 'btcusdt grid long']
     (acc, _m, what, words, _r, _f), = forms(carry)
     assert html.unescape(what) == 'Create the carry bot basket on demo.'
-    assert '<code>basket</code>' in words and acc == ['pfobasket', 'basket portfolio', 'basket']
+    assert '<code>basket</code>' in words and acc == ['pfobasket', 'basket portfolio bot', 'basket']
 
 
 def spec_U132_the_pop_up_takes_what_confirmed_takes_and_mainnet_the_code_only():
@@ -162,8 +162,10 @@ def spec_U132_the_pop_up_takes_what_confirmed_takes_and_mainnet_the_code_only():
             ('pfobasket', {'strategy': 'portfolio', 'name': 'basket'}),
             ('linBTCUSDTs', {'market_type': 'linear', 'symbol': 'BTCUSDT', 'side': 'long'}),   # not its row
             ('linETHUSDTl', None)]
-    tries = ['linBTCUSDTl', ' LINBTCUSDTL ', 'BTCUSDT long grid', 'btcusdt  LONG grid', 'BTCUSDT long',
-             'BTCUSD short DCA inverse', 'basket', 'basket portfolio', 'pfobasket', 'invBTCUSDs',
+    tries = ['linBTCUSDTl', ' LINBTCUSDTL ', 'BTCUSDT Futures Grid long', 'btcusdt  futures GRID long',
+             'BTCUSDT grid long', 'BTCUSDT long grid', 'BTCUSDT Futures Grid', 'BTCUSDT grid short',
+             'BTCUSD Inverse Futures DCA short', 'BTCUSD DCA short', 'basket', 'basket Portfolio Bot',
+             'basket portfolio', 'pfobasket', 'invBTCUSDs',
              'linETHUSDTl', 'BTCUSDT', '']
     for botid, row in rows:
         for real in (False, True):
@@ -231,7 +233,7 @@ def spec_U133_a_mainnet_pop_up_that_takes_the_plain_name_is_caught():
         retype = re.search(r'name="(retype_\w+)"', pages['create']).group(1)
         with _Systemctl('inactive'):
             got = _call(base, '/apply', {'fleet': '0', 'proposal': _proposal(pages['create']),
-                                         'confirm': 'BTCUSDT long grid', retype: '1000'})
+                                         'confirm': 'BTCUSDT Futures Grid long', retype: '1000'})
         assert 'not applied' in got                       # confirmed() stays the authority
     finally:
         cf.accepts = saved

@@ -159,13 +159,16 @@ def spec_D96_the_market_pages_stay_gone():
     root = Path(__file__).resolve().parents[1]
     assert not list((root / 'ops' / 'systemd').glob('collect-pull*'))
     for nav in (side_nav(), page_links(), page_links(table=True)):            # both menus
-        assert '/asset' not in nav and '/calm-wild' not in nav and ('/carry' in nav or 'show=carry' in nav)
+        assert '/asset' not in nav and '/calm-wild' not in nav
+    # D161: the carry page stays at its address; the column no longer links it (U141)
     assert importlib.util.find_spec('ggdata.market') is not None                # the bots' reading stays
     srv, base = _serve(CONTRACT)
     try:
         for path in ('/asset?coin=BTC', '/calm-wild?coin=BTC'):
             page = urllib.request.urlopen(urllib.request.Request(base + path, headers={'Cookie': 'gg=tok123'})).read().decode()
             assert '<title>grid-gremlin</title>' in page and 'Pick a bot by its name' in page, path
+        page = urllib.request.urlopen(urllib.request.Request(base + '/carry', headers={'Cookie': 'gg=tok123'})).read().decode()
+        assert '<h1>carry</h1>' in page
     finally:
         srv.shutdown()
 

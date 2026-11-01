@@ -48,7 +48,7 @@ def position_page(idx, label, botid, contract, belief, prices=None, fills=()):
     terms = (contract.get('terms') or {}).get(botid)
     b = (contract.get('bots') or {}).get(botid)
     return (f'<meta name="gg-refresh" content="{REFRESH_S}">'      # U68: live, in place
-            f'<h1>{esc(label)} · {esc(_plain_name(botid, contract, b) if (terms or {}).get("strategy") != "portfolio" else botid[3:] + " portfolio")}</h1>'
+            f'<h1>{esc(label)} · {esc(_plain_name(botid, contract, b, side=True))}</h1>'
             f'{position_body(idx, botid, contract, belief, prices, fills)}'
             '<p><a href="/">&larr; fleet</a></p>')
 

@@ -1142,6 +1142,7 @@ def main(argv):
                         'market_type': cfg['market_type'],
                         'strategy': cfg.get('strategy', 'grid'),
                         'spot_borrow': bool(cfg.get('spot_borrow')),
+                        'spot_leverage': cfg.get('spot_leverage'),    # D161: the card's "set"
                         'multiplier': cfg.get('order_size_multiplier'),
                         'add_ons': cfg.get('max_averaging_orders'),
                         # L6 (D81): a trade's exit and its record, for its card
@@ -1180,7 +1181,10 @@ def main(argv):
                                'short_products': cfg['short_products'],
                                'rebalance': cfg['rebalance'], 'regime': cfg.get('regime'),
                                'funding_rule': cfg['funding_rule'], 'risk': cfg['risk'],
-                               'account': cfg.get('account', 'default')}
+                               'account': cfg.get('account', 'default'),
+                               # D161: the card's "set" — the spot loan's and each hedge's
+                               'spot_leverage': (cfg.get('margin') or {}).get('spot_leverage') or 1.0,
+                               'perp_leverage': cfg.get('perp_leverage')}
     botids = list(key_of)
     fills, marks = [], {}
     for venue, rows in sorted(by_venue.items()):

@@ -73,7 +73,10 @@ class PositionPages:
         if show == 'trade':
             return page_pane(show, self._trade_html())
         if show == 'setup':
-            return page_pane(show, self._capture(self._setup_page, '/setup'))
+            # D161: the chooser's kind (or the carry door) comes along
+            sub = {k: q[k] for k in ('kind', 'adv') if q.get(k)}
+            return page_pane(show, self._capture(
+                self._setup_page, '/setup' + ('?' + urllib.parse.urlencode(sub) if sub else '')))
         if show == 'control':
             return page_pane(show, self._capture(self._control_page, '/control'))
         return None

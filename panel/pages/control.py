@@ -1,7 +1,7 @@
 """Control (§12): the control page, starting and stopping units, closing what a stopped bot left open (X15). Moved out of routes.py whole (D91 step 3): a mixin
 the Handler inherits."""
 from ..forms import unit_for_fleet, unit_refusal, waiting_for_restart
-from ..html_bits import (_squash, accepts, confirm_dialog, confirmed, esc, plain_name, refusal_box,
+from ..html_bits import (_squash, accepts, confirm_dialog, confirmed, esc, full_name, refusal_box, typed_name,
                          to_type, typed_inline)
 from gridgremlin.apply import row_botid
 from panel.chart import _f
@@ -358,7 +358,7 @@ restart loads every written change.</p>
             # outside — the panel writes the request, the fleet acts on it
             real = self._mainnet(self.fleets[min(fi, len(self.fleets) - 1)], 'bybit')
             row = self._row_of(fi, botid)
-            said = (None if real else plain_name(row)) or botid
+            said = (None if real else typed_name(row)) or botid
             held = self._snapshot_held(fi, botid) if real else None
             if real and held is None:
                 return self._page(refusal_box('cannot close', f'{botid}: on real money the '
@@ -389,7 +389,7 @@ restart loads every written change.</p>
                 + '<button class="danger">close at market</button></form>')
         real = self._mainnet(self.fleets[min(fi, len(self.fleets) - 1)], 'bybit')
         row = self._row_of(fi, botid)
-        said = (None if real else plain_name(row)) or botid
+        said = (None if real else typed_name(row)) or botid
         got = self._run_close(fi, botid, dry=True)
         if 'refused' in got:
             return self._page(refusal_box('cannot close', got['refused']))
@@ -434,7 +434,7 @@ restart loads every written change.</p>
         real = self._mainnet(self.fleets[min(fi, len(self.fleets) - 1)], 'bybit')
         row = self._row_of(fi, botid)
         if not botid or not confirmed(form.get('confirm'), botid, row, mainnet=real):
-            said = None if real else plain_name(row)
+            said = None if real else typed_name(row)
             return self._page(refusal_box(
                 'not closed', f'the typed name must be exactly '
                               + (f'{said} or {botid}' if said else botid)
@@ -655,7 +655,7 @@ restart loads every written change.</p>
                 'not started', 'no engine this panel controls runs this account — start or '
                                'restart it on the computer that runs it'))
         kind, name, running = eng
-        said = html.escape(plain_name(self._row_of(fi, botid)) or botid)
+        said = html.escape(full_name(self._row_of(fi, botid)) or botid)
         back = '<p><a href="/">back to your bots</a> · <a href="/control">control</a></p>'
         if running and self._retire_state(fi, botid)[2] is not None:
             return self._page(f'<h1>{said}: already running</h1><p>its account\'s engine has '

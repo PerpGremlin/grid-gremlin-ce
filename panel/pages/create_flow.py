@@ -1,8 +1,8 @@
 """Setting up and editing a bot (U19): the setup page, the review with its chart, what-if and fit, the create and apply flow. Moved out of routes.py whole (D91 step 3): a mixin
 the Handler inherits."""
 from ..forms import next_step_html, other_half_html, other_side_html, rehearse_bot_form, unit_for_fleet
-from ..html_bits import (accepts, confirm_dialog, confirmed, plain_name, qarg, refusal_box, tidy,
-                         to_type, typed_inline)
+from ..html_bits import (accepts, confirm_dialog, confirmed, full_name, qarg, refusal_box, tidy,
+                         to_type, typed_inline, typed_name)
 from gridgremlin.apply import row_botid
 from panel.chart import _f
 from pathlib import Path
@@ -98,7 +98,7 @@ class CreateFlowPages:
             if again:
                 return self._page(refusal_box('not applied', again))
             if not confirmed(form.get('confirm'), botid, named_row, mainnet=real):
-                said = None if real else plain_name(named_row)
+                said = None if real else typed_name(named_row)
                 return self._page(refusal_box(
                     'not applied', 'the name typed must be '
                     + (f'{said} or {botid}' if said else botid)
@@ -239,7 +239,7 @@ class CreateFlowPages:
                           'size="12">' for k, _, n in jumps))
             + confirm_dialog(                                    # D159: the pop-up
                 {'create': 'Create', 'edit': 'Change', 'remove': 'Remove'}[mode]
-                + f' the bot {plain_name(named_row) or botid} on {self._account(min(fi, len(self.fleets) - 1))}.',
+                + f' the bot {full_name(named_row) or botid} on {self._account(min(fi, len(self.fleets) - 1))}.',
                 to_type(botid, named_row, real), accepts(botid, named_row, real), verb,
                 [(f'retype_{k}', f'<b>Mainnet:</b> type the new {k} (<code>{n:g}</code>) again',
                   n) for k, _, n in jumps], danger=mode == 'remove')
@@ -388,7 +388,7 @@ class CreateFlowPages:
                           '<a href="/">fleet</a></p>')
 
     def _setup_page(self):
-        from panel.setup import advanced_page, form_from_bot, quick_page
+        from panel.setup import KINDS, advanced_page, form_from_bot, quick_page
         q = (dict(urllib.parse.parse_qsl(self.path.split('?', 1)[1]))
              if '?' in self.path else {})
         fi = min(int(_f(q.get('fleet')) or 0), len(self.fleets) - 1)
@@ -413,7 +413,8 @@ class CreateFlowPages:
             return self._page(self._with_acct(advanced_page, fi)(q['adv'], {}, labels, fi,
                                             symbols=self._symbols(fi)))
         return self._page(self._with_acct(quick_page, fi)(labels, fi, symbols=self._symbols(fi),
-                                     carry=self._carry_ok()))
+                                     carry=self._carry_ok(),
+                                     kind=q.get('kind') if q.get('kind') in KINDS else None))
 
     def _carry_ok(self):
         """D157: a carry bot is Bybit's alone — its link shows only where

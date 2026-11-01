@@ -202,7 +202,7 @@ def spec_L6_a_trades_card_says_it_is_a_trade_with_its_exit_and_offers_its_close(
     c.setdefault('terms', {})[bot] = t
     c['watchdog']['belief']['bots'][bot] = {'alive': True, 'position': 1.0}
     html = render([('demo', c)])
-    assert 'BTCUSDT long trade' in html
+    assert 'BTCUSDT Perpetual Futures Trade' in html                 # D161: the futures type, on a trade
     assert f"href='/close?fleet=0&amp;bot={bot}'>close trade</a>" in html
     c['watchdog']['belief']['bots'][bot] = {'alive': False, 'position': None}
     assert "<a href='/trade'>clear</a>" in render([('demo', c)])

@@ -1375,6 +1375,20 @@ stands unless the owner corrects it.
   a "start it now" button, and nothing starts on its own; quick setup's "How
   careful?" states the leverage it picks, its values unchanged, and the
   review page shows an estimated liquidation price.
+- **D158 — A failed fill read freezes, and
+  G26's escalation never re-places what this session saw fill
+  (2026-10-31; approved by the owner 2026-11-01).** Two changes to G26's escalation, built in a commit of
+  their own so they can be dropped. A fill read that fails freezes both
+  sides for as long as it fails, on a clock of its own (an outage never
+  spends G26's wait), said once past the wait and urgent (D60), instead
+  of falling back to the block the average pins — the block is for
+  adoption only; a flat or the holding back at the cached size ends it. Past the wait, pairing from a list that does not add up
+  is corrected by what this session saw fill — this process's own fills
+  since it started or the holding was last flat, held in memory: an exit
+  at j is not placed again until an entry at j−1 fills after it, a rung is
+  not bought again until its exit fills after it, and the lots are read
+  the same way. A create that only resizes a resting order is never held
+  back. Lots older than the session stay as the list has them.
 - **D159 — Refusals take the eye, and the typed confirmation is a pop-up
   (2026-11-01).** Setting up a carry bot, the owner missed the typed check
   three times: everything on the page looked alike and the confirm box sat
@@ -1422,6 +1436,43 @@ stands unless the owner corrects it.
   balances, floating debt and available balance in the account box and
   beside every setup form's money field (U135–U138). Display only for the
   last; D29, the mainnet double gate and the margin floor are unchanged.
+- **D161 — The panel's shape for a retail trader: the bots and their
+  trades (2026-11-01).** Walking the panel, the owner asked for one click
+  back to the overview, fewer side-column buttons ("use toggles"), the
+  markets out of the panel ("indicators belong to the terminalgremlin
+  app"), a pop-up to pick a new bot's kind, each card's leverage, and names
+  as the platforms say them; approved whole the same day. **Back:** the
+  column's first entry is **overview** and the grid-gremlin name above it
+  links there too, each dropping a right-half pick and keeping the
+  arrangement; Escape does the same when no dialog is open and the cursor
+  is in no field. **The column:** about 23 entries become the name,
+  overview, new bot, control, results (the snapshot export moves inside
+  it), key, one view block and theme; in the block, cards or table is one
+  switch, arrange one choice, and accounts, size in and leverage one
+  button each, naming what is on as theme does. Every other page wears the
+  same list. Every old address still answers. **New bot** opens a chooser
+  in D159's dialog look: Grid, DCA, Portfolio Bot (the carry bot), Single
+  trade, Rehearse a grid first, one plain line each, straight to that
+  kind's creator; without script it is a page with the same five links.
+  New trade and carry leave the column. **Markets:** the overview's markets
+  section and the card's regime line are gone (this ends D96's "a card's
+  word of it"); a thin order book stays as a warning about the bot. The
+  engine's hourly reading, the readout's copy of it, the digest and the
+  tilt fleet's regime gate are untouched. The carry calculator page
+  (`/carry`) stays at its address, unlinked. **Leverage:** every card says
+  **set** (the row's leverage, a spot row's loan multiple or 1x, else the
+  exchange's) and **in use** (the position at the mark over the bot's own
+  money); a carry card says its spot's and, when hedged, its perpetuals'.
+  Shown only, never a cap (D29). **Names:** SYMBOL, market, kind —
+  "BTCUSDT Futures Grid", "BTCUSD Inverse Futures Grid", "ETHUSDT Margined
+  Spot DCA", "ETHUSDT Spot DCA"; a trade spells its futures type,
+  "SOLUSDT Perpetual Futures Trade"; a carry bot is "<name> Portfolio
+  Bot". The side is the card's LONG or SHORT tag and part of the typed
+  name: off Mainnet a confirm box takes "BTCUSDT Futures Grid long", the
+  short form "BTCUSDT grid long", a carry bot's own name, or the code; on
+  Mainnet the code only, as before. The D157 spelling ("BTCUSDT long
+  grid") is no longer taken. Engine behaviour, the mainnet double gate
+  (D25, D64, D97) and D29 are untouched.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

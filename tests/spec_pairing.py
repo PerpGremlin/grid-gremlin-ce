@@ -872,7 +872,7 @@ def _one_lot(notifier=None):
 
     def fill(order_id):
         o = next(x for x in venue.orders if x['order_id'] == order_id)
-        clock.t += 0.5
+        clock.t += 2.0
         fills.append(_fill_row(fills, clock, o['side'], o['price'], o['qty'],
                                o['link_id']))
         venue.orders = [x for x in venue.orders if x['order_id'] != order_id]
@@ -1170,3 +1170,279 @@ def spec_G23_what_reduces_is_the_venues_word():
                  'closedSize': '0'}], 'nextPageCursor': None}
     fills = bb_read(Bybit(), 'linear', 'SOLUSDT', 0, 10)
     assert [f['reduces'] for f in fills] == [True, False]
+
+
+# --- D158: a failed read freezes; the escalation
+# never re-places what this session saw fill ------------------------------------
+
+def spec_D158_a_failed_read_freezes_both_sides():
+    """Lots at 60k and 59k; the 60k exit (the 59k lot's) fills, and the
+    fills cannot be read. The venue's average is still the two lots', and
+    the block it pins puts the one lot left at rung 9 — the lot just sold —
+    so the 60k exit was placed again. A failed read says nothing of which
+    lots are held: nothing placed or cancelled, past the wait too, said
+    once; when the read comes back, the lots are paired from it. SABOTAGE:
+    fall back to the block (G23 before D158) and the 60k exit is placed
+    again."""
+    from gridgremlin.exchange.errors import VenueError
+    venue, lines = FakeVenue(mark=60500.0), []
+    clock = _Clock()
+    fills = _recording(venue, clock)
+    bot = Bot(_cfg(), ADAPTER, venue, Notifier(sink=lines.append), gen_seed=1,
+              clock=clock)
+    bot.cycle()
+    held, cost = 0.0, 0.0
+    for px in (60000.0, 59000.0):
+        buy = next(o for o in venue.orders if o['side'] == 'Buy'
+                   and float(o['price']) == px)
+        clock.t += 1.0
+        venue.fill(buy['order_id'], buy['price'])
+        held, cost = held + float(buy['qty']), cost + float(buy['qty']) * px
+        venue.position = dict(venue.position, size=f'{held:.3f}',
+                              avgPrice=str(cost / held))
+        venue.mark = px - 400.0
+        bot.cycle()
+    exit_ = next(o for o in venue.orders if o['side'] == 'Sell'
+                 and float(o['price']) == 60000.0)
+    sold = float(exit_['qty'])
+    venue.orders.remove(exit_)
+    clock.t += 1.0
+    fills.append(_fill_row(fills, clock, 'Sell', 60000.0, sold,
+                           exit_['link_id'], 'sold'))
+    venue.position = dict(venue.position, size=f'{held - sold:.3f}')
+    venue.mark = 59900.0
+    honest = venue.fills_history
+
+    def down(mt, sym, a, b):
+        raise VenueError('executions: timed out')
+    venue.fills_history = down
+    before = sorted(o['order_id'] for o in venue.orders)
+    for _ in range(40):                                # 80 s, past the wait
+        clock.t += 2.0
+        bot.cycle()
+        assert sorted(o['order_id'] for o in venue.orders) == before
+    assert sum('could not be read' in ln for ln in lines) == 1
+    venue.fills_history = honest
+    clock.t += 2.0
+    bot.cycle()
+    assert bot._rungs_cache[2] == [10]
+    assert _sells(venue.orders) == [61000.0]           # the 60k lot's own
+    assert _buys(venue.orders)[-1] == 59000.0
+
+
+def _past_the_wait(bot, clock, seconds=80):
+    for _ in range(int(seconds // 2)):
+        clock.t += 2.0
+        bot.cycle()
+
+
+def spec_D158_the_escalation_never_re_places_an_exit_this_session_saw_fill():
+    """G26 one-list's case, with the thirty-day read behind for longer than
+    the wait: past it, pairing resumes from that list, which still holds
+    the lot whose 60k exit filled — and the 60k exit was placed again.
+    This session saw it fill after its lot's entry: not again until an
+    entry at 59k fills. SABOTAGE: drop the filter (G26 before D158) and the
+    60k exit is placed again past the wait."""
+    venue, bot, fills, hidden, clock, held, lines = _lots_bought_three_days_ago()
+    exit_ = next(o for o in venue.orders if o['side'] == 'Sell'
+                 and float(o['price']) == 60000.0)
+    sold = float(exit_['qty'])
+    venue.orders.remove(exit_)
+    clock.t += 1.0
+    fills.append(_fill_row(fills, clock, 'Sell', 60000.0, sold,
+                           exit_['link_id'], 'sold'))
+    hidden.add('sold')                             # behind, and staying so
+    venue.position = dict(venue.position, size=f'{held - sold:.3f}',
+                          avgPrice='60000')
+    venue.mark = 59900.0
+    _past_the_wait(bot, clock)
+    assert sum('do not account' in ln for ln in lines) == 1
+    assert 60000.0 not in _sells(venue.orders)
+    assert _sells(venue.orders) == [61000.0]
+    hidden.clear()                                 # the long read catches up
+    clock.t += 2.0
+    bot.cycle()
+    assert bot._rungs_cache[2] == [10] and not bot._rungs_escalated
+    assert _buys(venue.orders)[-1] == 59000.0      # re-armed as G7 says
+
+
+def spec_D158_the_escalation_never_buys_again_a_rung_this_session_saw_fill():
+    """The other half: the 58k entry fills, the two-day read lists it, the
+    thirty-day read (the walk needs it, the older lots being three days
+    old) stays behind past the wait. Pairing from it, rung 8 looks empty and
+    58k was bought again. This session saw it fill and its exit has not:
+    not again. SABOTAGE: drop the filter and 58k is bought again."""
+    venue, bot, fills, hidden, clock, held, lines = _lots_bought_three_days_ago()
+    buy = next(o for o in venue.orders if o['side'] == 'Buy'
+               and float(o['price']) == 58000.0)
+    q = float(buy['qty'])
+    venue.orders.remove(buy)
+    clock.t += 1.0
+    fills.append(_fill_row(fills, clock, 'Buy', 58000.0, q, buy['link_id'],
+                           'bought'))
+    hidden.add('bought')
+    venue.position = dict(venue.position, size=f'{held + q:.3f}')
+    venue.mark = 58300.0
+    _past_the_wait(bot, clock)
+    assert sum('do not account' in ln for ln in lines) == 1
+    assert 58000.0 not in _buys(venue.orders)
+    hidden.clear()
+    clock.t += 2.0
+    bot.cycle()
+    assert bot._rungs_cache[2] == [8, 9, 10]
+    assert 58000.0 not in _buys(venue.orders)
+    assert _sells(venue.orders) == [59000.0, 60000.0, 61000.0]
+
+
+def spec_D158_an_outage_never_spends_the_wait():
+    """Half of the 59k entry fills (the order still rests, the size moved)
+    and the fills cannot be read for 90 s — said once, urgent. When they
+    can again the list still lacks the partial fill: G26's wait starts from
+    that read, so nothing moves. One clock for both let the outage spend
+    the wait, and the bot paired at once from the lagging list. SABOTAGE:
+    start G26's clock at the outage and keep it, and the bot is not frozen
+    when the reads come back; say it plainly and the phone never hears."""
+    from gridgremlin.exchange.errors import VenueError
+    said = []
+
+    class Rec(Notifier):
+        def event(self, kind, botid, text, icon='', urgent=False):
+            said.append((text, urgent))
+    venue, bot, fills, hidden, clock, fill, _ = _one_lot(Rec())
+    b = next(o for o in venue.orders if o['side'] == 'Buy'
+             and float(o['price']) == 59000.0)
+    clock.t += 2.0
+    part = _fill_row(fills, clock, 'Buy', 59000.0, 0.004, b['link_id'],
+                     'part')
+    fills.append(part)
+    hidden.add('part')
+    venue.position = dict(venue.position, size='0.011')
+    honest = venue.fills_history
+
+    def down(mt, sym, a, b):
+        raise VenueError('executions: timed out')
+    venue.fills_history = down
+    before = _book(venue)
+    for _ in range(45):                                # 90 s down
+        clock.t += 2.0
+        bot.cycle()
+        assert _book(venue) == before
+    assert [u for t, u in said if 'could not be read' in t] == [True]
+    venue.fills_history = honest                       # back, still lagging
+    for _ in range(10):
+        clock.t += 2.0
+        bot.cycle()
+        assert bot._rungs_frozen(clock()) and _book(venue) == before
+    hidden.clear()
+    clock.t += 2.0
+    bot.cycle()
+    assert bot._rungs_cache[2] == [9, 10]
+
+
+def spec_D158_the_session_is_this_process_since_the_last_flat():
+    """What 'this session saw fill' corrects at the escalation is the
+    session's own: fills from before the process started, or before the
+    holding was last flat, name no lot now. The first cut kept every fill
+    any read listed — thirty days and pre-flatten history — and never
+    forgot. SABOTAGE: record fills older than the session and they are in
+    its memory."""
+    clock, fills = _Clock(), []
+    old = _fill_row(fills, clock, 'Sell', 61000.0, LOT, 'linBTCUSDTl-11-o',
+                    'old')
+    fills.append(old)                                  # before the process
+    clock.t += 60.0
+    bot = _reader(fills, clock)
+    clock.t += 60.0
+    fills.append(_fill_row(fills, clock, 'Buy', 60000.0, LOT,
+                           f'{bot.botid}-10-a', 'new'))
+    assert bot._held_rungs(LOT) == [10]
+    assert set(bot._session_rungs) == {(10, True)}, bot._session_rungs
+
+
+def spec_D158_a_flat_starts_the_session_afresh():
+    """SABOTAGE: keep the memory through a flat and the last round's fills
+    still steer this round's escalation."""
+    venue, bot, fills, hidden, clock, fill, _ = _one_lot()
+    assert bot._session_rungs                          # the 60k buy
+    s = next(o for o in venue.orders if o['side'] == 'Sell')
+    fill(s['order_id'])
+    venue.position = None                              # flat
+    venue.mark = 61500.0
+    for _ in range(4):                                 # E9 confirms flat
+        clock.t += 2.0
+        bot.cycle()
+    assert bot.alive and bot._session_rungs == {}
+
+
+def spec_D158_a_resized_order_is_never_held_back():
+    """Past the wait, a create the session's fills hold back is dropped —
+    but one that pairs with a cancel at its rung, side and price is the
+    same order resized, an amend: dropped, the cancel left the rung with
+    nothing. SABOTAGE: hold back every refill and the resize is lost."""
+    clock, fills = _Clock(), []
+    bot = _reader(fills, clock)
+    b = bot.botid
+    bot._session_rungs = {(9, True): 1000, (10, False): 2000}   # j10 sold
+    bot._rungs_escalated = True
+    resting = {'link_id': f'{b}-10-x', 'side': 'Sell', 'price': 60000.0,
+               'qty': 0.007, 'reduce_only': True}
+    resize = {'rung': 10, 'side': 'Sell', 'price': 60000.0, 'qty': 0.008,
+              'reduce_only': True}
+    again = dict(resize, qty=0.007)
+    assert bot._hold_back_refills([resting], [resize]) == [resize]
+    assert bot._hold_back_refills([], [again]) == []
+
+
+def spec_D158_a_flat_ends_an_outages_freeze():
+    """The 60k exit fills and that cycle's read fails; before the next, the
+    other lot is closed and the bot is flat. The flat never reads the
+    fills, so the failure's freeze outlived it — the bot re-armed nothing,
+    forever, and said nothing (the second review's repro). A flat ends it.
+    SABOTAGE: keep the failure through the flat and nothing is re-armed."""
+    from gridgremlin.exchange.errors import VenueError
+    venue, bot, fills, hidden, clock, fill, _ = _one_lot()
+    honest = venue.fills_history
+    b = next(o for o in venue.orders if o['side'] == 'Buy'
+             and float(o['price']) == 59000.0)
+    fill(b['order_id'])
+    venue.position = dict(venue.position, size='0.015')
+
+    def down(mt, sym, a, b):
+        raise VenueError('rate limit', kind='rate_limit')
+    venue.fills_history = down
+    clock.t += 2.0
+    bot.cycle()
+    assert bot._rungs_fail_since is not None
+    venue.fills_history = honest
+    for o in [o for o in venue.orders if o['side'] == 'Sell']:
+        fill(o['order_id'])
+    venue.position = None                              # flat
+    venue.mark = 60500.0
+    for _ in range(10):
+        clock.t += 2.0
+        bot.cycle()
+    assert bot.alive and not bot._rungs_frozen(clock())
+    assert 60000.0 in _buys(venue.orders) and 59000.0 in _buys(venue.orders)
+
+
+def spec_D158_back_at_the_cached_size_an_outages_freeze_ends():
+    """A hand moves the size and the read fails; the hand takes it back
+    while the reads still fail. The cached lots describe that size and
+    nothing is awaited: the cache answers without a read, so the failure
+    was never cleared and the freeze lasted forever. SABOTAGE: keep the
+    failure on the cache's answer and the bot stays frozen."""
+    from gridgremlin.exchange.errors import VenueError
+    venue, bot, fills, hidden, clock, fill, _ = _one_lot()
+
+    def down(mt, sym, a, b):
+        raise VenueError('rate limit', kind='rate_limit')
+    venue.fills_history = down
+    venue.position = dict(venue.position, size='0.011')   # a hand
+    clock.t += 2.0
+    bot.cycle()
+    assert bot._rungs_frozen(clock())
+    venue.position = dict(venue.position, size='0.007')   # taken back
+    clock.t += 2.0
+    bot.cycle()
+    assert not bot._rungs_frozen(clock())
+    assert bot._rungs_fail_since is None

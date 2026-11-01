@@ -1,7 +1,7 @@
 """D143: a portfolio row's leverage, reviewed and written (panel/lever.py is
 the pure half): a mixin the Handler inherits."""
 from gridgremlin.apply import row_botid
-from ..html_bits import accepts, confirm_dialog, confirmed, plain_name, refusal_box, to_type, typed_inline
+from ..html_bits import accepts, confirm_dialog, confirmed, full_name, refusal_box, typed_name, to_type, typed_inline
 from pathlib import Path
 import html
 import json
@@ -96,7 +96,7 @@ class LeverPages:
         if form.get('confirm') is not None:
             if not confirmed(form.get('confirm'), botid, raw['bots'][i]):   # D157; Mainnet refused above
                 return self._page(refusal_box('not applied', 'the name typed must be '
-                                              f'{plain_name(raw["bots"][i])} or {botid} '
+                                              f'{typed_name(raw["bots"][i])} or {botid} '
                                               '(capitals do not matter) — a click is not a decision'))
             atomic_write(fleet_p, new_text)
             return self._page(f'<h1>{html.escape(botid)}: written</h1><p>The running fleet applies it '
@@ -123,7 +123,7 @@ class LeverPages:
             + typed_inline(f'type {to_type(botid, raw["bots"][i])} to write it '
                            '<input name="confirm" size="20" autocomplete="off"> ')
             + confirm_dialog(                                    # D159: the pop-up
-                f'Write the new leverage of the bot {plain_name(raw["bots"][i]) or botid} '
+                f'Write the new leverage of the bot {full_name(raw["bots"][i]) or botid} '
                 f'on {self._account(fi)}.', to_type(botid, raw['bots'][i]),
                 accepts(botid, raw['bots'][i]), 'write it')
             + '<button>write it</button></form><p><a href="/">back, change nothing</a></p>')

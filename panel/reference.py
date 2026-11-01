@@ -124,6 +124,17 @@ money figure names its coin: a USDT/USDC perpetual's or a spot bot's money is it
 settle coin (Bybit USDT or USDC, Hyperliquid USDC); a coin-margined bot's
 investment, size, loss and P&amp;L are dollars ($1 contracts) and its margin is
 the coin itself. An account's total joins the coins its bots use.</td></tr>
+<tr><td>BTCUSDT Futures Grid</td><td class="dim">bot name</td><td class="dim">a bot's
+name: its market's symbol, the market (Futures; Inverse Futures for coin-margined;
+Spot; Margined Spot when it borrows), and its kind (Grid, DCA). A single trade says
+its futures type: SOLUSDT Perpetual Futures Trade. A carry bot is its own name and
+Portfolio Bot. The side is the LONG or SHORT tag beside it; a confirm box takes the
+name with its side ("BTCUSDT Futures Grid long"), the short form ("BTCUSDT grid
+long"), or the code.</td></tr>
+<tr><td>set 3x · in use 1.2x</td><td class="dim">leverage</td><td class="dim">set is
+the leverage the bot is set to (a spot bot's loan multiple, 1x when it borrows
+nothing); in use is its position at the mark ÷ its own money. A carry bot says its
+spot's and, when hedged, its perpetuals'. Shown only: nothing caps it.</td></tr>
 <tr><td>Running · in position</td><td class="dim">running</td><td class="dim">the bot
 runs and holds a position; its exits rest on the exchange or wait for the price
 to come near.</td></tr>
@@ -241,13 +252,13 @@ the coin too and is not counted.</td></tr>
 long or short with its own exit: its take profit, its stop watched at the mark, who
 opened it when. <b>close trade</b> ends it early with one reduce-only market order;
 <b>clear</b>, once it has ended, frees its market and side. Opened from <b>new
-trade</b>.</td></tr>
+bot</b>, single trade.</td></tr>
 <tr><td>numbers (button)</td><td class="dim">details</td><td class="dim">the position's
 own page, live: the position as the exchange shows it, then every number laid open. A
 card on the front page is slim: its money, run rate and range, and only what needs
 you now, in red.</td></tr>
 <tr><td>details / assets (fold)</td><td class="dim">—</td><td class="dim">on the
-position's page, the card's lower half (holding, kind, margin, market, limits; a
+position's page, the card's lower half (holding, kind, margin, limits; a
 portfolio's assets) behind one word. Click to fold or open; it is remembered.</td></tr>
 <tr><td>price, 24 h / 7 d</td><td class="dim">chart</td><td class="dim">on a position's
 page: the price the engine read each minute, the range's grid levels (edges dashed),
@@ -435,3 +446,44 @@ document.addEventListener('click',function(e){var d=e.target.closest&&e.target.c
 })();</script>"""
 
 KEEP_JS += CONFIRM_JS
+
+
+# D161 (2026-11-01): the column's view switches, one button each naming what
+# is on (as theme does) — accounts full/folded, size in stepping all → coins →
+# value → cost, leverage now / if all filled — over KEEP_JS's own ggFold,
+# ggSize and ggLev; arrange goes on change; "new bot" opens its chooser
+# (without dialog support the link goes to the /new page); Escape, with no
+# dialog open and the cursor in no field, goes back to the overview the way
+# the name and "overview" do. Nothing else passes through it.
+NAV_JS = """<script>(function(){
+var S=sessionStorage,STEP=['all','coin','value','cost'],SW={all:'all',coin:'coins',value:'value',cost:'cost'};
+var D=window.HTMLDialogElement,can=typeof D==='function'&&'showModal' in D.prototype;
+function fold(){return S.getItem('gg-fold:acct')||'open';}
+function size(){var s=S.getItem('gg-size');return STEP.indexOf(s)<0?'all':s;}
+function lev(){return S.getItem('gg-lev')==='filled'?'filled':'now';}
+function label(){document.querySelectorAll('[data-tog]').forEach(function(b){var k=b.dataset.tog;
+ if(k==='acct')b.textContent='accounts: '+(fold()==='open'?'full':'folded');
+ else if(k==='size')b.textContent='size in: '+SW[size()];
+ else if(k==='lev')b.textContent='leverage: '+(lev()==='now'?'now':'if all filled');});}
+label();
+document.addEventListener('click',function(e){var c=e.target.closest?e.target:null;if(!c)return;
+ var t=c.closest('[data-tog]');
+ if(t){e.preventDefault();var k=t.dataset.tog;
+  if(k==='acct'&&window.ggFold)ggFold(fold()==='open'?'folded':'open','acct');
+  else if(k==='size'&&window.ggSize)ggSize(STEP[(STEP.indexOf(size())+1)%STEP.length]);
+  else if(k==='lev'&&window.ggLev)ggLev(lev()==='now'?'filled':'now');
+  label();return;}
+ var d=document.querySelector('dialog.ggnew'),n=c.closest('a[data-new]');
+ if(n&&can&&d&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey&&!e.button){e.preventDefault();d.showModal();return;}
+ var g=c.closest('dialog.ggnew');
+ if(g&&(c.closest('[data-cancel]')||c.closest('a')))g.close();},true);
+document.addEventListener('change',function(e){var s=e.target;
+ if(s.matches&&s.matches('select[data-go]')&&s.form)s.form.submit();});
+document.addEventListener('keydown',function(e){
+ if(e.key!=='Escape'||e.defaultPrevented||document.querySelector('dialog[open]'))return;
+ var a=document.activeElement;
+ if(a&&(a.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)))return;
+ var h=document.querySelector('a[data-home]');if(h){e.preventDefault();h.click();}});
+})();</script>"""
+
+KEEP_JS += NAV_JS

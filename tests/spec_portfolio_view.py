@@ -38,7 +38,7 @@ def spec_H6_the_card_says_the_three_truths_and_the_exchange_counts_the_row():
     from panel.position_view import position_page
     html = cards_section(0, 'demo', CONTRACT) + position_page(           # U68: the facts are the page's
         0, 'demo', 'pfocarry', CONTRACT, CONTRACT['watchdog']['belief']['bots'])
-    assert 'carry portfolio' in html and 'PORTFOLIO' in html
+    assert 'carry Portfolio Bot' in html and 'PORTFOLIO' in html
     assert '<div class="card pfo">' in html and '<div class="two"><div>' in html   # two columns inside
     from panel.reference import KEY
     assert 'carry / tilt / basis &amp; shape' in KEY and 'range moved up / down N levels' in KEY and 'numbers (button)' in KEY
@@ -54,7 +54,7 @@ def spec_H6_the_card_says_the_three_truths_and_the_exchange_counts_the_row():
     assert '<td>BTC</td><td>50% → 50%</td><td>1 → 1.00</td><td>0.75</td><td>0.75</td>' in html
     assert 'regime up' in html and 'unwound (basis)' in html
     assert 'stack <b>90,000.00</b> USDT · cash 120.50 · next tick in 20.0 h' in html
-    assert "mode=remove'>remove</a>" in html and 'copy=' not in html.split('carry portfolio')[1].split('</div></div>')[0]
+    assert "mode=remove'>remove</a>" in html and 'copy=' not in html.split('carry Portfolio Bot')[1].split('</div></div>')[0]
     # the exchange's total: the grid's 9.00 plus the row's 1,010.00
     assert portfolio_total(CONTRACT) == 1010.0 and '+1,019.00</span> USDT' in html
     assert '+1,019.00' in hero_strip([('demo', CONTRACT)])

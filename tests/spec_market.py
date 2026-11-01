@@ -266,7 +266,11 @@ def spec_K9_the_newest_reading_sits_beside_each_bot_and_in_the_digest():
     assert 'market: no readings yet' in text
 
 
-def spec_K9_the_card_says_its_markets_regime_red_when_thin():
+def spec_K9_the_card_says_only_a_thin_book_and_no_reading():
+    """D161 (the owner: the market's indicators belong to the site; the
+    panel is the bots and their trades): a card no longer says its
+    market's regime. The one fact about the bot itself stays — its book is
+    thin for what its account puts there, in red."""
     import copy
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -275,12 +279,10 @@ def spec_K9_the_card_says_its_markets_regime_red_when_thin():
     c['market'] = {'spoADAUSDTl': {'line': 'ranging · ADX 18 · ATR 1.2%/4h',
                                    'thin': True, 'regime': 'ranging', 'age_s': 8000}}
     page = _everything(c)
-    assert ('<div class="neg">market ranging · ADX 18 · ATR 1.2%/4h · order book thin for this size'
-            ' · read 2 h ago') in page
+    assert '<div class="neg">order book thin for this size' in page
+    assert 'ranging' not in page and 'ADX' not in page
     c['market']['spoADAUSDTl'].update(thin=False, age_s=30)
-    assert '<div class="dim">market ranging · ADX 18 · ATR 1.2%/4h</div>' in _everything(c)
-    del c['market']
-    assert 'market ranging' not in _everything(c)
+    assert 'ranging' not in _everything(c) and 'order book thin' not in _everything(c)
 
 
 def spec_K9_the_readout_contract_carries_the_market_words():

@@ -204,8 +204,11 @@ def spec_S6_the_reset_list_is_complete_and_documented():
                   # of an exit fill can still mis-pair once
                   '_rungs_awaited', '_rungs_links',   # G23: the next cycle
                   '_cancelled_links', '_placed_links',   # compares the book
-                  '_rungs_asked'}   # G23: a restart asks again
                   # with this one; a restart re-reads the fills
+                  '_rungs_asked',   # G23: a restart asks again
+                  '_rungs_fail_since', '_rungs_fail_said', '_rungs_escalated',
+                  '_session_rungs', '_session_since_ms'}   # D158:
+                  # a restart starts a new session
     state = {k for k, v in vars(bot).items()
              if k.startswith('_') and not callable(v)
              and k not in ('_now', '_entry_side', '_exit_side', '_min_gap',

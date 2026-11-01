@@ -64,8 +64,7 @@ def detail_pane(idx, label, botid, contract, listing, show='fills', numbers='', 
     b = (contract.get('bots') or {}).get(botid)
     terms = (contract.get('terms') or {}).get(botid) or {}
     quote, _ = units_of(botid, terms)
-    name = (botid[3:] + ' portfolio' if terms.get('strategy') == 'portfolio'
-            else _plain_name(botid, contract, b))
+    name = _plain_name(botid, contract, b, side=True)          # D161
     show = show if show in dict(TABS) else 'fills'
     tabs = ' '.join(f'<b class="on">{word}</b>' if key == show else
                     f'<a data-pick href="/?fleet={idx}&amp;bot={qarg(botid)}&amp;show={key}">{word}</a>'

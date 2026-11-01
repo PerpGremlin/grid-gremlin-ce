@@ -899,7 +899,7 @@ def spec_U8_the_form_carries_the_chart_and_the_server_redraws_it():
     try:
         page = _call(base, '/setup?adv=grid')
         assert '<div id="chart">' in page and "fetch('/chart'" in page
-        assert page.index('<div id="chart">') < page.index('</form>')
+        assert page.index('<div id="chart">') < page.index('</form>', page.index('<main>'))   # the form's own, not the column's arrange
         empty = _call(base, '/chart', {'fleet': '0', 'strategy': 'grid'})
         assert 'once a coin is typed' in empty
         first = _call(base, '/chart', {'fleet': '0', 'strategy': 'grid',
@@ -1148,9 +1148,9 @@ def spec_U11_every_form_page_has_the_way_back():
                                         'fleet': '0', 'preset': 'sideways',
                                         'symbol': 'BTCUSDT'})]
         for page in pages:
-            assert '<a href="/">back to your bots</a>' in page
+            assert '<a href="/" data-home>overview</a>' in page   # D161: the way back is the overview
             assert 'history.back()' in page                       # U21
-            assert page.index('back to your bots') < page.index('<h1') \
+            assert page.index('data-home>overview') < page.index('<h1') \
                 if '<h1' in page else True
         assert 'class="refusal"' in pages[-1]          # and a quick refusal
         assert pages[-1].index('class="refusal"') < pages[-1].index(
@@ -1332,7 +1332,7 @@ def spec_U14_the_summary_offers_a_rehearsal_of_the_bot_as_configured():
                                             'days': '400'})
         assert '90 at most' in refused and 'class="refusal"' in refused
         assert 'rehearse this bot over the last' in refused    # form kept
-        assert 'back to your bots' in refused
+        assert 'data-home>overview</a>' in refused
     finally:
         close()
 
@@ -1475,7 +1475,7 @@ def spec_U56_a_cards_numbers_live_on_the_positions_own_page_and_the_show_all_swi
     assert "<a data-pick href='/?fleet=0&amp;bot=spoADAUSDTl&amp;show=numbers'>numbers</a>" in c
     assert '<details' not in c                                  # U68: a slim card folds nothing
     page = position_page(0, 'demo', 'spoADAUSDTl', C, belief)
-    assert page.startswith('<meta name="gg-refresh" content="15"><h1>demo · ADAUSDT long grid spot</h1><h3>as the exchange shows it</h3>'
+    assert page.startswith('<meta name="gg-refresh" content="15"><h1>demo · ADAUSDT Spot Grid long</h1><h3>as the exchange shows it</h3>'
                            '<div class="scroll"><table class="xch">')                      # U62: scrolls, never cut
     assert '<th>entry price</th>' in page and '<td>0.207</td>' in page and '<th>unrealised P&amp;L</th>' in page
     assert '<div class="numbers"><h3>the numbers</h3><table>' in page and '<tr><td>fills</td><td>3</td></tr>' in page
@@ -2115,10 +2115,12 @@ def spec_U60_every_page_wears_the_panels_navigation():
     from panel.forms import BACK
     from panel.nav import PAGE_END, page_links, side_nav
     assert BACK == side_nav() and BACK.startswith('<div class="page"><nav class="side">')
-    for href in ('/', '/table', '/control', '/setup', '/rehearse', '/export', '/key'):
+    for href in ('/', '/table', '/control', '/new', '/results', '/key'):   # D161: the short list
         assert f'href="{href}"' in side_nav(), href
+    for gone in ('/setup', '/trade', '/rehearse', '/carry', '/export'):        # reached through new bot, results
+        assert f'href="{gone}"' not in side_nav().split('<dialog')[0], gone
     assert '<a href="#" data-back>' in side_nav() and 'leaving a form saves nothing' in side_nav()
-    assert 'href="/table"' in page_links() and 'href="/"' in page_links(table=True)
+    assert 'href="/?show=control"' in page_links() and 'href="/control"' in page_links(table=True)
     assert 'class="bar"' not in side_nav()            # .bar is the progress bar's; the column is nav.side
     base, d, close = _served_fleet()
     try:
@@ -2587,7 +2589,7 @@ def spec_U111_a_running_carry_bot_is_edited_from_its_edit_tab():
         assert 'edit: gates passed' in page and 'save the change' in page, page[:800]
         seen = html_unescape(re.search(r'name="seen" value="([^"]+)"', page).group(1))
         done = _call(base, '/setup-carry', dict(edit, step='apply', seen=seen,
-                                                confirm='basket portfolio'))   # D157: its plain name
+                                                confirm='basket Portfolio Bot'))   # D157, D161: its plain name
         assert 'pfobasket: written' in done and 'new terms at the fleet' in done, done[:600]
         rows = [r for r in json.loads((d / 'f.json').read_text())['bots'] if r.get('strategy') == 'portfolio']
         assert len(rows) == 1 and rows[0]['capital'] == 2000 and rows[0]['rebalance']['trigger'] == 'drift'

@@ -350,6 +350,9 @@ PRESETS = {      # the quick setup: name -> (label, what it is for)
                  'two bots on one coin, set up one after the other'),
 }
 CAUTION = ('careful', 'balanced', 'bold')
+# D161: the new-bot chooser's kinds, each its own presets and advanced form
+KINDS = {'grid': (('sideways', 'rising', 'falling', 'reversal'), 'grid', 'grid'),
+         'dca': (('dca_long', 'dca_short'), 'martingale', 'buy-the-dips (DCA)')}
 # careful / balanced / bold — every number here is a default, stated in the
 # summary sentence and editable in the advanced form before anything is saved
 GRID_HALF_WIDTH = {'careful': 0.15, 'balanced': 0.10, 'bold': 0.06}
@@ -1113,26 +1116,29 @@ def fleet_select(fleets, chosen=0):
     return f'<select name="fleet">{opts}</select>'
 
 
-def quick_page(fleets, chosen=0, symbols=(), values=None, carry=True, account=''):
+def quick_page(fleets, chosen=0, symbols=(), values=None, carry=True, account='', kind=None):
     """`values`: what was typed, when a refused quick setup comes back
     (D157: it came back blank, the preset and the money lost). `carry`:
-    whether any account here can hold a carry bot (Bybit only)."""
+    whether any account here can hold a carry bot (Bybit only). `kind`
+    (D161, from the new-bot chooser): 'grid' or 'dca' shows that kind's
+    presets and its advanced form alone."""
     t = values or {}
+    shown = KINDS[kind][0] if kind in KINDS else tuple(PRESETS)
 
     def v(k):
         return html.escape(str(t.get(k) or ''), quote=True)
-    picked = t.get('preset') if t.get('preset') in PRESETS else 'sideways'
+    picked = t.get('preset') if t.get('preset') in shown else shown[0]
     careful = t.get('caution') if t.get('caution') in CAUTION else 'balanced'
     presets = ''.join(
         f'<tr><td><label><input type="radio" name="preset" value="{k}"'
         f'{" checked" if k == picked else ""}> {html.escape(lb)}'
         f'</label></td><td class="dim">{html.escape(what)}</td></tr>'
-        for k, (lb, what) in PRESETS.items())
+        for k, (lb, what) in PRESETS.items() if k in shown)
     caution = ''.join(                                   # D157: the leverage said
         f'<option value="{c}"{" selected" if c == careful else ""}>'
         f'{html.escape(caution_words(c))}</option>' for c in CAUTION)
     return (
-        '<h1>set up a bot <span class="dim">— three answers; today\'s '
+        f'<h1>set up a {"" if kind not in KINDS else ("grid " if kind == "grid" else "DCA ")}bot <span class="dim">— three answers; today\'s '
         'price fills in the rest. Nothing is saved until you have read '
         'the summary and typed the bot\'s name.</span></h1>'
         '<form method="post" action="/setup">'
@@ -1173,16 +1179,19 @@ def quick_page(fleets, chosen=0, symbols=(), values=None, carry=True, account=''
         '</button> '
         '<button name="then" value="advanced" class="quiet">Open in the '
         'advanced form &rarr;</button> <span class="dim">(nothing above '
-        'needs filling for that)</span></form>' + NUMBERS_JS +
-        '<p class="dim">or start from a blank advanced form: '
-        '<a href="/setup?adv=grid">grid</a> · '
-        '<a href="/setup?adv=martingale">buy-the-dips (DCA)</a> — every '
-        'setting the config file accepts.</p>'
+        'needs filling for that)</span></form>' + NUMBERS_JS
+        + ('<p class="dim">or start from a blank advanced form: '
+           '<a href="/setup?adv=grid">grid</a> · '
+           '<a href="/setup?adv=martingale">buy-the-dips (DCA)</a> — every '
+           'setting the config file accepts.</p>' if kind not in KINDS else
+           f'<p class="dim">or start from a blank advanced form: <a href="/setup?adv={KINDS[kind][1]}">'
+           f'{KINDS[kind][2]}</a> — every setting the config file accepts. Another kind: '
+           '<a href="/new" data-new>new bot</a>.</p>')
         # D157 (the audit's thirteenth): the carry bot is another product,
         # not a third grid — apart, and only where an account can hold one
         + ('<p class="dim" style="margin-top:2.5em">a different product: '
            '<a href="/setup?adv=carry">a carry bot</a> — coins on spot, hedged '
-           'on their perpetuals, the funding collected.</p>' if carry else ''))
+           'on their perpetuals, the funding collected.</p>' if carry and kind not in KINDS else ''))
 
 
 SPOT_ONLY = ('assumed_avg_entry', 'holding', 'holding_since', 'spot_borrow', 'spot_leverage')

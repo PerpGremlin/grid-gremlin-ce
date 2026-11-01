@@ -129,17 +129,64 @@ def kind_line(terms):
     return f'grid on {market} · {lev_s}'
 
 
-def _plain_name(botid, contract, b):
-    """'BTCUSDT long grid' from the botid and the contract — the name a
-    person says; the botid stays on the card for the confirm box. D157:
-    spelt by html_bits.plain_name, the one a confirm box takes."""
-    from .html_bits import plain_name, row_of_botid
-    kind = (b or {}).get('strategy') or (
+def _plain_name(botid, contract, b, side=False):
+    """'BTCUSDT Futures Grid' from the botid and the contract — the name a
+    person says; the side is the card's tag beside it (side=True: said in
+    the words, for a list with no tag). D157, D161: spelt by
+    html_bits.plain_name, the one a confirm box takes."""
+    from .html_bits import full_name, plain_name, row_of_botid
+    terms = (contract.get('terms') or {}).get(botid) or {}
+    kind = (b or {}).get('strategy') or terms.get('strategy') or (
         'grid' if botid in (contract.get('ranges') or {}) else 'martingale')
-    row = row_of_botid(botid, kind, bool(((contract.get('terms') or {}).get(botid) or {}).get('trade')))
+    row = row_of_botid(botid, kind, bool(terms.get('trade')), bool(terms.get('spot_borrow')))
     if (b or {}).get('side') in ('long', 'short'):
         row['side'] = b['side']
-    return plain_name(row)
+    return (full_name if side else plain_name)(row)
+
+
+def _x(v):
+    """A leverage as the card says it: 2x, 1.35x; a dash when not known."""
+    return '—' if v is None else f'{v:.2f}'.rstrip('0').rstrip('.') + 'x'
+
+
+def leverage_line(terms, mv, pos, mark, inverse=False):
+    """D161 (the owner: show the bot's leverage, set and in use): two
+    numbers on every card. "Set" is the row's leverage (a spot row's loan
+    multiple, 1x without one), else the exchange's; "in use" is what the
+    position is worth at the mark over the bot's own money. Display only:
+    nothing here sizes or caps anything (D29)."""
+    terms = terms or {}
+    if terms.get('market_type') == 'spot':
+        set_ = (terms.get('spot_leverage') or 1.0) if terms.get('spot_borrow') else 1.0
+    else:
+        set_ = terms.get('leverage') or (mv or {}).get('leverage')
+    cap, use = terms.get('capital'), None
+    if cap and pos is not None:
+        value = abs(pos) if inverse else (abs(pos) * mark if mark else None)
+        use = None if value is None else value / cap
+    return (f'<div class="dim lev2" title="set: the leverage the bot is set to; in use: '
+            f'its position at the mark over its own money">set <b>{_x(set_)}</b> · '
+            f'in use <b>{_x(use)}</b></div>')
+
+
+def portfolio_leverage(terms, v):
+    """D161: a carry bot's leverage — its spot's, set (the loan multiple)
+    and in use (the stack over its equity), and its perps' when hedged, set
+    (as the exchange holds each leg) and in use (the shorts' value over the
+    same equity)."""
+    v = v or {}
+    out = f"spot set <b>{_x(terms.get('spot_leverage') or 1.0)}</b> · in use <b>{_x(v.get('leverage'))}</b>"
+    legs = [g for g in v.get('legs') or [] if not g.get('closed')]
+    if legs or terms.get('hedges'):
+        sets = ([g['leverage'] for g in legs if g.get('leverage')]
+                or [x for x in (terms.get('perp_leverage') or {}).values() if x])
+        set_s = ('—' if not sets else _x(min(sets)) if min(sets) == max(sets)
+                 else f'{min(sets):g}–{_x(max(sets))}')
+        eq = (v.get('stack_value') or 0.0) + (v.get('cash') or 0.0)
+        worth = sum(abs(g.get('size') or 0.0) * (1.0 if g.get('inverse') else (g.get('mark') or 0.0))
+                    for g in legs)
+        out += f" · perps set <b>{set_s}</b> · in use <b>{_x(worth / eq if eq > 0 and v else None)}</b>"
+    return f'<div class="dim lev2">{out}</div>'
 
 
 def _side_tag(botid):
@@ -468,15 +515,11 @@ def card(idx, botid, b, contract, belief, full=False):
         held += (f'</div><div class="{"neg" if past or away < 5 else "dim"}">' + said)
     mkt = (contract.get('market') or {}).get(botid)
     if mkt and mkt.get('thin'):
-        alerts.append(f"market {mkt.get('line') or ''} · order book thin for this size")
-    if mkt and mkt.get('line'):
-        # D67: the market's regime beside the bot that trades it; red when
-        # the book is thin for this fleet
-        age = mkt.get('age_s') or 0
-        held += (f'</div><div class="{"neg" if mkt.get("thin") else "dim"}">'
-                 f"market {mkt['line']}"
-                 + (' · order book thin for this size' if mkt.get('thin') else '')
-                 + (f' · read {age // 3600} h ago' if age >= 7200 else ''))
+        # D161: the market's reading left the panel (the site shows the
+        # market); what stays is the one fact about this bot — the book is
+        # thin for what its account puts there
+        alerts.append('order book thin for this size')
+        held += '</div><div class="neg">order book thin for this size'
     if mv and (mv.get('im') is not None or mv.get('mm') is not None):
         # V14: the exchange's own margin on this position, from the
         # engine's last snapshot
@@ -571,6 +614,8 @@ def card(idx, botid, b, contract, belief, full=False):
         # the close page asks the exchange itself
         links += (f" <a href='/close?fleet={idx}&amp;bot={qarg(botid)}'>close "
                   'position</a>')
+    lev_line = leverage_line(terms, mv, last_seen if halted else pos, mark,   # D161
+                             bool((b or {}).get('inverse')) or botid.startswith('inv'))
     if not full:
         # U68 (the owner: "far too much for a card … looks like pionex at
         # first", the rest on the numbers page, live): the side, the name,
@@ -579,7 +624,7 @@ def card(idx, botid, b, contract, belief, full=False):
         return (f'<div class="card {side} slim"><div>'
                 f'<span class="side {side}">{side.upper()}</span> <b>'
                 f'{pick_link(idx, botid, esc(_plain_name(botid, contract, b)))}</b>{note} '
-                f'{state_tag(state, cls)}</div>'
+                f'{state_tag(state, cls)}</div>{lev_line}'
                 f'<div>{slim_head if b is not None else head}</div>'
                 + ('' if b is not None else f'<div class="dim">{_quiet_held}</div>')
                 + f'{where}{warn}'
@@ -591,7 +636,7 @@ def card(idx, botid, b, contract, belief, full=False):
     return (f'<div class="card {side}"><div>'
             f'<span class="side {side}">{side.upper()}</span> <b>'
             f'{esc(_plain_name(botid, contract, b))}</b>{note} '
-            f'{state_tag(state, cls)}</div>'
+            f'{state_tag(state, cls)}</div>{lev_line}'
             f'<div>{head}</div>{where}{fold(idx, botid, f'<div class="dim">{held}</div>')}{more}'
             f'<div class="dim foot">{bot_code(botid, quote_raw)}<span>{links}</span></div></div>')
 
@@ -729,7 +774,7 @@ def portfolio_card(idx, botid, contract, belief, full=False):
     state = ('DEAD' if bl.get('alive') is False else 'NOT STARTED' if botid not in belief
              else 'HOLDING' if (v.get('stack_value') or 0) > 0 else 'RESTING')
     state = halted or state                                  # U104
-    name = f"{botid[3:]} portfolio"
+    name = _plain_name(botid, contract, None)                    # D161: "<name> Portfolio Bot"
     kind = (f"{len(terms.get('assets') or [])} assets · hedged on "
             + ', '.join(sorted({h['product'] for h in (terms.get('hedges') or {}).values()}) or ['nothing'])
             + _rebalanced(terms.get('rebalance') or {})
@@ -826,14 +871,13 @@ def portfolio_card(idx, botid, contract, belief, full=False):
     # U55: three cards wide, not the page; the money and the facts side by
     # side, the assets below, the footer aligned with every other card's
     if not full:                                  # U68: the slim card
-        lev = (f'<div class="dim">{v["leverage"]:.2f}× the equity'
-               + (f' · borrowed {v["borrowed"]:,.0f}' if v.get('borrowed') else '') + '</div>'
-               if v and v.get('leverage') else '')
+        lev = (portfolio_leverage(terms, v)                               # D161
+               + (f'<div class="dim">borrowed {v["borrowed"]:,.0f}</div>' if v and v.get('borrowed') else ''))
         return (f'<div class="card pfo slim"><div><span class="side pfo">PORTFOLIO</span> <b>{esc(name)}</b> '
                 f'{state_tag(state, cls)}</div><div class="dim">{kind}{shares}</div><div>{head}</div>{lev}'
                 f'<div class="dim foot">{bot_code(botid)}<span>{links}</span></div></div>')
     return (f'<div class="card pfo"><div><span class="side pfo">PORTFOLIO</span> <b>{esc(name)}</b> '
-            f'{state_tag(state, cls)}</div><div class="dim">{kind}{shares}</div>'
+            f'{state_tag(state, cls)}</div><div class="dim">{kind}{shares}</div>{portfolio_leverage(terms, v)}'
             f'<div class="two"><div>{head}</div><div>{facts}</div></div>'
             + (fold(idx, botid, body, word='assets') if body else '')          # U58
             + f'<div class="dim foot">{bot_code(botid)}<span>{links}</span></div></div>')

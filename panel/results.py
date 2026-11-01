@@ -35,7 +35,10 @@ def results_page(labelled):
     parts = ['<h1>results since the first kept fill</h1>'
              '<p class="say">What each bot has made after fees since the ledger first saw it '
              '(realized: the open position is on its card). A bot whose market has left the '
-             'fleet is still listed, under its account.</p>']
+             'fleet is still listed, under its account.</p>'
+             # D161: the snapshot export lives here, out of the side column
+             '<p><a href="/export">export snapshot</a> <span class="dim">— the bots\' page as '
+             'one HTML file, a snapshot: no refresh, no actions</span></p>']
     head = ('<table><tr class="dim"><td>bot</td><td>curve</td><td>made after fees</td>'
             '<td>fills</td><td>since</td></tr>')
     for label, c in labelled:

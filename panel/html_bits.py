@@ -62,28 +62,74 @@ def named(typed, botid):
     return bool(botid) and (typed or '').strip().lower() == botid.lower()
 
 
-MARKET_WORD = {'inverse': ' inverse', 'spot': ' spot'}
+MARKET_WORDS = {'linear': 'Futures', 'inverse': 'Inverse Futures', 'spot': 'Spot'}
+
+
+def market_words(row, trade=False):
+    """D161: the market a bot trades, as the platforms say it — linear
+    "Futures", inverse "Inverse Futures", spot with a loan "Margined Spot",
+    plain spot "Spot". A trade spells out its futures type ("Perpetual
+    Futures"); a bot does not."""
+    mt = row.get('market_type') or 'linear'
+    if mt == 'spot':
+        return 'Margined Spot' if row.get('spot_borrow') else 'Spot'
+    if trade:
+        return 'Inverse Perpetual Futures' if mt == 'inverse' else 'Perpetual Futures'
+    return MARKET_WORDS.get(mt, 'Futures')
+
+
+def _kind(row):
+    return ('trade' if row.get('trade') else
+            'DCA' if row.get('strategy') == 'martingale' else 'grid')
 
 
 def plain_name(row):
-    """D157: a bot's plain name, from its own fields — "BTCUSDT long grid",
-    "BTCUSD long DCA inverse", "SOLUSDT short trade", "carry portfolio".
-    The one spelling: the card says it, and a confirm box on Demo or Testnet
-    takes it as well as the bot's code. None when the row says too little."""
+    """D161: a bot's plain name, from its own fields — SYMBOL, market, kind:
+    "BTCUSDT Futures Grid", "BTCUSD Inverse Futures DCA", "ETHUSDT Margined
+    Spot DCA", "SOLUSDT Perpetual Futures Trade", "carry Portfolio Bot". The
+    side is the card's tag beside it, and part of the typed name
+    (full_name). None when the row says too little."""
     if not isinstance(row, dict):
         return None
     if row.get('strategy') == 'portfolio':
-        return f"{row.get('name')} portfolio" if row.get('name') else None
+        return f"{row.get('name')} Portfolio Bot" if row.get('name') else None
     side, symbol = row.get('side'), row.get('symbol')
     if side not in ('long', 'short') or not symbol:
         return None
-    kind = ('trade' if row.get('trade') else
-            'DCA' if row.get('strategy') == 'martingale' else 'grid')
-    market = MARKET_WORD.get(row.get('market_type') or 'linear', '')
-    return f"{str(symbol).replace('-', '')} {side} {kind}{market}"
+    kind = _kind(row)
+    return (f"{str(symbol).replace('-', '')} {market_words(row, bool(row.get('trade')))} "
+            f"{kind if kind == 'DCA' else kind.capitalize()}")
 
 
-def row_of_botid(botid, strategy=None, trade=False):
+def full_name(row):
+    """D161: the plain name with its side — "BTCUSDT Futures Grid long" —
+    the words a confirm box shows off Mainnet. A carry bot has no side."""
+    said = plain_name(row)
+    if not said or row.get('strategy') == 'portfolio':
+        return said
+    return f"{said} {row['side']}"
+
+
+def short_name(row):
+    """D161: the short spelling a confirm box also takes — SYMBOL, kind,
+    side: "BTCUSDT grid long". None for a carry bot or a thin row."""
+    if not plain_name(row) or row.get('strategy') == 'portfolio':
+        return None
+    return f"{str(row['symbol']).replace('-', '')} {_kind(row)} {row['side']}"
+
+
+def spellings(row):
+    """The words, besides the code, a confirm box takes for this row off
+    Mainnet: the full name, the short form, and a carry bot's own name as
+    its form took it (U125b)."""
+    if not isinstance(row, dict):
+        return []
+    out = [full_name(row), short_name(row),
+           row.get('name') if row.get('strategy') == 'portfolio' else None]
+    return [s for s in out if s]
+
+
+def row_of_botid(botid, strategy=None, trade=False, spot_borrow=False):
     """The fields plain_name reads, from a bot's code alone (I1): what the
     card has when no fleet row is at hand."""
     mt = {'inv': 'inverse', 'spo': 'spot'}.get(botid[:3], 'linear')
@@ -91,43 +137,40 @@ def row_of_botid(botid, strategy=None, trade=False):
         return {'strategy': 'portfolio', 'name': botid[3:]}
     return {'market_type': mt, 'symbol': botid[3:-1],
             'side': 'short' if botid.endswith('s') else 'long',
-            'strategy': strategy or 'grid', 'trade': trade}
+            'strategy': strategy or 'grid', 'trade': trade, 'spot_borrow': spot_borrow}
 
 
 def _squash(text):
     return ' '.join(str(text or '').lower().split())
 
 
-def confirmed(typed, botid, row=None, mainnet=False):
-    """D157 (the owner's answer): a typed confirmation takes the bot's code,
-    as always (U18), and on Demo or Testnet its plain name too — derived
-    from the row, which must be this bot's. Mainnet takes the code only,
-    exactly as before: its typing is unchanged."""
-    if named(typed, botid):
-        return True
-    if mainnet or not row:
-        return False
+def _mine(row, botid):
     from gridgremlin.apply import row_botid
     try:
-        if row_botid(row) != botid:
-            return False
+        return row_botid(row) == botid
     except (KeyError, TypeError):
         return False
-    said = plain_name(row)
-    if said and _squash(typed) == _squash(said):
+
+
+def confirmed(typed, botid, row=None, mainnet=False):
+    """D157, D161: a typed confirmation takes the bot's code, as always
+    (U18), and on Demo or Testnet its full name with its side, the short
+    form (SYMBOL kind side), or a carry bot's own name — derived from the
+    row, which must be this bot's. Mainnet takes the code only, exactly as
+    before: its typing is unchanged."""
+    if named(typed, botid):
         return True
-    # a carry bot's own name, as typed on its form ("basket" for pfobasket):
-    # the word its maker chose is the one they type back
-    return (row.get('strategy') == 'portfolio' and bool(row.get('name'))
-            and _squash(typed) == _squash(row.get('name')))
+    if mainnet or not row or not _mine(row, botid):
+        return False
+    return _squash(typed) in [_squash(s) for s in spellings(row)]
 
 
 def typed_name(row):
     """The words a confirm box shows to type off Mainnet: a carry bot's own
-    name as its form took it, any other bot's plain name."""
+    name as its form took it, any other bot's full name with its side."""
     if isinstance(row, dict) and row.get('strategy') == 'portfolio' and row.get('name'):
         return str(row['name'])
-    return plain_name(row)
+    return full_name(row)
 
 
 def to_type(botid, row=None, mainnet=False):
@@ -150,21 +193,14 @@ def refusal_box(title, why, extra=''):
 
 
 def accepts(botid, row=None, mainnet=False):
-    """D159: the spellings confirmed() takes, as the page's pop-up matches
-    them — lower case, spaces squashed: the code always; off Mainnet the
-    plain name (and a carry bot's own name) of a row that is this bot's.
-    Mainnet: the code only. The server's confirmed() stays the authority."""
+    """D159, D161: the spellings confirmed() takes, as the page's pop-up
+    matches them — lower case, spaces squashed: the code always; off
+    Mainnet the full name, the short form and a carry bot's own name, of a
+    row that is this bot's. Mainnet: the code only. The server's
+    confirmed() stays the authority."""
     out = [_squash(botid)]
-    if not mainnet and isinstance(row, dict):
-        from gridgremlin.apply import row_botid
-        try:
-            mine = row_botid(row) == botid
-        except (KeyError, TypeError):
-            mine = False
-        if mine:
-            out += [_squash(s) for s in (
-                plain_name(row),
-                row.get('name') if row.get('strategy') == 'portfolio' else None) if s]
+    if not mainnet and isinstance(row, dict) and _mine(row, botid):
+        out += [_squash(s) for s in spellings(row)]
     return list(dict.fromkeys(out))
 
 

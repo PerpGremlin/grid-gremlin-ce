@@ -57,14 +57,20 @@ box-shadow:0 0 0 3px color-mix(in srgb,var(--neg) 35%,transparent)}
 .typed{display:inline-block;border:2px dashed var(--accent);padding:.3em .6em;margin:.2em 0;
 background:color-mix(in srgb,var(--accent) 10%,var(--bg))}
 .gg-dlg .typed{display:none}
-dialog.ggconfirm:not([open]){display:none}
-dialog.ggconfirm{border:3px solid var(--accent);background:var(--bg);color:var(--fg);padding:0 1.2em 1em;
+dialog.ggconfirm:not([open]),dialog.ggnew:not([open]){display:none}
+dialog.ggconfirm,dialog.ggnew{border:3px solid var(--accent);background:var(--bg);color:var(--fg);padding:0 1.2em 1em;
 max-width:min(36em,92vw);font:inherit;box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 35%,transparent)}
-dialog.ggconfirm::backdrop{background:rgba(0,0,0,.65)}
-dialog.ggconfirm .what{margin:0 -1.2em .8em;padding:.5em 1.2em;background:var(--accent);color:var(--bg);font-weight:bold}
+dialog.ggconfirm::backdrop,dialog.ggnew::backdrop{background:rgba(0,0,0,.65)}
+dialog.ggconfirm .what,dialog.ggnew .what{margin:0 -1.2em .8em;padding:.5em 1.2em;background:var(--accent);color:var(--bg);font-weight:bold}
 dialog.ggconfirm input{font:inherit;font-size:1.15em;padding:.3em .5em;width:100%;box-sizing:border-box}
 dialog.ggconfirm label.again{display:block;margin:.6em 0 0;color:var(--neg)}
-dialog.ggconfirm .dlgbtn{text-align:right;margin-top:1em}
+dialog.ggconfirm .dlgbtn,dialog.ggnew .dlgbtn{text-align:right;margin-top:1em}
+/* D161: the column's name, its view switches, the new-bot chooser */
+nav.side a.ggname{font-weight:bold;font-size:1.15em;background:none;border:0;padding:.2em 0}
+nav.side .tog{display:block;margin:.15em var(--gap-s) .15em 0;text-align:left}
+nav.side form.arrange{margin:.15em 0}nav.side form.arrange select{font:inherit}
+ul.kinds{list-style:none;padding:0;margin:.4em 0}ul.kinds li{margin:.5em 0}ul.kinds li a{min-width:11em}
+@media(max-width:60em){nav.side .tog,nav.side form.arrange{display:inline-block}}
 .typed code,dialog.ggconfirm code{font-weight:bold;font-size:1.1em;padding:0 .25em;outline:1px solid var(--accent)}
 a{color:var(--accent)}
 a[href]{display:inline-block;padding:.2em .7em;margin:.15em .2em;background:var(--accent-soft);border:1px solid var(--accent);border-radius:4px;color:var(--fg);text-decoration:none;line-height:1.5}a[href]:hover,a.pick{background:var(--accent);color:var(--bg)}b.on{display:inline-block;padding:.2em .7em;margin:.15em .2em;background:var(--accent);border:1px solid var(--accent);border-radius:4px;color:var(--bg)}a[href*='mode=remove'],a[href^='/retire'],a[href^='/close']{border-color:var(--neg)}
@@ -148,7 +154,7 @@ color:var(--accent)}details td{text-align:left}details td:first-child
 {width:22em}details td.dim{min-width:18em}table.ladder td:not(:first-child),table.ladder th:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}details select{max-width:18em}input,select{background:var(--bg);color:var(--fg);
 border:1px solid var(--edge);border-radius:3px;font:inherit;padding:.15em .3em}
 .only-coin .u-value,.only-coin .u-cost,.only-coin .u-sep,.only-value .u-coin,.only-value .u-cost,.only-value .u-sep,.only-cost .u-coin,.only-cost .u-value,.only-cost .u-sep{display:none}
-/* U67: the fleet page in two halves — the bots, and the markets beside them */
+/* U67, D96: the fleet page in two halves — the bots, and what was picked beside them */
 .split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 calc(var(--gap)*1.5);align-items:start}
 .split>.bots{min-width:0}
 /* U86: pinned where it starts — its top is the strip's height plus the gap
@@ -175,7 +181,6 @@ table.ov{border-collapse:collapse;font-size:.9em;width:100%}table.ov td,table.ov
 table.ov td:first-child,table.ov th:first-child{text-align:left}.pane table.ov td:first-child{min-width:3em}
 table.ov td.xcell{width:40%}.xbar{display:flex;height:.7em}.xh{flex:1;display:flex}.xleft{justify-content:flex-end;border-right:2px solid var(--line)}
 .xbar i{display:block;height:100%}.xbar .xs{background:var(--neg);border-radius:3px 0 0 3px}.xbar .xl{background:var(--pos);border-radius:0 3px 3px 0}
-table.moods td{text-align:left;white-space:normal}
 ul.watch{margin:.3em 0;padding-left:1.2em}ul.watch li{margin:.2em 0;color:var(--neg)}
 .calm{color:var(--calm)}.wild{color:var(--wild)}
 .gauge{display:inline-block;width:5em;height:.5em;background:var(--line);border-radius:3px;vertical-align:middle;overflow:hidden}

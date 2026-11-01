@@ -173,7 +173,7 @@ class FleetAdminPages:
         """D157: what a tombstone's revive box shows to type: the bot's
         plain name off Mainnet, while its row is still in the file; else
         its code."""
-        from ..html_bits import plain_name
+        from ..html_bits import typed_name
         if self._real(self.fleets[min(fi, len(self.fleets) - 1)]):
             return botid
-        return plain_name(self._row_of(fi, botid)) or botid
+        return typed_name(self._row_of(fi, botid)) or botid

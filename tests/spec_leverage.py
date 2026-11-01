@@ -73,7 +73,7 @@ def spec_R19_every_surface_says_it_the_same_way():
     page = render([('demo', c)])
     assert f'<div class="parts lev-now">{now}</div>' in page
     assert f'<div class="parts lev-filled">{filled}</div>' in page
-    assert 'ggLev' in page and 'data-lev="filled"' in page   # the switch
+    assert 'ggLev' in page and 'data-tog="lev">leverage: now</button>' in page   # the switch (D161: one toggle)
 
     class Box(phone.Box):
         def readout(self, fp):
