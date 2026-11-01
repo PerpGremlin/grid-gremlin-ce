@@ -396,12 +396,55 @@ def _num(text):
 SIZE_UNITS = (('collateral', 'collateral (USDT, or USDC on a PERP market and on Hyperliquid)'),
               ('notional', 'position size (USDT / USDC, the market\'s own)'),
               ('coins', 'coins'))
+# U160: the same three units on a coin-margined (inverse) market, where the
+# engine sizes in USD — capital x leverage is the USD the contracts are
+# worth, one contract a dollar (InverseAdapter.qty_from_notional) — and the
+# coin is only the collateral. `{coin}` is the market's coin.
+SIZE_UNITS_INVERSE = {
+    'collateral': 'USD you put up (your {coin} is the collateral)',
+    'notional': 'position size (USD contracts, $1 each)',
+    'coins': 'coins (the position\'s size, at today\'s price)'}
+
+# U160: a money field's words on an inverse market: (label or None, help).
+INVERSE_WORDS = {
+    'capital': (None, 'in USD — the dollar value you put up, not a count of '
+                      'coins; your {coin} is the collateral. The position is '
+                      'this times the leverage'),
+    'max_loss': (None, 'in USD. When its own losses, closed and still open '
+                       'together, reach this, it closes its position and stops '
+                       'for good. Blank = no limit. Counts at most the last 30 days'),
+    'max_position_base': ('Largest position (in USD contracts)',
+                          'one contract is $1 on a coin-margined market. Blank = '
+                          'the full grid; type "unbounded" for no limit'),
+    'min_position_base': ('Contracts never to sell',
+                          'in USD contracts ($1 each): a core holding no exit '
+                          'and no stop touches'),
+}
+
+
+def coin_of(symbol):
+    """U160: the coin of a coin-margined market — BTC of BTCUSD, and of a
+    dated BTCUSDH27 — or the symbol itself when it names no USD."""
+    s = (symbol or '').strip().upper()
+    i = s.find('USD')
+    return s[:i] if i > 0 else (s or 'coin')
+
+
+def size_market(form, venue):
+    """U160: the market whose price turns coins into a size — the form's
+    own when it is coin-margined (BTCUSD is no linear market), else the
+    linear one, as before."""
+    mt = 'inverse' if (form.get('market_type') or '').strip() == 'inverse' else 'linear'
+    return {'venue': venue, 'market_type': mt,
+            'symbol': (form.get('symbol') or '').strip().upper()}
 
 
 def capital_from(size, unit, leverage, mark=None):
     """U24: the size in the unit the person thinks in -> `capital`, which
     is collateral. notional / leverage; coins x mark / leverage. A unit
-    that needs the price refuses without one, by name."""
+    that needs the price refuses without one, by name. U160: the same on a
+    coin-margined market, in USD — collateral is the USD put up, notional
+    the USD contracts, coins x mark their USD value."""
     lev = float(leverage or 1.0)
     if unit in (None, '', 'collateral'):
         return size
@@ -416,10 +459,40 @@ def capital_from(size, unit, leverage, mark=None):
     raise ValueError(f'unknown size unit "{unit}"')
 
 
-def size_unit_select(value=None):
-    opts = ''.join(f'<option value="{k}"{" selected" if k == value else ""}>'
-                   f'{lb}</option>' for k, lb in SIZE_UNITS)
+def size_unit_select(value=None, market_type=None, symbol=None):
+    """U24's units, in the words of the market (U160): a coin-margined
+    market's say USD; MONEY_JS swaps them when the market type changes."""
+    inv = market_type == 'inverse'
+    coin = coin_of(symbol)
+    opts = ''.join(
+        f'<option value="{k}"{" selected" if k == value else ""}>'
+        + (html.escape(SIZE_UNITS_INVERSE[k].replace('{coin}', coin)) if inv else lb)
+        + '</option>' for k, lb in SIZE_UNITS)
     return f'<select name="size_unit">{opts}</select>'
+
+
+def _money_js():
+    import json
+    units = json.dumps({'lin': dict(SIZE_UNITS), 'inv': SIZE_UNITS_INVERSE})
+    return """<script>(function(){
+function q(n){return document.getElementsByName(n)[0]||null;}
+var mt=q('market_type');if(!mt)return;
+var sy=q('symbol'),U=""" + units + """;
+function coin(){var s=((sy&&sy.value)||'').trim().toUpperCase(),i=s.indexOf('USD');
+ return i>0?s.slice(0,i):(s||'coin');}
+function swap(){var inv=mt.value==='inverse',c=coin();
+ function w(t){return t.split('{coin}').join(c);}
+ document.querySelectorAll('[data-inv]').forEach(function(e){
+  e.textContent=inv?w(e.getAttribute('data-inv')):e.getAttribute('data-lin');});
+ var su=q('size_unit');Array.prototype.forEach.call(su?su.options:[],function(o){
+  var t=(inv?U.inv:U.lin)[o.value];if(t)o.textContent=inv?w(t):t;});}
+mt.addEventListener('change',swap);if(sy)sy.addEventListener('input',swap);
+swap();})();</script>"""
+
+
+# U160: the money fields' words follow the market type as it is chosen —
+# a coin-margined market sizes in USD, its coin only the collateral
+MONEY_JS = _money_js()
 
 
 def resolve_size(form, mark_fn, leverage=None):
@@ -636,12 +709,22 @@ def _quick_limits(bot, form):
     return bot
 
 
-def quick_bot(form, venue, mark):
+def quick_bot(form, venue, mark, market_type='linear'):
     """The quick setup: a preset and three answers -> a full bot row, every
     price derived from the mark. The row then goes through the same gates
     as any other, and opens in the advanced form for whoever wants to
-    change a number."""
+    change a number. `market_type` is the one the symbol is listed as
+    (U161, panel.create.market_kind): a coin-margined grid is an inverse
+    row, sized in USD as the engine sizes it."""
     preset = form.get('preset', 'sideways')
+    sym = (form.get('symbol') or '').strip().upper()
+    if market_type == 'spot':
+        raise ValueError(f'{sym} is listed on Bybit as spot only: the quick setup '
+                         'builds perpetual bots — open the advanced form for a spot bot')
+    if market_type == 'inverse' and str(preset).startswith('dca'):
+        raise ValueError(f'{sym} is a coin-margined (inverse) market: a DCA bot runs '
+                         f'on a USDT/USDC perpetual or spot — type {coin_of(sym)}USDT '
+                         'for the USDT perpetual')
     if preset not in PRESETS:
         raise ValueError(f'unknown preset "{preset}"')
     caution = form.get('caution', 'balanced')
@@ -682,10 +765,10 @@ def quick_bot(form, venue, mark):
     half = GRID_HALF_WIDTH[caution]
     if preset == 'reversal':
         return _quick_limits(reversal_leg(form, venue, mark, caution, half,
-                                          symbol, size, unit, stop), form)
+                                          symbol, size, unit, stop, market_type), form)
     side = 'short' if preset == 'falling' else 'long'
     money = _sig(capital_from(size, unit, GRID_LEVERAGE[caution], mark), 6)
-    bot = {**_venue_key(venue), 'market_type': 'linear', 'symbol': symbol,
+    bot = {**_venue_key(venue), 'market_type': market_type, 'symbol': symbol,
            'side': side, 'capital': money,
            'leverage': GRID_LEVERAGE[caution],
            'lower': _sig(mark * (1.0 - half)),
@@ -696,7 +779,7 @@ def quick_bot(form, venue, mark):
                         'confirm_seconds': 900, 'max_rungs': 90,
                         'ref_position': 0.5}
         hl = venue == 'hyperliquid'        # I3: the furthest link must fit
-        botid = make_botid('linear', symbol, side)
+        botid = make_botid(market_type, symbol, side)
         while bot['slide']['max_rungs'] > 1:
             try:
                 check_link_fits(botid, widest_rung(bot),
@@ -715,7 +798,8 @@ def quick_bot(form, venue, mark):
     return _quick_limits(bot, form)
 
 
-def reversal_leg(form, venue, mark, caution, half, symbol, size, unit, stop):
+def reversal_leg(form, venue, mark, caution, half, symbol, size, unit, stop,
+                 market_type='linear'):
     """D54: the reversal grid is two legs split at a STATIC mid — a long
     grid below it, a short grid above — on a venue that holds both sides
     of one market (Bybit hedge mode). The quick setup makes them one after
@@ -738,7 +822,7 @@ def reversal_leg(form, venue, mark, caution, half, symbol, size, unit, stop):
     lev = GRID_LEVERAGE[caution]
     money = _sig(capital_from(size, unit, lev, mark) / 2.0, 6)
     rungs = GRID_RUNGS[caution] // 2 + 1
-    bot = {**_venue_key(venue), 'market_type': 'linear', 'symbol': symbol,
+    bot = {**_venue_key(venue), 'market_type': market_type, 'symbol': symbol,
            'side': leg, 'capital': money, 'leverage': lev,
            'lower': _sig(mid * (1.0 - half)) if leg == 'long' else _sig(mid),
            'upper': _sig(mid) if leg == 'long' else _sig(mid * (1.0 + half)),
@@ -811,6 +895,14 @@ def sentence(cfg, mark=None):
     money = (f"Its investment is {_m(cfg['capital'])}"
              + (f" at {lev:g}x leverage, so up to {_m(notional)} in the "
                 f'market{coins}.' if lev != 1 else f'{coins}.'))
+    if cfg.get('market_type') == 'inverse':        # U160: sized in USD
+        coin = coin_of(cfg['symbol'])
+        worth = (f" (about {cfg['capital'] / mark:,.4g} {coin} at today's price)"
+                 if mark else '')
+        money = (f"Its investment is {_m(cfg['capital'])} USD{worth}; your "
+                 f'{coin} is the collateral'
+                 + (f", and at {lev:g}x leverage up to {_m(notional)} USD of "
+                    'contracts are in the market.' if lev != 1 else '.'))
     stop = cfg.get('stop')
     if not stop:
         stop_s = ('It has no stop loss: if the price runs against it, it '
@@ -1057,7 +1149,7 @@ def default_words(kind, value):
 
 
 def _field(name, kind, label, help_, value, fixed=False, unit=None,
-           default=...):
+           default=..., market_type=None, symbol=None):
     e = html.escape
     v = e(str(value)) if value is not None else ''
     # U33: the empty box says what a blank becomes — the engine's own default,
@@ -1102,11 +1194,25 @@ def _field(name, kind, label, help_, value, fixed=False, unit=None,
                    f'<span class="dim" id="{name}_hint"></span>')
     elif name == 'capital':                # U24: the size in your unit
         control = (f'<input name="{name}" value="{v}" size="10"{ph}> '
-                   + size_unit_select(unit))
+                   + size_unit_select(unit, market_type, symbol))
     else:
         control = f'<input name="{name}" value="{v}" size="14"{ph}>'
-    return (f'<tr><td>{e(label)}</td><td>{control}</td>'
-            f'<td class="dim">{e(help_)}</td></tr>')
+    if name not in INVERSE_WORDS:
+        return (f'<tr><td>{e(label)}</td><td>{control}</td>'
+                f'<td class="dim">{e(help_)}</td></tr>')
+    # U160: a money field carries its coin-margined words beside its own;
+    # drawn as the market stands, swapped by MONEY_JS as it is changed
+    inv_label, inv_help = INVERSE_WORDS[name]
+    star = ' *' if label.endswith(' *') else ''
+    inv_label = (inv_label + star) if inv_label else label
+    inv = market_type == 'inverse'
+    coin = coin_of(symbol)
+
+    def said(lin, inv_text):
+        shown = inv_text.replace('{coin}', coin) if inv else lin
+        return (f' data-lin="{e(lin)}" data-inv="{e(inv_text)}">{e(shown)}')
+    return (f'<tr><td{said(label, inv_label)}</td><td>{control}</td>'
+            f'<td class="dim"{said(help_, inv_help)}</td></tr>')
 
 
 def fleet_select(fleets, chosen=0):
@@ -1155,7 +1261,9 @@ def quick_page(fleets, chosen=0, symbols=(), values=None, carry=True, account=''
         f'<tr><td>Investment</td><td><input name="capital" value="{v("capital")}" size="10"> '
         f'{size_unit_select(t.get("size_unit"))}</td><td class="dim">what you put up '
         '(collateral), or the position\'s size in USDT, or in coins — '
-        'converted at today\'s price and the preset\'s leverage</td>'
+        'converted at today\'s price and the preset\'s leverage. On a '
+        'coin-margined market (BTCUSD) all of it is in USD, the coin only the '
+        'collateral</td>'                                  # U161
         '</tr><tr><td>How careful?</td><td><select name="caution">'
         f'{caution}</select></td><td class="dim">each answer names the '
         'leverage it picks: careful is wider and lower, bold tighter and '
@@ -1212,6 +1320,8 @@ def advanced_page(strategy, values, fleets, chosen=0, note='', edit=None,
         return _field(n, k, lb + (' *' if mark else ''), h, values.get(n),
                       fixed=bool(edit) and n in IDENTITY,
                       unit=values.get('size_unit'),
+                      market_type=values.get('market_type'),
+                      symbol=values.get('symbol'),
                       default=dflts.get(p, ...))
     # U105: what the bot needs, open and first; required ones starred
     first = ''.join(field(every[n], mark=n in needed) for n in essential if n in every)
@@ -1290,7 +1400,7 @@ def advanced_page(strategy, values, fleets, chosen=0, note='', edit=None,
         + CHART_BOX + ''.join(groups) +
         '<button>Next: review the bot &rarr;</button></form>' + CHART_JS
         # U81: after the form, so the fields it fills exist when it runs
-        + HINT_JS + NUMBERS_JS
+        + HINT_JS + NUMBERS_JS + MONEY_JS
         + ('<p class="dim"><a href="/">back to the fleet</a></p>' if edit
            else '<p class="dim"><a href="/setup">back to the quick setup'
                 '</a></p>'))

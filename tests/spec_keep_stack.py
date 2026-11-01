@@ -320,8 +320,9 @@ def spec_U135_the_leverage_page_offers_keep_the_coins_with_its_figures_before_th
 
 def _contract(age_s=5, **fig):
     return {'generated_ms': int((time.time() - age_s) * 1000), 'account': {'bybit': dict(
-        tier='demo', wallet={'BTC': {'balance': 0.5, 'usd': 35000.0, 'borrow': 0.0, 'interest': 0.0},
-                             'USDT': {'balance': -1200.0, 'usd': -1200.0, 'borrow': 1200.0, 'interest': 0.42}},
+        tier='demo', wallet={'BTC': {'balance': 0.5, 'usd': 35000.0, 'borrow': 0.0, 'interest': 0.0, 'upl': 0.0},
+                             'USDT': {'balance': -1200.0, 'usd': -1200.0, 'borrow': 1200.0, 'interest': 0.42,
+                                      'upl': 0.0}},
         available=8765.43, **fig)}}
 
 
@@ -356,6 +357,29 @@ def spec_U138_the_account_lines_are_the_readouts_own_numbers():
     hl = account_lines({'generated_ms': int(time.time() * 1000),
                         'account': {'hyperliquid': {'tier': 'testnet', 'available': 50.0}}})
     assert 'balances: <span class="dim">not read' in hl and '50.00 USDT' in hl
+
+
+def spec_U138b_a_balance_is_worth_its_balance_and_dust_folds():
+    """U138b (the owner's account box, 2026-11-01: "USDT 247,711.5 (≈ 236,773.34
+    USDT)"): Bybit's usdValue is a coin's equity — its balance plus the open
+    P&L of the perps settled in it. The balance is said at its own worth, the
+    open P&L apart; coins under 1 USDT owing nothing fold into a count.
+    Sabotage: the equity shown as the balance's worth is caught."""
+    from gridgremlin.exchange.bybit.truth import wallet_coins
+    from panel.strip_view import account_lines
+    acct = {'coin': [{'coin': 'USDT', 'walletBalance': '1000', 'usdValue': '900', 'unrealisedPnl': '-100'},
+                     {'coin': 'ADA', 'walletBalance': '0.0077', 'usdValue': '0.003'},
+                     {'coin': 'SOL', 'walletBalance': '0.00004', 'usdValue': '0.008'},
+                     {'coin': 'BTC', 'walletBalance': '0.1', 'usdValue': '7000'}]}
+    w = wallet_coins(acct)
+    assert w['USDT']['upl'] == -100.0
+    out = account_lines({'generated_ms': int(time.time() * 1000),
+                         'account': {'bybit': {'tier': 'demo', 'wallet': w, 'available': 1.0}}})
+    assert 'USDT 1,000 (≈ 1,000.00 USDT)' in out, out
+    assert '900.00' not in out                                   # never the equity as the worth
+    assert 'open P&amp;L on its perps: <span class="dim">USDT -100.00' in out
+    assert 'BTC 0.1 (≈ 7,000.00 USDT)' in out
+    assert 'ADA' not in out and 'SOL' not in out and '+ 2 coins under 1 USDT' in out
 
 
 def spec_U138_sabotage_with_no_age_limit_a_day_old_readout_reads_as_now():

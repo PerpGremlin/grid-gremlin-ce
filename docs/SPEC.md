@@ -1611,6 +1611,43 @@ eventually pin (T1).
   booked from those alone, said as partial since a venue-made close carries
   no link; the readout carries those as `gone`. A record that is not whole
   is listed, never summed.
+- **R25** (D162) The account, read by read: each readout's account as one
+  record — every coin's wallet balance and loan, every perpetual position
+  (market, side, size, entry, mark) — from the reads it already makes:
+  Bybit's three position pages and wallet read (R19, U138), Hyperliquid's
+  clearinghouse state; no further call. A part the venue does not give
+  (Hyperliquid's coin-by-coin wallet) is absent, never zero.
+- **R26** (D162) The record is kept thinly and each day once: the last 25
+  hours in `logs/account/<fleet>.json`, one record per two minutes over
+  the last two hours and one per fifteen minutes before (the newest of
+  each slot, the newest read always); the first read of each UTC day
+  appended to `logs/fills/<fleet>.account-days.jsonl`, beside the kept
+  ledger, kept long. One writer at a time (a lock); the readout reads
+  both back, never writes. Sabotage: without the thinning the file grows
+  with every read past the bound.
+- **R27** (D162) Money moved in or out is the venue's own record, read at
+  most every ten minutes (from seven days back, the transfer lists' own
+  limit, then an hour before the last read) and kept eight days by id:
+  Bybit's transfers within the account and between accounts, deposits and
+  withdrawals, completed ones only, each in or out of the trading wallet
+  (a transfer between accounts by the key's own id, unread: no direction
+  claimed); Hyperliquid's non-funding ledger (moves between its spot and
+  perp halves are inside the account). A record the key cannot read is
+  named with the venue's words; the others still count. Sabotage: with no
+  pause every readout reads them.
+- **R28** (D162) What changed since 1 h, 24 h and 7 d: against the newest
+  record at or before the window's start (or the oldest, said as the
+  record starting inside the window), each coin's balance and loan before,
+  now and the change, never explained; each position's size before, now
+  and the change, new or closed, split into the bots' own fills on that
+  market and side over the span (an entry adds, an exit takes away; by the
+  link, I1, so a hand trade is not a bot's) and the rest, not from a bot,
+  the two adding up to the change exactly. The fills are the kept ledger's
+  and the readout's own, one fill once (I4); a span the two do not reach
+  back over is said as the ledger behind. A Portfolio Bot's legs are run
+  but not kept: their change is not split, said. Positions on a market and
+  side no bot runs are listed whole. Sabotage: a hand trade counted as the
+  bot's moves the split.
 - **R9** The readout counts SAME-RUNG exits: an exit filling at a price the book
   entered at. It needs no basis, so a truncated window cannot fake it. Read it as a
   RATIO, not a verdict — in a netted engine (G12) a rung legitimately flips between
@@ -2294,6 +2331,11 @@ eventually pin (T1).
   forms beside their money field, from the readout already kept — never a
   read started for a page. Sabotage: with no age limit, a day-old readout
   reads as now.
+- **U138b** (2026-11-01) A balance is said at its own worth: Bybit's usdValue
+  is the coin's equity (its balance plus the open P&L of the perps settled in
+  it), so the balance's worth is the balance at the price that equity implies,
+  and the open P&L is a line of its own, per coin. Coins worth under 1 USDT
+  that owe nothing fold into one count.
 - **U139** (D161, 2026-11-01) One click back to the overview: the column's
   first entry, **overview**, and the grid-gremlin name above it each go to
   the front page with no right-half pick, the arrangement kept; on the
@@ -2367,6 +2409,49 @@ eventually pin (T1).
   part as the investment, the rest as spot leverage up to 10x — and the
   rehearsal worked; what it cannot say (its 90-day and last-settlement
   windows) is dropped. `/?show=carry` is the same form in the right half.
+- **U160** (2026-11-01) A coin-margined (inverse) grid is sized in USD and
+  says so: capital x leverage is its USD, one contract a dollar
+  (InverseAdapter, A4), the coin only the collateral. On the advanced
+  grid form the investment, the most it may lose and the position cap
+  and floor say USD (contracts), and the size units read "USD you put up
+  (your <COIN> is the collateral)", "position size (USD contracts, $1
+  each)" and "coins (the position's size, at today's price)" — each
+  turned into USD capital as on a linear market, a coin priced on the
+  inverse market itself. The words follow the market type as it is
+  chosen. The numbers under the inputs and on the review open with
+  "Investment: N USD ≈ x <COIN> at today's price — your <COIN> is the
+  collateral", at the price the box already read, and carry USD; the
+  plain words say it too. A linear form reads as before, with no coin
+  line (its order size and sentence already say coins). A DCA bot is
+  linear or spot only (the engine's own refusal). Display only (D29).
+- **U161** (2026-11-01) The quick setup has no market-type field, so the
+  symbol says it: the Bybit category whose public instruments list it
+  (linear, then inverse, then spot), judged by A8's contractType check —
+  BTCUSD is inverse, BTCUSDT linear. The box under the inputs names it
+  ("BTCUSD — coin-margined (inverse) perpetual") and a quick inverse grid
+  is an inverse row, its money in USD as U160. Listed in none is the
+  not-listed refusal; a failed read is a failure, never "not listed"; on
+  Hyperliquid, linear as before. A quick DCA on an inverse market is
+  refused in words naming the USDT perpetual; a spot-only coin points to
+  the advanced form. Read once per symbol for five minutes.
+- **U150** (D162, 2026-11-01) The account box says what changed on the
+  account: each coin's balance before, now and the change (and its loan
+  when it has one), headed as shown, not explained; Hyperliquid's says
+  "not read" with why.
+- **U151** (D162) Each position whose size changed (or that is new or
+  closed, marked so) says before, now, the change, **from the bots** and
+  **not from a bot** (R28), or why it is not split.
+- **U152** (D162) "Account positions, not from a bot": each position on a
+  market and side no bot runs, named as a trade ("ETHUSDT Perpetual
+  Futures Trade · SHORT"), with size, entry, mark, P&L and leverage, and no
+  action (the close command closes a fleet's own bot only). "Money in/out
+  of the account" lists the venue's records over the window, or "not
+  read" with the venue's words.
+- **U154** (D162) One switch, **since: 1 h · 24 h · 7 d**, in the account
+  box, D161's look (the button names what is on, kept per tab); each
+  window is drawn and the switch shows one, 24 h without script. Nothing
+  shows for a missing or stale readout (U138's ten minutes). Sabotage:
+  with no age limit, an hour-old change reads as now.
 - **U111** A carry bot's hedge may differ by coin — inverse, usdt or usdc,
   the common one above and the others named ("SOL usdt") — and the form
   shows each coin's three perpetuals side by side: what a short was paid

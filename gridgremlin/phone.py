@@ -97,6 +97,8 @@ class Box:
             share_readout(fp, contract)                 # U47b: the panel reads this one
         except OSError as e:
             print(f'phone: sharing {fp}: {e}', file=sys.stderr, flush=True)
+        from .account_change import keep
+        keep(fp, contract)                              # D162: the account, read by read
         return contract
 
     def keep_warm(self, every=WARM_EVERY, rounds=None):

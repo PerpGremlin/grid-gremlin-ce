@@ -107,6 +107,15 @@ class InfoClient:
             body['endTime'] = int(end_ms)
         return self._transport(body)
 
+    def ledger_updates(self, start_ms, end_ms=None):
+        """D162: the address's deposits, withdrawals and transfers (its
+        non-funding ledger)."""
+        body = {'type': 'userNonFundingLedgerUpdates', 'user': self._user(),
+                'startTime': int(start_ms)}
+        if end_ms is not None:
+            body['endTime'] = int(end_ms)
+        return self._transport(body)
+
     def spot_clearinghouse_state(self):
         return self._transport({'type': 'spotClearinghouseState',
                                 'user': self._user()})

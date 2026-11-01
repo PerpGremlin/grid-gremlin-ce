@@ -166,6 +166,8 @@ class Handler(RehearsePages, CarryFlowPages, CreateFlowPages, FleetAdminPages, C
             env=fleet_env(fleet))                          # and its own keys
         try:
             data = json.loads(out.stdout)
+            from gridgremlin.account_change import keep
+            keep(fleet, data)                              # D162: the account, read by read
         except ValueError:
             # U76: the readout crashed or printed nothing. The last good
             # one stays (its age is on the page); with none, the section

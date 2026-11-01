@@ -470,6 +470,10 @@ var D=window.HTMLDialogElement,can=typeof D==='function'&&'showModal' in D.proto
 function fold(){return S.getItem('gg-fold:acct')||'open';}
 function size(){var s=S.getItem('gg-size');return STEP.indexOf(s)<0?'all':s;}
 function lev(){return S.getItem('gg-lev')==='filled'?'filled':'now';}
+var SINCE=['1h','24h','7d'],R=document.documentElement;
+function since(){var s=S.getItem('gg-since');return SINCE.indexOf(s)<0?'24h':s;}
+function ggSince(k){SINCE.forEach(function(w){R.classList.toggle('since-'+w,w===k&&k!=='24h');});S.setItem('gg-since',k);}
+ggSince(since());
 function label(){document.querySelectorAll('[data-tog]').forEach(function(b){var k=b.dataset.tog;
  if(k==='acct')b.textContent='accounts: '+(fold()==='open'?'full':'folded');
  else if(k==='size')b.textContent='size in: '+SW[size()];
@@ -481,6 +485,7 @@ document.addEventListener('click',function(e){var c=e.target.closest?e.target:nu
   if(k==='acct'&&window.ggFold)ggFold(fold()==='open'?'folded':'open','acct');
   else if(k==='size'&&window.ggSize)ggSize(STEP[(STEP.indexOf(size())+1)%STEP.length]);
   else if(k==='lev'&&window.ggLev)ggLev(lev()==='now'?'filled':'now');
+  else if(k==='since')ggSince(SINCE[(SINCE.indexOf(since())+1)%SINCE.length]);
   label();return;}
  var d=document.querySelector('dialog.ggnew'),n=c.closest('a[data-new]');
  if(n&&can&&d&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey&&!e.button){e.preventDefault();d.showModal();return;}

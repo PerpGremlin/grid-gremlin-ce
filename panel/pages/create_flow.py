@@ -581,7 +581,7 @@ class CreateFlowPages:
         from panel.create import (edit_proposal, merge_proposal,
                                   order_minimum_problem, validate_whole)
         from panel.setup import (bot_from_form, missing_required, quick_bot,
-                                 resolve_size)
+                                 resolve_size, size_market)
         fi = min(int(_f(form.get('fleet')) or 0), len(self.fleets) - 1)
         venue = self._fleet_venue(fi)
         symbol = (form.get('symbol') or '').strip().upper()
@@ -596,12 +596,18 @@ class CreateFlowPages:
                 return self._fragment('<p class="dim">the numbers show here once '
                                       'these are filled: '
                                       + html.escape('; '.join(miss)) + '.</p>')
+        said = ''
         try:
             if form.get('how') == 'quick':
-                bot = quick_bot(form, venue, self._mark_for(linear))
+                import panel.create as pc                     # U161: the symbol says it
+                kind = pc.market_kind(venue, symbol)
+                said = ('<p class="dim market-kind">' + html.escape(
+                    f'{symbol} — {pc.MARKET_WORDS[kind]}') + '</p>')
+                bot = quick_bot(form, venue, self._mark_for(dict(linear, market_type=kind)),
+                                kind)
             else:
-                bot = bot_from_form(resolve_size(form, lambda: self._mark_for(linear)),
-                                    venue)
+                bot = bot_from_form(resolve_size(               # U160: its own market
+                    form, lambda: self._mark_for(size_market(form, venue))), venue)
             fleet_raw = json.loads(Path(self.fleets[fi]).read_text())
             wd_raw = json.loads(Path(fleet_raw['watchdog']).read_text())
             raw = apply_profile(dict(bot), validate_profiles(
@@ -610,7 +616,7 @@ class CreateFlowPages:
             adapter = self._adapter_for(vbot)
             mark = self._mark_for(vbot)
         except Exception as e:                              # noqa: BLE001
-            return self._fragment(self._live_refusal(e))
+            return self._fragment(said + self._live_refusal(e))
         refusal = None
         try:
             if vbot['strategy'] == 'martingale':
@@ -636,7 +642,7 @@ class CreateFlowPages:
                                        least=least_capital(raw, adapter, mark)), money)
         except Exception as e:                              # noqa: BLE001
             body = f'<p class="dim">no numbers: {html.escape(str(e))}</p>'
-        return self._fragment((self._live_refusal(refusal) if refusal else '') + body)
+        return self._fragment(said + (self._live_refusal(refusal) if refusal else '') + body)
 
     @staticmethod
     def _live_refusal(why):
@@ -700,9 +706,11 @@ class CreateFlowPages:
                     symbols=self._symbols(fi)))
             elif how == 'quick':
                 symbol = (form.get('symbol') or '').strip().upper()
-                mark = public_mark({'venue': venue, 'market_type': 'linear',
+                import panel.create as pc                     # U161: the symbol says it
+                kind = pc.market_kind(venue, symbol)
+                mark = public_mark({'venue': venue, 'market_type': kind,
                                     'symbol': symbol})
-                bot = quick_bot(form, venue, mark)
+                bot = quick_bot(form, venue, mark, kind)
                 pair = ''
                 if (form.get('preset') == 'reversal'
                         and (form.get('leg') or 'long') == 'long'):
@@ -725,13 +733,12 @@ class CreateFlowPages:
                                 'its own bot, made the same way.'
                                 if pair else '') + '</p>'))
             else:
-                from panel.setup import missing_required, resolve_size
+                from panel.setup import missing_required, resolve_size, size_market
                 miss = missing_required(form.get('strategy', 'grid'), form)   # U105
                 if miss:
                     raise ValueError('still needed: ' + '; '.join(miss))
-                sized = resolve_size(form, lambda: public_mark({   # U24
-                    'venue': venue, 'market_type': 'linear',
-                    'symbol': (form.get('symbol') or '').strip().upper()}))
+                sized = resolve_size(form, lambda: public_mark(   # U24, U160
+                    size_market(form, venue)))
                 bot = bot_from_form(sized, venue)    # D157: `form` stays as typed
         except Exception as e:                              # noqa: BLE001
             note = refusal_box('not yet', e)

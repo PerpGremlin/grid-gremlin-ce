@@ -303,6 +303,43 @@ def public_mark(cfg):
     return float(rows[0].get('markPrice') or rows[0]['lastPrice'])
 
 
+_KINDS = {}                  # (venue, symbol) -> (t, market type), five minutes
+
+
+def market_kind(venue, symbol):
+    """U161: the quick setup has no market-type field, so the symbol says
+    it — the Bybit category whose public instruments list it, judged by
+    A8's own contractType check (a linear query for BTCUSD answers with the
+    inverse contract, refused): 'linear', 'inverse' or 'spot'. Listed in
+    none is the not-listed refusal; Hyperliquid is linear, as before. A
+    network failure is raised, never read as not listed."""
+    if venue == 'hyperliquid':
+        return 'linear'
+    import time
+    from gridgremlin.exchange.bybit import klines
+    from gridgremlin.exchange.bybit.truth import parse_instrument
+    from gridgremlin.exchange.errors import VenueError
+    key = (venue, symbol)
+    hit = _KINDS.get(key)
+    if hit and time.time() - hit[0] < 300:
+        return hit[1]
+    for category in ('linear', 'inverse', 'spot'):
+        try:
+            parse_instrument(category, klines.fetch_instrument(category, symbol))
+        except (IndexError, KeyError, TypeError, VenueError):
+            continue
+        _KINDS[key] = (time.time(), category)
+        return category
+    from gridgremlin.apply import not_listed
+    raise ConfigError(not_listed(
+        symbol, 'Bybit lists no such market — its markets are named like '
+                'BTCUSDT, or BTCUSD for a coin-margined one'))
+
+
+MARKET_WORDS = {'linear': 'USDT/USDC perpetual', 'inverse': 'coin-margined (inverse) perpetual',
+                'spot': 'spot'}
+
+
 def public_bars(cfg, days=30, bar_minutes=240):
     """A month of PUBLIC candles, oldest first, for the chart: [{t, o, h,
     l, c}]. Venue-aware like its neighbours; no key."""

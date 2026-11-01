@@ -881,6 +881,81 @@ def leverage_lines(contract):
     return out
 
 
+def venue_transfers(venue, client, history, now_ms):
+    """D162 (R27): the venue's own record of money moved in or out, read
+    when due (at most every TRANSFER_EVERY_S, from where the last read
+    reached); None when not due. {from_ms, to_ms, rows, unread}."""
+    from .account_change import transfers_due
+    start = transfers_due(history, venue, now_ms)
+    if start is None:
+        return None
+    if venue == 'hyperliquid':
+        from .exchange.hyperliquid.truth import read_transfers
+    else:
+        from .exchange.bybit.truth import read_transfers
+    rows, unread = read_transfers(client, start, now_ms)
+    return {'from_ms': start, 'to_ms': now_ms, 'rows': rows, 'unread': unread}
+
+
+def bot_markets(fleet):
+    """D162: (venue, market, symbol, side) every bot runs — a grid, DCA or
+    trade row's own, and a Portfolio Bot's perpetual legs (its hedges and
+    outright shorts, each a short); and the subset whose fills the kept
+    ledger holds (the market rows; a portfolio row's legs are not kept)."""
+    from .portfolio import leg_markets
+    kept = {(c['venue'], c['market_type'], c['symbol'], c['side'])
+            for c in market_rows(fleet)}
+    run = set(kept)
+    for cfg in fleet['bots']:
+        if cfg.get('strategy') == 'portfolio':
+            run |= {(cfg['venue'], mt, sym, 'short') for kind, _, mt, sym, _ in leg_markets(cfg)
+                    if kind in ('hedge', 'short')}
+    return run, kept
+
+
+def account_view(fleet_path, fleet, account, history, fresh, fresh_ok, since_ms, now_ms):
+    """D162 (R28): what changed on the account since 1 h, 24 h and 7 d, from
+    the kept records and this read — None when nothing was read. A
+    position's bot part counts the kept ledger's fills and this readout's
+    own, one fill once; where neither reaches back over the window the row
+    says the ledger is behind."""
+    from .account_change import (account_change, days_path, read_days, merge_transfers,
+                                 snapshot_of)
+    now_rec = snapshot_of(account)
+    if not now_rec:
+        return None
+    try:
+        from .kept_fills import load, merge, store_path
+        kept = load(store_path(fleet_path))
+    except (RuntimeError, OSError, ValueError):
+        kept = {'fills': [], 'collected': {}}
+    oldest = now_ms - 8 * 86_400_000
+    venue_of = {(c['market_type'], c['symbol']): c['venue'] for c in market_rows(fleet)}
+    fills = merge([f for f in kept['fills'] if f.get('time_ms', 0) >= oldest],
+                  [dict(f, venue='hyperliquid' if venue_of.get((f['market_type'], f['symbol']))
+                        == 'hyperliquid' else 'bybit') for f in fresh])      # as kept_books tags them
+    marks = kept.get('collected') or {}
+
+    def complete(venue, market, symbol, t0):
+        mark = marks.get('hyperliquid' if venue == 'hyperliquid'
+                         else f'bybit:{market}:{symbol}')
+        fresh_reach = since_ms if venue in fresh_ok else None
+        if fresh_reach is not None and (t0 >= fresh_reach or (mark or 0) >= fresh_reach):
+            return True
+        return (mark or 0) >= now_ms
+    run, kept_mk = bot_markets(fleet)
+    records = sorted({r['t']: r for r in read_days(days_path(fleet_path))
+                      + list(history.get('records') or [])}.values(), key=lambda r: r['t'])
+    transfers = {}
+    for venue, fig in account.items():
+        old = (history.get('transfers') or {}).get(venue)
+        got = (fig or {}).get('transfers')
+        transfers[venue] = merge_transfers(old, got, now_ms) if got else old
+    positions = {v: (fig or {}).get('positions') for v, fig in account.items()}
+    return account_change(records, now_rec, now_ms, fills, run, kept_mk, complete,
+                          transfers, positions)
+
+
 def base_coin(symbol):
     """An inverse contract's own coin, from its name (common.symbols, D91)."""
     return coin_of(symbol) or 'coin'
@@ -1186,7 +1261,7 @@ def main(argv):
                                'spot_leverage': (cfg.get('margin') or {}).get('spot_leverage') or 1.0,
                                'perp_leverage': cfg.get('perp_leverage')}
     botids = list(key_of)
-    fills, marks = [], {}
+    fills, marks, fresh_ok = [], {}, set()
     for venue, rows in sorted(by_venue.items()):
         try:
             got, m = (_hl_pull(rows, since_ms) if venue == 'hyperliquid'
@@ -1197,6 +1272,9 @@ def main(argv):
             continue
         fills += got
         marks.update(m)
+        fresh_ok.add(venue)
+    from .account_change import load_history, recent_path
+    history = load_history(recent_path(argv[0]))          # D162: read back, never written here
     account = {}                       # R19: each exchange's own figures
     for venue in by_venue:
         try:
@@ -1216,6 +1294,8 @@ def main(argv):
             print(f'[warn] {venue}: account figures unread — {e}',
                   file=sys.stderr)
             account[venue] = None
+            continue
+        account[venue]['transfers'] = venue_transfers(venue, client, history, now_ms)   # D162
     # D76: a spot bot with a stated holding — the wallet against its book,
     # the inverse books' coin P&L since the statement explaining the rest
     anchored = [c for c in market_rows(fleet)
@@ -1336,6 +1416,8 @@ def main(argv):
             'marks': {b: marks.get(key_of[b]) for b in botids},     # U57: the mark for a quiet bot too
             'terms': terms,
             'account': account,
+            'account_change': account_view(argv[0], fleet, account, history, fills,
+                                           fresh_ok, since_ms, now_ms),       # D162
             'watchdog': _watchdog_view(fleet),
             'fee_floors': {b: fee_floor_for(key_of[b][0]) for b in botids},
             'market': _market_for(key_of, venue_of, now_ms),        # D67

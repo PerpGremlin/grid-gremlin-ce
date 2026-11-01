@@ -70,13 +70,16 @@ def read_wallet(result):
 
 def wallet_coins(acct):
     """U138: each coin of the account's wallet as the venue states it —
-    {coin: {balance, usd, borrow, interest}}: its wallet balance, its USD
-    value, what the venue has lent in it and the interest accrued on that.
+    {coin: {balance, usd, borrow, interest, upl}}: its wallet balance, its
+    USD value (Bybit's usdValue: the coin's EQUITY, its balance plus the open
+    P&L of the perps settled in it), what the venue has lent in it, the
+    interest accrued on that, and that open P&L in the coin (unrealisedPnl).
     A coin at zero everywhere is left out; a blank field is None."""
     out = {}
     for c in acct.get('coin') or []:
         row = {'balance': _f(c.get('walletBalance'), 0.0), 'usd': _f(c.get('usdValue')),
-               'borrow': _f(c.get('borrowAmount'), 0.0), 'interest': _f(c.get('accruedInterest'), 0.0)}
+               'borrow': _f(c.get('borrowAmount'), 0.0), 'interest': _f(c.get('accruedInterest'), 0.0),
+               'upl': _f(c.get('unrealisedPnl'), 0.0)}
         if row['balance'] or row['borrow']:
             out[c.get('coin')] = row
     return out
@@ -87,8 +90,9 @@ def account_figures(client):
     positionValue over every open position (linear in its settle coin;
     inverse is stated in the coin, so at its mark price) over its
     totalMarginBalance — every position on the account, the owner's own
-    included. Reads only."""
-    notional = 0.0
+    included. Reads only. D162: the same pages' positions are kept, each
+    as `account_position` says it — no further call."""
+    notional, positions = 0.0, []
     for category, extra in (('linear', {'settleCoin': 'USDT'}),
                             ('linear', {'settleCoin': 'USDC'}),
                             ('inverse', {})):
@@ -104,6 +108,7 @@ def account_figures(client):
                 value = abs(_f(p.get('positionValue'), 0.0))
                 notional += (value * _f(p.get('markPrice'), 0.0)
                              if category == 'inverse' else value)
+                positions.append(account_position(category, p))
             cursor = page.get('nextPageCursor')
             if not cursor:
                 break
@@ -112,7 +117,112 @@ def account_figures(client):
     # U138: the same read's wallet, coin by coin, and what is free to trade
     return {'notional': notional, 'equity': margin, 'collateral': margin,
             'source': 'bybit', 'wallet': wallet_coins(acct),
-            'available': _f(acct.get('totalAvailableBalance'))}
+            'available': _f(acct.get('totalAvailableBalance')),
+            'positions': positions}
+
+
+def account_position(category, p):
+    """D162 (R25): one perpetual position on the account as the position
+    list states it — its market, side, size (an inverse one in its $1
+    contracts), entry, mark, unrealised P&L and leverage; a blank field is
+    None."""
+    return {'market': category, 'symbol': p.get('symbol'),
+            'side': 'long' if p.get('side') == 'Buy' else 'short',
+            'size': abs(_f(p.get('size'), 0.0)),
+            'entry': _f(p.get('avgPrice')) or None, 'mark': _f(p.get('markPrice')) or None,
+            'upnl': _f(p.get('unrealisedPnl')), 'leverage': _f(p.get('leverage')) or None}
+
+
+TRADING_WALLETS = ('UNIFIED', 'CONTRACT', 'SPOT')      # the wallets the balances are read from
+WALLET_WORDS = {'UNIFIED': 'Unified Trading', 'FUND': 'Funding', 'CONTRACT': 'Derivatives',
+                'SPOT': 'Spot', 'OPTION': 'Options'}
+TRANSFER_READS = (
+    ('transfers within the account', '/v5/asset/transfer/query-inter-transfer-list', 'list'),
+    ('transfers between accounts', '/v5/asset/transfer/query-universal-transfer-list', 'list'),
+    ('deposits', '/v5/asset/deposit/query-record', 'rows'),
+    ('withdrawals', '/v5/asset/withdraw/query-record', 'rows'))
+
+
+def _wallet(name):
+    return WALLET_WORDS.get(name, str(name or '?').title())
+
+
+def transfer_row(kind, e, uid=None):
+    """D162 (R27): one money movement as the venue's record says it — {id,
+    t, dir, coin, amount, what}. `dir` is in or out of the trading wallet
+    the balances are read from (a deposit or withdrawal, of the account);
+    None where the record cannot say (a transfer between two accounts with
+    this account's id unread). None for a record not completed, or for a
+    move between two trading wallets."""
+    if kind == 'deposits':
+        if str(e.get('status')) != '3':                    # 3: success
+            return None
+        return {'id': f"dep:{e.get('id') or e.get('txID')}", 't': int(e.get('successAt') or 0),
+                'dir': 'in', 'coin': e.get('coin'), 'amount': _f(e.get('amount'), 0.0),
+                'what': 'deposit'}
+    if kind == 'withdrawals':
+        if str(e.get('status')).lower() != 'success':
+            return None
+        fee = _f(e.get('withdrawFee'), 0.0)
+        return {'id': f"wd:{e.get('withdrawId')}",
+                't': int(e.get('updateTime') or e.get('createTime') or 0),
+                'dir': 'out', 'coin': e.get('coin'), 'amount': _f(e.get('amount'), 0.0),
+                'what': 'withdrawal' + (f' (fee {fee:g})' if fee else '')}
+    if str(e.get('status')).upper() != 'SUCCESS':
+        return None
+    src, dst = e.get('fromAccountType'), e.get('toAccountType')
+    row = {'id': f"tr:{e.get('transferId')}", 't': int(e.get('timestamp') or 0),
+           'coin': e.get('coin'), 'amount': _f(e.get('amount'), 0.0)}
+    path = f'{_wallet(src)} → {_wallet(dst)}'
+    if kind == 'transfers within the account':
+        if (src in TRADING_WALLETS) == (dst in TRADING_WALLETS):
+            return None
+        return dict(row, dir='in' if dst in TRADING_WALLETS else 'out',
+                    what=f'transfer within the account ({path})')
+    me = None if uid is None else str(uid)
+    frm, to = str(e.get('fromMemberId')), str(e.get('toMemberId'))
+    if me is None:
+        return dict(row, dir=None, what=f"transfer between accounts ({path}; this account's id unread)")
+    into = to == me and dst in TRADING_WALLETS
+    out_of = frm == me and src in TRADING_WALLETS
+    if into == out_of:
+        return None
+    return dict(row, dir='in' if into else 'out',
+                what=f"transfer {'from' if into else 'to'} another account ({path})")
+
+
+def read_transfers(client, start_ms, end_ms):
+    """D162 (R27): the money moved into or out of the account between two
+    times (at most seven days, the transfer lists' own limit), from the
+    venue's four records — transfers within the account and between
+    accounts, deposits, withdrawals — and the account's id, which says a
+    transfer between accounts' direction. Returns (rows, unread): a record
+    the key cannot read is named in `unread` with the venue's own words and
+    the others still count — never a guess, never a silent gap."""
+    rows, unread, uid = [], {}, None
+    try:
+        uid = (client.get('/v5/user/query-api', {}, signed=True) or {}).get('userID')
+    except (VenueError, OSError, ValueError, KeyError, TypeError) as e:
+        unread["this account's id"] = str(e)[:200]
+    for kind, path, key in TRANSFER_READS:
+        cursor = None
+        try:
+            for _ in range(MAX_ORDER_PAGES):
+                params = {'startTime': int(start_ms), 'endTime': int(end_ms), 'limit': 50}
+                if cursor:
+                    params['cursor'] = cursor
+                page = client.get(path, params, signed=True) or {}
+                for e in page.get(key) or []:
+                    got = transfer_row(kind, e, uid)
+                    if got is not None and start_ms <= got['t'] <= end_ms:
+                        rows.append(got)
+                cursor = page.get('nextPageCursor')
+                if not cursor:
+                    break
+        except (VenueError, OSError, ValueError, KeyError, TypeError) as e:
+            unread[kind] = str(e)[:200]
+    rows.sort(key=lambda r: r['t'])
+    return rows, unread
 
 
 def read_positions(result):

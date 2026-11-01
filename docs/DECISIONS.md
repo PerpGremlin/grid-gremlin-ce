@@ -1495,6 +1495,45 @@ stands unless the owner corrects it.
   nothing, one function for every place, U111's funding table folded in.
   `/carry` opens that form with its query (U149). The chooser keeps five
   kinds; Portfolio Bot's line says its form rehearses the year first.)*
+- **D162 — See how the account's assets and futures change (2026-11-01).**
+  The owner's model: an account is just its assets. A perpetual position
+  borrows against the asset it is margined in. The bots are rulesets that
+  manage those assets. He wants to see how the account's coins and futures
+  change, the simple version: see only, no action and no alerts for now.
+  **Recorded each read:** every coin's wallet balance and loan, and every
+  perpetual position (market, side, size, entry, mark), from the readout's
+  own reads (R19's position pages and D160's wallet; Hyperliquid's
+  clearinghouse state), with no new call for them. The last 25 hours are
+  kept thinly (one record per two minutes over the last two hours, one per
+  fifteen minutes before that) in `logs/account/<fleet>.json`; the first
+  read of each UTC day is kept long, beside the kept ledger, in
+  `logs/fills/<fleet>.account-days.jsonl`. The reader that keeps the shared
+  readout writes them (the phone service; the panel when it reads for
+  itself); the readout only reads them back. **Shown on the account box**,
+  since 1 h, 24 h or 7 d (one switch naming what is on, D161's look): each
+  coin's balance (and loan) before, now and the change; each position's
+  size before, now and the change, new and closed ones marked. **A
+  position's change is split exactly** into what the bots' own fills on
+  that market and side account for (the kept ledger and the readout's own
+  fresh fills, one fill once, by the link) and the rest, "not from a bot"
+  (a hand trade, or a market no bot runs). A Portfolio Bot's legs are run
+  by a bot but their fills are not in the kept ledger, so their change is
+  not split, said so. **Balances are shown, not explained:** funding,
+  interest and fees move them without a trade, and nothing is inferred.
+  Instead the venue's own records of money moved are listed as "money
+  in/out of the account" — on Bybit its transfers within the account and
+  between accounts, deposits and withdrawals (and the key's own id, for a
+  transfer's direction), read at most every ten minutes; on Hyperliquid
+  its ledger of deposits, withdrawals and transfers. A record the key
+  cannot read is said as "not read" with the venue's words. **Positions on
+  a market and side no bot runs** are listed as "Account positions, not
+  from a bot", named as a trade ("ETHUSDT Perpetual Futures Trade ·
+  SHORT"), with P&L and leverage and no action: the close command closes
+  only a fleet's own bot, so none is offered. Adopting one as a managed
+  trade is the next step, not this one. Balances and changes stay on the
+  live panel: never in an export, and taken off the public page (which a
+  fresh readout had put D160's lines on). Engine trading behaviour, the
+  mainnet double gate (D25, D64, D97) and D29 are untouched.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

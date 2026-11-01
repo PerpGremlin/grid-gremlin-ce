@@ -67,6 +67,35 @@ def exchange_free(contract):
 READOUT_STALE_S = 600      # U138: a readout older than this is "not read"
 
 
+DUST_USD = 1.0      # U138b: a coin worth less than this, owing nothing, is folded
+
+
+def _balances(wallet):
+    """U138b: each coin's balance and what the BALANCE is worth — Bybit's
+    usdValue is the coin's equity (balance + the open P&L of the perps
+    settled in it), so the balance's worth is the balance at the price that
+    equity implies; the open P&L is said apart, per coin. Coins worth under
+    DUST_USD that owe nothing fold into one count."""
+    shown, dust, opl = [], 0, []
+    for c, w in sorted(wallet.items()):
+        b, u, upl = w.get('balance') or 0.0, w.get('usd'), w.get('upl') or 0.0
+        worth = None
+        if u is not None:
+            eq = b + upl
+            worth = b * (u / eq) if eq else (u if not upl else None)
+        if upl:
+            opl.append(f'{esc(c)} {upl:+,.2f}')
+        if (worth is not None and abs(worth) < DUST_USD and not upl
+                and not (w.get('borrow') or 0.0) and b >= 0):
+            dust += 1
+            continue
+        shown.append(f'{esc(c)} {b:,.8g}' + (f' (≈ {worth:,.2f} USDT)' if worth is not None else ''))
+    text = ' · '.join(shown) or 'empty'
+    if dust:
+        text += f' · + {dust} coin{"s" if dust > 1 else ""} under {DUST_USD:g} USDT'
+    return text, ' · '.join(opl)
+
+
 def account_lines(contract, now=None):
     """U138, the one renderer: each account's wallet as its readout states
     it — the coins and stables with their USDT value, the floating debt
@@ -87,10 +116,9 @@ def account_lines(contract, now=None):
         wallet = (fig or {}).get('wallet')
         if wallet is None:
             bal = debt = 'not read'
+            opl = ''
         else:
-            bal = ' · '.join(f"{esc(c)} {w['balance']:,.8g}"
-                             + (f" (≈ {w['usd']:,.2f} USDT)" if w.get('usd') is not None else '')
-                             for c, w in sorted(wallet.items())) or 'empty'
+            bal, opl = _balances(wallet)
             owed = [(c, max(w.get('borrow') or 0.0, -(w.get('balance') or 0.0), 0.0), w.get('interest') or 0.0)
                     for c, w in sorted(wallet.items())]
             debt = ' · '.join(f'{esc(c)} {d:,.8g}' + (f' (+ {i:,.8g} interest)' if i else '')
@@ -99,9 +127,120 @@ def account_lines(contract, now=None):
         avail = 'not read' if avail is None else f'{avail:,.2f} USDT'
         out.append(f'<div class="parts acctlines"><b>{name}</b> '
                    f'<div>balances: <span class="dim">{bal}</span></div>'
+                   + (f'<div>open P&amp;L on its perps: <span class="dim">{opl}</span></div>' if opl else '') +
                    f'<div>floating debt: <span class="dim">{debt}</span></div>'
                    f'<div>available to trade: <b>{avail}</b></div></div>')
     return ''.join(out)
+
+
+SINCE_WORDS = (('1h', '1 h'), ('24h', '24 h'), ('7d', '7 d'))
+
+
+def _q(x):
+    return '—' if x is None else f'{x:,.8g}'
+
+
+def _dq(x):
+    return '—' if x is None else ('0' if abs(x) < 1e-12 else f'{x:+,.8g}')
+
+
+def _at(ms):
+    import time as _t
+    return _t.strftime('%d %b %H:%M UTC', _t.gmtime(ms / 1000.0))
+
+
+def position_words(p, trade=False):
+    """D162: a position as the platforms say a trade (D161): "BTCUSDT
+    Perpetual Futures Trade · SHORT"; without `trade`, the market alone."""
+    from .html_bits import market_words
+    said = f"{p['symbol']} {market_words({'market_type': p['market']}, trade=True)}"
+    return esc(f"{said}{' Trade' if trade else ''} · {p['side'].upper()}")
+
+
+def _window(w, venue):
+    if w.get('none'):
+        return f'<p class="dim">{esc(w["none"])} — the account is recorded from its first read.</p>'
+    head = (f'<p class="dim">from the record at {_at(w["from_ms"])} to now'
+            + (' — the record starts there, inside the window' if w.get('short') else '') + '</p>')
+    bal = w.get('balances')
+    if bal is None:
+        why = ('Hyperliquid states no coin-by-coin wallet' if venue == 'hyperliquid'
+               else 'the wallet was not read at one end')
+        btab = f'<p>balances: <span class="dim">not read — {why}</span></p>'
+    else:
+        loans = any('loan_now' in r for r in bal)
+        btab = ('<h4>balances (shown, not explained: funding, interest and fees move them without a trade)</h4>'
+                '<table><tr><th>coin</th><th>before</th><th>now</th><th>change</th>'
+                + ('<th>loan before</th><th>loan now</th>' if loans else '') + '</tr>'
+                + ''.join(f'<tr><td>{esc(r["coin"])}</td><td>{_q(r["before"])}</td><td>{_q(r["now"])}</td>'
+                          f'<td class="{_num_cls(r["change"])}">{_dq(r["change"])}</td>'
+                          + (f'<td>{_q(r.get("loan_before"))}</td><td>{_q(r.get("loan_now"))}</td>'
+                             if loans else '') + '</tr>' for r in bal)
+                + '</table>') if bal else '<p>balances: <span class="dim">empty at both ends</span></p>'
+    pos = w.get('positions')
+    if pos is None:
+        ptab = '<p>positions: <span class="dim">not read at one end</span></p>'
+    elif not pos:
+        ptab = '<p>positions: <span class="dim">no size changed</span></p>'
+    else:
+        rows = []
+        for r in pos:
+            tag = {'new': ' <b>new</b>', 'closed': ' <b>closed</b>'}.get(r['state'], '')
+            why = f'<br><span class="dim">{esc(r["why"])}</span>' if r.get('why') else ''
+            rows.append(f'<tr><td>{position_words(r)}{tag}{why}</td><td>{_q(r["before"])}</td>'
+                        f'<td>{_q(r["now"])}</td><td>{_dq(r["change"])}</td>'
+                        f'<td>{_dq(r.get("bots"))}</td><td>{_dq(r.get("rest"))}</td></tr>')
+        ptab = ('<h4>positions (size)</h4><table><tr><th>position</th><th>before</th><th>now</th>'
+                '<th>change</th><th>from the bots</th><th>not from a bot</th></tr>'
+                + ''.join(rows) + '</table>')
+    tr = w.get('transfers') or {}
+    lines = [f'{_at(r["t"])} · <b>{"in" if r["dir"] == "in" else "out" if r["dir"] == "out" else "moved"}</b> '
+             f'{_q(r["amount"])} {esc(r["coin"])} · {esc(r["what"])}' for r in tr.get('rows') or []]
+    unread = tr.get('unread') or {}
+    said = ('; '.join(f'{esc(k)} — {esc(v)}' for k, v in sorted(unread.items())))
+    if tr.get('from_ms') and tr['from_ms'] > w['from_ms']:
+        lines.append(f'<span class="dim">read from {_at(tr["from_ms"])} only</span>')
+    if unread and not lines and set(unread) != {"this account's id"}:
+        money = f'<span class="dim">not read: {said}</span>'
+    else:
+        money = ('<br>'.join(lines) or '<span class="dim">none recorded</span>') + (
+            f'<br><span class="dim">not read: {said}</span>' if unread else '')
+    return f'{head}{btab}{ptab}<h4>money in/out of the account</h4><p>{money}</p>'
+
+
+def account_change_lines(contract, now=None):
+    """D162 (U150–U153): what changed on the account — its coins and its
+    perpetual positions, since 1 h, 24 h or 7 d (one switch naming what is
+    on, D161's look) — and its positions no bot runs. The readout's own
+    `account_change`; nothing when the readout is missing or stale (the
+    account lines say "not read"). The live panel's only (U138's rule)."""
+    import time as _t
+    now = _t.time() if now is None else now
+    gen = (contract or {}).get('generated_ms')
+    change = (contract or {}).get('account_change')
+    if not change or gen is None or now - gen / 1000.0 > READOUT_STALE_S:
+        return ''
+    figs = contract.get('account') or {}
+    out = ['<div class="parts acctchg"><b>what changed on the account</b> '
+           '<button type="button" class="quiet tog" data-tog="since">since: '
+           + ''.join(f'<span class="s{k}">{w}</span>' for k, w in SINCE_WORDS) + '</button>']
+    for venue, got in sorted(change.items()):
+        name = esc(TIER_NAMES.get((venue, (figs.get(venue) or {}).get('tier')), venue))
+        out.append(f'<div><b>{name}</b>')
+        for k, _ in SINCE_WORDS:
+            out.append(f'<div class="chg chg-{k}">{_window((got.get("windows") or {}).get(k) or {"none": "no record"}, venue)}</div>')
+        loose = got.get('not_from_a_bot') or []
+        if loose:
+            out.append('<h4>Account positions, not from a bot</h4><table><tr><th>position</th><th>size</th>'
+                       '<th>entry</th><th>mark</th><th>P&amp;L</th><th>leverage</th></tr>'
+                       + ''.join(f'<tr><td>{position_words(p, trade=True)}</td><td>{_q(p.get("size"))}</td>'
+                                 f'<td>{_q(p.get("entry"))}</td><td>{_q(p.get("mark"))}</td>'
+                                 f'<td class="{_num_cls(p.get("upnl") or 0.0)}">{_dq(p.get("upnl"))}</td>'
+                                 f'<td>{"—" if p.get("leverage") is None else format(p["leverage"], "g") + "x"}</td></tr>'
+                                 for p in loose)
+                       + '</table><p class="dim">no bot manages these; the engine leaves them alone.</p>')
+        out.append('</div>')
+    return ''.join(out) + '</div>'
 
 
 def exchange_since_first(contract):

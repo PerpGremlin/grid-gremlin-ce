@@ -372,8 +372,12 @@ def _served_fleet():
                     max_position_base='unbounded')                 # D34, with 'both'
     (d / 'f.json').write_text(json.dumps(
         {'watchdog': str(d / 'wd.json'), 'bots': [seed_row]}))
-    saved = pc.public_mark, pc.public_adapter, pc.public_bars
+    saved = pc.public_mark, pc.public_adapter, pc.public_bars, pc.market_kind
     pc.public_mark = lambda cfg: 84905.14
+    # U161: the quick setup asks which market lists the symbol; faked as
+    # Bybit names them, no venue asked
+    pc.market_kind = lambda venue, symbol: ('inverse' if venue != 'hyperliquid'
+                                            and symbol.endswith('USD') else 'linear')
     pc.public_bars = lambda cfg, **kw: _bars()
     pc.public_adapter = lambda cfg: LinearAdapter(
         {'symbol': cfg['symbol'], 'qty_step': 0.001, 'min_qty': 0.001,
@@ -388,7 +392,7 @@ def _served_fleet():
 
     def close():
         srv.shutdown()
-        pc.public_mark, pc.public_adapter, pc.public_bars = saved
+        pc.public_mark, pc.public_adapter, pc.public_bars, pc.market_kind = saved
         H._bars.clear()
         H._adapters.clear()
         H._marks.clear()                  # D157: the live numbers' price

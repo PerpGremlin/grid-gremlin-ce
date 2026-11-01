@@ -72,7 +72,72 @@ def account_figures(client):
             'equity': _f(summary.get('accountValue')),
             'collateral': wallet['equity'],
             'source': 'hyperliquid',
-            'available': wallet.get('available')}     # U138: no coin-by-coin wallet here
+            'available': wallet.get('available'),      # U138: no coin-by-coin wallet here
+            'positions': account_positions(state)}     # D162: from the same read
+
+
+def account_positions(state):
+    """D162 (R25): every perpetual position on the account, from the
+    clearinghouse state already read — HL's market is the coin, its mark
+    the position's value over its size."""
+    out = []
+    for ap in state.get('assetPositions', []):
+        p = ap.get('position', {})
+        szi = _f(p.get('szi'), 0.0)
+        if not szi:
+            continue
+        value = _f(p.get('positionValue'))
+        out.append({'market': 'linear', 'symbol': p.get('coin'),
+                    'side': 'long' if szi > 0 else 'short', 'size': abs(szi),
+                    'entry': _f(p.get('entryPx')) or None,
+                    'mark': (abs(value) / abs(szi)) if value else None,
+                    'upnl': _f(p.get('unrealizedPnl')),
+                    'leverage': _f((p.get('leverage') or {}).get('value')) or None})
+    return out
+
+
+def _addr_eq(a, b):
+    return bool(a) and bool(b) and str(a).lower() == str(b).lower()
+
+
+def transfer_row(u, address):
+    """D162 (R27): one entry of HL's ledger of money moved (deposits,
+    withdrawals, transfers; funding is not in it) as {id, t, dir, coin,
+    amount, what}; None for a move inside the account (spot to perp) or a
+    kind that moves no money in or out."""
+    d = u.get('delta') or {}
+    kind = d.get('type')
+    base = {'id': f"hl:{u.get('hash')}:{kind}", 't': int(u.get('time') or 0)}
+    if kind == 'deposit':
+        return dict(base, dir='in', coin='USDC', amount=_f(d.get('usdc'), 0.0), what='deposit')
+    if kind == 'withdraw':
+        fee = _f(d.get('fee'), 0.0)
+        return dict(base, dir='out', coin='USDC', amount=_f(d.get('usdc'), 0.0),
+                    what='withdrawal' + (f' (fee {fee:g})' if fee else ''))
+    if kind in ('internalTransfer', 'subAccountTransfer', 'spotTransfer'):
+        into = _addr_eq(d.get('destination'), address)
+        if into == _addr_eq(d.get('user'), address):
+            return None
+        coin = d.get('token') or 'USDC'
+        amount = _f(d.get('amount') if kind == 'spotTransfer' else d.get('usdc'), 0.0)
+        return dict(base, dir='in' if into else 'out', coin=coin, amount=amount,
+                    what=f"transfer {'from' if into else 'to'} another address")
+    if kind in ('vaultDeposit', 'vaultWithdraw'):
+        return dict(base, dir='out' if kind == 'vaultDeposit' else 'in', coin='USDC',
+                    amount=_f(d.get('usdc') or d.get('requestedUsd'), 0.0),
+                    what='into a vault' if kind == 'vaultDeposit' else 'out of a vault')
+    return None
+
+
+def read_transfers(client, start_ms, end_ms):
+    """D162 (R27): HL's own record of money moved, `userNonFundingLedgerUpdates`
+    — the address's public ledger, no key needed. Returns (rows, unread)."""
+    try:
+        raw = client.ledger_updates(start_ms, end_ms) or []
+    except (VenueError, OSError, ValueError, KeyError, TypeError) as e:
+        return [], {'the ledger of money moved': str(e)[:200]}
+    rows = [r for r in (transfer_row(u, client.address) for u in raw) if r is not None]
+    return sorted(rows, key=lambda r: r['t']), {}
 
 
 def read_positions(state, coin):

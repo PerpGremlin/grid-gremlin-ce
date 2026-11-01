@@ -434,3 +434,279 @@ def spec_U124_the_card_and_account_box_speak_a_persons_words():
                  'range moved up / down N levels', 'est. liquidation price',
                  'least investment that works', 'profit per grid level'):
         assert word in KEY, word
+
+
+# --- U160: a coin-margined (inverse) bot is sized in USD, and says so ----------
+
+INV = {'how': 'advanced', 'strategy': 'grid', 'fleet': '0', 'symbol': 'BTCUSD',
+       'side': 'long', 'market_type': 'inverse', 'capital': '1000', 'leverage': '2',
+       'lower': '80000', 'upper': '90000', 'rungs': '11'}
+
+
+def _served_inverse(asked=None):
+    """The served panel, a BTCUSD inverse market beside the linear ones;
+    `asked` collects the market of every price read."""
+    import panel.create as pc
+    from gridgremlin.adapters import InverseAdapter
+    base, d, close = _served()
+    linear = pc.public_adapter
+
+    def adapter(cfg):
+        if cfg.get('market_type') == 'inverse':
+            return InverseAdapter({'symbol': cfg['symbol'], 'qty_step': 1, 'price_tick': 0.5,
+                                   'min_qty': 1, 'settle_coin': 'BTC'})
+        return linear(cfg)
+
+    def mark(cfg):
+        if asked is not None:
+            asked.append(cfg.get('market_type'))
+        return MARK
+    pc.public_adapter, pc.public_mark = adapter, mark
+    return base, d, close
+
+
+def _inverse_said(form_page, numbers, review):
+    """None when an inverse grid speaks USD everywhere its money is typed
+    or shown, else what is missing."""
+    from panel.setup import SIZE_UNITS_INVERSE
+    coin = f'{1000 / MARK:.4g} BTC'
+    if ('in USD — the dollar value you put up, not a count of coins; your BTC is the '
+            'collateral') not in html.unescape(form_page):
+        return 'the investment field does not say USD'
+    if html.escape(SIZE_UNITS_INVERSE['collateral'].replace('{coin}', 'BTC')) not in form_page:
+        return 'the size unit does not say USD'
+    if 'Largest position (in USD contracts)' not in form_page:
+        return 'the position cap still says coins'
+    line = _row_text(numbers, 'Investment')
+    if line is None or not line.startswith(f"1,000 USD ≈ {coin} at today's price"):
+        return f'no coin line under the investment: {line}'
+    if not (_row_text(numbers, 'Leverage') or '').startswith(
+            '2x — 1,000 USD trades up to 2,000 USD'):
+        return 'the leverage row is not in USD'
+    if not (_row_text(review, 'Investment') or '').startswith(f'1,000 USD ≈ {coin}'):
+        return 'the review does not state the investment in USD and its coin value'
+    if f'Its investment is 1,000 USD (about {coin} at today' not in html.unescape(review):
+        return 'the plain words do not say USD'
+    return None
+
+
+def _inverse_pages(base):
+    from panel.setup import advanced_page
+    return (advanced_page('grid', INV, ['demo']), _call(base, '/numbers', INV),
+            _call(base, '/setup', INV))
+
+
+def spec_U160_capital_from_on_an_inverse_market_is_in_usd():
+    """The owner (2026-11-01) read "collateral (USDT …)" on a coin-margined
+    grid and thought he had to type BTC. The engine sizes an inverse bot in
+    USD: capital x leverage is the ladder's USD (config C4), and a contract
+    is a dollar (InverseAdapter.qty_from_notional), so the full ladder is
+    that many contracts. Each unit of the form turns into USD capital:
+    collateral is the USD put up, position size the USD contracts over the
+    leverage, coins their USD value at the inverse market's own price (a
+    linear BTCUSD does not exist; it was asked for before)."""
+    from gridgremlin.adapters import InverseAdapter
+    from gridgremlin.config import validate_config
+    from gridgremlin.ladder import grid_rungs, position_cap
+    from panel.setup import capital_from, resolve_size, size_market
+    cfg = validate_config({'market_type': 'inverse', 'symbol': 'BTCUSD', 'side': 'long',
+                           'capital': 1000, 'leverage': 5, 'lower': 80000,
+                           'upper': 90000, 'rungs': 10})
+    ad = InverseAdapter({'symbol': 'BTCUSD', 'qty_step': 1, 'price_tick': 0.5,
+                         'min_qty': 1, 'settle_coin': 'BTC'})
+    assert cfg['ladder_notional'] == 5000.0
+    assert position_cap(cfg, ad, grid_rungs(cfg, ad)) == 5000.0      # contracts = USD
+    assert capital_from(1000.0, 'collateral', 5) == 1000.0
+    assert capital_from(5000.0, 'notional', 5) == 1000.0
+    assert abs(capital_from(0.1, 'coins', 2, mark=60000.0) - 3000.0) < 1e-9
+    assert size_market({'market_type': 'inverse', 'symbol': ' btcusd'}, 'bybit') == {
+        'venue': 'bybit', 'market_type': 'inverse', 'symbol': 'BTCUSD'}
+    assert size_market({'market_type': 'linear', 'symbol': 'BTCUSDT'},
+                       'bybit')['market_type'] == 'linear'
+    f = resolve_size(dict(INV, capital='0.1', size_unit='coins'), lambda: 60000.0)
+    assert f['capital'] == '3000' and f['size_unit'] == 'collateral'
+    asked = []
+    base, _d, close = _served_inverse(asked)
+    try:                                   # the coins are priced on BTCUSD inverse
+        got = _call(base, '/numbers', dict(INV, capital=f'{1000 / MARK:.10g}',
+                                           size_unit='coins', leverage='1'))
+        assert 'class="refusal"' not in got, got
+        assert asked and set(asked) == {'inverse'}, asked
+        assert (_row_text(got, 'Investment') or '').startswith('1,000 USD'), got
+    finally:
+        close()
+
+
+def spec_U160_an_inverse_grid_says_usd_and_its_coin_line():
+    """The money fields of an inverse grid say USD, the size units read as
+    USD, the position cap counts USD contracts, a line under the investment
+    gives its coin value at the price the box already read, and the review
+    states the investment in USD and in its coin. The words follow the
+    market type as it is changed (MONEY_JS). Display only: the row is the
+    same row. Quick setups and DCA bots are linear or spot (the engine
+    refuses an inverse DCA), so the advanced grid is the one door."""
+    base, _d, close = _served_inverse()
+    try:
+        problem = _inverse_said(*_inverse_pages(base))
+        assert problem is None, problem
+        page = html.unescape(_call(base, '/setup?adv=grid'))
+        assert "var mt=q('market_type');if(!mt)return;" in page
+        assert 'data-inv="in USD — the dollar value you put up' in page
+        bot = _proposal(_call(base, '/setup', INV))['bot']
+        assert bot['capital'] == 1000 and bot['market_type'] == 'inverse'
+    finally:
+        close()
+
+
+def spec_U160_linear_wording_is_unchanged():
+    """A linear grid reads as it did: the investment's own help, the size
+    units' own words, coins for the position cap, no coin line."""
+    from panel.setup import SIZE_UNITS, advanced_page
+    lin = dict(INV, symbol='BTCUSDT', market_type='linear')
+    page = advanced_page('grid', lin, ['demo'])
+    assert ('>what you put up (collateral), or the position size in USDT, or coins '
+            "— converted at today's price and the leverage below</td>") in html.unescape(page)
+    for _k, words in SIZE_UNITS:
+        assert f'>{words}</option>' in page, words
+    assert '>Largest position (in coins)</td>' in page
+    base, _d, close = _served_inverse()
+    try:
+        got = _call(base, '/numbers', lin)
+        assert _row_text(got, 'Investment') is None, got
+        assert 'USD ≈' not in got and ' USD ' not in html.unescape(got)
+    finally:
+        close()
+
+
+def spec_U160_sabotage_an_inverse_form_in_linear_words_is_caught():
+    """Sabotage: with the inverse words dropped, and with the coin line
+    dropped from the numbers, the check says what is missing."""
+    import panel.consequence as pcq
+    import panel.setup as ps
+    base, _d, close = _served_inverse()
+    saved_words, saved_rows = ps.INVERSE_WORDS, pcq.rows_html
+    try:
+        ps.INVERSE_WORDS = {}
+        assert _inverse_said(*_inverse_pages(base)) == 'the investment field does not say USD'
+        ps.INVERSE_WORDS = saved_words
+        pcq.rows_html = lambda cfg, n, money='': saved_rows(
+            dict(cfg, market_type='linear'), n, money)
+        assert _inverse_said(*_inverse_pages(base)).startswith('no coin line')
+    finally:
+        ps.INVERSE_WORDS, pcq.rows_html = saved_words, saved_rows
+        close()
+
+
+# --- U161: the quick setup reads the market type from the symbol ---------------
+
+def _info(symbol, kind):
+    return {'symbol': symbol, 'status': 'Trading', 'contractType': kind,
+            'priceFilter': {'tickSize': '0.5'},
+            'lotSizeFilter': {'qtyStep': '1', 'minOrderQty': '1'}}
+
+
+def _catalogue(category, symbol):
+    """Bybit's public instruments as it answers them: a linear query for
+    BTCUSD answers with the inverse contract (A8); SPOTONLY is listed on
+    spot alone; anything else, an empty list."""
+    if symbol == 'BTCUSDT' and category in ('linear', 'spot'):
+        return _info(symbol, 'LinearPerpetual' if category == 'linear' else '')
+    if symbol == 'BTCUSD' and category in ('linear', 'inverse'):
+        return _info(symbol, 'InversePerpetual')
+    if symbol == 'SPOTONLY' and category == 'spot':
+        return _info(symbol, '')
+    return [][0]
+
+
+def _with_catalogue(fetch, run):
+    import panel.create as pc
+    from gridgremlin.exchange.bybit import klines
+    saved = klines.fetch_instrument
+    klines.fetch_instrument = fetch
+    pc._KINDS.clear()
+    try:
+        return run(pc)
+    finally:
+        klines.fetch_instrument = saved
+        pc._KINDS.clear()
+
+
+def spec_U161_the_quick_setup_reads_the_market_type_from_the_symbol():
+    """The owner (2026-11-01) typed BTCUSD in the quick setup and met A8's
+    "pick the inverse market type" on a form with no such field. The
+    symbol now says it: the category whose public instruments list it,
+    judged by A8's contractType check — BTCUSD inverse, BTCUSDT linear, a
+    spot-only coin spot, an unknown one the not-listed refusal, a failed
+    read raised as a failure, Hyperliquid linear without asking."""
+    from gridgremlin.config import ConfigError
+
+    def run(pc):
+        assert pc.market_kind('bybit', 'BTCUSD') == 'inverse'
+        assert pc.market_kind('bybit', 'BTCUSDT') == 'linear'
+        assert pc.market_kind('bybit', 'SPOTONLY') == 'spot'
+        try:
+            pc.market_kind('bybit', 'NOSUCHUSDT')
+            raise AssertionError('an unlisted symbol was given a market type')
+        except ConfigError as e:
+            assert 'NOSUCHUSDT: Bybit lists no such market' in str(e), e
+        assert pc.market_kind('hyperliquid', 'BTCUSD') == 'linear'
+    _with_catalogue(_catalogue, run)
+
+    def down(category, symbol):
+        raise OSError('network unreachable')
+
+    def run_down(pc):
+        try:
+            pc.market_kind('bybit', 'BTCUSD')
+            raise AssertionError('a failed read was taken for an answer')
+        except OSError:
+            pass
+    _with_catalogue(down, run_down)
+
+
+def spec_U161_a_quick_inverse_grid_says_its_market_and_usd():
+    """BTCUSD in the quick grid: the box says the market ("BTCUSD —
+    coin-margined (inverse) perpetual") and the investment in USD with its
+    coin value; the review's row is an inverse row. A quick DCA on it is
+    refused in words, naming the USDT perpetual (the engine runs a DCA on
+    linear or spot only); a spot-only coin points to the advanced form."""
+    from panel.setup import quick_bot
+    base, _d, close = _served_inverse()
+    q = dict(QUICK, symbol='BTCUSD')
+    try:
+        got = _call(base, '/numbers', q)
+        assert 'BTCUSD — coin-margined (inverse) perpetual' in got, got
+        assert 'class="refusal"' not in got, got
+        assert (_row_text(got, 'Investment') or '').startswith('1,000 USD ≈ '), got
+        assert re.search(r"≈ [0-9.]+ BTC at today's price", _row_text(got, 'Investment'))
+        page = _call(base, '/setup', q)
+        assert _proposal(page)['bot']['market_type'] == 'inverse', page[:600]
+        assert (_row_text(page, 'Investment') or '').startswith('1,000 USD ≈ ')
+        lin = _call(base, '/numbers', QUICK)
+        assert 'BTCUSDT — USDT/USDC perpetual' in lin and _row_text(lin, 'Investment') is None
+        dca = _call(base, '/numbers', dict(q, preset='dca_long'))
+        assert 'class="refusal"' in dca and 'type BTCUSDT for the USDT perpetual' in dca, dca
+    finally:
+        close()
+    try:
+        quick_bot(dict(QUICK, symbol='SPOTONLY'), 'bybit', 1.0, 'spot')
+        raise AssertionError('a spot-only coin made a quick perpetual bot')
+    except ValueError as e:
+        assert 'open the advanced form for a spot bot' in str(e)
+
+
+def spec_U161_sabotage_without_the_contract_check_btcusd_reads_linear():
+    """Sabotage: with A8's contractType check taken out of the instrument
+    parse, a linear query for BTCUSD answers and the symbol reads linear —
+    the dead end the owner met."""
+    from gridgremlin.exchange.bybit import truth
+    saved = truth.parse_instrument
+
+    def blind(category, info):
+        return saved(category, dict(info, contractType=''))
+    truth.parse_instrument = blind
+    try:
+        assert _with_catalogue(_catalogue, lambda pc: pc.market_kind('bybit', 'BTCUSD')) \
+            == 'linear'
+    finally:
+        truth.parse_instrument = saved

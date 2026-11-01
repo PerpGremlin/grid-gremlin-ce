@@ -245,9 +245,21 @@ def rows_html(cfg, n, money=''):
     """The facts as table rows, in the order the platforms show them."""
     e = html.escape
     unit = f' {e(money)}' if money else ''
+    free_unit = unit                     # the account's money, as its readout says
+    out = []
+    if cfg.get('market_type') == 'inverse':
+        # U160: a coin-margined bot is sized in USD (one contract a dollar,
+        # InverseAdapter.qty_from_notional); its coin is only the collateral.
+        # The investment's coin value at the price this box already holds
+        from panel.setup import coin_of
+        coin = e(coin_of(cfg.get('symbol')))
+        unit, free_unit = ' USD', free_unit or ' USD'
+        out.append(('Investment', f"{_m(n['capital'])} USD ≈ "
+                                  f"{n['capital'] / n['mark']:.4g} {coin} at today's price "
+                                  f'— your {coin} is the collateral'))
     lev = n['leverage']
-    out = [('Leverage', f"{lev:g}x — {_m(n['capital'])}{unit} trades up to "
-                        f"{_m(n['in_market'])}{unit} in the market")]
+    out.append(('Leverage', f"{lev:g}x — {_m(n['capital'])}{unit} trades up to "
+                            f"{_m(n['in_market'])}{unit} in the market"))
     if n['strategy'] == 'grid':
         pl = n.get('per_level')
         if pl:
@@ -282,7 +294,7 @@ def rows_html(cfg, n, money=''):
             short = n['capital'] > free
             cls = ' class="neg"' if short else ''
             said += (f' · this bot {_m(n["capital"])} · free to trade '
-                     f'<b{cls}>{_m(free)}{unit}</b>'
+                     f'<b{cls}>{_m(free)}{free_unit}</b>'
                      + (' — more than the account has free' if short else ''))
         else:
             said += ' · free to trade: not read yet (the bots page reads it)'
