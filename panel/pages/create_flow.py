@@ -1,7 +1,8 @@
 """Setting up and editing a bot (U19): the setup page, the review with its chart, what-if and fit, the create and apply flow. Moved out of routes.py whole (D91 step 3): a mixin
 the Handler inherits."""
 from ..forms import next_step_html, other_half_html, other_side_html, rehearse_bot_form, unit_for_fleet
-from ..html_bits import confirmed, plain_name, qarg, refusal_box, tidy, to_type
+from ..html_bits import (accepts, confirm_dialog, confirmed, plain_name, qarg, refusal_box, tidy,
+                         to_type, typed_inline)
 from gridgremlin.apply import row_botid
 from panel.chart import _f
 from pathlib import Path
@@ -230,12 +231,18 @@ class CreateFlowPages:
             f'<input type="hidden" name="gg" value="1">'
             f'<input type="hidden" name="fleet" value="{fi}">'
             f'<input type="hidden" name="proposal" value="{pj}">'
-            f'<b>To {verb}</b>, type {to_type(botid, named_row, real)} here: '
-            f'<input name="confirm" size="22" placeholder="'
-            f'{html.escape((None if real else plain_name(named_row)) or botid)}"> '
-            + ''.join(f'<br><b class="neg">Mainnet:</b> type the new {k} '
-                      f'(<code>{n:g}</code>) again: <input name="retype_{k}" '
-                      'size="12">' for k, _, n in jumps)
+            + typed_inline(
+                f'<b>To {verb}</b>, type {to_type(botid, named_row, real)} here: '
+                f'<input name="confirm" size="22" autocomplete="off"> '
+                + ''.join(f'<br><b class="neg">Mainnet:</b> type the new {k} '
+                          f'(<code>{n:g}</code>) again: <input name="retype_{k}" '
+                          'size="12">' for k, _, n in jumps))
+            + confirm_dialog(                                    # D159: the pop-up
+                {'create': 'Create', 'edit': 'Change', 'remove': 'Remove'}[mode]
+                + f' the bot {plain_name(named_row) or botid} on {self._account(min(fi, len(self.fleets) - 1))}.',
+                to_type(botid, named_row, real), accepts(botid, named_row, real), verb,
+                [(f'retype_{k}', f'<b>Mainnet:</b> type the new {k} (<code>{n:g}</code>) again',
+                  n) for k, _, n in jumps], danger=mode == 'remove')
             + f'<button>{verb}</button></form>'
             '<p class="dim">this writes the account\'s file. A running bot '
             'takes changed terms within seconds; a new bot waits until it is '

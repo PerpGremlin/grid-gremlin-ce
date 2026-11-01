@@ -391,3 +391,47 @@ var m=document.querySelector('meta[name="gg-refresh"]'),every=m?Number(m.content
 if(every>0)setInterval(function(){if(busy||dirty())return;
  swap(location.href,1).catch(function(){});},every*1000);
 })();</script>"""
+
+
+# D159 (2026-11-01): a refusal takes the eye, and a typed confirmation is a
+# pop-up. On load the page scrolls to its first refusal and gives it focus.
+# A form holding a dialog.ggconfirm opens it instead of sending; its confirm
+# button wakes only when the typing matches the dialog's data-accept (lower
+# case, spaces squashed — confirmed()'s rule; data-multi: comma-separated
+# names, each one accepted or made of accepted words, control's U43) and
+# every retype with a data-want equals its number; on press the typing goes
+# into the form's own fields and the form is sent. Escape or cancel sends
+# nothing. Without dialog support the inline box stays (no gg-dlg class).
+CONFIRM_JS = """<script>(function(){
+var R=document.documentElement,D=window.HTMLDialogElement,can=typeof D==='function'&&'showModal' in D.prototype;
+if(can)R.classList.add('gg-dlg');
+var bad=document.querySelector('.refusal[tabindex]');
+if(bad){bad.scrollIntoView({block:'center'});bad.focus({preventScroll:true});}
+function sq(s){return String(s||'').toLowerCase().split(/\\s+/).filter(Boolean).join(' ');}
+function named(d,t){var acc=[];try{acc=JSON.parse(d.dataset.accept||'[]');}catch(e){}
+ function one(p){return acc.indexOf(sq(p))>=0;}
+ if(!d.dataset.multi)return one(t);
+ var parts=t.split(',').filter(function(p){return sq(p);});
+ return parts.length>0&&parts.every(function(p){return one(p)||sq(p).split(' ').every(one);});}
+function near(i){if(!('want' in i.dataset))return true;var s=i.value.replace(/,/g,'').trim(),n=Number(s),w=Number(i.dataset.want),
+ d=n-w,m=w<0?-w:w;if(!s||n!==n)return false;return (d<0?-d:d)<=1e-9*(m>1?m:1);}
+function check(d){var ok=named(d,d.querySelector('input.gg-typed').value)&&
+ [].every.call(d.querySelectorAll('input[data-into]'),near);
+ d.querySelector('button[data-go]').disabled=!ok;return ok;}
+function go(d){if(!check(d))return;var f=d.closest('form'),c=f.querySelector('[name=confirm]');
+ if(c)c.value=d.querySelector('input.gg-typed').value.trim();
+ d.querySelectorAll('input[data-into]').forEach(function(i){
+  var t=f.querySelector('[name="'+i.dataset.into+'"]');if(t)t.value=i.value;});
+ f.dataset.ggGo='1';d.close();if(d._by)f.requestSubmit(d._by);else f.requestSubmit();
+ setTimeout(function(){delete f.dataset.ggGo;},0);}
+document.addEventListener('submit',function(e){var f=e.target,d=f.querySelector&&f.querySelector('dialog.ggconfirm');
+ if(!can||!d||f.dataset.ggGo)return;e.preventDefault();
+ d._by=e.submitter&&e.submitter.form===f?e.submitter:null;check(d);d.showModal();},true);
+document.addEventListener('input',function(e){var d=e.target.closest&&e.target.closest('dialog.ggconfirm');if(d)check(d);});
+document.addEventListener('keydown',function(e){var d=e.target.closest&&e.target.closest('dialog.ggconfirm');
+ if(d&&e.key==='Enter'&&e.target.tagName==='INPUT'){e.preventDefault();go(d);}});
+document.addEventListener('click',function(e){var d=e.target.closest&&e.target.closest('dialog.ggconfirm');if(!d)return;
+ if(e.target.closest('[data-cancel]'))d.close();else if(e.target.closest('button[data-go]'))go(d);});
+})();</script>"""
+
+KEEP_JS += CONFIRM_JS

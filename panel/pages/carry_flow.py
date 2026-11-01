@@ -9,7 +9,8 @@ import json
 from pathlib import Path
 
 from common.fmt import float_or as _f
-from panel.html_bits import confirmed, plain_name, refusal_box, to_type
+from panel.html_bits import (accepts, confirm_dialog, confirmed, refusal_box, to_type, typed_inline,
+                             typed_name)
 
 
 def stranded(was, now):
@@ -192,7 +193,7 @@ class CarryFlowPages:
             if not confirmed(form.get('confirm'), botid, row,                     # D157
                              mainnet=self._mainnet(fleet_p, 'bybit')):
                 return self._carry_page(fi, form, refusal_box(
-                    'not applied', f'the name typed must be {plain_name(row)} or {botid} '
+                    'not applied', f'the name typed must be {typed_name(row)} or {botid} '
                     '(capitals do not matter) — a click is not a decision'))
             atomic_write(fleet_p, new_fleet)
             if not form.get('edit'):
@@ -231,10 +232,15 @@ class CarryFlowPages:
             '<input type="hidden" name="gg" value="1">' + hidden +
             '<input type="hidden" name="step" value="apply">'
             f'<input type="hidden" name="seen" value="{html.escape(json.dumps(seen), quote=True)}">'
-            f'<b>To {"save this change" if form.get("edit") else "create this bot"}</b>, type '
-            f'{to_type(botid, row)} here: '
-            f'<input name="confirm" size="22" placeholder="{html.escape(plain_name(row) or botid)}"> '
-            f'<button>{"save the change" if form.get("edit") else "create this bot"}</button></form>'
+            + typed_inline(
+                f'<b>To {"save this change" if form.get("edit") else "create this bot"}</b>, type '
+                f'{to_type(botid, row)} here: <input name="confirm" size="22" autocomplete="off">')
+            + confirm_dialog(                                    # D159: the pop-up
+                f'{"Save the change to" if form.get("edit") else "Create"} the carry bot '
+                f'{typed_name(row) or botid} on {self._account(fi)}.',
+                to_type(botid, row), accepts(botid, row),
+                "save the change" if form.get("edit") else "create this bot")
+            + f'<button>{"save the change" if form.get("edit") else "create this bot"}</button></form>'
             '<p class="dim">this writes the account\'s file. A new bot waits until it '
             'is started; at its start it buys its spot and opens its '
             'hedges.</p></div>'

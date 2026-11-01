@@ -21,7 +21,7 @@ def visible(page):
     refusal is said verbatim (P3) and is left out."""
     page = re.sub(r'(?is)<(script|style)\b.*?</\1>', ' ', page)
     page = re.sub(r'(?s)<!--.*?-->', ' ', page)
-    page = re.sub(r'(?s)<div class="refusal">.*?</div>', ' ', page)
+    page = re.sub(r'(?s)<div class="refusal"[^>]*>.*?</div>', ' ', page)
     held = ' '.join(re.findall(r'placeholder="([^"]*)"', page))
     return html.unescape(re.sub(r'<[^>]+>', ' ', page) + ' ' + held)
 

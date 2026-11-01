@@ -54,7 +54,7 @@ def open_trades_html(rows_by_fleet, real=()):
     box per row — clearing is for a trade that has ended. D157: the box
     shows the trade's plain name, and its code is taken too; on an account
     that may reach Mainnet (its index in `real`) only the code, as before."""
-    from .html_bits import plain_name
+    from .html_bits import accepts, confirm_dialog, plain_name, to_type, typed_inline
     rows = ''.join(
         f"<tr><td class='dim'>{html.escape(lb)}</td><td>{html.escape(b)}</td>"
         f"<td>{html.escape(t['side'])} {html.escape(t['symbol'])} {t['capital']:g} at {t['leverage']:g}x</td>"
@@ -64,9 +64,14 @@ def open_trades_html(rows_by_fleet, real=()):
         f"{html.escape(str((t.get('_record') or {}).get('by', '?')))}</td>"
         f"<td><form method='post' action='/trade' style='margin:0'><input type='hidden' name='gg' value='1'>"
         f"<input type='hidden' name='action' value='clear'><input type='hidden' name='fleet' value='{fi}'>"
-        f"<input name='confirm' size='18' placeholder='{html.escape((None if fi in real else plain_name(t)) or b, quote=True)}'>"
-        f"<button class='quiet'>clear</button></form></td></tr>"
-        for fi, lb, trades in rows_by_fleet for b, t in trades)
+        + typed_inline(f"type <code>{html.escape(said)}</code> "
+                       "<input name='confirm' size='18' autocomplete='off'>")
+        + confirm_dialog(                                       # D159: the pop-up
+            f'Clear the ended trade {said} on {lb}, so another can open on its market and side.',
+            to_type(b, t, fi in real), accepts(b, t, fi in real), 'clear')
+        + "<button class='quiet'>clear</button></form></td></tr>"
+        for fi, lb, trades in rows_by_fleet for b, t in trades
+        for said in [(None if fi in real else plain_name(t)) or b])
     return ('<h1>your trades</h1><p class="dim">a trade ends itself at its take profit or '
             'stop; <b>close trade</b> on its card ends it early. Clear one that has ended, by '
             'typing its name (or its code), to open another on that market and side.</p>'

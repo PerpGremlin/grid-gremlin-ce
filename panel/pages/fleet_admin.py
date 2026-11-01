@@ -1,7 +1,7 @@
 """A bot's edit page and the tombstones (X7b). Moved out of routes.py whole (D91 step 3): a mixin
 the Handler inherits."""
 from gridgremlin.apply import row_botid
-from ..html_bits import qarg
+from ..html_bits import accepts, confirm_dialog, qarg, to_type, typed_inline
 from pathlib import Path
 import html
 import json
@@ -126,12 +126,14 @@ class FleetAdminPages:
         clears = ''.join(
             f"<form method='post' action='/clear-tombstones' style='margin:.3em 0'>"
             f"<input type='hidden' name='gg' value='1'><input type='hidden' name='fleet' value='{fi}'>"
-            f"{html.escape(str(lb))}: {len(orph)} left from bots no longer on the account — type "
-            + (f"<b>{html.escape(self._account(fi))}</b> <span class='dim'>(or "
-               f"{html.escape(Path(self.fleets[fi]).name)})</span> "
-               if self._account_typed(self._account(fi)) == fi else
-               f"<b>{html.escape(Path(self.fleets[fi]).name)}</b> ") +
-            f"<input name='confirm' size='18'> <button>clear them</button></form>"
+            f"{html.escape(str(lb))}: {len(orph)} left from bots no longer on the account "
+            + typed_inline(f"— type {self._account_words(fi)} <input name='confirm' size='18' "
+                           "autocomplete='off'> ")
+            + confirm_dialog(                                     # D159: the pop-up
+                f'Clear the {len(orph)} tombstone{"" if len(orph) == 1 else "s"} left on '
+                f'{self._account(fi)} from bots no longer on the account.',
+                self._account_words(fi), self._account_accepts(fi), 'clear them', danger=True)
+            + "<button>clear them</button></form>"
             for fi, lb, _tp, tombs in self._tombs_all()
             for orph in [self._orphans(fi, tombs)] if orph)
         trows = ''.join(
@@ -142,11 +144,17 @@ class FleetAdminPages:
             f"<td><form method='post' action='/revive' style='margin:0'>"
             f"<input type='hidden' name='gg' value='1'>"
             f"<input type='hidden' name='fleet' value='{fi}'>"
-            f"<input name='confirm' size='14' placeholder='{html.escape(said, quote=True)}'>"
-            f"<button>revive</button></form></td></tr>"
+            + typed_inline(f"type <code>{html.escape(said)}</code> "
+                           "<input name='confirm' size='14' autocomplete='off'>")
+            + confirm_dialog(                                     # D159: the pop-up
+                f'Revive the bot {said} on {self._account(fi)}: its tombstone is removed, and it '
+                "runs again when the account's engine next starts.",
+                to_type(b, row, real), accepts(b, row, real), 'revive')
+            + "<button>revive</button></form></td></tr>"
             for fi, lb, _tp, tombs in self._tombs_all()
+            for real in [self._real(self.fleets[min(fi, len(self.fleets) - 1)])]
             for b, v in tombs.items()
-            for said in [self._revive_word(fi, b)]) or \
+            for said, row in [(self._revive_word(fi, b), self._row_of(fi, b))]) or \
             '<tr><td class="dim" colspan="4">no tombstones</td></tr>'
         return ('<h1>tombstones <span class="dim">— revival is deliberate, '
                 'with the evidence</span></h1>'

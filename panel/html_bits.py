@@ -114,13 +114,26 @@ def confirmed(typed, botid, row=None, mainnet=False):
     except (KeyError, TypeError):
         return False
     said = plain_name(row)
-    return bool(said) and _squash(typed) == _squash(said)
+    if said and _squash(typed) == _squash(said):
+        return True
+    # a carry bot's own name, as typed on its form ("basket" for pfobasket):
+    # the word its maker chose is the one they type back
+    return (row.get('strategy') == 'portfolio' and bool(row.get('name'))
+            and _squash(typed) == _squash(row.get('name')))
+
+
+def typed_name(row):
+    """The words a confirm box shows to type off Mainnet: a carry bot's own
+    name as its form took it, any other bot's plain name."""
+    if isinstance(row, dict) and row.get('strategy') == 'portfolio' and row.get('name'):
+        return str(row['name'])
+    return plain_name(row)
 
 
 def to_type(botid, row=None, mainnet=False):
     """D157: the words a confirm box asks for, shown on the page: the plain
     name with the code as the other spelling, or on Mainnet the code."""
-    said = None if mainnet else plain_name(row)
+    said = None if mainnet else typed_name(row)
     if not said:
         return f'its code <code>{esc(botid)}</code>'
     return f'its name <code>{esc(said)}</code> <span class="dim">(or its code {esc(botid)})</span>'
@@ -131,8 +144,59 @@ def refusal_box(title, why, extra=''):
     words: what happened (nothing was saved), the engine's reason, and
     what to do about it."""
     import html as _html
-    return (f'<div class="refusal"><b>{_html.escape(title)}</b> — nothing '
+    # D159: it takes the reader's eye and focus on load (CONFIRM_JS)
+    return (f'<div class="refusal" tabindex="-1" role="alert"><b>{_html.escape(title)}</b> — nothing '
             f'was saved.<br>{_html.escape(str(why))}{extra}</div>')
+
+
+def accepts(botid, row=None, mainnet=False):
+    """D159: the spellings confirmed() takes, as the page's pop-up matches
+    them — lower case, spaces squashed: the code always; off Mainnet the
+    plain name (and a carry bot's own name) of a row that is this bot's.
+    Mainnet: the code only. The server's confirmed() stays the authority."""
+    out = [_squash(botid)]
+    if not mainnet and isinstance(row, dict):
+        from gridgremlin.apply import row_botid
+        try:
+            mine = row_botid(row) == botid
+        except (KeyError, TypeError):
+            mine = False
+        if mine:
+            out += [_squash(s) for s in (
+                plain_name(row),
+                row.get('name') if row.get('strategy') == 'portfolio' else None) if s]
+    return list(dict.fromkeys(out))
+
+
+def typed_inline(inner):
+    """D159: the inline typed box (the page without script): the pop-up's
+    script hides it once it can open the dialog instead."""
+    return f'<span class="typed">{inner}</span>'
+
+
+def confirm_dialog(what, words, accept, button, retypes=(), multi=False, danger=False):
+    """D159: the typed confirmation as a pop-up, inside its form. `what` is
+    the one plain line of what happens, `words` the words to type (to_type's
+    HTML), `accept` the spellings it takes (accepts()), `retypes` Mainnet's
+    second typing as (field, label HTML, the number or None). Its confirm
+    stays disabled until the typing matches; on press the typed words go
+    into the form's own confirm field and the form is sent. Escape or
+    cancel sends nothing. Without script it never opens: the inline box
+    stays (typed_inline)."""
+    import json
+    again = ''.join(
+        f'<label class="again">{label} <input data-into="{esc(name)}" size="14" '
+        f'autocomplete="off"' + (f' data-want="{want!r}"' if want is not None else '') + '></label>'
+        for name, label, want in retypes)
+    return (f'<dialog class="ggconfirm" data-accept="{esc(json.dumps(accept))}"'
+            + (' data-multi="1"' if multi else '') + '>'
+            f'<p class="what">{esc(what)}</p>'
+            f'<p>To go ahead, type {words}:</p>'
+            '<input class="gg-typed" autofocus autocomplete="off" spellcheck="false" '
+            'aria-label="the words to type">' + again +
+            '<p class="dlgbtn"><button type="button" class="quiet" data-cancel>cancel</button> '
+            f'<button type="button" data-go disabled{" class=\"danger\"" if danger else ""}>'
+            f'{esc(button)}</button></p></dialog>')
 
 
 def coin_of(botid):

@@ -1375,6 +1375,29 @@ stands unless the owner corrects it.
   a "start it now" button, and nothing starts on its own; quick setup's "How
   careful?" states the leverage it picks, its values unchanged, and the
   review page shows an estimated liquidation price.
+- **D159 — Refusals take the eye, and the typed confirmation is a pop-up
+  (2026-11-01).** Setting up a carry bot, the owner missed the typed check
+  three times: everything on the page looked alike and the confirm box sat
+  inline among the other fields, so the name went into the wrong box. His
+  ask: errors and prompts come up as a box and the screen goes to them; the
+  name to type pops up on the screen and is typed there. So a refusal is a
+  red-titled box unlike anything else, in every theme, and the page scrolls
+  to the first one and gives it focus on load. Every typed confirmation —
+  create, edit, remove, carry, leverage, stop, close, close trade, a
+  trade's clear, revive, the leftover tombstones, retire all and control's
+  unit actions — opens a dialog when its button is pressed: one plain line
+  of what will happen and on which account, the words to type (the same
+  words the page shows), its own box with the cursor in it, and a confirm
+  button that wakes only when the typing matches what the server takes (the
+  plain name or the code off Mainnet, the code only on Mainnet; case and
+  spaces ignored). Mainnet's second typing of size or capital is in the same
+  dialog. Escape or cancel sends nothing. The server's check is unchanged
+  and stays the authority; the dialog only carries the typing into the
+  form. **Without script** the page is as before: the inline box stays and
+  works, and the refusal is already first; the script hides the inline box
+  only when it can open the dialog. The answer no longer stands in the box
+  as a placeholder, which read as already filled in. Engine behaviour, the
+  mainnet double gate (D25, D64, D97) and D29 are untouched.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

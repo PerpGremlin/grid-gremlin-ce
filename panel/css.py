@@ -46,6 +46,26 @@ tr.only-reversal{display:none}form:has(input[name=preset][value=reversal]:checke
 .refusal{border:2px solid var(--neg);color:var(--neg);padding:.7em 1em;
 margin:0 0 1em;max-width:62em;font-size:1.1em}
 .refusal a{color:var(--accent)}
+/* D159: a refusal and a typed confirmation look like nothing else on the
+page — a refusal a red-titled box on a red wash, the confirmation a framed
+prompt (and, with script, a pop-up over a dimmed page); each theme's own
+--neg, --accent and --bg, so every theme keeps its contrast */
+.refusal{border:3px solid var(--neg);background:color-mix(in srgb,var(--neg) 14%,var(--bg));color:var(--fg);
+box-shadow:0 0 0 3px color-mix(in srgb,var(--neg) 35%,transparent)}
+.refusal>b:first-child{display:block;margin:-.7em -1em .5em;padding:.3em 1em;background:var(--neg);color:var(--bg)}
+.refusal:focus{outline:3px solid var(--fg);outline-offset:2px}
+.typed{display:inline-block;border:2px dashed var(--accent);padding:.3em .6em;margin:.2em 0;
+background:color-mix(in srgb,var(--accent) 10%,var(--bg))}
+.gg-dlg .typed{display:none}
+dialog.ggconfirm:not([open]){display:none}
+dialog.ggconfirm{border:3px solid var(--accent);background:var(--bg);color:var(--fg);padding:0 1.2em 1em;
+max-width:min(36em,92vw);font:inherit;box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 35%,transparent)}
+dialog.ggconfirm::backdrop{background:rgba(0,0,0,.65)}
+dialog.ggconfirm .what{margin:0 -1.2em .8em;padding:.5em 1.2em;background:var(--accent);color:var(--bg);font-weight:bold}
+dialog.ggconfirm input{font:inherit;font-size:1.15em;padding:.3em .5em;width:100%;box-sizing:border-box}
+dialog.ggconfirm label.again{display:block;margin:.6em 0 0;color:var(--neg)}
+dialog.ggconfirm .dlgbtn{text-align:right;margin-top:1em}
+.typed code,dialog.ggconfirm code{font-weight:bold;font-size:1.1em;padding:0 .25em;outline:1px solid var(--accent)}
 a{color:var(--accent)}
 a[href]{display:inline-block;padding:.2em .7em;margin:.15em .2em;background:var(--accent-soft);border:1px solid var(--accent);border-radius:4px;color:var(--fg);text-decoration:none;line-height:1.5}a[href]:hover,a.pick{background:var(--accent);color:var(--bg)}b.on{display:inline-block;padding:.2em .7em;margin:.15em .2em;background:var(--accent);border:1px solid var(--accent);border-radius:4px;color:var(--bg)}a[href*='mode=remove'],a[href^='/retire'],a[href^='/close']{border-color:var(--neg)}
 .grp{grid-column:1/-1;color:var(--dim);text-align:left;padding-top:.6em;
@@ -258,6 +278,10 @@ price line, the grid dotted dark grey, small Tahoma */
 :root.t-metatrader body{font:11px/1.35 Tahoma,Verdana,Geneva,sans-serif;font-variant-numeric:tabular-nums}
 :root.t-metatrader :is(td,th,.grp){border-bottom-style:dotted}
 :root.t-metatrader svg line[stroke="var(--line)"]{stroke-dasharray:1 3}
+/* D159: win95's dialog a raised window, its title bar navy */
+:root.t-win95 dialog.ggconfirm{border:0;box-shadow:var(--up)}
+:root.t-win95 dialog.ggconfirm .what{background:#000080;color:#fff}
+:root.t-win95 .refusal{background:#fff;color:#000}:root.t-win95 .refusal>b:first-child{color:#fff}
 /* U112: both square, every corner */
 :root.t-win95 *,:root.t-metatrader *{border-radius:0!important}
 """

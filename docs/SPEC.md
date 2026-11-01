@@ -1980,6 +1980,9 @@ eventually pin (T1).
 - **U108e** (D157, 2026-10-31) The carry form refuses a coin over "Most in
   one coin" in its own units, a share of the basket, and says what to change;
   the engine's check on the stack (H1) stays behind it unchanged.
+- **U125b** (D157, 2026-11-01) A carry bot's confirm box also takes the name its
+  maker typed on the form ("basket" for pfobasket) and shows that name to type;
+  any other bot's bare symbol is not taken, and Mainnet takes the code only.
 - **U109** The right half's tables fit the half: latest trades in four
   columns (the account under the bot, the side with its role, the size at
   its price), a bot's fills in six (the date over the time), their text
@@ -2161,6 +2164,34 @@ eventually pin (T1).
   bots", "stop — its bots park, positions stay open"); the written page,
   the stop page, the tombstones and the trade page say account, not fleet.
   *(D157)*
+- **U130** (D159, 2026-11-01) **The typed confirmation is a pop-up.** Every
+  form with a typed gate — create, edit, remove, carry, the portfolio's
+  leverage, stop, remove a stood-down bot, close, close trade, a trade's
+  clear, retire all, control's unit actions, revive and the leftover
+  tombstones — holds a `dialog.ggconfirm` and keeps its inline box
+  (`span.typed`) for a page without script; no answer stands in a box as a
+  placeholder. Pressing the form's button opens the dialog instead of
+  sending; Escape or cancel sends nothing; its confirm puts the typing (and
+  any second typing) into the form's own fields and sends it. The script
+  hides the inline box only once it can open a dialog. Its sabotage drops
+  the dialog, or puts the answer back as a placeholder, and is caught.
+- **U131** (D159, 2026-11-01) The dialog's words to type are `to_type`'s,
+  the same as the inline box's, and its one line says what will happen and
+  on which account ("Create the carry bot basket on demo.").
+- **U132** (D159, 2026-11-01) The dialog's `data-accept` is
+  `html_bits.accepts`: of every spelling tried, `confirmed` takes exactly
+  those it lists (lower case, spaces squashed, as the script squashes), on
+  Demo and on Mainnet. On Mainnet it lists the code alone on every gate,
+  and the second typing (size or capital) is in the dialog, its button
+  woken only when the number equals the page's. `confirmed` stays the
+  server's check, unchanged.
+- **U133** (D159, 2026-11-01) Sabotage: a Mainnet create page whose dialog
+  takes the plain name is caught by the check, and the server still
+  refuses the plain name.
+- **U134** (D159, 2026-11-01) A refusal (`refusal_box`) is a red-titled box
+  with `tabindex="-1"`, in each theme's own colours; on load the page's
+  script scrolls to the first and focuses it. Its sabotage draws one
+  without the tabindex, and the script would not find it.
 - **U111** A carry bot's hedge may differ by coin — inverse, usdt or usdc,
   the common one above and the others named ("SOL usdt") — and the form
   shows each coin's three perpetuals side by side: what a short was paid

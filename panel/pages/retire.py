@@ -3,7 +3,7 @@ stand down keeping the position, stand down closing everything — and its
 removal from the fleet inside it. The panel holds no keys: it writes the
 request, and the running fleet's bot acts on it under its own links (the
 road a trade's close takes, L7). A mixin the Handler inherits."""
-from ..html_bits import confirmed, plain_name, refusal_box, to_type
+from ..html_bits import accepts, confirm_dialog, typed_inline, confirmed, plain_name, refusal_box, to_type
 from panel.chart import _f
 from pathlib import Path
 import html
@@ -104,8 +104,13 @@ class RetirePages:
             return self._page(
                 top + said + '<form method="post" action="/retire">' + hidden
                 + '<input type="hidden" name="do" value="remove">'
-                + f'type {to_type(botid, row, real)} to take it off the account: <input name="confirm" '
-                f'size="22" placeholder="{b if real else said}"> <button class="danger">remove</button></form>'
+                + typed_inline(f'type {to_type(botid, row, real)} to take it off the account: '
+                               '<input name="confirm" size="22" autocomplete="off"> ')
+                + confirm_dialog(                                   # D159: the pop-up
+                    f'Take the bot {plain_name(row) or botid} off {self._account(min(fi, len(self.fleets) - 1))}: '
+                    'its row and watchdog line leave the files.',
+                    to_type(botid, row, real), accepts(botid, row, real), 'remove', danger=True)
+                + '<button class="danger">remove</button></form>'
                 '<p class="dim">the bot and its watchdog line leave the account\'s files together; a '
                 'backup is kept beside each.</p>')
         if req and req.get('action') in ('hold', 'close'):
@@ -131,10 +136,15 @@ class RetirePages:
             + '<p class="say"><b>Close the position, or leave it open?</b></p>' + steps
             + '<p><label><input type="checkbox" name="remove" value="1"> and <b>remove</b> it from the '
             'account once it has stopped</label> <span class="dim">(not with pause)</span></p>'
-            + f'type {to_type(botid, row, real)}: <input name="confirm" size="22" '
-              f'placeholder="{b if real else said}"> '
-            + ('<br><span class="neg">real money</span> — to close everything, type the size a second '
-               'time: <input name="size" size="14" placeholder="the size above"> ' if real and held else '')
+            + typed_inline(
+                f'type {to_type(botid, row, real)}: <input name="confirm" size="22" autocomplete="off"> '
+                + ('<br><span class="neg">real money</span> — to close everything, type the size a second '
+                   'time: <input name="size" size="14" placeholder="the size above"> ' if real and held else ''))
+            + confirm_dialog(                                       # D159: the pop-up
+                f'Stop the bot {plain_name(row) or botid} on {self._account(min(fi, len(self.fleets) - 1))}, '
+                'as chosen above.', to_type(botid, row, real), accepts(botid, row, real), 'stop it',
+                [('size', f'<b>real money</b>, to close everything: type the size (<code>{held:.10g}</code>) '
+                  'a second time', None)] if real and held else [], danger=True)
             + '<button class="danger">stop it</button></form>')
 
     def _retire_act(self, form):

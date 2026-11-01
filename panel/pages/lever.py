@@ -1,7 +1,7 @@
 """D143: a portfolio row's leverage, reviewed and written (panel/lever.py is
 the pure half): a mixin the Handler inherits."""
 from gridgremlin.apply import row_botid
-from ..html_bits import confirmed, plain_name, refusal_box, to_type
+from ..html_bits import accepts, confirm_dialog, confirmed, plain_name, refusal_box, to_type, typed_inline
 from pathlib import Path
 import html
 import json
@@ -79,5 +79,10 @@ class LeverPages:
             + ''.join(f'<input type="hidden" name="{e(k, quote=True)}" value="{e(v, quote=True)}">'
                       for k, v in typed.items()) +
             f'<input type="hidden" name="seen" value="{e(json.dumps(seen), quote=True)}">'
-            f'<label>type {to_type(botid, raw["bots"][i])} to write it <input name="confirm" size="20"></label> '
-            '<button>write it</button></form><p><a href="/">back, change nothing</a></p>')
+            + typed_inline(f'type {to_type(botid, raw["bots"][i])} to write it '
+                           '<input name="confirm" size="20" autocomplete="off"> ')
+            + confirm_dialog(                                    # D159: the pop-up
+                f'Write the new leverage of the bot {plain_name(raw["bots"][i]) or botid} '
+                f'on {self._account(fi)}.', to_type(botid, raw['bots'][i]),
+                accepts(botid, raw['bots'][i]), 'write it')
+            + '<button>write it</button></form><p><a href="/">back, change nothing</a></p>')

@@ -1,7 +1,8 @@
 """Control (§12): the control page, starting and stopping units, closing what a stopped bot left open (X15). Moved out of routes.py whole (D91 step 3): a mixin
 the Handler inherits."""
 from ..forms import unit_for_fleet, unit_refusal, waiting_for_restart
-from ..html_bits import confirmed, plain_name, refusal_box, to_type
+from ..html_bits import (_squash, accepts, confirm_dialog, confirmed, esc, plain_name, refusal_box,
+                         to_type, typed_inline)
 from gridgremlin.apply import row_botid
 from panel.chart import _f
 from pathlib import Path
@@ -42,8 +43,8 @@ account's bots, on this computer; never the exchange</span></h1>
 <select name="action"><option value="start">start</option><option value="stop">stop —
 its bots park, positions stay open</option>
 <option value="restart">restart — loads new and removed bots</option></select>
-type the account's name to confirm ({html.escape(names)}) — its file name works too:
-<input name="confirm" size="22"><button>do it</button></form></div>
+{typed_inline(f"type the account's name to confirm ({html.escape(names)}) — its file name works too: "
+              '<input name="confirm" size="22" autocomplete="off">')}{self._unit_dialog(names, supervise=True)}<button>do it</button></form></div>
 <p class="dim">the engine runs on its own: closing the panel does
 nothing to it. Stop parks the bots and never closes a position. Nothing
 restarts by itself.</p>
@@ -83,9 +84,9 @@ account's bots, on this computer; never the exchange</span></h1>
 <select name="action"><option value="restart">restart — loads new and removed bots</option>
 <option value="stop">stop — its bots park, positions stay open</option>
 <option value="start">start</option></select>
-type the account's name to confirm ({html.escape(names)}) — or its unit name; several go
-separated by commas. An account that may reach Mainnet takes its unit name only:
-<input name="confirm" size="44">
+{typed_inline(f"type the account's name to confirm ({html.escape(names)}) — or its unit name; several go "
+              "separated by commas. An account that may reach Mainnet takes its unit name only: "
+              '<input name="confirm" size="44" autocomplete="off">')}{self._unit_dialog(names)}
 <button>do it</button></form></div>
 <p class="dim">one exception to "never the exchange": a bot's card offers
 <b>stop</b>, which asks the running bot to close its position or leave it
@@ -104,6 +105,21 @@ restart loads every written change.</p>
             return str(self.labels[fi])
         return Path(self.fleets[fi]).name
 
+    def _unit_dialog(self, names, supervise=False):
+        """D159: control's pop-up — what it takes is what _control_act
+        takes: an account's name where _account_typed reads one, else its
+        unit name (several, separated by commas, U43), or on a laptop its
+        file name."""
+        named = [self._account(fi) for fi in range(len(self.fleets))
+                 if self._account_typed(self._account(fi)) == fi]
+        other = [Path(f).name for f in self.fleets] if supervise else list(self.units)
+        return confirm_dialog(
+            "Start, stop or restart the account's engine, as chosen above.",
+            f'the account\'s name <span class="dim">({esc(names)}) — or its '
+            + ('file name' if supervise else 'unit name; several go separated by commas')
+            + '</span>', list(dict.fromkeys(_squash(n) for n in named + other)), 'do it',
+            multi=not supervise)
+
     def _real(self, fleet):
         """D157: may this fleet reach Mainnet, by either venue's reading —
         where a shortcut is never taken."""
@@ -119,6 +135,26 @@ restart loads every written change.</p>
         if len(hits) != 1 or self._real(self.fleets[hits[0]]):
             return None
         return hits[0]
+
+    def _account_words(self, fi):
+        """D159: what to type to act on one account's file (retire all, the
+        leftover tombstones): its name, or its file name where the name is
+        not taken (Mainnet, or two of a name)."""
+        fi = min(fi, len(self.fleets) - 1)
+        name = Path(self.fleets[fi]).name
+        if self._account_typed(self._account(fi)) == fi:
+            return (f'<b>{html.escape(self._account(fi))}</b> '
+                    f'<span class="dim">(or {html.escape(name)})</span>')
+        return f'<b>{html.escape(name)}</b>'
+
+    def _account_accepts(self, fi):
+        """D159: the spellings those pages take, for the pop-up: the file
+        name, and the account's name where _account_typed reads it."""
+        fi = min(fi, len(self.fleets) - 1)
+        out = [_squash(Path(self.fleets[fi]).name)]
+        if self._account_typed(self._account(fi)) == fi:
+            out.append(_squash(self._account(fi)))
+        return out
 
     def _units_typed(self, typed):
         """D157: the unit names a typed confirmation means — a part between
@@ -209,17 +245,18 @@ restart loads every written change.</p>
                 left += (f'<p class="neg">{key.replace("_", " ")}: '
                          + html.escape(got[key] if isinstance(got[key], str) else '; '.join(got[key]))
                          + '</p>')
+        words = self._account_words(fi)
         again = ('' if go else
                  f'<form method="post" action="/retire-all"><input type="hidden" name="gg" value="1">'
                  f'<input type="hidden" name="fleet" value="{fi}"><input type="hidden" name="go" value="1">'
                  + ('<input type="hidden" name="sell" value="1">' if sell else '')
                  + ('<input type="hidden" name="clear" value="1">' if clear else '')
-                 + (f'type <b>{html.escape(self._account(min(fi, len(self.fleets) - 1)))}</b> '
-                    f'<span class="dim">(or {html.escape(name)})</span> to do it: '
-                    if self._account_typed(self._account(min(fi, len(self.fleets) - 1))) is not None
-                    else f'type <b>{html.escape(name)}</b> to do it: ')
-                 + '<input name="confirm" size="24"> '
-                   '<button>retire all</button></form>')
+                 + typed_inline('type ' + words + ' to do it: <input name="confirm" size="24" autocomplete="off"> ')
+                 + confirm_dialog(                               # D159: the pop-up
+                     f'Retire every bot of {self._account(min(fi, len(self.fleets) - 1))}'
+                     + (', sell its coins' if sell else '') + (', and clear it to no bots' if clear else '')
+                     + '.', words, self._account_accepts(fi), 'retire all', danger=True)
+                 + '<button>retire all</button></form>')
         return self._page(head + f'<ul>{"".join(lines) or "<li>nothing in this fleet</li>"}</ul>'
                           + left + again + '<p><a href="/control">control</a> · <a href="/">fleet</a></p>')
 
@@ -337,12 +374,18 @@ restart loads every written change.</p>
                 '<input type="hidden" name="gg" value="1">'
                 f'<input type="hidden" name="fleet" value="{fi}">'
                 f'<input type="hidden" name="bot" value="{b}">'
-                f'type {to_type(botid, row, real)} to close it: <input name="confirm" '
-                f'size="18" placeholder="{_html.escape(said)}"> '
-                + (f'<br><span class="neg">real money</span> — it holds <b>{held:.10g}</b> '
-                   '(the engine\'s last snapshot); type the size a second time: '
-                   '<input name="size" size="14" placeholder="the size above"> '
-                   if real else '')                                    # X15d
+                + typed_inline(
+                    f'type {to_type(botid, row, real)} to close it: <input name="confirm" '
+                    'size="18" autocomplete="off"> '
+                    + (f'<br><span class="neg">real money</span> — it holds <b>{held:.10g}</b> '
+                       '(the engine\'s last snapshot); type the size a second time: '
+                       '<input name="size" size="14" placeholder="the size above"> '
+                       if real else ''))                                # X15d
+                + confirm_dialog(                                       # D159: the pop-up
+                    f'Close the trade {said} at market on {self._account(min(fi, len(self.fleets) - 1))}.',
+                    to_type(botid, row, real), accepts(botid, row, real), 'close at market',
+                    [('size', f'<b>real money</b>: type the size it holds (<code>{held:.10g}</code>) '
+                      'a second time', held)] if real else [], danger=True)
                 + '<button class="danger">close at market</button></form>')
         real = self._mainnet(self.fleets[min(fi, len(self.fleets) - 1)], 'bybit')
         row = self._row_of(fi, botid)
@@ -368,11 +411,18 @@ restart loads every written change.</p>
             '<input type="hidden" name="gg" value="1">'
             f'<input type="hidden" name="fleet" value="{fi}">'
             f'<input type="hidden" name="bot" value="{b}">'
-            f'type {to_type(botid, row, real)} to close it: <input name="confirm" '
-            f'size="18" placeholder="{_html.escape(said)}"> '
-            + ('<br><span class="neg">real money</span> — type the size a second time: '
-               '<input name="size" size="14" placeholder="the size above"> '
-               if real else '')
+            + typed_inline(
+                f'type {to_type(botid, row, real)} to close it: <input name="confirm" '
+                'size="18" autocomplete="off"> '
+                + ('<br><span class="neg">real money</span> — type the size a second time: '
+                   '<input name="size" size="14" placeholder="the size above"> '
+                   if real else ''))
+            + confirm_dialog(                                           # D159: the pop-up
+                f'Close the {got["side"]} position of {got["held"]:.10g} {got["symbol"]} that '
+                f'{said} left open, at market, on {self._account(min(fi, len(self.fleets) - 1))}.',
+                to_type(botid, row, real), accepts(botid, row, real), 'close at market',
+                [('size', f'<b>real money</b>: type the size (<code>{got["held"]:.10g}</code>) '
+                  'a second time', got['held'])] if real else [], danger=True)
             + '<button class="danger">close at market</button></form>')
 
     def _close_act(self, form):

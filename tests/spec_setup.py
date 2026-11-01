@@ -430,6 +430,9 @@ def spec_P1_the_panel_holds_its_boundary_behind_the_token():
             _fleet_rows = Handler._fleet_rows
             _account = Handler._account
             _account_typed = Handler._account_typed
+            _account_words = Handler._account_words          # D159: the pop-up's words
+            _account_accepts = Handler._account_accepts
+            _row_of = Handler._row_of
 
             def _real(self, f):
                 return False

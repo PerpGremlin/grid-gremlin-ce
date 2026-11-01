@@ -63,7 +63,7 @@ def spec_U99_the_panel_reviews_asks_for_the_name_and_writes_onto_what_it_read():
         seen = review.split('name="seen" value="')[1].split('"')[0].replace('&quot;', '"')
         wrong = _call(base, '/lever', dict(form, seen=seen, confirm='pfoother'))
         assert 'not applied' in wrong and json.loads(f.read_text()) == fleet
-        assert '<code>carry portfolio</code>' in review                 # D157: its plain name
+        assert '<code>carry</code>' in review                 # D157/U125b: a carry bot's own name
         ok = _call(base, '/lever', dict(form, seen=seen, confirm='Carry  portfolio'))
         assert 'pfocarry: written' in ok
         row = json.loads(f.read_text())['bots'][1]

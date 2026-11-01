@@ -110,7 +110,8 @@ def spec_U125_every_typed_gate_on_demo_takes_the_plain_name():
     base, d, close = _served()
     try:
         page = _call(base, '/setup', RISING)
-        assert '<code>BTCUSDT long grid</code>' in page and 'placeholder="BTCUSDT long grid"' in page
+        assert '<code>BTCUSDT long grid</code>' in page and 'placeholder="BTCUSDT long grid"' not in page   # D159
+        assert '&quot;btcusdt long grid&quot;' in page                     # the pop-up takes it
         with _Systemctl('inactive'):
             done = _call(base, '/apply', {'fleet': '0', 'proposal': _proposal(page),
                                           'confirm': 'btcusdt long grid'})
@@ -124,13 +125,14 @@ def spec_U125_every_typed_gate_on_demo_takes_the_plain_name():
         Tombstones(str(tp)).add('linETHUSDTl', 'its stop')
         with _Systemctl('inactive'):
             control = _call(base, '/control')
-        assert "placeholder='ETHUSDT long grid'" in control
+        assert "type <code>ETHUSDT long grid</code>" in control and "placeholder='ETHUSDT" not in control
         assert 'tombstone removed' in _call(base, '/revive', {'fleet': '0', 'confirm': 'ethusdt long grid'})
         ok = _call(base, '/trade', {'action': 'open', 'go': '1', 'fleet': '0', 'side': 'short',
                                     'symbol': 'SOLUSDT', 'capital': '100', 'tp': '1'})
         assert 'linSOLUSDTs: queued' in ok
         Tombstones(str(tp)).add('linSOLUSDTs', 'took profit')
-        assert "placeholder='SOLUSDT short trade'" in _call(base, '/trade')
+        trades = _call(base, '/trade')
+        assert "type <code>SOLUSDT short trade</code>" in trades and "placeholder='SOLUSDT" not in trades
         assert 'linSOLUSDTs: cleared' in _call(base, '/trade', {'action': 'clear', 'fleet': '0',
                                                                  'confirm': 'SOLUSDT short trade'})
     finally:
@@ -458,3 +460,22 @@ def spec_U129_control_speaks_of_accounts_and_shows_units_as_a_detail():
         assert not re.search(r'\bfleets?\b', shown), re.findall(r'.{30}\bfleets?\b.{30}', shown)
     finally:
         close()
+
+
+def spec_U125b_a_carry_bot_takes_its_own_name_off_mainnet():
+    """U125b: a carry bot's box takes the name its maker typed on the form
+    ("lvgdbet" for pfolvgdbet) as well as "lvgdbet portfolio" and the code,
+    and shows that name to type; Mainnet still takes the code only."""
+    from panel.html_bits import confirmed, to_type
+    row = {'strategy': 'portfolio', 'name': 'lvgdbet'}
+    for typed in ('lvgdbet', ' LVGDBET ', 'lvgdbet portfolio', 'pfolvgdbet'):
+        assert confirmed(typed, 'pfolvgdbet', row), typed
+    for typed in ('', 'lvgdbe', 'basket', 'pfo'):
+        assert not confirmed(typed, 'pfolvgdbet', row), typed
+    assert not confirmed('lvgdbet', 'pfolvgdbet', row, mainnet=True)
+    assert confirmed('pfolvgdbet', 'pfolvgdbet', row, mainnet=True)
+    assert not confirmed('lvgdbet', 'pfobasket', row)     # another bot's row
+    assert '<code>lvgdbet</code>' in to_type('pfolvgdbet', row)
+    assert 'lvgdbet' not in to_type('pfolvgdbet', row, mainnet=True).split('<code>')[1].replace('pfolvgdbet', '')
+    grid = {'symbol': 'BTCUSDT', 'side': 'long', 'strategy': 'grid'}
+    assert not confirmed('BTCUSDT', 'linBTCUSDTl', grid)  # only a carry bot's name is bare
