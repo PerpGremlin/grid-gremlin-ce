@@ -138,6 +138,11 @@ eventually pin (T1).
 
 ## G — the grid
 
+- **A8** (2026-11-01) The kind asked for is the kind read: a Bybit instrument whose
+  `contractType` is not the market type asked for (Bybit answers a linear query
+  for BTCUSD with the inverse contract) is refused in words that name the market
+  and what to type — never read as the other kind (its 1-contract lot read as a
+  1-coin minimum).
 - **G1** The lattice is computed once from `{lower, upper, rungs}`, tick-rounded; price
   never moves it. A slide (G17–G19) moves the *window* over the unchanged lattice by
   whole rungs, on a trigger, never continuously. *(v1's central bug; §5d; D28)*

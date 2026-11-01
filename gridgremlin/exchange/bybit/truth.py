@@ -23,7 +23,27 @@ def parse_instrument(category, info):
             'max_leverage': _f((info.get('leverageFilter') or {}).get('maxLeverage')) or None}
     if info.get('status') != 'Trading':
         raise VenueError(f"{info['symbol']}: status {info.get('status')!r}")
+    # A8: Bybit answers a linear query for an inverse symbol (BTCUSD) with the
+    # inverse contract, whose lot is 1 USD contract — read as 1 coin it sized
+    # every order wrong. The kind asked for is the kind it must be.
+    kind = str(info.get('contractType') or '')
+    want = CONTRACT_KIND.get(category)
+    if kind and want and not kind.startswith(want):
+        raise VenueError(wrong_kind(info['symbol'], category, kind))
     return spec
+
+
+CONTRACT_KIND = {'linear': 'Linear', 'inverse': 'Inverse'}
+
+
+def wrong_kind(symbol, category, kind):
+    """A8's refusal in plain words: what the market is, and what to type."""
+    if kind.startswith('Inverse'):
+        return (f'{symbol} is a coin-margined (inverse) market on Bybit, not a USDT/USDC '
+                f'one: pick the inverse market type for it, or type '
+                f'{symbol}T for the USDT perpetual')
+    return (f'{symbol} is a USDT/USDC ({kind}) market on Bybit, not a {category} one: '
+            'pick the USDT/USDC perpetual market type for it')
 
 
 def read_wallet(result):

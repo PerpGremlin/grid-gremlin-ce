@@ -1328,3 +1328,32 @@ def spec_F12_a_portfolio_leverage_refused_applies_nothing_and_other_changes_wait
         fleet.write_text(json.dumps(raw))
         assert watch.apply() == {'pfocarry': 'restart'}, q
         assert row.cfg['capital'] == 1000.0 and row.cfg['margin']['spot_leverage'] == 2.0
+
+
+def spec_A8_an_instrument_of_another_kind_is_refused():
+    """A8: Bybit answers a linear query for BTCUSD with the inverse contract;
+    read as linear its 1-contract lot was 1 coin. The kind asked for must be
+    the kind returned, refused in words that say what to type. Sabotage:
+    without the check the inverse lot reads as a 1-coin minimum."""
+    from gridgremlin.exchange.bybit.truth import parse_instrument
+    from gridgremlin.exchange.errors import VenueError
+    inv = {'symbol': 'BTCUSD', 'contractType': 'InversePerpetual', 'status': 'Trading',
+           'baseCoin': 'BTC', 'settleCoin': 'BTC', 'priceFilter': {'tickSize': '0.5'},
+           'lotSizeFilter': {'qtyStep': '1', 'minOrderQty': '1'}}
+    lin = dict(inv, symbol='BTCUSDT', contractType='LinearPerpetual', settleCoin='USDT',
+               lotSizeFilter={'qtyStep': '0.001', 'minOrderQty': '0.001', 'minNotionalValue': '5'})
+    try:
+        parse_instrument('linear', inv)
+    except VenueError as e:
+        assert 'coin-margined (inverse)' in str(e) and 'BTCUSDT' in str(e), e
+    else:
+        raise AssertionError('an inverse contract was read as a linear one')
+    try:
+        parse_instrument('inverse', lin)
+    except VenueError as e:
+        assert 'USDT/USDC' in str(e), e
+    else:
+        raise AssertionError('a linear contract was read as an inverse one')
+    assert parse_instrument('inverse', inv)['min_qty'] == 1.0
+    assert parse_instrument('linear', lin)['min_qty'] == 0.001
+    assert parse_instrument('linear', {k: v for k, v in lin.items() if k != 'contractType'})['qty_step'] == 0.001
