@@ -184,6 +184,16 @@ def _reduces(direction, liquidated_us):
     return d.startswith('Close') or '>' in d
 
 
+def _fill_time(raw, tid):
+    """G29: a fill's time, or a refusal naming the fill — a bare int() named
+    nothing, and the one bad row could not be found to deal with by hand."""
+    try:
+        return int(raw or 0)
+    except (TypeError, ValueError):
+        raise ValueError(f'fill id {tid} refused: its time {raw!r} is not '
+                         'a time (G29)') from None
+
+
 def read_fills(raw, coins, address):
     """R1: the shared fill shape; tid is the execution id, the cloid decodes
     back to the link. Rows outside `coins` are not ours to ledger.
@@ -207,12 +217,15 @@ def read_fills(raw, coins, address):
             who = _addr(liq.get('liquidatedUser')) if isinstance(liq, dict) \
                 else ''
             if not who:
-                raise VenueError(f"{f.get('coin')} fill {f.get('tid')}: "
-                                 'liquidation stamp names no liquidatedUser '
-                                 '— cannot tell whose it was (R10)')
+                # G29: the refused fill's id leads, so the freeze's card
+                # and phone line name the one fill to deal with by hand
+                raise VenueError(f"fill id {f.get('tid')} ({f.get('coin')}) "
+                                 'refused: its liquidation stamp names no '
+                                 'liquidatedUser — cannot tell whose it was '
+                                 '(R10)')
             liquidated_us = who == ours
         out.append({'exec_id': str(f.get('tid')),
-                    'time_ms': int(f.get('time') or 0),
+                    'time_ms': _fill_time(f.get('time'), f.get('tid')),
                     'symbol': f.get('coin'),
                     'market_type': 'linear',
                     # HL's round exits are OUR resting orders (D21) and carry

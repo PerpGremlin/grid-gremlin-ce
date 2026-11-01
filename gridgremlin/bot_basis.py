@@ -11,7 +11,8 @@ from .ladder import (SEED_RUNG, anchor_from_rung, fee_floor_for, grid_rungs,
                      sellable_base, slide_is_adverse, slide_offset, split,
                      stop_level_for)
 from .window import window
-from .bot_constants import HISTORY_WINDOW_DAYS, RUNGS_LAG_SECONDS, VENUE_STOP
+from .bot_constants import (FROZEN_REMIND_SECONDS, FROZEN_WHY_CHARS,
+                            HISTORY_WINDOW_DAYS, RUNGS_LAG_SECONDS, VENUE_STOP)
 
 FORWARD_MS = 3_600_000     # G26: reads only move forward, over the last hour
 
@@ -208,7 +209,9 @@ class BasisMixin:
             # D158: back at the size the cached lots describe, with nothing
             # awaited, there is nothing a read must tell: an outage's freeze
             # ends here as at a flat, or it outlived the failure forever
-            self._rungs_fail_since, self._rungs_fail_said = None, False
+            if self._rungs_fail_since is not None:
+                self._freeze_over(self._now(), 'freeze over back at the '
+                                  'size its lots describe')     # G28
             return cached[2]
         entry = self._entry_side.lower()
         want = abs(held)
@@ -218,7 +221,7 @@ class BasisMixin:
         for days in (2, HISTORY_WINDOW_DAYS):     # the newest cover almost always
             try:
                 listed = self._own_fills_all(days)
-            except (VenueError, OSError):
+            except (VenueError, OSError) as e:
                 # D158: a read that fails says
                 # nothing of which lots are held; both sides freeze for as
                 # long as it fails, on a clock of its own, said once past
@@ -227,14 +230,31 @@ class BasisMixin:
                 # is not settled by the clock while nothing can be read.
                 if self._rungs_fail_since is None:
                     self._rungs_fail_since = now
-                if (now - self._rungs_fail_since >= RUNGS_LAG_SECONDS
-                        and not self._rungs_fail_said):
+                # G28: the exchange's own words, for the card and the phone
+                # (a fill our parser refused names its id: G29)
+                why = (str(e) or type(e).__name__).strip()
+                if len(why) > FROZEN_WHY_CHARS:
+                    why = why[:FROZEN_WHY_CHARS - 1] + '…'
+                self._rungs_fail_why = why
+                lasted = now - self._rungs_fail_since
+                if lasted >= RUNGS_LAG_SECONDS and not self._rungs_fail_said:
                     self._rungs_fail_said = True
                     self.notify.event(
                         'warn', self.botid,
                         f'our fills could not be read for '
                         f'{RUNGS_LAG_SECONDS:g}s — nothing placed or '
-                        'cancelled until they can (G26, D158)', urgent=True)
+                        f'cancelled until they can (G26, D158): {why}',
+                        urgent=True)
+                elif (self._rungs_fail_said and lasted >= FROZEN_REMIND_SECONDS
+                        * (self._rungs_fail_reminded + 1)):
+                    # G28: said again every FROZEN_REMIND_SECONDS while it
+                    # lasts, urgent like the first; a catch-up says once
+                    self._rungs_fail_reminded = int(lasted
+                                                    // FROZEN_REMIND_SECONDS)
+                    self.notify.event(
+                        'warn', self.botid,
+                        f'still frozen after {lasted / 3600:.0f} h: {why}',
+                        urgent=True)
                 return cached[2] if cached else None
             if listed is None:
                 self._rungs_awaited = {}          # no account: nothing to wait on
@@ -243,7 +263,7 @@ class BasisMixin:
                 # D158: the outage is over; G26's wait starts afresh from
                 # this read, never spent by the outage — and so does each
                 # awaited order's
-                self._rungs_fail_since, self._rungs_fail_said = None, False
+                self._freeze_over(now, 'fills readable again')    # G28
                 self._rungs_lag_since = None
                 for link in self._rungs_awaited:
                     self._rungs_awaited[link] = now
@@ -361,6 +381,30 @@ class BasisMixin:
         if state in ('filled', 'open'):
             self._rungs_asked.add(link)
         return False
+
+    def _freeze_over(self, now, how):
+        """G28: D158's freeze has ended — a clean read, a flat, or the
+        holding back at the cached size. A freeze that was said (past the
+        wait) is said over once, plainly (the log's, not the phone's), with
+        how long it lasted; one shorter than the wait was never said, so
+        neither is its end. Only what is SAID changes here: when the freeze
+        ends is D158's."""
+        if self._rungs_fail_said:
+            self.notify.event('info', self.botid,
+                              f'{how} after '
+                              f'{(now - self._rungs_fail_since) / 60:.0f} min;'
+                              ' running (D158)')
+        self._rungs_fail_since, self._rungs_fail_said = None, False
+        self._rungs_fail_why, self._rungs_fail_reminded = None, 0
+
+    @property
+    def frozen_view(self):
+        """G28: the snapshot's word on a frozen bot — since when (unix
+        seconds) and the exchange's error — or None."""
+        if self._rungs_fail_since is None:
+            return None
+        return {'frozen_since': self._rungs_fail_since,
+                'frozen_why': self._rungs_fail_why}
 
     def _rungs_frozen(self, now):
         """G26: inside the wait, nothing is placed or cancelled — nor while

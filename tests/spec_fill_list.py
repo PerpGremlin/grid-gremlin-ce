@@ -149,7 +149,8 @@ def spec_D96_the_market_pages_stay_gone():
     from the panel — no module, no link, and their old addresses land on
     the front page. The trading server no longer pulls the collected data
     (no unit template, no reader). The hourly reading the bots trade on,
-    and the carry page, stay."""
+    and the carry page's address, stay (U149: it opens the Portfolio Bot
+    form's rehearsal now)."""
     import importlib.util
     import urllib.request
     from spec_panel import CONTRACT, _serve
@@ -168,7 +169,7 @@ def spec_D96_the_market_pages_stay_gone():
             page = urllib.request.urlopen(urllib.request.Request(base + path, headers={'Cookie': 'gg=tok123'})).read().decode()
             assert '<title>grid-gremlin</title>' in page and 'Pick a bot by its name' in page, path
         page = urllib.request.urlopen(urllib.request.Request(base + '/carry', headers={'Cookie': 'gg=tok123'})).read().decode()
-        assert '<h1>carry</h1>' in page
+        assert 'Rehearse it first' in page and 'set up a carry bot' in page
     finally:
         srv.shutdown()
 

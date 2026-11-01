@@ -275,8 +275,16 @@ def read_fills(client, category, symbol, start_ms, end_ms):
                 stop_kind = str(e.get('stopOrderType') or '')
                 closed = _f(e.get('closedSize'), 0.0)
                 forced = e.get('execType') in ('BustTrade', 'AdlTrade')
+                try:
+                    at = int(e.get('execTime') or 0)
+                except (TypeError, ValueError):
+                    # G29: the one per-fill refusal here — named by its id
+                    # (a bare int() named nothing to deal with by hand)
+                    raise ValueError(f'fill id {eid} refused: its execTime '
+                                     f"{e.get('execTime')!r} is not a time "
+                                     '(G29)') from None
                 fills.append({'exec_id': eid,
-                              'time_ms': int(e.get('execTime') or 0),
+                              'time_ms': at,
                               'symbol': e.get('symbol'),
                               'market_type': category,
                               # spot rows carry no closedSize (M5)

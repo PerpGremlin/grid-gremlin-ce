@@ -83,7 +83,7 @@ button.quiet{background:var(--accent-soft);border:1px solid var(--accent);color:
 button.theme{margin:var(--gap) 0 0}
 details td.wide{text-align:left;white-space:normal;width:auto;padding-top:.4em}
 .st{cursor:help;border-bottom:1px dotted var(--dim)}.st-holding{color:var(--accent)}
-.st-dead{color:var(--neg)}.st-not-started{color:var(--pos)}.st-resting,.st-flat{color:var(--dim)}
+.st-dead,.st-frozen{color:var(--neg)}.st-not-started{color:var(--pos)}.st-resting,.st-flat{color:var(--dim)}
 .bar{height:.6em;background:var(--line);border-radius:.3em;max-width:40em;margin:.4em 0}
 .bar div{height:100%;background:var(--accent);border-radius:.3em;transition:width .3s}
 button.danger{background:var(--neg)}

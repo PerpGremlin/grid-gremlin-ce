@@ -13,7 +13,7 @@ from .ladder import (SEED_RUNG, anchor_from_rung, fee_floor_for, grid_rungs,
                      sellable_base, slide_floor, slide_is_adverse, slide_offset,
                      split, stop_level_for)
 from .window import window
-from .bot_constants import (FLAT_CONFIRMATIONS, RUNGS_LAG_SECONDS, DEFER_ESCALATE_CYCLES, FLAP_LIMIT, FLAP_COOLDOWN, BACKOFF_BASE, BACKOFF_CEILING, HISTORY_WINDOW_DAYS, VENUE_STOP, STOP_RUNG)  # noqa: F401  (re-exported: the specs read them here)
+from .bot_constants import (FLAT_CONFIRMATIONS, RUNGS_LAG_SECONDS, FROZEN_REMIND_SECONDS, DEFER_ESCALATE_CYCLES, FLAP_LIMIT, FLAP_COOLDOWN, BACKOFF_BASE, BACKOFF_CEILING, HISTORY_WINDOW_DAYS, VENUE_STOP, STOP_RUNG)  # noqa: F401  (re-exported: the specs read them here)
 from .bot_basis import BasisMixin
 from .bot_reconcile import ReconcileMixin
 from .bot_round import RoundMixin
@@ -130,6 +130,8 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
         self._fills_known = {}         # G26: fill id -> ms of every fill read
         self._rungs_fail_since = None  # D158 (proposed): since when the
         self._rungs_fail_said = False  # fills could not be read; said once
+        self._rungs_fail_why = None    # G28: the read's last error, cut
+        self._rungs_fail_reminded = 0  # G28: reminders said (one per 6 h)
         self._rungs_escalated = False  # D158: pairing from a list past G26
         self._session_rungs = {}       # D158: (rung, entry?) -> ms last seen
         self._session_since_ms = int(self._now() * 1000)   # D158: the session
@@ -484,10 +486,11 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
             self._rungs_escalated = False  # D158: a flat starts the session
             self._session_rungs = {}       # afresh — what filled before it
             self._session_since_ms = int(now * 1000)   # names no lot now
-            self._rungs_fail_since = None  # D158: a flat ends the outage's
-            self._rungs_fail_said = False  # freeze — no lot to keep
-                                       # since it still net to the change
-                                       # that no longer exists (H2 2026-08-07)
+            # D158: a flat ends the outage's freeze — no lot to keep; G28
+            # says its end once (the cached cost above: since it still net
+            # to the change that no longer exists, H2 2026-08-07)
+            if self._rungs_fail_since is not None:
+                self._freeze_over(now, 'freeze over at a flat')
 
         ref = self._sticky(truth['split_ref'])     # W2: the one anchor
         self._maybe_slide(ref, now)                # G18/G21/G22

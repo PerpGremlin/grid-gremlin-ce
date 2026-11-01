@@ -80,7 +80,8 @@ NEW_KINDS = (
     ('dca', 'DCA', '/setup?kind=dca', '/?show=setup&kind=dca',
      'buys more as the price falls, sells the lot on a bounce'),
     ('carry', 'Portfolio Bot', '/setup?adv=carry', '/?show=setup&adv=carry',
-     'coins on spot, each hedged on its perpetual: collects the funding'),
+     'coins on spot, each hedged on its perpetual: collects the funding — '
+     'its form rehearses the year first'),
     ('trade', 'Single trade', '/trade', '/?show=trade',
      'one long or short with its own take profit and stop'),
     ('rehearse', 'Rehearse a grid first', '/rehearse', '/?show=rehearse',

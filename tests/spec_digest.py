@@ -62,8 +62,9 @@ def spec_F17_the_log_is_read_from_where_the_last_digest_stopped():
         assert counts['kills'] == 1                             # from the start
 
 
-def spec_F17_the_digest_says_each_exchange_and_its_health():
-    now = 20 * DAY / 1000 + 3600
+def _demo_digest(entry, now):
+    """The digest of one demo fleet whose last snapshot holds `entry` for
+    its one bot: (text, state)."""
     with tempfile.TemporaryDirectory() as d:
         old = os.getcwd()
         os.chdir(d)
@@ -73,7 +74,7 @@ def spec_F17_the_digest_says_each_exchange_and_its_health():
             Path('logs/fills').mkdir(parents=True)
             Path('logs/snap.jsonl').write_text(json.dumps({
                 't': now - 30, 'equity': 5000.0, 'mm_rate': 0.05, 'available': 1500.0,
-                'bots': {'linBTCUSDTl': {'alive': True, 'position': 0.0}}})
+                'bots': {'linBTCUSDTl': entry}})
                 + '\n')
             Path('configs/wd.json').write_text(json.dumps({
                 'snapshot': 'logs/snap.jsonl', 'state': 'logs/wd.state'}))
@@ -100,9 +101,14 @@ def spec_F17_the_digest_says_each_exchange_and_its_health():
                                 'unreal_at_mark': 0.0}}}}))
             Path('logs/fleet-demo.log').write_text(
                 '[ship] kill linBTCUSDTl: stood down\n')
-            text, state = build(['configs/fleet.demo.json'], now=now)
+            return build(['configs/fleet.demo.json'], now=now)
         finally:
             os.chdir(old)
+
+
+def spec_F17_the_digest_says_each_exchange_and_its_health():
+    now = 20 * DAY / 1000 + 3600
+    text, state = _demo_digest({'alive': True, 'position': 0.0}, now)
     assert 'daily digest · 1970-01-21' in text
     assert 'day +10.00 after fees, before funding (fees 2.00) · 1 trips · 0 rounds' in text
     assert 'kept history +10.00' in text and 'equity 5,000' in text
@@ -112,6 +118,19 @@ def spec_F17_the_digest_says_each_exchange_and_its_health():
     assert 'since the log began (first digest): kills 1' in text
     assert 'health: 1/1 bots alive' in text
     assert state['demo'] > 0                         # the place, to remember
+    assert 'frozen' not in text
+
+
+def spec_G28_the_digest_names_a_frozen_bot():
+    """D158's freeze reaches the digest from the snapshot, as it reaches
+    the card: a bot whose fills cannot be read is named in the health line
+    until a snapshot no longer carries it (the end-to-end clear is
+    spec_G28_the_snapshot_clears_on_the_first_clean_read)."""
+    now = 20 * DAY / 1000 + 3600
+    text, _ = _demo_digest({'alive': True, 'position': 0.007,
+                            'frozen_since': now - 7200,
+                            'frozen_why': 'executions: timed out'}, now)
+    assert 'health: 1/1 bots alive · ⚠️ frozen, fills unreadable: linBTCUSDTl' in text
 
 
 def spec_F17_a_fleet_that_cannot_be_read_does_not_cost_the_others():

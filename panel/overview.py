@@ -6,7 +6,7 @@ kept ledgers' tails, read by the caller): no venue call, no new state.
 A bot picked by its name still opens in the half (D96, U78)."""
 import time
 
-from .card import _plain_name
+from .card import _plain_name, frozen_words
 from .html_bits import _num_cls, coin_of, esc, qarg
 
 LIQ_NEAR_PCT = 10.0         # as the card's own warning (V17, U68)
@@ -50,6 +50,9 @@ def watch_list(labelled):
             said = []
             if bl.get('alive') is False:
                 said.append('stopped')
+            frozen = frozen_words(bl, c.get('generated_ms'))       # U146 (D158)
+            if bl.get('alive') is not False and frozen:
+                said.append(frozen[0])
             if bl.get('paused'):
                 said.append('paused')                     # D145
             if bl.get('capped'):

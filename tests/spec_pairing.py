@@ -1446,3 +1446,207 @@ def spec_D158_back_at_the_cached_size_an_outages_freeze_ends():
     bot.cycle()
     assert not bot._rungs_frozen(clock())
     assert bot._rungs_fail_since is None
+
+
+# --- G28/G29: D158's freeze, visible (owner, 2026-11-01) ----------------------
+
+class _Said(Notifier):
+    """Every event as (kind, text, urgent)."""
+
+    def __init__(self):
+        super().__init__(sink=[].append)
+        self.said = []
+
+    def event(self, kind, botid, text, icon='', urgent=False):
+        self.said.append((kind, text, urgent))
+
+
+def _frozen_for(hours, step=600.0, why='executions: timed out'):
+    """One lot held; the 59k entry fills and from then on the fills cannot
+    be read — for `hours`, a cycle every `step` seconds. Returns the bot,
+    its clock, the notifier, and `back()` to let the reads through."""
+    from gridgremlin.exchange.errors import VenueError
+    rec = _Said()
+    venue, bot, fills, hidden, clock, fill, _ = _one_lot(rec)
+    honest = venue.fills_history
+    b = next(o for o in venue.orders if o['side'] == 'Buy'
+             and float(o['price']) == 59000.0)
+    fill(b['order_id'])
+    venue.position = dict(venue.position, size='0.015')
+
+    def down(mt, sym, a, z):
+        raise VenueError(why)
+    venue.fills_history = down
+    rec.said.clear()
+    t0 = clock()
+    while clock() - t0 < hours * 3600.0:
+        clock.t += step
+        bot.cycle()
+
+    def back():
+        venue.fills_history = honest
+    return bot, clock, rec, back
+
+
+def _reminders(rec):
+    return [t for k, t, u in rec.said if t.startswith('still frozen')]
+
+
+def spec_G28_a_freeze_is_said_again_every_six_hours_while_it_lasts():
+    """D158 said a failed read once, a minute in, and never again: a freeze
+    that lasted a day was one line on the phone at its start. Said again at
+    6 h and 12 h, urgent like the first, each with the exchange's words —
+    and not in between. SABOTAGE:
+    spec_G28_sabotage_without_the_count_a_reminder_goes_every_cycle."""
+    from gridgremlin.bot import FROZEN_REMIND_SECONDS
+    assert FROZEN_REMIND_SECONDS == 6 * 3600.0
+    bot, clock, rec, back = _frozen_for(13)
+    first = [(t, u) for k, t, u in rec.said if 'could not be read' in t]
+    assert len(first) == 1 and first[0][1] is True
+    assert first[0][0].endswith('(G26, D158): executions: timed out')
+    assert _reminders(rec) == ['still frozen after 6 h: executions: timed out',
+                               'still frozen after 12 h: executions: timed out']
+    assert all(u is True and k == 'warn' for k, t, u in rec.said
+               if t.startswith('still frozen'))
+
+
+def spec_G28_sabotage_without_the_count_a_reminder_goes_every_cycle():
+    """With the reminders' count forgotten each cycle, every cycle past six
+    hours says it again — what the count is there to stop."""
+    bot, clock, rec, back = _frozen_for(6.5)
+    assert len(_reminders(rec)) == 1
+    for _ in range(5):
+        bot._rungs_fail_reminded = 0                   # sabotage
+        clock.t += 600.0
+        bot.cycle()
+    assert len(_reminders(rec)) == 6
+
+
+def spec_G28_the_end_is_said_once_and_the_reminders_stop():
+    """The reads come back after 13 h: one plain line (info, not urgent —
+    the log's, not the phone's) says the fills are readable again and how
+    long it lasted; no reminder after it, however long the bot runs on; the
+    snapshot no longer carries the freeze. SABOTAGE:
+    spec_G28_sabotage_the_end_unsaid_keeps_the_card_frozen."""
+    from gridgremlin.main import snapshot_row
+    bot, clock, rec, back = _frozen_for(13)
+    row = snapshot_row([bot], {'equity': 1.0, 'mm_rate': 0.0}, clock())
+    entry = row['bots'][bot.botid]
+    assert entry['frozen_why'] == 'executions: timed out'
+    assert abs(clock() - entry['frozen_since'] - 13 * 3600.0) <= 600.0
+    back()
+    rec.said.clear()
+    for _ in range(80):                                # 13 h more, reading
+        clock.t += 600.0
+        bot.cycle()
+    ends = [(k, t, u) for k, t, u in rec.said if 'readable again' in t]
+    assert len(ends) == 1
+    kind, text, urgent = ends[0]
+    assert kind == 'info' and urgent is False
+    assert text.startswith('fills readable again after ') and \
+        text.endswith(' min; running (D158)')
+    assert not _reminders(rec)
+    row = snapshot_row([bot], {'equity': 1.0, 'mm_rate': 0.0}, clock())
+    assert 'frozen_since' not in row['bots'][bot.botid]
+    assert 'frozen_why' not in row['bots'][bot.botid]
+
+
+def spec_G28_the_snapshot_clears_on_the_first_clean_read():
+    """The card's word comes from the snapshot: the first snapshot after a
+    clean read has no freeze in it. SABOTAGE:
+    spec_G28_sabotage_the_end_unsaid_keeps_the_card_frozen."""
+    from gridgremlin.main import snapshot_row
+    bot, clock, rec, back = _frozen_for(0.1, step=2.0)
+    assert 'frozen_since' in snapshot_row(
+        [bot], {'equity': 1.0, 'mm_rate': 0.0}, clock())['bots'][bot.botid]
+    back()
+    clock.t += 2.0
+    bot.cycle()
+    assert 'frozen_since' not in snapshot_row(
+        [bot], {'equity': 1.0, 'mm_rate': 0.0}, clock())['bots'][bot.botid]
+
+
+def spec_G28_sabotage_the_end_unsaid_keeps_the_card_frozen():
+    """With the end's bookkeeping skipped, the clean read leaves the
+    snapshot frozen and the end is never said."""
+    from gridgremlin.main import snapshot_row
+    bot, clock, rec, back = _frozen_for(0.1, step=2.0)
+    bot._freeze_over = lambda now, how: None           # sabotage
+    back()
+    for _ in range(3):
+        clock.t += 2.0
+        bot.cycle()
+    assert 'frozen_since' in snapshot_row(
+        [bot], {'equity': 1.0, 'mm_rate': 0.0}, clock())['bots'][bot.botid]
+    assert not [t for k, t, u in rec.said if 'readable again' in t]
+
+
+def spec_G28_a_freeze_under_the_wait_is_never_said_nor_its_end():
+    """A read that fails once and works the next cycle was never said, so
+    its end is not either — the log pairs every start it says with one end."""
+    bot, clock, rec, back = _frozen_for(0.0005, step=2.0)
+    back()
+    clock.t += 2.0
+    bot.cycle()
+    assert not [t for k, t, u in rec.said
+                if 'could not be read' in t or 'readable again' in t]
+    assert bot._rungs_fail_since is None
+
+
+def spec_G29_a_refused_fill_is_named_by_its_id():
+    """HL stamps a liquidation naming no liquidatedUser (R10): the parser
+    refuses the read and the bot freezes — and before, the phone heard only
+    "could not be read" and nobody could find the one fill to deal with by
+    hand. The refusal leads with the fill's id, the bot's line and its
+    snapshot carry it. Bybit's parser has one per-fill refusal, a time that
+    is not one: named too. SABOTAGE:
+    spec_G29_sabotage_an_id_at_the_end_is_cut_off."""
+    from gridgremlin.exchange.errors import VenueError
+    from gridgremlin.exchange.hyperliquid import truth as hl
+    from gridgremlin.exchange.bybit import truth as bb
+    from gridgremlin.main import snapshot_row
+    ours = '0xAbCdEf0000000000000000000000000000001234'
+    row = {'coin': 'BTC', 'px': '60000', 'sz': '0.007', 'side': 'B',
+           'time': 1786639311071, 'dir': 'Open Long', 'fee': '0',
+           'tid': 2999250522, 'cloid': None,
+           'liquidation': {'markPx': '60000', 'method': 'market'}}
+    try:
+        hl.read_fills([row], {'BTC'}, ours)
+    except VenueError as e:
+        refused = str(e)
+    else:
+        raise AssertionError('the stamp naming nobody was read')
+    assert refused.startswith('fill id 2999250522 ') and 'R10' in refused
+    bot, clock, rec, back = _frozen_for(0.1, step=2.0, why=refused)
+    first = [t for k, t, u in rec.said if 'could not be read' in t]
+    assert len(first) == 1 and 'fill id 2999250522' in first[0]
+    snap = snapshot_row([bot], {'equity': 1.0, 'mm_rate': 0.0}, clock())
+    assert 'fill id 2999250522' in snap['bots'][bot.botid]['frozen_why']
+
+    class Page:
+        def executions_page(self, *a, **k):
+            return {'list': [{'execId': 'e-77', 'execType': 'Trade',
+                              'execTime': 'soon', 'side': 'Buy',
+                              'execPrice': '1', 'execQty': '1'}]}
+    try:
+        bb.read_fills(Page(), 'linear', 'BTCUSDT', 0, 1000)
+    except ValueError as e:
+        assert str(e).startswith('fill id e-77 refused')
+    else:
+        raise AssertionError('a time that is none was read')
+    try:
+        hl.read_fills([dict(row, liquidation=None, time='soon')], {'BTC'}, ours)
+    except ValueError as e:
+        assert str(e).startswith('fill id 2999250522 refused')
+    else:
+        raise AssertionError('a time that is none was read')
+
+
+def spec_G29_sabotage_an_id_at_the_end_is_cut_off():
+    """Why the id leads: the error is cut to 160 characters for the card
+    and the phone, and an id at the end of a long refusal is cut off."""
+    long_tail = ('liquidation stamp names no liquidatedUser — cannot tell '
+                 'whose it was; ' * 4 + 'fill id 2999250522')
+    bot, clock, rec, back = _frozen_for(0.1, step=2.0, why=long_tail)
+    assert 'fill id 2999250522' not in bot.frozen_view['frozen_why']
+    assert len(bot.frozen_view['frozen_why']) == 160

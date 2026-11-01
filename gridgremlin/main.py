@@ -259,6 +259,12 @@ def snapshot_row(bots, wallet, now, tiers=None):
                                **({'capped': b.capped}
                                   if b.alive and getattr(b, 'capped', None)
                                   else {}),
+                               # G28 (D158): frozen — its fills cannot be
+                               # read — since when, and the exchange's words;
+                               # gone from the first snapshot after it ends
+                               **(b.frozen_view
+                                  if b.alive and getattr(b, 'frozen_view',
+                                                         None) else {}),
                                # V14: the venue's margin on the position
                                **({'margin': b.margin_view}
                                   if b.alive and getattr(b, 'margin_view',

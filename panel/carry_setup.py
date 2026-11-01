@@ -31,7 +31,7 @@ ESSENTIAL = (
      'usdt = BTCUSDT; usdc = BTCPERP', False),
     ('hedge_each', ('hedge', '*'), 'products', 'Hedge some coins on',
      'a coin on another perpetual than the one above, like HYPE usdt or '
-     'HYPEUSDT, SUI usdc or SUIPERP (the market as Bybit names it) — the funding table below the form compares them. Blank = every '
+     'HYPEUSDT, SUI usdc or SUIPERP (the market as Bybit names it) — the rehearsal below the form compares them. Blank = every '
      'coin on the one above. An outright short is on usdt unless named here', False),
     ('perp_leverage', ('perp_leverage',), 'num', 'Perp leverage',
      'set on every hedge at each start; blank = whatever the venue holds', False),
@@ -429,9 +429,42 @@ def _input(n, kind, value, fixed=False):
     return f'<input name="{n}" size="{size}" value="{v}">'
 
 
-def carry_page(values, fleets, chosen=0, alert='', edit=None, account=''):
-    """The form: what the basket needs first, every other setting folded.
-    `edit`: the running bot's id — its fleet and name fixed (U111)."""
+# U148: the rehearsal, inside the form (the owner, 2026-11-01: "a function
+# inside of the creation … like the grid rehearsal"). With script, the
+# form as it stands goes to /carry-rehearse 600 ms after typing stops and
+# the SERVER's answer is swapped in, the newest winning (D157's way);
+# without, the rehearse button posts the form and the page comes back
+# with it worked. Either way nothing is saved.
+REHEARSE_JS = """<script>(function(){
+var box=document.getElementById('rehearsal');if(!box)return;
+var form=box.closest('form');if(!form)return;
+var asked=0,wait=null;
+function ask(){var mine=++asked,data=new URLSearchParams(new FormData(form));
+ fetch('/carry-rehearse',{method:'POST',credentials:'same-origin',body:data})
+ .then(function(r){return r.text();})
+ .then(function(t){if(mine===asked)box.innerHTML=t;});}
+function soon(){clearTimeout(wait);wait=setTimeout(ask,600);}
+form.addEventListener('input',soon);form.addEventListener('change',soon);
+if(!box.querySelector('table'))ask();})();</script>"""
+
+
+def rehearse_box(worked=''):
+    """U148: the rehearsal's place in the form — its words, the worked
+    year (or what to type for it), and the button that works it without
+    script. It sits after "Next" so Enter in a field still goes to review."""
+    from panel.carry import PLACEHOLDER
+    return ('<div class="fsec" id="carry-rehearse"><h1 class="dim">Rehearse it first '
+            '<span class="dim">— what this basket would have been paid, on the rates of '
+            'the last 7 and 30 days. Nothing is saved.</span></h1>'
+            f'<div id="rehearsal">{worked or PLACEHOLDER}</div>'
+            '<button name="step" value="rehearse" class="quiet">rehearse</button></div>')
+
+
+def carry_page(values, fleets, chosen=0, alert='', edit=None, account='', rehearsal=''):
+    """The form: what the basket needs first, every other setting folded,
+    then its rehearsal (U148; `rehearsal`: the worked block, or '' for
+    what to type). `edit`: the running bot's id — its fleet and name fixed
+    (U111)."""
     from panel.setup import fleet_select
     edit = edit or values.get('edit') or None
 
@@ -464,8 +497,8 @@ def carry_page(values, fleets, chosen=0, alert='', edit=None, account=''):
         + rows(ESSENTIAL) + '</table>' + account + '</div>'
         f'<details class="adv"{" open" if adv_open else ""}><summary>Advanced</summary>'
         '<div class="fsec"><table>' + rows(ADVANCED) + '</table></div></details>'
-        '<button>Next: review the bot &rarr;</button></form>'
-        '<p class="dim">* needed. A blank takes the engine\'s default.</p>')
+        '<button>Next: review the bot &rarr;</button>' + rehearse_box(rehearsal) + '</form>'
+        '<p class="dim">* needed. A blank takes the engine\'s default.</p>' + REHEARSE_JS)
 
 
 PRODUCT_WORDS = (('inverse', 'inverse', '{c}USD'), ('usdt', 'linear', '{c}USDT'), ('usdc', 'linear', '{c}PERP'))
@@ -481,12 +514,15 @@ def funding_apr(rates, now_ms, days):
     return sum(got) * 365.0 / days if got else None
 
 
-def funding_html(coins, read, now_ms):
+def funding_html(coins, read, now_ms, chosen=None):
     """U111: each coin's perpetuals side by side — what a short on each was
     paid a year, over 7 and 30 days, from the venue's public record —
     beside the choice of where to hedge. `read(market_type, symbol)` gives
     the settlements, or None when the market cannot be read (no such
-    market, the venue down): a dash, never a guess."""
+    market, the venue down): a dash, never a guess. U148: part of the
+    rehearsal; `chosen` {coin: symbol} sets the market each coin is
+    shorted on in bold."""
+    chosen = chosen or {}
     if not coins:
         return ''
     head = ('<tr><th rowspan="2">coin</th>'
@@ -497,14 +533,15 @@ def funding_html(coins, read, now_ms):
         cells = []
         for _, mt, sym in PRODUCT_WORDS:
             rates = read(mt, sym.format(c=c))
+            b0, b1 = ('<b>', '</b>') if chosen.get(c) == sym.format(c=c) else ('', '')
             for d in WINDOW_DAYS:
                 v = None if rates is None else funding_apr(rates, now_ms, d)
                 cells.append('<td class="dim">—</td>' if v is None else
-                             f'<td class="{"pos" if v > 0 else "neg" if v < 0 else ""}">{v * 100:+.2f}%</td>')
+                             f'<td class="{"pos" if v > 0 else "neg" if v < 0 else ""}">{b0}{v * 100:+.2f}%{b1}</td>')
         body.append(f'<tr><td>{html.escape(c)}</td>{"".join(cells)}</tr>')
-    return ('<div class="fsec"><h1 class="dim">Funding a short was paid, a year</h1>'
+    return ('<h1 class="dim">Funding a short was paid, a year, on each perpetual</h1>'
             f'<table class="fund">{head}{"".join(body)}</table>'
             '<p class="dim">inverse = COINUSD, margined in the coin; usdt = COINUSDT; usdc = '
-            'COINPERP. From Bybit\'s public record of each market\'s settlements, summed over '
-            'the window and scaled to a year: the past, not a promise. A dash: no such market, '
-            'or it could not be read.</p></div>')
+            'COINPERP; in bold, where this basket is shorted. From Bybit\'s public record of each '
+            'market\'s settlements, summed over the window and scaled to a year: the past, not a '
+            'promise. A dash: no such market, or it could not be read.</p>')

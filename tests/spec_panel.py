@@ -1829,33 +1829,36 @@ def spec_U68_a_card_is_slim_and_its_numbers_page_is_live():
     assert '@media (max-width:860px){.split{display:block}' in CSS and 'max-width:1100px){.split' not in CSS
 
 
-def spec_U69_the_carry_page_works_the_year_on_the_newest_reading():
+def spec_U69_the_carry_year_is_worked_by_the_portfolio_bots_rehearsal():
     """The owner (2026-10-11): "say i held 100k of BTC with an 85K USDT debt
     … shorted 100k of BTCUSD (inverse) … what would that look like over an
-    entire year?" — live, as a page: the funding on the stack, the interest
-    on the loan, the fees; the net on the owner's own money; the funding
-    that breaks even; the year at other funding rates; every coin read. A
-    loan past 70% of the stack is said, red. No reading: said."""
-    from panel.carry import carry_page, year_of
-    y = year_of(100_000, 85_000, 0.057, 0.0393)
-    assert round(y['funding']) == 5700 and round(y['interest']) == 3340 and round(y['fees']) == 350
-    assert round(y['net']) == 2010 and abs(y['on_own'] - 2010.5 / 15_000) < 1e-3
-    assert abs(y['breakeven'] - (3340.5 + 350) / 100_000) < 1e-6 and abs(y['lever'] - 100 / 15) < 1e-9
-    row = {'t': 1000.0, 'carry': {'borrow_apr': {'USDT': 0.0393, 'BTC': 0.0042},
-           'funding': {'BTC': {'inverse': {'last': 0.02, 'every_h': 8, 'd7': 0.06, 'd30': 0.056, 'd90': 0.057},
-                               'linear': {'last': -0.005, 'every_h': 8, 'd7': 0.027, 'd30': 0.042, 'd90': 0.044}},
-                       'DOT': {'linear': {'unread': 'HTTPError'}}}}}
-    page = carry_page(row, {}, now=1060.0)
-    assert '<h1>carry</h1>' in page and 'value="100000"' in page and 'value="85000"' in page   # the owner's example
-    assert '+2,010' in page and '+13.4%' in page and '6.7× on the spread' in page
-    assert '3.69% a year' in page                                                             # breaks even
+    entire year?" Since 2026-11-01 (U148) the Portfolio Bot form's
+    rehearsal works it: the funding on the shorts, the interest on the
+    loan, the fees; the net on the owner's own money; the funding that
+    breaks even; the year at other funding rates. A loan past 70% of the
+    stack is said, red; a loan past the stack is capped; no borrow rate is
+    a dash, never a guess."""
+    from panel.carry import old_query, rehearsal_html
+    day, now = 86_400_000, 100 * 86_400_000
+    paid = [(now - i * day // 3, 0.057 / 1095) for i in range(90)]          # 5.70% a year, 8-hourly
+
+    def read(wanted):
+        return {k: (paid if k == ('inverse', 'BTCUSD') else None) for k in wanted}
+    reading = {'t': now / 1000 - 60, 'carry': {'borrow_apr': {'USDT': 0.0393}}}
+    form = old_query({'coin': 'BTC', 'stack': '100000', 'loan': '85000', 'leg': 'inverse'})
+    assert form == {'assets': 'BTC 100', 'max_weight': '100', 'hedge_ratio': '100',
+                    'hedge_product': 'inverse', 'capital': '15000', 'spot_leverage': '6.66667'}, form
+    page = rehearsal_html(form, read, now, reading)
+    assert '+5,700' in page and '-3,341' in page and '-350' in page                 # funding, interest, fees
+    assert '<b><span class="pos">+2,010</span></b>' in page and '+13.4%' in page and '6.7× on the spread' in page
+    assert 'breaks even: 3.69% a year' in page
     assert '85% of the stack is borrowed' in page and '<p class="neg">' in page
-    assert page.count('<tr><td>') >= 6 + 7 + 2 and 'unread' in page
-    calm = carry_page(row, {'loan': '50000', 'leg': 'linear', 'window': 'd30'}, now=1060.0)
-    assert 'of the stack is borrowed' not in calm and '+4.20% a year on 100,000' in calm
-    assert 'no carry reading yet' in carry_page(None) and 'no carry reading yet' in carry_page({'t': 1.0})
-    big = carry_page(row, {'loan': '999999999'}, now=1060.0)                                  # a loan past the stack: capped
-    assert 'value="100000" inputmode' in big and big.count('value="100000"') == 2
+    assert page.count('<tr><td>') >= 5 + 7 + 1
+    calm = rehearsal_html(old_query({'coin': 'BTC', 'stack': '100000', 'loan': '50000'}), read, now, reading)
+    assert 'of the stack is borrowed' not in calm and '2.0× on the spread' in calm
+    assert old_query({'coin': 'BTC', 'stack': '100000', 'loan': '999999999'}).get('capital') is None   # capped: no money of its own
+    unread = rehearsal_html(form, read, now, None)
+    assert 'the USDT borrow rate is not read' in unread and '+2,010' not in unread
 
 
 def spec_U58_a_cards_lower_half_folds_and_the_side_panel_folds_every_card_at_once():
@@ -2657,3 +2660,63 @@ def spec_U112_the_button_cycles_every_theme_before_the_page_paints():
     for f in Path(__file__).resolve().parents[1].joinpath('panel').rglob('*.py'):   # every live page
         for after in f.read_text().split('<style>{CSS}</style>')[1:]:
             assert after.startswith(('{THEME_JS}', "{'' if static else THEME_JS}")), f.name
+
+
+# --- U146: a frozen bot says so (D158's visibility, 2026-11-01) ---------------
+
+def _frozen_contract(since=1_800_000_000.0, why='executions: timed out <b>'):
+    bl = {'alive': True, 'position': 0.007}
+    if since is not None:
+        bl.update(frozen_since=since, frozen_why=why)
+    return {'window_hours': 6.0, 'generated_ms': 1_800_003_600_000,
+            'unowned': {}, 'bots': {'linBTCUSDTl': None},
+            'watchdog': {'belief': {'age_s': 2, 'bots': {'linBTCUSDTl': bl}}}}
+
+
+def spec_U146_a_frozen_bot_says_since_when_and_the_exchanges_words():
+    """D158 froze a bot whose fills could not be read and the panel showed
+    it running: nothing on the card, the strip or "needs a look". Its card
+    now reads Frozen, "Frozen since HH:MM UTC — its fills can't be read"
+    and the exchange's error (escaped: it is the venue's text); the strip
+    counts it; the overview lists it. The snapshot without the freeze (its
+    first after a clean read) shows none of it. SABOTAGE:
+    spec_U146_sabotage_without_the_words_the_card_reads_running."""
+    import time
+    from panel.server import render
+    from panel.card import card
+    from panel.overview import watch_list
+    from panel.strip_view import hero_strip
+    c = _frozen_contract()
+    at = time.strftime('%H:%M', time.gmtime(1_800_000_000))
+    said = f"Frozen since {at} UTC — its fills can't be read"
+    page = render([('demo', c)])
+    assert said in page and 'st st-frozen' in page
+    assert 'executions: timed out &lt;b&gt;' in page and 'timed out <b>' not in page
+    belief = c['watchdog']['belief']['bots']
+    full = card(0, 'linBTCUSDTl', None, c, belief, full=True)
+    assert said in full and '>Frozen</span>' in full
+    assert '1 frozen' in hero_strip([('demo', c)])
+    assert any(said in w for _, b, _, w in watch_list([('demo', c)]))
+    old = _frozen_contract()
+    old['generated_ms'] += 86_400_000                  # a day on: the date too
+    day = time.strftime('%Y-%m-%d', time.gmtime(1_800_000_000))
+    assert f'Frozen since {day} {at} UTC' in render([('demo', old)])
+    clear = _frozen_contract(since=None)               # the next snapshot
+    page = render([('demo', clear)])
+    assert 'Frozen since' not in page and 'st st-frozen' not in page
+    assert 'frozen' not in hero_strip([('demo', clear)])
+    assert not watch_list([('demo', clear)])
+
+
+def spec_U146_sabotage_without_the_words_the_card_reads_running():
+    """With the card's reading of the freeze gone, a frozen bot's card says
+    Running · in position — the panel before U146."""
+    import panel.card as pc
+    from panel.server import render
+    real = pc.frozen_words
+    pc.frozen_words = lambda bl, now_ms=None: None     # sabotage
+    try:
+        page = render([('demo', _frozen_contract())])
+    finally:
+        pc.frozen_words = real
+    assert 'Frozen since' not in page and 'Running · in position' in page

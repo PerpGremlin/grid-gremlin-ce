@@ -3,6 +3,10 @@ the bot and its mixins."""
 FLAT_CONFIRMATIONS = 3  # E9: consecutive flat reads before standing down
 RUNGS_LAG_SECONDS = 60.0    # G26: how long both sides wait for the fill list
                             # (a time, not cycles: polls differ by venue)
+FROZEN_REMIND_SECONDS = 6 * 3600.0   # G28 (D158): a freeze past the wait is
+                                     # said again this often while it lasts
+FROZEN_WHY_CHARS = 160      # G28: the exchange's error, cut to this for the
+                            # card and the phone
 DEFER_ESCALATE_CYCLES = 60  # G15: withheld-exit cycles before the operator
                             # is told the cost is not reconstructable
 FLAP_LIMIT = 3          # B5: strikes before a (rung, side) cools

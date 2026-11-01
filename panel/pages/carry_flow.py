@@ -92,28 +92,43 @@ _FUNDING = {}
 
 class CarryFlowPages:
 
-    def _funding(self, form):
-        """U111: the funding table for the coins the form names (none: '')."""
-        import time
+    def _read_many(self, wanted):
+        """U148: each market's settlements from the venue's public record,
+        read side by side (kept FUNDING_TTL_S each): {(type, symbol): rates}."""
         from concurrent.futures import ThreadPoolExecutor
-        from panel.carry_setup import PRODUCT_WORDS, _assets, funding_html
-        try:
-            coins = [c for c, sh in _assets(form.get('assets') or '') if sh > 0]
-        except ValueError:
-            return ''
-        if not coins:
-            return ''
-        wanted = [(mt, sym.format(c=c)) for c in coins for _, mt, sym in PRODUCT_WORDS]
+        if not wanted:
+            return {}
         with ThreadPoolExecutor(max_workers=8) as pool:
-            got = dict(zip(wanted, pool.map(lambda k: public_funding(*k), wanted)))
-        return funding_html(coins, lambda mt, sym: got.get((mt, sym)), int(time.time() * 1000))
+            return dict(zip(wanted, pool.map(lambda k: public_funding(*k), wanted)))
+
+    @staticmethod
+    def _carry_reading():
+        """The engine's newest market reading (the USDT borrow rate), or None."""
+        try:
+            from ggdata.market import latest
+            return latest()
+        except Exception:                             # noqa: BLE001 — unread, said as a dash
+            return None
+
+    def _rehearsal(self, form):
+        """U148: the form's rehearsal, worked — the one calculator
+        (panel.carry.rehearsal), on the venue's public funding and the
+        engine's borrow reading. Writes nothing."""
+        import time
+        from panel.carry import rehearsal_html
+        return rehearsal_html(form, self._read_many, int(time.time() * 1000), self._carry_reading())
+
+    def _carry_rehearse_post(self, form):
+        """U148: the live box's answer — the rehearsal of the form as it
+        stands, a fragment. Nothing is written."""
+        return self._fragment(self._rehearsal(form))
 
     def _carry_page(self, fi, values=None, alert=''):
         from panel.carry_setup import carry_page
         values = values or {}
         return self._page(carry_page(values, self._fleet_labels(), fi, alert=alert,
-                                     account=self._account_lines(fi))
-                          + self._funding(values))
+                                     account=self._account_lines(fi),
+                                     rehearsal=self._rehearsal(values)))
 
     def _carry_account(self, fleet_p, fleet_raw, botid, account):
         """U136: the account as the exchange holds it, from the engine's last
@@ -154,7 +169,7 @@ class CarryFlowPages:
         wd_p = Path(fleet_raw['watchdog']) if fleet_raw.get('watchdog') else None
         wd_text = wd_p.read_text() if wd_p else '{}'
         seen = self._seen(fleet_text, wd_text)
-        if form.get('step') == 'change':
+        if form.get('step') in ('change', 'rehearse'):    # U148: rehearse writes nothing
             return self._carry_page(fi, form)
         try:
             if self._mainnet(fleet_p, 'bybit'):
@@ -249,7 +264,8 @@ class CarryFlowPages:
             + (f'<p class="say">Hedges read as: {html.escape("; ".join(read_as))}.</p>'
                if read_as else '') +
             '<table><tr><th>leg</th><th>market</th><th>kind</th><th>USDT at its weight</th></tr>'
-            f'{legs}</table></div>' + account + self._funding(form) +
+            f'{legs}</table></div>' + account +
+            '<div class="fsec"><h1 class="dim">The rehearsal</h1>' + self._rehearsal(form) + '</div>' +
             '<div class="fsec"><form method="post" action="/setup-carry">'
             '<input type="hidden" name="gg" value="1">' + hidden +
             '<input type="hidden" name="step" value="change">'

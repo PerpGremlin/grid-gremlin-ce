@@ -234,6 +234,11 @@ def section(fleet_path, now, day_start, archive_root='logs/daily',
         health.append('⚠️ snapshot stale — is the fleet running?')
     else:
         health.append(f'{alive}/{len(fleet["bots"])} bots alive')
+        frozen = sorted(b for b, v in (snap.get('bots') or {}).items()
+                        if v.get('alive', True) and v.get('frozen_since') is not None)
+        if frozen:
+            # G28 (D158): a bot whose fills cannot be read places nothing
+            health.append(f"⚠️ frozen, fills unreadable: {', '.join(frozen)}")
     wd = _watchdog_view(fleet) or contract.get('watchdog') or {}
     if wd.get('swept_s_ago') is not None:
         health.append(f"watchdog {wd['swept_s_ago'] // 60:.0f} min ago")

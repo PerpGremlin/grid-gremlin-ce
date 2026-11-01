@@ -207,6 +207,7 @@ def spec_S6_the_reset_list_is_complete_and_documented():
                   # with this one; a restart re-reads the fills
                   '_rungs_asked',   # G23: a restart asks again
                   '_rungs_fail_since', '_rungs_fail_said', '_rungs_escalated',
+                  '_rungs_fail_why', '_rungs_fail_reminded',   # G28
                   '_session_rungs', '_session_since_ms'}   # D158:
                   # a restart starts a new session
     state = {k for k, v in vars(bot).items()

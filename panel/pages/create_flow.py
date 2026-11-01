@@ -408,7 +408,8 @@ class CreateFlowPages:
                      'setting is carried over — choose the coin, and '
                      'check the prices, which belong to the old one.</p>'))
         if q.get('adv') == 'carry':                              # U108
-            return self._carry_page(fi)
+            from panel.carry_setup import FIELDS               # U149: a query fills the form
+            return self._carry_page(fi, {n: q[n] for n, *_ in FIELDS if n in q})
         if q.get('adv') in ('grid', 'martingale'):
             return self._page(self._with_acct(advanced_page, fi)(q['adv'], {}, labels, fi,
                                             symbols=self._symbols(fi)))

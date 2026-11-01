@@ -1,5 +1,5 @@
 """A bot's card (U68 slim, U56 full) and a portfolio's (H6), with the lines a card is made of. Out of render.py (D91 step 3)."""
-from common.fmt import signed
+from common.fmt import float_or, signed
 from gridgremlin.report import card_total
 from .reference import STATE_WORDS, state_label
 from .drawings import strip
@@ -289,6 +289,24 @@ FLOATING = ('<span class="st" title="what it holds now, at the mark price, again
             'cost; it becomes real only when sold">Floating P&amp;L</span>')
 
 
+def frozen_words(bl, now_ms=None):
+    """G28/U146 (D158): a frozen bot in words — "Frozen since HH:MM UTC —
+    its fills can't be read" (the date too when it began on another UTC
+    day than now) — and the exchange's own error, escaped, or None when the
+    engine's snapshot says nothing of a freeze. (words, why)."""
+    import time as _t
+    since = float_or((bl or {}).get('frozen_since'))
+    if since is None:
+        return None
+    day = _t.strftime('%Y-%m-%d', _t.gmtime(since))
+    now_day = _t.strftime('%Y-%m-%d', _t.gmtime(now_ms / 1000.0)) if now_ms else day
+    at = _t.strftime('%H:%M', _t.gmtime(since))
+    words = (f'Frozen since {at if day == now_day else f"{day} {at}"} UTC'
+             " — its fills can't be read")
+    why = (bl or {}).get('frozen_why')
+    return words, (esc(str(why)) if why else '')
+
+
 HALT_HEAD = {'RETIRED': 'retired: stood down for good, its orders cancelled',
              'STOPPED': 'its fleet is stopped: nothing placed, nothing watched'}
 
@@ -487,6 +505,14 @@ def card(idx, botid, b, contract, belief, full=False):
         # U94: the engine's figures below are its last snapshot's
         alerts.append(f"the engine's state, margin and limits are from {stale}")
         held += f"</div><div class=\"neg\">the engine's state, margin and limits are from {stale}"
+    frozen = frozen_words(belief.get(botid), contract.get('generated_ms'))
+    if frozen:
+        # U146 (D158): its fills cannot be read, so nothing is placed or
+        # cancelled; the exchange's own words beside it (a refused fill
+        # names its id, G29). Gone from the first snapshot after it ends.
+        said = frozen[0] + (f': {frozen[1]}' if frozen[1] else '')
+        alerts.insert(0, said)
+        held += f'</div><div class="neg">{said}'
     paused = (belief.get(botid) or {}).get('paused')
     if paused:
         # D145: retire's pause — undone on its retire page
@@ -591,8 +617,10 @@ def card(idx, botid, b, contract, belief, full=False):
         held += (f'</div><div class="{"neg" if used >= 0.75 else "dim"}">'
                  f"loss limit: down {down:,.2f} of {loss['limit']:,.6g} "
                  f'{money_coin} ({used:.0%} used)')
+    if not halted and state != 'DEAD' and frozen:
+        state = 'FROZEN'                                     # U146 (D158)
     state = halted or state                                  # U104
-    cls = 'neg' if state == 'DEAD' else 'dim'
+    cls = 'neg' if state in ('DEAD', 'FROZEN') else 'dim'
     side = 'short' if botid.endswith('s') else 'long'
     flat = (abs(pos) <= 1e-12 if b is not None else
             (belief.get(botid) or {}).get('position') == 0)   # unknown ≠ flat

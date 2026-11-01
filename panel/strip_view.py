@@ -170,6 +170,8 @@ def hero_strip(labelled):
         gap = sum(1 for b in c['bots'].values() if unpriced(b))
         belief = ((c.get('watchdog') or {}).get('belief') or {}).get('bots', {})
         dead = sum(1 for bl in belief.values() if bl.get('alive') is False)
+        frozen = sum(1 for bl in belief.values()                       # U146
+                     if bl.get('alive') is not False and bl.get('frozen_since') is not None)
         levs = [a['now'] for a in account_leverage(c).values()]
         lev = ('leverage —' if not levs or any(v is None for v in levs) else
                'leverage ' + ' · '.join(f'{v:.2f}x' for v in levs))
@@ -183,6 +185,12 @@ def hero_strip(labelled):
         if stale:
             # U94: the dead count, the MMR and the free share are the engine's last snapshot's
             lev += f' · <b class="neg">engine read {stale}</b>'
+        # D157: how many stopped; U146 (D158): how many are frozen — one
+        # cell, so the grid's columns stay where they were
+        said = ([f'<b class="neg num st" title="stopped by their own rule (a stop loss, a loss limit, a round count) or refused at start">{dead} stopped</b>'] if dead else []) \
+            + ([f'<b class="neg num st" title="running, but their fills cannot be read: nothing placed or cancelled until they can (D158)">{frozen} frozen</b>'] if frozen else [])
+        count_cell = (said[0] if len(said) == 1 else
+                      '<span>' + ' · '.join(said) + '</span>' if said else '<span></span>')
         # six cells per fleet in one grid, so every column lines up whatever
         # the words' lengths (the owner: "so it looks squared")
         spark = equity_svg(((c.get('equity') or {}).get('24h')), 120, 18)       # U63
@@ -193,7 +201,7 @@ def hero_strip(labelled):
             + (f' <span class="neg">+ {gap} unpriced</span>' if gap else '')        # U95
             + '</span>'
             f'<span class="dim num">{len(c["bots"])} bots</span>'
-            + (f'<b class="neg num st" title="stopped by their own rule (a stop loss, a loss limit, a round count) or refused at start">{dead} stopped</b>' if dead else '<span></span>')   # D157
+            + count_cell
             + f'<span class="dim">{lev}</span>'
             + (f'<span class="spark" title="equity, 24 h">{spark}</span>' if spark else '<span></span>')
             + '</div>')

@@ -63,10 +63,10 @@ class PositionPages:
         if show == 'results':
             from panel.results import results_page
             return page_pane(show, results_page(labelled))
-        if show == 'carry':
-            from ggdata.market import latest
-            from panel.carry import carry_page
-            return page_pane(show, carry_page(latest(), q, action='/'))
+        if show == 'carry':                          # U149: the form, its rehearsal worked
+            from panel.carry import old_query
+            return page_pane('setup', self._capture(
+                self._setup_page, '/setup?' + urllib.parse.urlencode({'adv': 'carry', **old_query(q)})))
         if show == 'rehearse':
             from panel.forms import FORM
             return page_pane(show, FORM)

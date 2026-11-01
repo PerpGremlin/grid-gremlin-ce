@@ -25,6 +25,7 @@ STATE_LABEL = {
     'RESTING': 'Running · no position',
     'FLAT': 'Running · no position',
     'HOLDING': 'Running · in position',
+    'FROZEN': 'Frozen',
     'STOPPED': 'Stopped (engine off)',
     'RETIRED': 'Retired',
     'DEAD': 'Stopped (by its rule)',
@@ -38,6 +39,10 @@ STATE_WORDS = {
     'HOLDING': 'running with a position; its exits rest on the exchange or '
                'wait for the price to come within reach',
     'FLAT': 'running, holding nothing now; it traded in this window',
+    'FROZEN': 'running, but its fills cannot be read: nothing is placed or '
+              'cancelled until they can. The card names the time it began '
+              'and the exchange\'s own error; the phone hears it after a '
+              'minute and every 6 hours while it lasts',
     'STOPPED': 'its account\'s engine is not running: nothing is placed or '
                'watched, and the card shows the exchange\'s fills and the holding '
                'last seen, not the engine\'s last picture as if it were now',
@@ -143,6 +148,10 @@ runs and holds nothing; its orders rest or wait. A bot rests only the orders wit
 a few percent of the price (5% unless set) and places the rest as the price comes
 near, so a wide grid shows one or two orders, which is correct; the card's
 "orders" line says what rests and what waits.</td></tr>
+<tr><td>Frozen</td><td class="dim">—</td><td class="dim">the
+bot runs but its fills cannot be read, so it places and cancels nothing until they
+can; the card says since when and the exchange's own error. It ends by itself on the
+first clean read.</td></tr>
 <tr><td>Waiting to start</td><td class="dim">pending</td><td class="dim">saved to
 its account but not running yet: it starts when the account's engine is next
 started or restarted (on the control page).</td></tr>

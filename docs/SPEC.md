@@ -292,6 +292,28 @@ eventually pin (T1).
   and each kept quantity is priced at its own rung when one below the
   minimum is dropped. *(the second audit, 2026-10-13: BTCUSD at 20 USDT, 14
   rungs, 70% placed and nothing said)*
+- **G28** D158's freeze is seen while it lasts. The bot's snapshot entry
+  carries `frozen_since` (unix seconds) and `frozen_why` (the read's last
+  error, cut to 160 characters) from the first failed read, and drops both
+  on the first snapshot after the end — a clean read, a flat, or the
+  holding back at the cached size. The first warning (urgent, past G26's
+  wait) carries the error; it is said again every `FROZEN_REMIND_SECONDS`
+  (6 h) while the freeze lasts, urgent: "still frozen after 6 h: <error>",
+  then 12 h, never between, a catch-up said once. A freeze that was said
+  has its end said once, plainly (info): "fills readable again after N
+  min; running (D158)", or "freeze over at a flat …" / "freeze over back
+  at the size its lots describe …"; one shorter than the wait was never
+  said, nor is its end. The digest's health line names the frozen bots.
+  When the freeze starts and ends and what is placed or cancelled are
+  D158's, unchanged. *(D158's dated addition, 2026-11-01)*
+- **G29** A fill our own parser refuses is named by its id, first in the
+  message, so G28's cut keeps it and it can be dealt with by hand: HL's
+  liquidation stamp naming no liquidatedUser ("fill id <tid> (<coin>)
+  refused: …", R10), and on either venue a fill time that is not one
+  ("fill id <id> refused: its time … is not a time"). Bybit's parser has
+  no other per-fill refusal. The refusals keep their kinds: R10's is a
+  VenueError (D158 freezes), a bad time a ValueError (the cycle is lost and
+  warned, as before). *(D158's dated addition, 2026-11-01)*
 - **G22** The window offset is the second narrow local durable fact E3 permits,
   beside X7's tombstone: written BEFORE the orders move (a crash mid-slide resumes
   at the new window, whose orders may already rest), read at build, clamped to G19
@@ -2052,6 +2074,8 @@ eventually pin (T1).
   **Retired**, on the card, the table and the strip ("N stopped"). Each
   carries its meaning on hover; the engine's state stays the key and the
   CSS class. *(D157)*
+  *(2026-11-01: **Frozen** (FROZEN) joins them — running, its fills
+  unreadable, nothing placed or cancelled (D158, U146).)*
 - **U115** A card's money reads as the platforms': **Total P&L · ROI**, then
   **Grid profit** and **Floating P&L** (U90's grid profit and trend; R5's
   open), then **Runtime**, the profit a day and **APR** (U64). Each label's
@@ -2311,6 +2335,38 @@ eventually pin (T1).
   Grid, DCA; a trade's futures type spelled out; a carry bot "<name>
   Portfolio Bot". The card's side is its tag; a list with no tag says the
   side in words.
+- **U146** (D158, 2026-11-01) A frozen bot says so: its card's state reads
+  **Frozen** (red), with "Frozen since HH:MM UTC — its fills can't be
+  read" (the date too when it began on another UTC day) and the
+  exchange's error, escaped; the strip counts "N frozen" beside "N
+  stopped" in one cell; "needs a look" lists it. From the snapshot's G28
+  fields: the first snapshot after the end shows none of it. A stopped,
+  retired or engine-off bot keeps its own state.
+- **U148** (D161, 2026-11-01) The Portfolio Bot form rehearses itself:
+  under "Next", **rehearse it first** works the year of the basket as
+  typed — coins, weights, hedge and its perpetual per coin, outright
+  shorts, spot leverage, investment — on the rates of the last 7 and 30
+  days: each short leg's funding (its USDT at its weight × its market's
+  rate, from the venue's public record), the loan's interest (the stack
+  past the investment, at the engine's newest USDT borrow reading), fees
+  of 0.35% of the spot stack and the outright shorts; the net, on the
+  investment, the funding that breaks even, the year at funding 0–15%;
+  then each coin's three perpetuals side by side, the one chosen in bold
+  (U111's table, once). A loan past 70% of the stack is said, red; a
+  borrow rate above the row's most is said (H4 stands the loan down); an
+  unread rate is a dash, never a guess; a form the engine would refuse
+  says why. With script the box re-works 600 ms after typing stops (the
+  server answers, D157's way); without, its button posts the form and the
+  page comes back worked. The review shows the same block. It saves
+  nothing. One function, `panel.carry.rehearsal`, works it for every
+  place. Sabotage: that function stubbed shows in every place; a second
+  calculator in the panel's source is named.
+- **U149** (D161, 2026-11-01) `/carry` still answers: it opens the
+  Portfolio Bot form (303) with what its query said — one coin at the
+  whole basket, hedged in full on the perpetual it named, the stack's own
+  part as the investment, the rest as spot leverage up to 10x — and the
+  rehearsal worked; what it cannot say (its 90-day and last-settlement
+  windows) is dropped. `/?show=carry` is the same form in the right half.
 - **U111** A carry bot's hedge may differ by coin — inverse, usdt or usdc,
   the common one above and the others named ("SOL usdt") — and the form
   shows each coin's three perpetuals side by side: what a short was paid
@@ -2401,7 +2457,9 @@ eventually pin (T1).
   example is the default (100,000 stack, 85,000 borrowed, BTC on the
   inverse, 90 days). Display only. *(the owner, 2026-10-11: "say i held
   100k of BTC with an 85K USDT debt … what would that look like over an
-  entire year?")*
+  entire year?")* *(2026-11-01: moved inside the Portfolio Bot form as its
+  rehearsal, U148; `/carry` opens that form, U149. The owner's example
+  still works to the same year there.)*
 - **U70** *(retired the same day by U72)* The phone's market report, live on
   the markets half. The owner: the phone's text is not needed on the page —
   a heading for each kind of data instead. The phone is still sent it.

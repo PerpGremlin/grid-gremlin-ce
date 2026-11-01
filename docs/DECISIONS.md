@@ -1389,6 +1389,20 @@ stands unless the owner corrects it.
   not bought again until its exit fills after it, and the lots are read
   the same way. A create that only resizes a resting order is never held
   back. Lots older than the session stay as the list has them.
+  *(2026-11-01, the owner: the freeze is seen. While a bot is frozen its
+  snapshot carries `frozen_since` and `frozen_why` (the exchange's error,
+  cut to 160 characters), and the card reads **Frozen**, "Frozen since
+  HH:MM UTC — its fills can't be read" with that error; the strip counts
+  it, "needs a look" and the digest name it; the first snapshot after the
+  end has none of it. The first warning now carries the error, and the
+  freeze is said again every 6 h while it lasts, urgent ("still frozen
+  after 6 h: <error>"). Its end, when it was said, is said once and
+  plainly ("fills readable again after N min; running"; at a flat or back
+  at the cached size, "freeze over …"). A fill our own parser refuses — HL's
+  liquidation stamp naming nobody (R10), a time that is none on either
+  venue — is named by its id first, so it survives the cut and can be dealt
+  with by hand. When the freeze starts and ends, and what is placed or
+  cancelled, are as above. G28, G29, U146.)*
 - **D159 — Refusals take the eye, and the typed confirmation is a pop-up
   (2026-11-01).** Setting up a carry bot, the owner missed the typed check
   three times: everything on the page looked alike and the confirm box sat
@@ -1473,6 +1487,14 @@ stands unless the owner corrects it.
   Mainnet the code only, as before. The D157 spelling ("BTCUSDT long
   grid") is no longer taken. Engine behaviour, the mainnet double gate
   (D25, D64, D97) and D29 are untouched.
+  *(2026-11-01, the owner, settling what D161 left open: the carry
+  calculator is "a function inside of the creation, so users can see
+  that, like the grid rehearsal. its useful to keep as a rehearsal tool."
+  It is the Portfolio Bot form's rehearsal now (U148): the basket as
+  typed, worked on the last 7 and 30 days, live or by its button, saving
+  nothing, one function for every place, U111's funding table folded in.
+  `/carry` opens that form with its query (U149). The chooser keeps five
+  kinds; Portfolio Bot's line says its form rehearses the year first.)*
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

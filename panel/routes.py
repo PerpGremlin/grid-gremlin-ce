@@ -370,18 +370,15 @@ class Handler(RehearsePages, CarryFlowPages, CreateFlowPages, FleetAdminPages, C
             self.end_headers()
             self._out(body)
             return
-        if self.path.split('?')[0] == '/carry':                      # U69
-            from ggdata.market import latest
-            from panel.reference import KEEP_JS, THEME_JS
-            from .carry import carry_page
-            from .nav import PAGE_END, side_nav
+        if self.path.split('?')[0] == '/carry':                      # U69, U149
+            # the calculator is the Portfolio Bot form's rehearsal now: the
+            # old address opens it, carrying what its query said
+            from .carry import old_query
             q = dict(urllib.parse.parse_qsl(self.path.partition('?')[2]))
-            body = (f'<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>carry</title><style>{CSS}</style>{THEME_JS}'
-                    f'{side_nav()}<main>{carry_page(latest(), q)}</main>{PAGE_END}{KEEP_JS}')
-            self.send_response(200)
-            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.send_response(303)
+            self.send_header('Location', '/setup?' + urllib.parse.urlencode(
+                {'adv': 'carry', **old_query(q)}) + '#carry-rehearse')
             self.end_headers()
-            self._out(body)
             return
         if self.path == '/results':                                   # R24
             from panel.reference import KEEP_JS, THEME_JS
@@ -445,6 +442,8 @@ class Handler(RehearsePages, CarryFlowPages, CreateFlowPages, FleetAdminPages, C
             return self._setup_post(form)
         if self.path == '/setup-carry':
             return self._carry_post(form)                     # U108
+        if self.path == '/carry-rehearse':
+            return self._carry_rehearse_post(form)            # U148
         if self.path == '/chart':
             return self._chart_post(form)
         if self.path == '/whatif':
