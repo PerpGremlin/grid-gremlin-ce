@@ -599,6 +599,15 @@ eventually pin (T1).
   (one protection), at or beyond the take-profit, and with the offset at or
   beyond it. Unhosted, a restart re-arms when the mark is next in profit by
   the activation (M21's shape).
+- **M27** A DCA bot on a coin-margined perpetual (D165): Bybit only, refused on
+  Hyperliquid by name. Each order is its dollars in $1 contracts, at any price;
+  `size_in: coin` is coins × price (D89). The take profit and stops are percentages
+  of the venue's own average, harmonic on this market; the P&L and fees are in the
+  coin, stated in USD at the fill's price (A4), and the loss limit and reinvest read
+  them so. Its coin is switched on as collateral at build (110101), as a Portfolio
+  Bot's leg. One bot per symbol: I2 holds, one-way, so a long and a short on one
+  inverse market are refused, as is one beside a Portfolio Bot's leg on it.
+  `spec_inverse_dca.py`, sabotage for each guard.
 - **M26** A DCA bot on margin spot (D59): long, Bybit, `spot_borrow` with
   `spot_leverage` as its leverage; the round's exit rests as a plain sell
   recognised by its link (spot has no reduce-only and no position TP); base
@@ -2130,6 +2139,14 @@ eventually pin (T1).
   property may hold one. *(owner, 2026-11-01: the green one "classic",
   "an actual dark theme", "a version that looks like a retail broker platform as
   well, or MetaTrader 5")*
+- **U182** (D165) The DCA form offers the inverse market; its investment, order
+  sizes and loss limit say USD with U160's words, the quick setup makes an inverse
+  row from the symbol (U161), the review's sentence and order sizes say USD, its
+  preview counts contracts, and the smallest-order check asks the adapter. The
+  liquidation estimate counts the investment as coins, worth what the coin is at each
+  price: nearer than the same row in USDT for a long, and a short at 1x holds to the
+  end of the path. A grid's estimate (T10) still takes the investment in constant
+  dollars (BACKLOG).
 - **U181** (2026-11-02) A seventh theme, black, between dark and light on the
   button: dark's colours and face with the page and panels taken down to near
   black, the panels still a step above the page, every word AA on both.
@@ -2478,8 +2495,8 @@ eventually pin (T1).
   "Investment: N USD ≈ x <COIN> at today's price — your <COIN> is the
   collateral", at the price the box already read, and carry USD; the
   plain words say it too. A linear form reads as before, with no coin
-  line (its order size and sentence already say coins). A DCA bot is
-  linear or spot only (the engine's own refusal). Display only (D29).
+  line (its order size and sentence already say coins). A DCA bot says it
+  too since D165 (U182). Display only (D29).
 - **U161** (2026-11-01) The quick setup has no market-type field, so the
   symbol says it: the Bybit category whose public instruments list it
   (linear, then inverse, then spot), judged by A8's contractType check —
@@ -2487,9 +2504,8 @@ eventually pin (T1).
   ("BTCUSD — coin-margined (inverse) perpetual") and a quick inverse grid
   is an inverse row, its money in USD as U160. Listed in none is the
   not-listed refusal; a failed read is a failure, never "not listed"; on
-  Hyperliquid, linear as before. A quick DCA on an inverse market is
-  refused in words naming the USDT perpetual; a spot-only coin points to
-  the advanced form. Read once per symbol for five minutes.
+  Hyperliquid, linear as before. A quick DCA on an inverse market is an
+  inverse row (D165); a spot-only coin points to the advanced form. Read once per symbol for five minutes.
 - **U150** (D162, 2026-11-01) The account box says what changed on the
   account: each coin's balance before, now and the change (and its loan
   when it has one), headed as shown, not explained; Hyperliquid's says
@@ -3923,6 +3939,10 @@ that pins it (T1).
 - **T3** The backtester drives the real `plan()`; fills require trade-through, not
   touch; funding is modelled; inventory is counted in integer qty-steps — float
   subtract-then-floor drops a whole step per iteration *(audit 2026-08-06)*. *(freqtrade + passivbot studies)*
+- **T7b** (D165) On an inverse row the pretend venue averages harmonically and
+  states its fee in the coin; the rehearsal's money is the adapter's, each fill in
+  USD at its price, so its figures are in USD as `backtest`'s are. A linear row's are
+  unchanged.
 - **T7** The martingale's rehearsal has no second engine: the real `Bot` runs
   cycle by cycle against a venue made of candles (`replay.BarVenue`), so every
   stop, limit and round rule is the live code. The pretend venue's assumptions are

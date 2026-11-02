@@ -121,6 +121,18 @@ def portfolio_legs(cfg, client):
     return legs
 
 
+def collateral_coin(cfg, spec):
+    """The coin a row needs switched on as collateral at build, or None:
+    margin spot's (D24), and an inverse DCA's, margined in its coin, which the
+    unified account refuses (110101) until it is, as a Portfolio Bot's leg
+    (D165)."""
+    if cfg['market_type'] == 'spot' and cfg.get('spot_borrow'):
+        return spec['base_coin']
+    if cfg['market_type'] == 'inverse' and cfg['strategy'] == 'martingale':
+        return spec['settle_coin']
+    return None
+
+
 def build_portfolio(cfg, client, notifier, state, tombs):
     """H2: the row, its legs resolved and each an I2 identity the fleet
     holds unique — a portfolio's BTCUSD short against an inverse BTC short
@@ -574,10 +586,9 @@ def build_market_bot(cfg, client, notifier, tombs, slide):
     identity = bot_identity(cfg, adapter)
     if venue == 'bybit' and cfg['market_type'] == 'linear':
         client.ensure_hedge_mode(cfg['market_type'], cfg['symbol'])
-    elif (venue == 'bybit' and cfg['market_type'] == 'spot'
-            and cfg.get('spot_borrow')):
+    elif venue == 'bybit' and collateral_coin(cfg, spec):
         try:
-            client.ensure_collateral(spec['base_coin'])
+            client.ensure_collateral(collateral_coin(cfg, spec))
         except VenueError as e:
             _vn(notifier, venue).event('warn', cfg['symbol'],
                                        f'collateral switch deferred: {e}')

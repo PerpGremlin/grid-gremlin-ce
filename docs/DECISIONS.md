@@ -1608,6 +1608,14 @@ stands unless the owner corrects it.
   whose full-size exit sold the next lot up, and that rung bought straight
   back; on Hyperliquid a leftover bought high sold about 4% under its cost.
 
+- **D165 — A DCA bot on an inverse perpetual (2026-11-02).** The owner:
+  "yes i want the inverse dca built". BTCUSD-style markets, on Bybit: the
+  engine's refusal goes, the form and the quick setup offer them, in USD with
+  the coin as collateral. No second inverse arithmetic: the adapter's, as an
+  inverse grid uses. Decided in the build: the review's liquidation estimate
+  counts the investment as coins (M27, U182), since that is what is at risk on
+  this market; and the row's coin is switched on as collateral at build.
+
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
 inline above.*

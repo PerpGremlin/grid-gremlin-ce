@@ -170,8 +170,9 @@ GRID = {
 
 MARTINGALE = {
     'The basics': COMMON + [
-        ('market_type', 'market_type', 'choice:linear|spot', 'Market type',
-         'a perpetual, or spot (on Bybit, long only); the exits rest as sells'),
+        ('market_type', 'market_type', 'choice:linear|inverse|spot', 'Market type',
+         'a USDT/USDC perpetual, one margined in the coin itself (inverse, on '
+         'Bybit), or spot (on Bybit, long only); the exits rest as sells'),
         ('spot_borrow', 'spot_borrow', 'switch', 'Margin spot (borrow)',
          'spot only: buys on borrowed money up to the spot leverage'),
         ('spot_leverage', 'spot_leverage', 'num', 'Spot leverage',
@@ -413,6 +414,10 @@ INVERSE_WORDS = {
     'max_loss': (None, 'in USD. When its own losses, closed and still open '
                        'together, reach this, it closes its position and stops '
                        'for good. Blank = no limit. Counts at most the last 30 days'),
+    'base_order_size': (None, 'in USD, leverage included: one contract is $1 on a '
+                              'coin-margined market — or in {coin} when sizes are in coin'),
+    'safety_order_size': (None, 'in USD, leverage included: one contract is $1 on a '
+                                'coin-margined market — or in {coin} when sizes are in coin'),
     'max_position_base': ('Largest position (in USD contracts)',
                           'one contract is $1 on a coin-margined market. Blank = '
                           'the full grid; type "unbounded" for no limit'),
@@ -721,10 +726,6 @@ def quick_bot(form, venue, mark, market_type='linear'):
     if market_type == 'spot':
         raise ValueError(f'{sym} is listed on Bybit as spot only: the quick setup '
                          'builds perpetual bots — open the advanced form for a spot bot')
-    if market_type == 'inverse' and str(preset).startswith('dca'):
-        raise ValueError(f'{sym} is a coin-margined (inverse) market: a DCA bot runs '
-                         f'on a USDT/USDC perpetual or spot — type {coin_of(sym)}USDT '
-                         'for the USDT perpetual')
     if preset not in PRESETS:
         raise ValueError(f'unknown preset "{preset}"')
     caution = form.get('caution', 'balanced')
@@ -747,7 +748,7 @@ def quick_bot(form, venue, mark, market_type='linear'):
         # M2: base + every add-on must fit inside money x leverage
         unit = money * lev * 0.98 / (1.0 + sum(k ** i for i in range(n)))
         bot = {**_venue_key(venue), 'strategy': 'martingale',
-               'market_type': 'linear', 'symbol': symbol,
+               'market_type': market_type, 'symbol': symbol,
                'side': 'long' if preset == 'dca_long' else 'short',
                'capital': money, 'leverage': lev,
                'base_order_size': _sig(unit, 4),
@@ -962,17 +963,18 @@ def sentence(cfg, mark=None):
         entry = ('at the market price' if cfg.get('start_order_type',
                                                   'market') == 'market'
                  else 'waiting at the best price to pay the lower fee')
+        usd = ' USD' if cfg.get('market_type') == 'inverse' else ''     # D165
         parts = [
             f"This bot {'buys' if long else 'sells'} {cfg['symbol']} in "
             f"steps. It opens with "
             + (f"{cfg['base_order_size']:g} coins" if cfg.get('size_in') == 'coin'
-               else _m(cfg['base_order_size'])) + f", {entry}.",
+               else _m(cfg['base_order_size']) + usd) + f", {entry}.",
             f"Each time the price {'falls' if long else 'rises'} further "
             f"it adds to the position: up to {n} more orders, the first "
             f"after a {cfg['deviation_pct']:.2%} move, covering a move of "
             f"about {depth:.1%} in all, "
             + (f"{cfg['ladder_total_coins']:g} coins" if cfg.get('size_in') == 'coin'
-               else _m(cfg['ladder_total_notional'])) + ' in total.',
+               else _m(cfg['ladder_total_notional']) + usd) + ' in total.',
             money]
         tr = cfg.get('take_profit_tranches')
         if tr:
@@ -1082,7 +1084,7 @@ CHOICE_LABELS = {
                     'leave_position': 'stop, and leave the position open'},
     'exit_floor': {'rung': 'one grid above where it was bought',
                    'basis': 'never below the average cost'},
-    'size_in': {'quote': 'money (USDT / USDC)', 'coin': 'coins'},
+    'size_in': {'quote': 'money (USDT / USDC; USD when coin-margined)', 'coin': 'coins'},
     'start_order_type': {'market': 'market order (at once)',
                          'maker': 'limit, post-only (the lower fee)'},
     'stop_candle': {'none': 'no candle wait'},

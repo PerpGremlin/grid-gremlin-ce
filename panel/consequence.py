@@ -158,7 +158,10 @@ def _dca_liquidation(cfg, adapter, mark):
         if r['stopped_at'] is not None and not r['held']:
             return None, r
         mm = adapter.notional(r['held'], r['price']) * MM_RATE if r['held'] else 0.0
-        return cfg['capital'] + r['pnl'] - mm, r
+        # D165: coin-margined, the investment is coins, worth what the coin is
+        worth = (cfg['capital'] * r['price'] / mark
+                 if cfg.get('market_type') == 'inverse' else cfg['capital'])
+        return worth + r['pnl'] - mm, r
     prev, n = 0.0, 1
     while True:
         move = way * min(n * PATH_STEP if long else (1.0 + PATH_STEP) ** n - 1.0, end)

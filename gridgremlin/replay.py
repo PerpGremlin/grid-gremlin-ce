@@ -78,9 +78,11 @@ class BarVenue:
             return 0.0
         qty = self.adapter.from_steps(n)
         if side == self.entry:
-            total = (self.avg or 0.0) * self.held + price * qty
+            inverse = self.adapter.market_type == 'inverse'
+            total = ((self.held / self.avg if self.avg else 0.0) + qty / price if inverse
+                     else (self.avg or 0.0) * self.held + price * qty)
             self.steps += n
-            self.avg = total / self.held
+            self.avg = self.held / total if inverse else total / self.held
         else:
             self.steps -= n
             if self.steps == 0:        # the venue's own rows go with it
@@ -94,7 +96,11 @@ class BarVenue:
         self.fills.append({
             'time_ms': self._ms,
             'side': side.lower(), 'price': price, 'qty': qty,
-            'fee': qty * price * fee_rate, 'link_id': link_id or '',
+            # A4: in the settle coin, as the venue states it (an inverse one's
+            # is the coin: its notional in dollars, at this fill's price)
+            'fee': (self.adapter.notional(qty, price) * fee_rate
+                    / self.adapter.pnl_to_usd(1.0, price)),
+            'link_id': link_id or '',
             'symbol': self.adapter.symbol, 'exec_id': f'x{self._n}',
             'venue_closed': bool(kind), 'venue_kind': kind})
         return qty
@@ -300,6 +306,12 @@ def backtest_martingale(cfg, adapter, bars, fee_maker=BYBIT_MAKER,
     span = bar_minutes * 60.0
     equity_curve, peak, max_drawdown, max_held = [], 0.0, 0.0, 0.0
     ran = 0
+    inverse = adapter.market_type == 'inverse'
+    realized = fees = 0.0            # D165, A4: stated in USD, each fill at its price
+
+    def unreal_at(p):
+        return (sign * adapter.pnl_to_usd(adapter.realised_pnl(venue.avg, p, venue.held), p)
+                if venue.steps else 0.0)
     for bar in bars:
         ran += 1
         t0 = bar['t'] / 1000.0
@@ -310,20 +322,18 @@ def backtest_martingale(cfg, adapter, bars, fee_maker=BYBIT_MAKER,
             for _ in range(CYCLES_PER_STEP):
                 if not bot.alive:
                     break
-                unreal = (sign * venue.held * (price - venue.avg)
-                          if venue.steps else 0.0)
-                bot.cycle(equity=cfg['capital'] + book['realized']
-                          - book['fees'] + unreal)
+                bot.cycle(equity=cfg['capital'] + realized - fees + unreal_at(price))
                 venue.now += 1.0
         for f in venue.fills[seen:]:               # the ledger, R2's own
+            before = book['realized']
             apply_fill(book, f['side'], f['price'], f['qty'], f['fee'],
-                       rung=rung_of(f['link_id'], bot.botid),
+                       inverse=inverse, rung=rung_of(f['link_id'], bot.botid),
                        entry_side=entry)
+            realized += adapter.pnl_to_usd(book['realized'] - before, f['price'])
+            fees += adapter.pnl_to_usd(f['fee'], f['price'])
         seen = len(venue.fills)
         max_held = max(max_held, venue.held)
-        unreal = (sign * venue.held * (bar['c'] - venue.avg)
-                  if venue.steps else 0.0)
-        equity = book['realized'] - book['fees'] + unreal
+        equity = realized - fees + unreal_at(bar['c'])
         equity_curve.append(equity)
         peak = max(peak, equity)
         max_drawdown = max(max_drawdown, peak - equity)
@@ -337,8 +347,8 @@ def backtest_martingale(cfg, adapter, bars, fee_maker=BYBIT_MAKER,
     return {'hosts_position_tp': venue.hosts_position_tp,
             
         'strategy': 'martingale',
-        'grid_profit': book['realized'], 'fees': book['fees'],
-        'funding': 0.0, 'net': book['realized'] - book['fees'],
+        'grid_profit': realized, 'fees': fees,
+        'funding': 0.0, 'net': realized - fees,
         'total': equity_curve[-1] if equity_curve else 0.0,
         'trips': book['trips'], 'rounds': book['rounds'],
         'entry_fills': sum(1 for f in venue.fills if f['side'] == entry),

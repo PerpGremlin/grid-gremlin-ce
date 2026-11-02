@@ -543,8 +543,7 @@ def spec_U160_an_inverse_grid_says_usd_and_its_coin_line():
     gives its coin value at the price the box already read, and the review
     states the investment in USD and in its coin. The words follow the
     market type as it is changed (MONEY_JS). Display only: the row is the
-    same row. Quick setups and DCA bots are linear or spot (the engine
-    refuses an inverse DCA), so the advanced grid is the one door."""
+    same row."""
     base, _d, close = _served_inverse()
     try:
         problem = _inverse_said(*_inverse_pages(base))
@@ -667,9 +666,8 @@ def spec_U161_the_quick_setup_reads_the_market_type_from_the_symbol():
 def spec_U161_a_quick_inverse_grid_says_its_market_and_usd():
     """BTCUSD in the quick grid: the box says the market ("BTCUSD —
     coin-margined (inverse) perpetual") and the investment in USD with its
-    coin value; the review's row is an inverse row. A quick DCA on it is
-    refused in words, naming the USDT perpetual (the engine runs a DCA on
-    linear or spot only); a spot-only coin points to the advanced form."""
+    coin value; the review's row is an inverse row. A quick DCA on it is an
+    inverse row too (D165); a spot-only coin points to the advanced form."""
     from panel.setup import quick_bot
     base, _d, close = _served_inverse()
     q = dict(QUICK, symbol='BTCUSD')
@@ -685,7 +683,11 @@ def spec_U161_a_quick_inverse_grid_says_its_market_and_usd():
         lin = _call(base, '/numbers', QUICK)
         assert 'BTCUSDT — USDT/USDC perpetual' in lin and _row_text(lin, 'Investment') is None
         dca = _call(base, '/numbers', dict(q, preset='dca_long'))
-        assert 'class="refusal"' in dca and 'type BTCUSDT for the USDT perpetual' in dca, dca
+        assert 'class="refusal"' not in dca and 'BTCUSD — coin-margined' in dca, dca
+        assert (_row_text(dca, 'Investment') or '').startswith('1,000 USD ≈ '), dca
+        assert ' USD' in (_row_text(dca, 'Size per order') or ''), dca
+        built = _proposal(_call(base, '/setup', dict(q, preset='dca_long')))['bot']
+        assert built['market_type'] == 'inverse' and built['strategy'] == 'martingale'
     finally:
         close()
     try:

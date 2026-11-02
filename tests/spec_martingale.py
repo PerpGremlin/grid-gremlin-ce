@@ -333,7 +333,6 @@ def spec_D89_a_dca_may_size_its_orders_in_coins():
     inv = InverseAdapter({'symbol': 'BTCUSD', 'qty_step': 1.0, 'price_tick': 0.5, 'min_qty': 1.0,
                           'settle_coin': 'BTC'})
     assert order_qty({'size_in': 'coin'}, inv, 0.01, 80000.0) == 800.0             # $1 contracts = coins × price
-    # (a DCA row is linear or spot today; the inverse case is ready if that widens)
     # the summary: equal coins at each step average at the coin-weighted price
     eq = _cfg(base_order_size=0.01, safety_order_size=0.01, order_size_multiplier=1.0, deviation_step_multiplier=1.0,
               size_in='coin')

@@ -644,8 +644,11 @@ def validate_martingale(row, where='row'):
     _profile_name(cfg, where)
 
     cfg['venue'] = _enum(cfg, 'venue', where, VENUES, default='bybit')
-    cfg['market_type'] = _enum(cfg, 'market_type', where, ('linear', 'spot'),
+    cfg['market_type'] = _enum(cfg, 'market_type', where, MARKET_TYPES,
                                default='linear')
+    if cfg['market_type'] == 'inverse' and cfg['venue'] != 'bybit':
+        _refuse(f"{where}: Hyperliquid has no coin-margined market — an "
+                'inverse DCA bot runs on Bybit (D165)')
     if not isinstance(cfg.get('symbol'), str) or not cfg.get('symbol'):
         _refuse(f"{where}: 'symbol' must be a non-empty string")
     cfg['side'] = _enum(cfg, 'side', where, SIDES)

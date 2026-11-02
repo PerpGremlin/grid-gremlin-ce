@@ -15,7 +15,7 @@ from gridgremlin.adapters import adapter_for
 from gridgremlin.apply import row_botid, check_link_fits, make_botid, widest_rung
 from gridgremlin.config import (market_rows, ConfigError, check_placeable,
                                 check_venue_leverage, validate_fleet)
-from gridgremlin.ladder import grid_rungs, plan_grid, position_cap
+from gridgremlin.ladder import grid_rungs, order_qty, plan_grid, position_cap
 from gridgremlin.main import BYBIT_LINK_LIMIT, check_watchdog_coverage
 from gridgremlin.watchdog import validate_watchdog
 
@@ -360,14 +360,14 @@ def order_minimum_problem(vbot, adapter, m0):
     import math
     # the smallest order in money at today's price — the coin minimum binds
     # on a dear coin (0.001 BTC ≈ 82)
-    least = max(adapter.min_notional or 0.0, adapter.min_qty * m0)
+    least = max(adapter.min_notional or 0.0, adapter.notional(adapter.min_qty, m0))
     for what, key in (('first order', 'base_order_size'),
                       ('add-on order', 'safety_order_size')):
         size = vbot.get(key)
         if not size:
             continue
         coins = vbot.get('size_in') == 'coin'     # D89
-        q0 = adapter.round_qty(size if coins else size / m0)
+        q0 = order_qty(vbot, adapter, size, m0)      # D165: an inverse one in contracts
         if q0 <= 0 or not adapter.meets_minimum(q0, m0):
             step = adapter.qty_step
             least_c = (math.ceil(least / m0 / step - 1e-9) * step
@@ -400,6 +400,8 @@ def martingale_preview(cfg, mark):
             qty, notional = notional, notional * price
         else:
             qty = notional / price if price > 0 else 0.0
+        if cfg.get('market_type') == 'inverse':      # D165: $1 contracts
+            qty = notional
         cum_n += notional
         cum_q += qty
         rows.append({'rung': i, 'price': price, 'notional': notional,
