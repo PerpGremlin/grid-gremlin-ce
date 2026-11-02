@@ -68,7 +68,7 @@ def spec_U170_sabotage_without_the_needs_a_look_reading_no_tab_is_red():
         page = r.render(_three())
     finally:
         r.needs_look = real
-    assert 'class="dot"' not in page.split('</nav>', 2)[1]
+    assert 'class="dot"' not in page.split('<nav class="acctabs"', 1)[1].split('</nav>', 1)[0]
 
 
 # --- U171: ?acct= filters on the server -------------------------------------
@@ -283,3 +283,98 @@ def spec_U176_sabotage_a_stylesheet_without_the_grid_is_caught():
     from panel.css import CSS
     bad = CSS.replace('repeat(auto-fill,minmax(min(18em,100%),1fr))', 'minmax(0,1fr)')
     assert grid_rules(bad) != []
+
+
+# --- U177: the strip folds into the tabs --------------------------------------
+
+def _strip_world():
+    """Three accounts with every strip figure lit: a stopped and a frozen
+    bot, an unpriced and a not-whole book, a red MMR and free share, an old
+    engine snapshot, a 24 h equity line."""
+    a, b, c = (lb_c[1] for lb_c in _three())
+    a['watchdog']['belief']['bots']['linXRPUSDTs']['alive'] = False
+    a['watchdog']['belief']['age_s'] = 1800
+    b['bots']['linETHUSDTl'] = dict(BOOK, unreal_at_mark=None)
+    b['watchdog']['belief'].update(mm_rate=0.62, available=50.0)
+    c['bots']['linSOLUSDTl'] = dict(BOOK, whole=False)
+    c['watchdog']['belief']['bots']['linSOLUSDTl']['frozen_since'] = 1
+    return [('Bybit demo', a), ('subaccount 2 · paper', b), ('HL testnet', c)]
+
+
+def strip_moved(page, labelled):
+    """What of the strip did not move into the tabs — [] when the page's
+    pinned strip is the tab row alone (no per-account row above it) and
+    each account's tab holds every figure its strip row would show: the
+    network, the total with its unpriced and not-whole notes, stopped or
+    frozen, the leverage line, the equity line, and the bot count."""
+    import html as _h
+    from panel.render import acct_key
+    from panel.strip_view import STRIP_CELLS, strip_cells, tier_badge
+    lost = []
+    hero = page.split('<div class="hero', 1)[1].split('<div class="page">', 1)[0]
+    if '<div class="fleet">' in hero:
+        lost.append('a strip row above the tabs')
+    if not hero.startswith(' tabbed"><nav class="acctabs"') or page.count('<nav class="acctabs"') != 1:
+        lost.append('the tabs are not the strip')
+    for lb, c in labelled:
+        key = acct_key(lb)
+        at = hero.find(f'data-acct="{key}"')
+        tab = hero[at:hero.find('</a>', at)] if at >= 0 else ''
+        cells = strip_cells(c)
+        want = [cells[k] for k in STRIP_CELLS if k != 'bots' and cells[k] != '<span></span>']
+        want += [re.sub(r'<a class="(tier[^"]*)" href="/trading" title="what this means">(.*?)</a>',
+                        r'<span class="\1">\2</span>', tier_badge(c)),
+                 f'{_h.escape(lb, quote=False)} <span class="n">{len(c["bots"])}</span>']
+        lost += [f'{lb}: {w[:60]}' for w in want if w not in tab]
+    return lost
+
+
+def spec_U177_the_strip_draws_no_account_rows_each_tab_carries_its_figures():
+    """The owner's complaint was scrolling and blank space; the strip's
+    five rows stood above the tabs. With tabs, the tabs are the pinned
+    strip: one row, each account's strip figures in its own tab, nothing
+    lost — on the cards and on the table face alike."""
+    from panel.render import render
+    world = _strip_world()
+    for page in (render(world), render(world, table=True), render(world, acct='hl-testnet')):
+        assert strip_moved(page, world) == [], strip_moved(page, world)
+    page = render(world)
+    hero = page.split('<div class="hero tabbed">', 1)[1].split('<div class="page">', 1)[0]
+    for said in ('1 stopped', '1 frozen', '+ 1 unpriced', '+ 1 not whole', 'MMR <b class="neg">62.0%</b>',
+                 'free <b class="neg">5%</b>', 'engine read 30 min ago', 'class="spark"'):
+        assert said in hero, said
+    assert '<a ' not in hero.replace('<a href=', '', 4)           # no link inside a tab
+    assert page.index('<div class="hero tabbed">') < page.index('<div class="page">')
+    from panel.css import CSS
+    assert '.hero.tabbed .acctabs{flex-wrap:nowrap;overflow-x:auto' in CSS   # one row; it scrolls, never the page
+
+
+def spec_U177_the_public_page_the_export_and_a_lone_account_keep_the_strip_rows():
+    """The public page (U153: no account lines, no tabs), an export and a
+    lone account have no tabs: their strip is U50's rows, exactly as before."""
+    from panel.render import render
+    from panel.strip_view import hero_strip
+    world = _strip_world()
+    pub = [(lb, dict(c, public=True)) for lb, c in world]
+    for page, rows in ((render(pub), hero_strip(pub)), (render(world, static='then'), hero_strip(world)),
+                       (render(world[:1]), hero_strip(world[:1], True))):
+        assert rows in page and '<nav class="acctabs"' not in page and '"hero tabbed"' not in page
+        assert rows.count('<div class="fleet">') == page.count('<div class="fleet">') >= 1
+    assert 'acctlines' not in render(pub)
+
+
+def spec_U177_sabotage_a_tab_without_the_strip_figures_is_caught():
+    import panel.render as r
+    world = _strip_world()
+    real = r.tab_figures
+    r.tab_figures = lambda c: ''                                    # sabotage: the figures dropped
+    try:
+        bare = r.render(world)
+    finally:
+        r.tab_figures = real
+    assert strip_moved(bare, world) != []
+    page = r.render(world)
+    assert strip_moved(page.replace('1 frozen', ''), world) != []        # one figure lost is caught
+    from panel.strip_view import hero_strip
+    rows = page.replace('<div class="hero tabbed">', hero_strip(world, True) + '<div class="hero tabbed">', 1)
+    assert strip_moved(rows, world) != []                                # the rows back above the tabs

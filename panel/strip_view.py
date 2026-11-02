@@ -208,12 +208,29 @@ def _window(w, venue):
     return f'{head}{btab}{ptab}<h4>money in/out of the account</h4><p>{money}</p>'
 
 
-def account_change_lines(contract, now=None, switch=True):
+def _manage_cell(idx, venue, p, managed):
+    """D164 (U155): the trade manager's link for a position no bot runs —
+    "manage", or once adopted "managed" with its exits as set."""
+    from urllib.parse import quote
+    from gridgremlin.managed import current, key_of
+    if p.get('market') not in ('linear', 'inverse'):
+        return '<span class="dim">spot: not managed yet</span>'
+    key = key_of(venue, p['market'], p['symbol'], p['side'])
+    rec = managed.get(key)
+    href = f'/manage?fleet={idx}&amp;key={quote(key)}'
+    if not current(rec, p):
+        return f'<a href="{href}">manage</a>'
+    return f'<a href="{href}">managed</a> · TP {_q(rec.get("tp"))} · SL {_q(rec.get("sl"))}'
+
+
+def account_change_lines(contract, now=None, switch=True, idx=None):
     """D162 (U150–U153): what changed on the account — its coins and its
     perpetual positions, since 1 h, 24 h or 7 d (one switch naming what is
     on, D161's look) — and its positions no bot runs. The readout's own
     `account_change`; nothing when the readout is missing or stale (the
-    account lines say "not read"). The live panel's only (U138's rule)."""
+    account lines say "not read"). The live panel's only (U138's rule).
+    D164 (U155): given the account's index, each perpetual no bot runs links
+    to its trade manager, and says its exits once it is managed."""
     import time as _t
     now = _t.time() if now is None else now
     gen = (contract or {}).get('generated_ms')
@@ -233,14 +250,20 @@ def account_change_lines(contract, now=None, switch=True):
             out.append(f'<div class="chg chg-{k}">{_window((got.get("windows") or {}).get(k) or {"none": "no record"}, venue)}</div>')
         loose = got.get('not_from_a_bot') or []
         if loose:
+            act = idx is not None
             out.append('<h4>Account positions, not from a bot</h4><table><tr><th>position</th><th>size</th>'
-                       '<th>entry</th><th>mark</th><th>P&amp;L</th><th>leverage</th></tr>'
+                       '<th>entry</th><th>mark</th><th>P&amp;L</th><th>leverage</th>'
+                       + ('<th>trade</th>' if act else '') + '</tr>'
                        + ''.join(f'<tr><td>{position_words(p, trade=True)}</td><td>{_q(p.get("size"))}</td>'
                                  f'<td>{_q(p.get("entry"))}</td><td>{_q(p.get("mark"))}</td>'
                                  f'<td class="{_num_cls(p.get("upnl") or 0.0)}">{_dq(p.get("upnl"))}</td>'
-                                 f'<td>{"—" if p.get("leverage") is None else format(p["leverage"], "g") + "x"}</td></tr>'
+                                 f'<td>{"—" if p.get("leverage") is None else format(p["leverage"], "g") + "x"}</td>'
+                                 + (f'<td>{_manage_cell(idx, venue, p, contract.get("managed") or {})}</td>'
+                                    if act else '') + '</tr>'
                                  for p in loose)
-                       + '</table><p class="dim">no bot manages these; the engine leaves them alone.</p>')
+                       + '</table><p class="dim">no bot manages these; '
+                       + ('<b>manage</b> one to set its take profit and stop, or to close part or all '
+                          'of it (D164).</p>' if act else 'the engine leaves them alone.</p>'))
         out.append('</div>')
     return ''.join(out) + '</div>'
 
@@ -272,15 +295,16 @@ TIER_NAMES = {('bybit', 'demo'): 'Demo Trading', ('bybit', 'testnet'): 'Testnet'
               ('hyperliquid', 'mainnet'): 'Mainnet'}
 
 
-def tier_badge(contract):
+def tier_badge(contract, link=True):
     """D65: the exchange's own name for the network, on every fleet's
-    heading; Mainnet in red. A link to what the networks mean."""
+    heading; Mainnet in red. A link to what the networks mean — a plain
+    label inside an account tab (U177), which is a link itself."""
     out = []
     for venue, env in sorted(contract_tiers(contract).items()):
         name = TIER_NAMES.get((venue, env), env)
         cls = 'tier-main' if env == 'mainnet' else 'tier-test'
         out.append(f'<a class="tier {cls}" href="/trading" title="what this '
-                   f'means">{name}</a>')
+                   f'means">{name}</a>' if link else f'<span class="tier {cls}">{name}</span>')
     # the strip's grid counts a cell per fleet for the badge: an unknown
     # network still fills its cell (the bug hunt, 2026-10-11: a fleet down
     # shifted every later cell one place left)
@@ -296,14 +320,64 @@ def portfolio_total(contract):
     return portfolio_rows_total(belief) or 0.0
 
 
+STRIP_CELLS = ('total', 'bots', 'count', 'lev', 'spark')
+
+
+def strip_cells(c):
+    """U50's figures for one fleet, the cells of its strip row in order
+    after the name and the network: the exchange's total after fees (U95's
+    unpriced and R14c's not whole beside it), the bot count, how many
+    stopped or frozen, the account's leverage with its MMR, free share and
+    the engine's read age, the 24 h equity line. The row and the account
+    tab (U177) both draw these, so neither can drop one."""
+    from gridgremlin.report import account_leverage
+    live = [b for b in c['bots'].values()                         # an unpriced inverse
+            if b is not None and b.get('realized') is not None]    # book: no dollars yet
+    total = sum(card_total(b) for b in live) + portfolio_total(c)       # H6
+    gap = sum(1 for b in c['bots'].values() if unpriced(b))
+    cut = sum(1 for b in c['bots'].values() if not_whole(b))           # R14c
+    belief = ((c.get('watchdog') or {}).get('belief') or {}).get('bots', {})
+    dead = sum(1 for bl in belief.values() if bl.get('alive') is False)
+    frozen = sum(1 for bl in belief.values()                       # U146
+                 if bl.get('alive') is not False and bl.get('frozen_since') is not None)
+    levs = [a['now'] for a in account_leverage(c).values()]
+    lev = ('leverage —' if not levs or any(v is None for v in levs) else
+           'leverage ' + ' · '.join(f'{v:.2f}x' for v in levs))
+    rate = ((c.get('watchdog') or {}).get('belief') or {}).get('mm_rate')
+    if rate is not None:                                     # U66
+        lev += (f' · MMR <b class="{"neg" if rate >= MMR_WARN else ""}">{rate:.1%}</b>')
+    got = free_share((c.get('watchdog') or {}).get('belief') or {})
+    if got is not None:                                      # U100
+        lev += (f' · free <b class="{"neg" if got[1] < FREE_WARN else ""}">{got[1]:.0%}</b>')
+    stale = snapshot_age(c)
+    if stale:
+        # U94: the dead count, the MMR and the free share are the engine's last snapshot's
+        lev += f' · <b class="neg">engine read {stale}</b>'
+    # D157: how many stopped; U146 (D158): how many are frozen — one
+    # cell, so the grid's columns stay where they were
+    said = ([f'<b class="neg num st" title="stopped by their own rule (a stop loss, a loss limit, a round count) or refused at start">{dead} stopped</b>'] if dead else []) \
+        + ([f'<b class="neg num st" title="running, but their fills cannot be read: nothing placed or cancelled until they can (D158)">{frozen} frozen</b>'] if frozen else [])
+    spark = equity_svg(((c.get('equity') or {}).get('24h')), 120, 18)       # U63
+    return {'total': (f'<span class="big num {_num_cls(total)}">{total:+,.2f} '
+                      f'<span class="dim">{venue_money(c)}</span>'
+                      + (f' <span class="neg">+ {gap} unpriced</span>' if gap else '')        # U95
+                      + (f' <span class="neg">+ {cut} not whole</span>' if cut else '')       # R14c
+                      + '</span>'),
+            'bots': f'<span class="dim num">{len(c["bots"])} bots</span>',
+            'count': (said[0] if len(said) == 1 else
+                      '<span>' + ' · '.join(said) + '</span>' if said else '<span></span>'),
+            'lev': f'<span class="dim">{lev}</span>',
+            'spark': (f'<span class="spark" title="equity, 24 h">{spark}</span>' if spark else '<span></span>')}
+
+
 def hero_strip(labelled, tabs=False):
     """U50 (the owner: the exchange boxes "get lost while scrolling"): a
     strip pinned to the top of the page, one row per fleet — its name and
     network, the exchange's total after fees, bots and how many are dead,
     the account's leverage now — read from the same contract as the box
     below, so the two can never disagree; the name jumps to the box —
-    with account tabs (D163), to its account's tab."""
-    from gridgremlin.report import account_leverage
+    with account tabs (D163), to its account's tab. Where the live page
+    draws account tabs, they are the strip (U177: render's tab strip)."""
     lines = []
 
     def jump(label, idx):
@@ -312,50 +386,23 @@ def hero_strip(labelled, tabs=False):
         from .render import acct_key
         return f'/?acct={acct_key(label)}" data-acct="{acct_key(label)}'
     for idx, (label, c) in enumerate(labelled):
-        live = [b for b in c['bots'].values()                         # an unpriced inverse
-                if b is not None and b.get('realized') is not None]    # book: no dollars yet
-        total = sum(card_total(b) for b in live) + portfolio_total(c)       # H6
-        gap = sum(1 for b in c['bots'].values() if unpriced(b))
-        cut = sum(1 for b in c['bots'].values() if not_whole(b))           # R14c
-        belief = ((c.get('watchdog') or {}).get('belief') or {}).get('bots', {})
-        dead = sum(1 for bl in belief.values() if bl.get('alive') is False)
-        frozen = sum(1 for bl in belief.values()                       # U146
-                     if bl.get('alive') is not False and bl.get('frozen_since') is not None)
-        levs = [a['now'] for a in account_leverage(c).values()]
-        lev = ('leverage —' if not levs or any(v is None for v in levs) else
-               'leverage ' + ' · '.join(f'{v:.2f}x' for v in levs))
-        rate = ((c.get('watchdog') or {}).get('belief') or {}).get('mm_rate')
-        if rate is not None:                                     # U66
-            lev += (f' · MMR <b class="{"neg" if rate >= MMR_WARN else ""}">{rate:.1%}</b>')
-        got = free_share((c.get('watchdog') or {}).get('belief') or {})
-        if got is not None:                                      # U100
-            lev += (f' · free <b class="{"neg" if got[1] < FREE_WARN else ""}">{got[1]:.0%}</b>')
-        stale = snapshot_age(c)
-        if stale:
-            # U94: the dead count, the MMR and the free share are the engine's last snapshot's
-            lev += f' · <b class="neg">engine read {stale}</b>'
-        # D157: how many stopped; U146 (D158): how many are frozen — one
-        # cell, so the grid's columns stay where they were
-        said = ([f'<b class="neg num st" title="stopped by their own rule (a stop loss, a loss limit, a round count) or refused at start">{dead} stopped</b>'] if dead else []) \
-            + ([f'<b class="neg num st" title="running, but their fills cannot be read: nothing placed or cancelled until they can (D158)">{frozen} frozen</b>'] if frozen else [])
-        count_cell = (said[0] if len(said) == 1 else
-                      '<span>' + ' · '.join(said) + '</span>' if said else '<span></span>')
-        # six cells per fleet in one grid, so every column lines up whatever
+        cells = strip_cells(c)
+        # seven cells per fleet in one grid, so every column lines up whatever
         # the words' lengths (the owner: "so it looks squared")
-        spark = equity_svg(((c.get('equity') or {}).get('24h')), 120, 18)       # U63
-        lines.append(
-            f'<div class="fleet"><a href="{jump(label, idx)}">{esc(label)}</a>{tier_badge(c)}'
-            f'<span class="big num {_num_cls(total)}">{total:+,.2f} '
-            f'<span class="dim">{venue_money(c)}</span>'
-            + (f' <span class="neg">+ {gap} unpriced</span>' if gap else '')        # U95
-            + (f' <span class="neg">+ {cut} not whole</span>' if cut else '')       # R14c
-            + '</span>'
-            f'<span class="dim num">{len(c["bots"])} bots</span>'
-            + count_cell
-            + f'<span class="dim">{lev}</span>'
-            + (f'<span class="spark" title="equity, 24 h">{spark}</span>' if spark else '<span></span>')
-            + '</div>')
+        lines.append(f'<div class="fleet"><a href="{jump(label, idx)}">{esc(label)}</a>{tier_badge(c)}'
+                     + ''.join(cells[k] for k in STRIP_CELLS) + '</div>')
     return '<div class="hero">' + ''.join(lines) + '</div>'
+
+
+def tab_figures(c):
+    """U177: the strip row's figures, folded into its account's tab — the
+    network (a label there: the tab is a link already), the total, stopped
+    or frozen, the leverage line, the equity line. The bot count is the
+    tab's own number."""
+    cells = strip_cells(c)
+    return ('<span class="tf">' + tier_badge(c, link=False)
+            + ''.join(cells[k] for k in STRIP_CELLS if k != 'bots' and cells[k] != '<span></span>')
+            + '</span>')
 
 
 def venue_money(contract):

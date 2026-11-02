@@ -646,9 +646,12 @@ def spec_U50_the_exchange_boxes_ride_in_a_strip_pinned_to_the_top():
     c2['bots']['spoADAUSDTl']['realized'] = 20.0
     c2['watchdog']['belief']['bots']['linDOGEs']['alive'] = False
     c2['account'] = {'bybit': {'equity': 1000.0, 'notional': 2780.0, 'collateral': 1000.0}}
+    from panel.strip_view import hero_strip
     html = render([('demo', CONTRACT), ('hl', c2)])
-    strip, rest = html.split('</div><div class="page">', 1)
-    strip = strip.split('<div class="hero">', 1)[1]
+    rest = html.split('</div><div class="page">', 1)[1]
+    # U177: a live page with account tabs draws these rows' figures in its tabs
+    assert '<div class="hero tabbed"><nav class="acctabs"' in html
+    strip = hero_strip([('demo', CONTRACT), ('hl', c2)], tabs=True).split('<div class="hero">', 1)[1]
     assert strip.count('<div class="fleet">') == 2 and strip.index('>demo<') < strip.index('>hl<')
     demo, hl = strip.split('<div class="fleet">')[1:]
     # D163: with account tabs the name opens its account's tab; the public page (no tabs) jumps

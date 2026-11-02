@@ -31,6 +31,7 @@ from .pages.position import PositionPages
 from .pages.trade import TradePages
 from .pages.lever import LeverPages
 from .pages.retire import RetirePages
+from .pages.manage import ManagePages
 
 CACHE_TTL_S = 30.0       # the readout reads the venues; 10 s fed the rate limit
 
@@ -56,7 +57,7 @@ def form_token(token):
     return hmac.new(token.encode(), b'gg-form', hashlib.sha256).hexdigest()[:32]
 
 
-class Handler(RehearsePages, CarryFlowPages, CreateFlowPages, FleetAdminPages, ControlPages, PositionPages, TradePages, LeverPages, RetirePages, http.server.BaseHTTPRequestHandler):
+class Handler(RehearsePages, CarryFlowPages, CreateFlowPages, FleetAdminPages, ControlPages, PositionPages, TradePages, LeverPages, RetirePages, ManagePages, http.server.BaseHTTPRequestHandler):
     server_version = 'gg-panel'
     token = ''
     fleets = ()            # venue sections: one per fleet file
@@ -189,7 +190,7 @@ class Handler(RehearsePages, CarryFlowPages, CreateFlowPages, FleetAdminPages, C
     _history = {}                      # U91: per snapshot file, the hourly history
 
     def _labelled(self):
-        return [(lb, self._with_run_state(f, self._with_equity(f, self._contract(f))))
+        return [(lb, self._with_managed(f, self._with_run_state(f, self._with_equity(f, self._contract(f)))))
                 for lb, f in zip(self.labels, self.fleets)]
 
     def _with_run_state(self, fleet, contract):
@@ -352,6 +353,8 @@ class Handler(RehearsePages, CarryFlowPages, CreateFlowPages, FleetAdminPages, C
             return self._page(self._trade_html())             # L6 (D81)
         if self.path.startswith('/close?'):
             return self._close_page()
+        if self.path.startswith('/manage?'):
+            return self._manage_page()                        # D164
         if self.path.startswith('/retire?'):
             return self._retire_page()                        # D145
         if self.path.startswith('/position?'):
@@ -456,6 +459,8 @@ class Handler(RehearsePages, CarryFlowPages, CreateFlowPages, FleetAdminPages, C
             return self._control_act(form, self.path)
         if self.path == '/close':
             return self._close_act(form)
+        if self.path == '/manage':
+            return self._manage_post(form)                    # D164
         if self.path == '/start':
             return self._start_act(form)                      # D157
         if self.path == '/retire':

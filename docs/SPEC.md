@@ -2495,7 +2495,8 @@ eventually pin (T1).
   window is drawn and the switch shows one, 24 h without script. Nothing
   shows for a missing or stale readout (U138's ten minutes). Sabotage:
   with no age limit, an hour-old change reads as now.
-- **U170** (D163, 2026-11-01) The bots' half opens with a tab strip:
+- **U170** (D163, 2026-11-01) The bots' half opens with a tab strip
+  (since U177 the pinned strip at the top of the page):
   "all", then one tab per account by its name, each with its bot count and
   a red dot when the account or a bot on it needs a look (U85's list, the
   account's red MMR or free share). One account alone has no tabs; an
@@ -2534,6 +2535,31 @@ eventually pin (T1).
   phone the tab strip scrolls in its own row. Measured in headless Chrome
   over five accounts: no page scrolls sideways at 1280, 1920 or 2560 px.
   Sabotage: a stylesheet without the grid is caught.
+- **U177** (D163, 2026-11-02) With account tabs, the tabs are the pinned
+  strip: one row at the top of the page, no row per account above it.
+  Each account's tab carries everything its U50 row showed — the network
+  (a label there, the tab being the link), the total after fees with
+  U95's unpriced and R14c's not whole, stopped or frozen, leverage with
+  MMR, free share and the engine's read age, the 24 h equity line — and
+  its bot count; the row and the tab draw from one function
+  (`strip_cells`). The row of tabs scrolls in itself when it outgrows the
+  screen, never the page. The public page, an export and a lone account
+  keep U50's rows exactly as before (the public page still with no
+  account lines and no tabs). Sabotage: a tab without the figures, one figure lost, or
+  the rows back above the tabs is caught.
+- **U179** (D164, 2026-11-02) On the live panel each perpetual in
+  "Account positions, not from a bot" links to its trade manager —
+  "manage", or once adopted "managed · TP · SL" with the exits as set; a
+  record of another position (closed, or its entry moved with an add)
+  reads as not managed. A link, never a form there; no index (an export,
+  the public page) draws none. *(U152's "no action" stands for those.)*
+- **U180** (D164) The trade manager (`/manage?fleet=&key=`) names the
+  market in full ("ETHUSDT Perpetual Futures Trade · SHORT") and says the
+  size, the part not covered by a bot, entry, mark and P&L. Each write —
+  manage it (adopt), set exits, close at market — is typed through D159's
+  pop-up (the trade's full name, "ETHUSDT trade short", or its code);
+  setting exits and closing need control armed and run the engine's
+  command (L11, L12); a side a bot runs shows nothing to manage.
 - **U111** A carry bot's hedge may differ by coin — inverse, usdt or usdc,
   the common one above and the others named ("SOL usdt") — and the form
   shows each coin's three perpetuals side by side: what a short was paid
@@ -2955,6 +2981,38 @@ eventually pin (T1).
   only when its holding is known to be open (a trade ended by its take
   profit answered "nothing to close"). *(the owner, 2026-10-11, on tilt's
   BTC trade)*
+- **L9** (D164, 2026-11-02) Adopting a position no bot covers places no
+  order and sets no exit: it writes a record (`logs/managed-<fleet>.json`:
+  what was adopted, its entry, when, by whom) and takes no client. Spot
+  and a side a bot runs are refused; a trade already managed is not
+  adopted twice. A record is the position's own only while the position
+  is held at the adopted entry (a close of part keeps it; an add or a
+  close ends it), so a record never manages the next position on that
+  side; an earlier adoption's resting exits are carried, to be cancelled.
+- **L10** (D164) THE guard: a managed trade acts only on the uncovered
+  part — the side's position less what each bot on that side holds, never
+  below nothing, nothing when a share is unknown (`managed.uncovered`).
+  By I2 a bot holds its side's whole position, so a side any fleet file
+  on the account runs (its rows, trades, Portfolio Bot legs) leaves
+  nothing, and every write there is refused with nothing sent; a fleet
+  file beside it that cannot be read refuses too. Sabotage: without the
+  subtraction a close takes the bot's position.
+- **L11** (D164) Exits: `python3 -m gridgremlin.managed <fleet> exits
+  <venue:market:SYMBOL:side> [--tp P] [--sl P]` re-reads the venue; the
+  position must be the one adopted. The take profit sits beyond the mark,
+  the stop behind it, else refused. The exits this trade set before are
+  cancelled first (never another's), then each new one is set on the venue
+  at the mark, sized to the uncovered part; an empty box sets none.
+  Hyperliquid sets none (close only).
+- **L12** (D164) Close: `… close <key> [--qty Q]` re-reads the venue and
+  sends one reduce-only market order, unlinked (I1: no bot counts it), for
+  Q or, without it, all of the uncovered part — never more (refused, and
+  the panel says so before running it). All closed, the record and its
+  exits go. On Hyperliquid only while its fleet is stopped (X15b).
+- **L13** (D164) Demo and Testnet only: the command refuses a key that
+  reaches Mainnet whatever the fleet file says, and takes no
+  `--allow-mainnet`; the panel refuses an account that may reach Mainnet
+  before it reads anything.
 ## J — the agent (D80)
 
 - **J1** The agent's one door is a forced command behind a restricted ssh

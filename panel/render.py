@@ -15,7 +15,7 @@ from .nav import VIEWS, grouped, nav_panel
 from .results import agent_box
 from .strip_view import (FREE_WARN, MMR_WARN, SINCE_WORDS, account_change_lines, account_lines,
                          exchange_free, exchange_leverage, exchange_mmr, exchange_since_first, free_share,
-                         hero_strip, portfolio_total, tier_badge, venue_money)
+                         hero_strip, portfolio_total, tab_figures, tier_badge, venue_money)
 from .table import section
 
 
@@ -113,7 +113,7 @@ def cards_section(idx, label, contract, view='all', scripted=True, watch=None):
         from .overview import watch_list
         watch = [(idx, *w[1:]) for w in watch_list([(label, contract)])]
     own = scripted and not contract.get("public")     # U138, U153: the live panel's only
-    change = account_change_lines(contract, switch=False) if own else ''
+    change = account_change_lines(contract, switch=False, idx=idx) if own else ''   # D164: its links
     since = (('<button type="button" class="quiet tog" data-tog="since">since: '
               + ''.join(f'<span class="s{k}">{w}</span>' for k, w in SINCE_WORDS) + '</button>')
              if change else '')
@@ -167,21 +167,23 @@ def acct_tabs(labelled, chosen, watch, query=None, here='/'):
     for each account on the left half"): "all", then one tab per account,
     each with its bot count and a red dot when something on it needs a look.
     Plain links (`?acct=`, the rest of the address kept), so they work with
-    no script; KEEP_JS keeps the choice per browser tab as well."""
+    no script; KEEP_JS keeps the choice per browser tab as well. U177:
+    each account's tab carries its strip row's figures (`tab_figures`) —
+    the tabs are the pinned strip, one line at the top of the page."""
     keep = {k: v for k, v in (query or {}).items() if k in ('view', 'fleet', 'bot', 'show')}
 
     def href(key):
         return here + '?' + urllib.parse.urlencode({**keep, 'acct': key}).replace('&', '&amp;')
 
-    def tab(key, words, n, red):
+    def tab(key, words, n, red, figs=''):
         return (f'<a href="{href(key)}" data-acct="{key}" class="tab{" pick" if key == chosen else ""}">'
-                f'{words} <span class="n">{n}</span>'
-                + ('<i class="dot" title="needs a look"></i>' if red else '') + '</a>')
+                f'<span class="tn">{words} <span class="n">{n}</span>'
+                + ('<i class="dot" title="needs a look"></i>' if red else '') + f'</span>{figs}</a>')
     reds = [bool(needs_look(i, c, watch)) or bool(c.get('unavailable'))
             for i, (_, c) in enumerate(labelled)]
     return ('<nav class="acctabs" aria-label="accounts">'
             + tab('all', 'all', sum(len(c['bots']) for _, c in labelled), any(reds))
-            + ''.join(tab(acct_key(lb), esc(lb), len(c['bots']), reds[i])
+            + ''.join(tab(acct_key(lb), esc(lb), len(c['bots']), reds[i], tab_figures(c))
                       for i, (lb, c) in enumerate(labelled))
             + '</nav>')
 
@@ -222,8 +224,10 @@ def render(labelled, static=None, table=False, view='all', pane=None, notice='',
                       else face(i, lb, c, view)) + '</div>'
                    for i, (lb, c) in enumerate(labelled)
                    if chosen in ('all', acct_key(lb)))
-    if tabs and len(labelled) > 1:
-        body = acct_tabs(labelled, chosen, watch, query, '/table' if table else '/') + body
+    # U177: with tabs, the tabs are the pinned strip — each carries its
+    # account's strip figures, so the top of the page is one line
+    strip = (f'<div class="hero tabbed">{acct_tabs(labelled, chosen, watch, query, "/table" if table else "/")}</div>'
+             if tabs and len(labelled) > 1 else hero_strip(labelled, tabs))
     if static:
         head = ''
         chrome = (f'<p class="dim">exported {static} — a snapshot, '
@@ -243,7 +247,7 @@ def render(labelled, static=None, table=False, view='all', pane=None, notice='',
     vp = '' if static else VIEWPORT
     return f"""<!doctype html><meta charset="utf-8">{vp}
 <title>grid-gremlin</title><style>{CSS}</style>{'' if static else THEME_JS}
-{head}{hero_strip(labelled, tabs)}{f'<p class="neg">{notice}</p>' if notice and not static else ''}{body}
+{head}{strip}{f'<p class="neg">{notice}</p>' if notice and not static else ''}{body}
 {chrome}
 <p class="dim">this page renders the engine's own readout contract — it
 cannot disagree with the terminal. It holds no keys; venue writes are the

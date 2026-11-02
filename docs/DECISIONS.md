@@ -1563,6 +1563,40 @@ stands unless the owner corrects it.
   screen; on a phone the tab strip scrolls in its own row, the cards are
   one column and the pinned strip scrolls away. Layout only: no figure,
   no colour token and no engine behaviour changes.
+- **D164 — A position no bot covers is a trade the owner can manage
+  (2026-11-02).** The owner (11-01): "if the algo picks it up, then we
+  should be able to manage it (the perp trade that is)"; "new trades…
+  should pick up any positions not covered by the bots". **Adopting**
+  one of D162's "Account positions, not from a bot" makes it a managed
+  trade: a record (`logs/managed-<fleet>.json`: what was adopted, its
+  entry, when, by whom) and **no order and no exit** until he sets them.
+  **Only the uncovered part** is ever managed: the side's position less
+  what the bots on that side hold. A bot's share is never closed or
+  protected by the trade. By I2 a bot owns its side's whole position (its
+  holding is the venue's, read every cycle), so on a side any bot of the
+  account runs (any fleet file on the account, its trades and a Portfolio
+  Bot's legs included) nothing is uncovered and nothing is offered; the
+  managed part is a whole side no bot runs. **What he can do**: set a take
+  profit and a stop (prices; on Bybit the venue's own take profit and stop
+  at the mark, sized to the uncovered part, re-read at the press; the ones
+  this trade set before are cancelled first, nothing else is), and close
+  part or all at market (one reduce-only order, never more than the
+  uncovered part). **Perpetuals only**, linear and inverse; spot later.
+  Hyperliquid: close only, and only while its fleet is stopped (one signer
+  per wallet, X15b); the engine sets no exit there yet. **Every write**
+  is typed through D159's pop-up, as a bot's; the venue writes are the
+  engine's command run with the fleet's own keys, as the close command
+  is, and need control armed. **Demo and Testnet only**: refused on any
+  account that may reach Mainnet, and the command refuses a Mainnet key
+  whatever the fleet file says (D25, D64, D97 untouched). **Named as a
+  trade:** on the trade manager the market is said in full ("ETHUSDT
+  Perpetual Futures Trade · SHORT"); bot names stay as they are. Not the
+  trade kind (D81): a trade row is an entry then an exit, its take profit
+  required and its entry placed when flat, a bot that owns its side by I2
+  and closes whole (L7) — adopting must place nothing and start with no
+  exits, and closing part is the point. A hand-traded part on a side a
+  bot runs is the bot's under I2 and stays so until a decision says
+  otherwise.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

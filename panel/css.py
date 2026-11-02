@@ -276,6 +276,18 @@ details.acctd[open]>summary{margin-bottom:.3em}
 section.fbox{padding:0 .8em .4em;margin:0 0 var(--gap)}details.acct>summary{margin:0 0 .3em}
 @media(max-width:40em){.acctabs{flex-wrap:nowrap;overflow-x:auto;padding-bottom:.2em}
 .hero{position:static}}
+/* U177: the tabs are the pinned strip — each account's tab carries its
+strip row's figures, so the top of the page is one row; the row scrolls in
+itself when the tabs outgrow it, never the page */
+.hero.tabbed{display:block;padding-top:.35em;padding-bottom:.35em}
+.hero.tabbed .acctabs{flex-wrap:nowrap;overflow-x:auto;margin:0;align-items:stretch}
+.hero.tabbed a.tab{flex:1 1 0;min-width:12em;white-space:normal;display:flex;flex-direction:column;gap:.1em;padding:.2em .55em;line-height:1.3}
+.hero.tabbed a.tab[data-acct=all]{flex:0 0 auto;min-width:0;justify-content:center}
+.hero.tabbed .tn{white-space:nowrap}
+.hero.tabbed .tf{font-size:.8em;display:flex;flex-wrap:wrap;gap:0 .6em;align-items:baseline}
+.hero.tabbed .tf .big{font-size:1.2em}.hero.tabbed .tf .tier{font-size:.85em}.hero.tabbed .tf .spark svg{vertical-align:middle}
+.hero.tabbed a.tab:hover,.hero.tabbed a.tab.pick{background:var(--accent-soft);color:var(--fg)}
+.hero.tabbed a.tab.pick{border-color:var(--accent);box-shadow:inset 0 -3px var(--accent)}
 /* D105: the published read-only page — the note on top, and the panel's
 links that lead nowhere there drawn as buttons that cannot be pressed */
 .pubnote{margin:-2em -2em 2em;padding:.5em 2em;background:color-mix(in srgb,var(--accent) 14%,var(--bg));
