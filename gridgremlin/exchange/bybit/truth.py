@@ -329,6 +329,7 @@ def read_symbol_truth(client, market_type, symbol, funding_interval_minutes=480.
         'positions': positions})
 
 
+BORROW_SPAN_MS = 30 * 24 * 3600 * 1000     # the venue refuses a longer one (H4)
 SEVEN_DAYS_MS = 7 * 24 * 3600 * 1000      # the venue's max span per query
 
 
@@ -481,21 +482,31 @@ def read_closed_pnl(client, category, symbol, start_ms, end_ms):
 def read_borrow(client, coin, start_ms, end_ms):
     """H4: the loan's cost as the venue charged it, hourly rows in the
     window, oldest first — the cost in the coin, the hourly rate it was
-    charged at, the size it was charged on."""
-    out, cursor = [], None
-    for _ in range(MAX_ORDER_PAGES):
-        params = {'currency': coin, 'startTime': int(start_ms), 'endTime': int(end_ms), 'limit': 50}
-        if cursor:
-            params['cursor'] = cursor
-        page = client.get('/v5/account/borrow-history', params, signed=True)
-        for e in page.get('list', []):
-            out.append({'time_ms': int(e.get('createdTime') or 0),
-                        'cost': _f(e.get('borrowCost'), 0.0),
-                        'hourly_rate': _f(e.get('hourlyBorrowRate'), 0.0),
-                        'size': _f(e.get('InterestBearingBorrowSize'), 0.0)})
-        cursor = page.get('nextPageCursor')
-        if not cursor:
-            break
+    charged at, the size it was charged on. Asked in windows of 30 days: a
+    longer span is refused (retCode 10001, measured 2026-11-02 on the demo
+    key: 30 days answered, 31 refused)."""
+    out = []
+    win_start, end_ms = int(start_ms), int(end_ms)
+    while win_start < end_ms:
+        win_end = min(win_start + BORROW_SPAN_MS, end_ms)
+        cursor = None
+        for _ in range(MAX_ORDER_PAGES):
+            params = {'currency': coin, 'startTime': win_start, 'endTime': win_end, 'limit': 50}
+            if cursor:
+                params['cursor'] = cursor
+            page = client.get('/v5/account/borrow-history', params, signed=True)
+            for e in page.get('list', []):
+                out.append({'time_ms': int(e.get('createdTime') or 0),
+                            'cost': _f(e.get('borrowCost'), 0.0),
+                            'hourly_rate': _f(e.get('hourlyBorrowRate'), 0.0),
+                            'size': _f(e.get('InterestBearingBorrowSize'), 0.0)})
+            cursor = page.get('nextPageCursor')
+            if not cursor:
+                break
+        else:
+            raise VenueError(f'{coin}: borrow history beyond {MAX_ORDER_PAGES} pages',
+                             kind='partial_read')
+        win_start = win_end + 1          # both ends are inclusive: no row twice
     out.sort(key=lambda r: r['time_ms'])
     return out
 

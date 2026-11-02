@@ -14,6 +14,8 @@ from .config import SPOT_LEVERAGE_MOST
 from .exchange.errors import VenueError
 from .portfolio import borrowed_split, hedge_ratio, keep_stack_move, plan_portfolio, regime_word
 
+INTEREST_SAY_MS = 3_600_000            # H4: an interest read failing this long is said
+INTEREST_SETTLED_MS = 86_400_000       # H4: a charge the ledger has not listed by now is none
 READ_EVERY_S = 60.0          # the risk rules want a read a minute; the plan is daily
 OVERLAP_MS = 10 * 60 * 1000  # fills are re-read this far back and deduped by id
 DELEVER_STEP = 0.25          # the most the floor cuts in one read
@@ -238,6 +240,7 @@ class PortfolioBot:
         self._old_left = {}            # H17: {coin: the old short's coins left after this read's slice}
         self._keep_due = None          # H18: (seen, now) terms whose leverage keeps the coins, this read
         self._keep_held = None         # H18: why this read plans nothing (the account cannot cover the move)
+        self._interest_fail_since, self._interest_fail_said = None, False   # H4
         self.row = state.get(self.botid)
 
     # --- the state row ---------------------------------------------------------
@@ -816,14 +819,29 @@ class PortfolioBot:
         row.setdefault('interest_to_ms', now_ms - 3_600_000)
         try:
             rows = hist(self.cfg.get('spot_quote', 'USDT'), row['interest_to_ms'], now_ms)
-        except (VenueError, OSError):
+        except (VenueError, OSError) as e:
+            # H4: a blip passes in silence; one that lasts is said, once, for
+            # the row's interest has stopped counting while it does
+            if self._interest_fail_since is None:
+                self._interest_fail_since = now_ms
+            if (now_ms - self._interest_fail_since >= INTEREST_SAY_MS
+                    and not self._interest_fail_said):
+                self._interest_fail_said = True
+                self.notify.event('warn', self.botid,
+                                  f"the loan's interest could not be read for an hour, so "
+                                  f'the figure has stopped counting (H4): {e}')
             return
+        if self._interest_fail_said:
+            self.notify.event('info', self.botid, "the loan's interest is read again (H4)")
+        self._interest_fail_since, self._interest_fail_said = None, False
         for r in rows:
             if r['time_ms'] > row['interest_to_ms']:
                 row['interest_total'] += r['cost']
                 row['borrow_apr'] = r['hourly_rate'] * 8760.0
-        if rows:
-            row['interest_to_ms'] = max(row['interest_to_ms'], max(r['time_ms'] for r in rows))
+        # H4: a quiet read moves the watermark too, a day back for a charge the
+        # ledger has yet to list, so the span asked stays short with no loan
+        row['interest_to_ms'] = max([row['interest_to_ms'], now_ms - INTEREST_SETTLED_MS]
+                                    + [r['time_ms'] for r in rows])
 
     def _settle_others(self, now_ms):
         """The owner's answer (2026-10-11, demo): a borrowing row's cash IS

@@ -1965,3 +1965,65 @@ def spec_H17_a_restart_mid_slices_carries_on_from_the_books():
     assert reads == 9
     sold = sum(o[3] for o in venue.orders if o[1] == 'ETHUSDT' and o[0] == 'linear' and o[2] == 'Sell')
     assert abs(sold - 15.0) < 1e-9                                           # never doubled
+
+
+def _margin_bot():
+    venue, lines, clock = _venue(), [], Clock()
+    venue.coins['USDT'] = 100000.0
+    venue.t_ms = int(clock.t * 1000)
+    venue.borrow = []
+    venue.borrow_history = lambda coin, since, now: [r for r in venue.borrow if since < r['time_ms'] <= now]
+    row = {'capital': 100000, 'spot_borrow': True, 'margin': {'spot_leverage': 2.0},
+           'assets': [{'coin': 'BTC', 'weight': 1.0}, {'coin': 'ETH', 'weight': 1.0}],
+           'risk': {'max_weight': 1.0}}
+    bot, _ = _bot(venue, lines, clock=clock, row=row)
+    bot.cycle()
+    return bot, venue, lines, clock
+
+
+def spec_H4_a_quiet_read_keeps_the_span_short():
+    """Rows stopped coming when the loan ended, the watermark with them, and the
+    span only grew. It now moves on a read with none, to a day back. SABOTAGE:
+    move it only on rows and it stays where the loan ended."""
+    bot, venue, lines, clock = _margin_bot()
+    bot._settle_interest(int(clock.t * 1000) + 40 * 86_400_000)
+    assert bot.row['interest_to_ms'] == int(clock.t * 1000) + 39 * 86_400_000
+
+
+def spec_H4_a_charge_listed_late_still_counts():
+    """The watermark stays a day back so a charge the ledger lists late is not
+    passed. SABOTAGE: move it to now and this charge is never counted."""
+    bot, venue, lines, clock = _margin_bot()
+    now = int(clock.t * 1000) + 3 * 86_400_000
+    bot._settle_interest(now)
+    venue.borrow.append({'time_ms': now - 3_600_000, 'cost': 0.45, 'hourly_rate': 0.00001, 'size': 100.0})
+    before = bot.row['interest_total']
+    bot._settle_interest(now + 60_000)
+    assert abs(bot.row['interest_total'] - before - 0.45) < 1e-9
+    bot._settle_interest(now + 120_000)
+    assert abs(bot.row['interest_total'] - before - 0.45) < 1e-9      # counted once
+
+
+def spec_H4_a_failing_read_is_said_once_after_an_hour_and_its_end():
+    """The except swallowed every failure: the figure stopped and nothing said
+    so. A blip stays quiet. SABOTAGE: drop the warn and the row's interest stops
+    in silence; drop the once and it is said every read."""
+    from gridgremlin.exchange.errors import VenueError
+    bot, venue, lines, clock = _margin_bot()
+    good = venue.borrow_history
+
+    def refused(coin, since, now):
+        raise VenueError('retCode 10001')
+    venue.borrow_history = refused
+    t = int(clock.t * 1000)
+    mark = bot.row['interest_to_ms']
+    said = lambda: [ln for ln in lines if 'could not be read for an hour' in ln]
+    bot._settle_interest(t)
+    bot._settle_interest(t + 3_599_000)
+    assert not said() and bot.row['interest_to_ms'] == mark              # a blip; nothing skipped
+    bot._settle_interest(t + 3_600_000)
+    bot._settle_interest(t + 7_200_000)
+    assert len(said()) == 1
+    venue.borrow_history = good
+    bot._settle_interest(t + 7_260_000)
+    assert sum('is read again (H4)' in ln for ln in lines) == 1

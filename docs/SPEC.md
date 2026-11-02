@@ -3277,7 +3277,12 @@ that pins it (T1).
   — above it the loan stands down (the cap to 1×, planned at the next
   read, said once an hour) and the ratchet does not ease back while the
   rate stays above. *(measured 2026-10-08 on the carry sub: 0.000449%
-  an hour, 3.93% a year, 2.34 USDT for the first hour on 520k)* The loan
+  an hour, 3.93% a year, 2.34 USDT for the first hour on 520k)* The ledger is
+  asked in windows of 30 days, the longest the venue answers (measured
+  2026-11-02: 31 refused); a ledger past the page backstop is an error, never
+  a short answer. A read with no rows moves the watermark to a day back, so a
+  quiet row's span stays short. A read failing for an hour is said once, as is
+  its end; the watermark stays, so nothing is skipped. The loan
   stands down the same way when the shorts' trailing funding, as a yearly
   yield on what they cover at mark, is under the venue's rate (H1: a loan
   that costs more than the carry it buys is a levered long with a bill) —

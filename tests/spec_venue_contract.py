@@ -697,3 +697,52 @@ def spec_G23_an_orders_status_is_read_by_its_link_and_mapped():
     assert hl_state({'status': 'order', 'order': {
         'status': 'canceled', 'order': {'origSz': '0.5', 'sz': '0.2'}}}) == 'filled'
     assert hl_state({'status': 'unknownOid'}) is None
+
+
+class _BorrowVenue:
+    """Bybit's borrow history as measured 2026-11-02: over 30 days refused."""
+    DAY = 86_400_000
+
+    def __init__(self, rows, pages=None):
+        self.rows, self.asked, self.pages = rows, [], pages
+
+    def get(self, path, params, signed=False):
+        from gridgremlin.exchange.errors import VenueError
+        assert path == '/v5/account/borrow-history' and signed
+        start, end = params['startTime'], params['endTime']
+        self.asked.append((start, end))
+        if end - start > 30 * self.DAY:
+            raise VenueError('retCode 10001: cannot exceed 30 days')
+        if self.pages is not None:
+            return {'list': [], 'nextPageCursor': 'more'}
+        return {'list': [{'createdTime': str(t), 'borrowCost': '1', 'hourlyBorrowRate': '0.00001',
+                          'InterestBearingBorrowSize': '100'}
+                         for t in self.rows if start <= t <= end], 'nextPageCursor': ''}
+
+
+def spec_H4_a_long_span_is_asked_in_windows_the_venue_accepts():
+    """A row quiet for 95 days: the single span was refused on every read and
+    the interest froze, silently. SABOTAGE: one span and the venue refuses it;
+    windows sharing an edge count the row on that edge twice."""
+    from gridgremlin.exchange.bybit.truth import BORROW_SPAN_MS, read_borrow
+    day = _BorrowVenue.DAY
+    edge = BORROW_SPAN_MS
+    venue = _BorrowVenue([day, edge, edge + 1, 40 * day, 94 * day])
+    got = read_borrow(venue, 'USDT', 0, 95 * day)
+    assert [r['time_ms'] for r in got] == [day, edge, edge + 1, 40 * day, 94 * day]
+    assert len(venue.asked) == 4 and all(e - s <= 30 * day for s, e in venue.asked)
+    assert venue.asked[-1][1] == 95 * day
+
+
+def spec_H4_a_ledger_past_the_page_backstop_is_an_error():
+    """Cut short, the newest pages come first: the watermark would jump past
+    the oldest charges and they would never count. SABOTAGE: drop the else and
+    a truncated read returns as whole."""
+    from gridgremlin.exchange.bybit.truth import read_borrow
+    from gridgremlin.exchange.errors import VenueError
+    try:
+        read_borrow(_BorrowVenue([], pages='forever'), 'USDT', 0, 1000)
+    except VenueError as e:
+        assert e.kind == 'partial_read'
+    else:
+        raise AssertionError('a cut-short ledger came back as whole')
