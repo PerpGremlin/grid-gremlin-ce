@@ -187,3 +187,33 @@ def spec_M27_its_coin_is_switched_on_as_collateral_at_build():
     assert collateral_coin({'market_type': 'inverse', 'strategy': 'grid'}, spec) is None
     assert collateral_coin({'market_type': 'spot', 'strategy': 'martingale',
                             'spot_borrow': True}, spec) == 'BTC'
+
+
+def spec_M28_an_inverse_rows_leverage_is_set_on_the_venue():
+    """The card said "set 10x" over a position the exchange held at 50x (first
+    live bot, 2026-11-03). SABOTAGE: drop the call from the build and the venue
+    keeps whatever it had; let a refusal raise and the fleet will not build."""
+    import inspect
+    from gridgremlin.events import Notifier
+    from gridgremlin.exchange.errors import VenueError
+    from gridgremlin.main import build_market_bot, set_inverse_leverage
+
+    class Venue:
+        def __init__(self, refuse=False):
+            self.asked, self.refuse = [], refuse
+
+        def set_leverage(self, category, symbol, lev):
+            self.asked.append((category, symbol, lev))
+            if self.refuse:
+                raise VenueError('retCode 10001')
+    lines = []
+    note = Notifier(sink=lines.append)
+    venue = Venue()
+    set_inverse_leverage(_cfg(leverage=10), venue, note)
+    assert venue.asked == [('inverse', 'BTCUSD', 10)]
+    other = Venue()
+    set_inverse_leverage(_cfg(market_type='linear', symbol='BTCUSDT', leverage=10), other, note)
+    assert other.asked == []                                # a pair's is set with its tier
+    set_inverse_leverage(_cfg(leverage=10), Venue(refuse=True), note)
+    assert any('leverage not set to 10x' in ln for ln in lines)
+    assert 'set_inverse_leverage(cfg, client,' in inspect.getsource(build_market_bot)

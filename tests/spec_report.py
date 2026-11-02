@@ -1361,3 +1361,29 @@ def spec_R18b_an_unpriced_book_is_unread_everywhere_never_a_crash():
                                  'position': 100.0, 'fills': 3, 'mark': None, 'truncated': False}}}
     html = cards_section(0, 'demo', c)                                      # no raise
     assert 'invETHUSDl' in html
+
+
+def spec_R14d_a_spot_row_never_loses_the_others_held_read():
+    """Bybit refuses the position list for spot (181001, measured 2026-11-03).
+    One read in a try: a spot row first lost every row after it, so an inverse
+    bot begun flat read "not whole" and showed no P&L. SABOTAGE: ask for spot
+    and let it end the loop, and the inverse row is absent; one market's failure
+    still ending the loop loses the row after it."""
+    import gridgremlin.exchange.bybit.client as bc
+    from gridgremlin.exchange.errors import VenueError
+    from gridgremlin.report import _venue_held_all
+
+    class Fake:
+        def position_list(self, market_type, symbol):
+            if market_type == 'spot' or symbol == 'DOWN':
+                raise VenueError('retCode 181001')
+            return {'list': [{'size': '36210', 'side': 'Sell', 'positionIdx': 0}]}
+    rows = [{'market_type': 'spot', 'symbol': 'BTCUSDT', 'side': 'long'},
+            {'market_type': 'linear', 'symbol': 'DOWN', 'side': 'long'},
+            {'market_type': 'inverse', 'symbol': 'BTCUSD', 'side': 'short'}]
+    saved = bc.Client
+    try:
+        bc.Client = Fake
+        assert _venue_held_all('bybit', rows) == {'invBTCUSDs': 36210.0}
+    finally:
+        bc.Client = saved

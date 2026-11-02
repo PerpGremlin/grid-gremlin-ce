@@ -778,8 +778,13 @@ def _venue_held_all(venue, rows):
             client, seen = Client(), {}
             for cfg in rows:
                 key = (cfg['market_type'], cfg['symbol'])
-                if key not in seen:
-                    seen[key] = read_positions(client.position_list(*key))
+                if key[0] == 'spot':
+                    continue         # R14d: no positions there; the venue refuses
+                if key not in seen:  # the ask (181001), which lost every row after it
+                    try:
+                        seen[key] = read_positions(client.position_list(*key))
+                    except (VenueError, OSError, KeyError, ValueError, TypeError):
+                        continue     # this market's unknown, not the others'
                 held[make_botid(cfg['market_type'], cfg['symbol'], cfg['side'])] = \
                     _side_size(seen[key], cfg['side'])
     except (VenueError, OSError, KeyError, ValueError, TypeError):

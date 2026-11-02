@@ -253,6 +253,12 @@ eventually pin (T1).
   in-memory and resets on restart (E3); the backtester honours it in whole bars (T6).
   Pinned by sabotage: at zero, one read past the trigger moves the house. *(the
   control replay: one 0.5% wick slid an ETH window for good — JOURNAL 2026-09-25)*
+- **M28** An inverse row's leverage is set on the venue at build, a refusal said
+  and the row running on. Measured 2026-11-03: the exchange held the first live
+  bot at 50x under a row of 10x. `spec_M28_*`, with sabotage.
+- **R14d** The exchange's holding is read market by market, spot never asked:
+  Bybit refuses spot's position list, and that one refusal lost every row after
+  it, so a bot begun flat read "not whole". Absent stays unknown. `spec_R14d_*`.
 - **G23** Exits pair per rung (D35): a long sells each held lot one rung above the
   rung it was bought at, a short covers one rung below — regardless of the position's
   average. The engine stays netted (G12): WHICH rungs the lots came from is derived

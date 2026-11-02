@@ -133,6 +133,18 @@ def collateral_coin(cfg, spec):
     return None
 
 
+def set_inverse_leverage(cfg, client, notifier):
+    """M28: an inverse row's leverage on the venue, as a pair's is. Left alone,
+    a card said "set 10x" over a position the exchange held at 50x (2026-11-03).
+    A refusal is said and the row runs on; a Portfolio Bot's legs set their own."""
+    if cfg['market_type'] != 'inverse' or not cfg.get('leverage'):
+        return
+    try:
+        client.set_leverage('inverse', cfg['symbol'], cfg['leverage'])
+    except VenueError as e:
+        notifier.event('warn', cfg['symbol'], f"leverage not set to {cfg['leverage']:g}x: {e}")
+
+
 def build_portfolio(cfg, client, notifier, state, tombs):
     """H2: the row, its legs resolved and each an I2 identity the fleet
     holds unique — a portfolio's BTCUSD short against an inverse BTC short
@@ -586,6 +598,8 @@ def build_market_bot(cfg, client, notifier, tombs, slide):
     identity = bot_identity(cfg, adapter)
     if venue == 'bybit' and cfg['market_type'] == 'spot':
         bot.wallet_coin = spec['base_coin']                 # D169
+    if venue == 'bybit':
+        set_inverse_leverage(cfg, client, _vn(notifier, venue))
     if venue == 'bybit' and cfg['market_type'] == 'linear':
         client.ensure_hedge_mode(cfg['market_type'], cfg['symbol'])
     elif venue == 'bybit' and collateral_coin(cfg, spec):
