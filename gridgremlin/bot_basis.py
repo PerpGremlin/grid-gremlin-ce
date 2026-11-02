@@ -2,6 +2,7 @@
 it holds and at what cost — the fills it owns, the basis, the rungs held, how a
 round ended, the spot wallet's attribution. A mixin of Bot; every attribute is Bot's."""
 import time
+from decimal import Decimal
 
 from .apply import diff, make_botid, make_link, pair_amends, rung_of
 from .config import CANDLE_SECONDS, hosts_position_stop
@@ -11,7 +12,8 @@ from .ladder import (SEED_RUNG, anchor_from_rung, fee_floor_for, grid_rungs,
                      sellable_base, slide_is_adverse, slide_offset, split,
                      stop_level_for)
 from .window import window
-from .bot_constants import (FROZEN_REMIND_SECONDS, FROZEN_WHY_CHARS,
+from .bot_constants import (CASH_LOG_OVERLAP_MS, FILL_FEE_SLACK, FROZEN_REMIND_SECONDS,
+                            FROZEN_WHY_CHARS,
                             HISTORY_WINDOW_DAYS, RUNGS_LAG_SECONDS, VENUE_STOP)
 
 FORWARD_MS = 3_600_000     # G26: reads only move forward, over the last hour
@@ -222,39 +224,9 @@ class BasisMixin:
             try:
                 listed = self._own_fills_all(days)
             except (VenueError, OSError) as e:
-                # D158: a read that fails says
-                # nothing of which lots are held; both sides freeze for as
-                # long as it fails, on a clock of its own, said once past
-                # the wait (urgent: the owner needs it); the cached lots are
-                # kept and the block is for adoption only. An awaited order
-                # is not settled by the clock while nothing can be read.
-                if self._rungs_fail_since is None:
-                    self._rungs_fail_since = now
-                # G28: the exchange's own words, for the card and the phone
-                # (a fill our parser refused names its id: G29)
-                why = (str(e) or type(e).__name__).strip()
-                if len(why) > FROZEN_WHY_CHARS:
-                    why = why[:FROZEN_WHY_CHARS - 1] + '…'
-                self._rungs_fail_why = why
-                lasted = now - self._rungs_fail_since
-                if lasted >= RUNGS_LAG_SECONDS and not self._rungs_fail_said:
-                    self._rungs_fail_said = True
-                    self.notify.event(
-                        'warn', self.botid,
-                        f'our fills could not be read for '
-                        f'{RUNGS_LAG_SECONDS:g}s — nothing placed or '
-                        f'cancelled until they can (G26, D158): {why}',
-                        urgent=True)
-                elif (self._rungs_fail_said and lasted >= FROZEN_REMIND_SECONDS
-                        * (self._rungs_fail_reminded + 1)):
-                    # G28: said again every FROZEN_REMIND_SECONDS while it
-                    # lasts, urgent like the first; a catch-up says once
-                    self._rungs_fail_reminded = int(lasted
-                                                    // FROZEN_REMIND_SECONDS)
-                    self.notify.event(
-                        'warn', self.botid,
-                        f'still frozen after {lasted / 3600:.0f} h: {why}',
-                        urgent=True)
+                # D158: a read that fails says nothing of which lots are held;
+                # both sides freeze for as long as it fails
+                self._frozen_read(e, now, 'our fills')
                 return cached[2] if cached else None
             if listed is None:
                 self._rungs_awaited = {}          # no account: nothing to wait on
@@ -381,6 +353,39 @@ class BasisMixin:
         if state in ('filled', 'open'):
             self._rungs_asked.add(link)
         return False
+
+    def _frozen_read(self, e, now, what):
+        """D158: both sides freeze for as long as a read fails, on a clock of
+        its own, said once past the wait (urgent: the owner needs it); the
+        cached lots are kept and the block is for adoption only. An awaited
+        order is not settled by the clock while nothing can be read."""
+        if self._rungs_fail_since is None:
+            self._rungs_fail_since = now
+        # G28: the exchange's own words, for the card and the phone
+        # (a fill our parser refused names its id: G29)
+        why = (str(e) or type(e).__name__).strip()
+        if len(why) > FROZEN_WHY_CHARS:
+            why = why[:FROZEN_WHY_CHARS - 1] + '…'
+        self._rungs_fail_why = why
+        lasted = now - self._rungs_fail_since
+        if lasted >= RUNGS_LAG_SECONDS and not self._rungs_fail_said:
+            self._rungs_fail_said = True
+            self.notify.event(
+                'warn', self.botid,
+                f'{what} could not be read for '
+                f'{RUNGS_LAG_SECONDS:g}s — nothing placed or '
+                f'cancelled until they can (G26, D158): {why}',
+                urgent=True)
+        elif (self._rungs_fail_said and lasted >= FROZEN_REMIND_SECONDS
+                * (self._rungs_fail_reminded + 1)):
+            # G28: said again every FROZEN_REMIND_SECONDS while it
+            # lasts, urgent like the first; a catch-up says once
+            self._rungs_fail_reminded = int(lasted
+                                            // FROZEN_REMIND_SECONDS)
+            self.notify.event(
+                'warn', self.botid,
+                f'still frozen after {lasted / 3600:.0f} h: {why}',
+                urgent=True)
 
     def _freeze_over(self, now, how):
         """G28: D158's freeze has ended — a clean read, a flat, or the
@@ -800,6 +805,8 @@ class BasisMixin:
             own += q if str(f.get('side', '')).lower() == entry else -q
         own = max(own, 0.0)
         step = max(self.adapter.min_qty, self.adapter.qty_step)
+        if self.beside_inverse:
+            return self._spot_beside_inverse(wallet_size, own, step, anchor)     # D169
         half_lot = max(step, 0.5 * min(
             (o['qty'] for o in (getattr(self, '_last_desired', None) or [])),
             default=step))
@@ -826,6 +833,104 @@ class BasisMixin:
                               '(D58)', urgent=True)
         self._spot_lag_since = None
         return held, False
+
+    def _inverse_moves(self, now_ms, since_ms):
+        """D169: what the markets other than this row's moved the coin by, from
+        the venue's cash log, kept by id. Re-derived from the log at a restart,
+        nothing persisted. Read on from the last read, the overlap catching a
+        late row."""
+        start = self._inverse_to_ms if self._inverse_to_ms is not None else since_ms
+        rows = self.client.cash_log(self.beside_inverse, start, now_ms)
+        for r in rows:
+            if r['id'] in self._inverse_rows or not r['symbol']:
+                continue                 # a transfer or a loan is no market's
+            if r['category'] == 'spot' and r['symbol'] == self.cfg['symbol']:
+                continue                 # our own
+            self._inverse_rows[r['id']] = r
+            self._inverse_listed += r['change']
+        self._inverse_to_ms = now_ms - CASH_LOG_OVERLAP_MS
+
+    def _spot_beside_inverse(self, wallet_size, own, step, anchor):
+        """D169: an inverse market on this coin settles its fee, funding and
+        P&L in the wallet this row reads, so the row reads the wallet as it
+        would be without them: its coins never move for theirs, and D58's
+        bound still leaves it no more than its own fills. The wallet itself is
+        the most it may sell (`_spot_sell_cap`): a loss there leaves the row's
+        book as it was and its sells trimmed to the coins there are. A move
+        neither its own fills nor the log explain freezes the row until they
+        do; past G26's wait it is said once and taken as it stands. A read
+        that fails freezes it as D158 does. Returns (held, lagging)."""
+        now = self._now()
+        now_ms = int(now * 1000)
+        prev = self._spot_seen
+        since = anchor or now_ms - HISTORY_WINDOW_DAYS * 86_400_000
+        self._spot_sell_cap = max(wallet_size, 0.0)
+        if prev is None or wallet_size != prev[0] or self._spot_lag_since is not None:
+            try:
+                self._inverse_moves(now_ms, since)
+            except (VenueError, OSError) as e:
+                self._frozen_read(e, now, "the coin's cash log")
+                return (prev[3] if prev else min(wallet_size, own)), True
+            if self._rungs_fail_since is not None:
+                self._freeze_over(now, 'cash log readable again')
+        theirs = sum(r['change'] for r in self._inverse_rows.values()
+                     if r['category'] == 'inverse' and r['time_ms'] >= since)
+        held = min(max(wallet_size - theirs, 0.0), own)
+        if held < self.adapter.min_qty:
+            held = 0.0                       # fee shavings are not a holding
+        seen = (wallet_size, own, self._inverse_listed, held)
+        if prev is None:
+            self._spot_seen = seen
+            return held, False
+        moved = ((wallet_size - prev[0]) - (own - prev[1])
+                 - (self._inverse_listed - prev[2]))
+        # a buy's fee is taken in the coin: its fills are gross of it
+        if abs(moved) > max(step, FILL_FEE_SLACK * abs(own - prev[1])):
+            if self._spot_lag_since is None:
+                self._spot_lag_since = now
+            if now - self._spot_lag_since < RUNGS_LAG_SECONDS:
+                return prev[3], True         # judged against the same base
+            self.notify.event('warn', self.botid,
+                              f'the wallet moved {moved:+.10g} that neither our '
+                              f'own fills nor the cash log explain after '
+                              f'{RUNGS_LAG_SECONDS:g}s — an outside hand; trading '
+                              'on from what is there (D169)', urgent=True)
+        self._spot_seen = seen
+        self._spot_lag_since = None
+        return held, False
+
+    def _wallet_capped(self, qty):
+        """D169: a sell is never above the coins in the wallet: past them, on
+        margin spot, it would borrow the coin and open a short."""
+        cap = self._spot_sell_cap
+        return qty if cap is None else min(qty, cap)
+
+    def _exits_to_wallet(self, desired):
+        """D169: the planned sells, nearest first, trimmed to the coins in the
+        wallet: what is left over is not placed, and said once."""
+        cap = self._spot_sell_cap
+        if cap is None:
+            return desired
+        step, left = self.adapter.qty_step, self.adapter.to_steps(cap, 'floor')
+        out, trimmed = [], False
+        sells = sorted((d for d in desired if d['side'] == self._exit_side),
+                       key=lambda d: d['price'])
+        for d in sells:
+            want = self.adapter.to_steps(d['qty'])
+            take = min(want, left)
+            if take < want:
+                trimmed = True
+            qty = float(Decimal(str(step)) * take)
+            if take > 0 and self.adapter.meets_minimum(qty, d['price']):
+                out.append(dict(d, qty=qty))
+                left -= take
+        if trimmed and not self._sell_cap_said:
+            self.notify.event('warn', self.botid,
+                              f'the wallet holds {cap:.10g} of the coin, under what '
+                              'this row would sell; its sells are trimmed to it, '
+                              'never borrowed (D169)', urgent=True)
+        self._sell_cap_said = trimmed
+        return out + [d for d in desired if d['side'] != self._exit_side]
 
     def _held(self, truth):
         idx = self.adapter.position_idx(self._entry_side, False) or 0

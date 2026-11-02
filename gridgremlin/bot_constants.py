@@ -16,3 +16,5 @@ BACKOFF_CEILING = 300.0
 HISTORY_WINDOW_DAYS = 30    # M12/M13: the venue-practical fills lookback
 VENUE_STOP = 'the venue-held stop'    # X12: how a round ended (M14)
 STOP_RUNG = 99    # X11: the link rung of a stop that ends the ROUND — no
+CASH_LOG_OVERLAP_MS = 10 * 60 * 1000   # D169: the cash log is re-read this far back
+FILL_FEE_SLACK = 0.005                 # D169: a fill's fee in the coin, at most, of its size

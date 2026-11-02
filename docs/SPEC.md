@@ -201,6 +201,20 @@ eventually pin (T1).
   split ref and exits rest at the very price the inventory was bought at: the grid
   churns at zero spread and pays fees both ways. `assumed_avg_entry` wins when set.
   *(measured live 2026-08-06: 17 LTC round trips, every buy and sell at one price)*
+- **G30** (D169) A long spot row sharing its coin with an inverse market on the
+  account (a grid, a DCA, a trade or a Portfolio Bot's leg) reads the wallet as
+  it would be without that market: the wallet less the inverse rows of the coin's
+  cash log over the window its own fills are read over, then D58's bound. Its
+  position never moves for the other market's fee, funding or P&L, and it never
+  claims that market's coins. The wallet is the most it may sell: planned sells
+  are trimmed to it nearest first, said once, and each single close capped, so a
+  loss there leaves the book as it was and nothing is borrowed. A wallet below
+  zero halts the row as S4 does. A move neither its own fills nor the log explain
+  freezes it; past G26's wait it is said once and taken as it stands. A log read
+  that fails freezes it as D158 does, on G28's clock. Nothing is persisted: a
+  restart reads the same window. A row sharing nothing reads nothing more, and the
+  log is read only when the wallet moved. A short spot row is outside this.
+  `spec_D169_*`, with sabotage. *(owner, 2026-11-03: "2")*
 - **G16** A grid whose rung gap cannot clear the venue's own round-trip fee loses on
   every completed trip by construction — the build asks the venue what it charges and
   says so, before a single order rests. *(the spot fee lesson, 2026-08-06)*

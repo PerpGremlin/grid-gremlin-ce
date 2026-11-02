@@ -584,6 +584,8 @@ def build_market_bot(cfg, client, notifier, tombs, slide):
     chars = 4 if venue == 'hyperliquid' else 10
     check_link_fits(bot.botid, widest_rung(cfg), limit, gen_chars=chars)
     identity = bot_identity(cfg, adapter)
+    if venue == 'bybit' and cfg['market_type'] == 'spot':
+        bot.wallet_coin = spec['base_coin']                 # D169
     if venue == 'bybit' and cfg['market_type'] == 'linear':
         client.ensure_hedge_mode(cfg['market_type'], cfg['symbol'])
     elif venue == 'bybit' and collateral_coin(cfg, spec):
@@ -606,6 +608,26 @@ def build_market_bot(cfg, client, notifier, tombs, slide):
     return bot, identity
 
 
+def mark_shared_coins(bots):
+    """D169: a long spot row sharing its coin with an inverse market on the
+    account (a grid, a DCA, a trade or a Portfolio Bot's leg) reads the wallet
+    without that market's coins. No other row reads anything more."""
+    coins = set()
+    for b in bots:
+        if getattr(getattr(b, 'adapter', None), 'market_type', None) == 'inverse':
+            coins.add(b.adapter.settle_coin)
+        for kind in ('hedge', 'short'):
+            for coin, leg in (getattr(b, 'legs', None) or {}).get(kind, {}).items():
+                if leg.get('market_type') == 'inverse':
+                    coins.add(coin)
+    for b in bots:
+        coin = getattr(b, 'wallet_coin', None)
+        if coin in coins and b.cfg.get('side') == 'long' and not b.beside_inverse:
+            b.beside_inverse = coin
+            b.notify.event('info', b.botid, f'an inverse market shares the {coin} wallet: '
+                                            'its moves are read from the cash log and kept apart (D169)')
+
+
 def build_live_trade(cfg, fleet, clients, bots, notifier):
     """L1: a trade joining a running fleet gets everything a bot gets at the
     start — the shared builder, then its symbol's risk tier and leverage set
@@ -616,6 +638,7 @@ def build_live_trade(cfg, fleet, clients, bots, notifier):
     bot, identity = build_market_bot(dict(cfg, account=fleet['account']), clients[cfg['venue']],
                                      notifier, fleet['_tombs'], fleet['_slide'])
     _ensure_symbol_capacity([b for b in bots if b.cfg.get('symbol') == cfg['symbol']] + [bot], notifier)
+    mark_shared_coins(bots + [bot])
     return bot, identity
 
 
@@ -691,6 +714,7 @@ def build_fleet(fleet_path, notifier, allow_mainnet=False):
         clients['bybit'] = WriteClient()
         refuse_mainnet(clients['bybit'], fleet.get('allow_mainnet', False), allow_mainnet)
     _ensure_symbol_capacity(bots, notifier)
+    mark_shared_coins(bots)
     check_fleet_unique(identities)
     pf = fleet['preflight']
     failures = [(label, reason) for _, label, reason

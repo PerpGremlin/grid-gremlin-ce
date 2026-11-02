@@ -351,7 +351,7 @@ class StopsMixin:
             try:
                 self.client.place_market(
                     cfg['market_type'], cfg['symbol'], self._exit_side,
-                    adapter.fmt_qty(qty),
+                    adapter.fmt_qty(self._wallet_capped(qty)),
                     adapter.position_idx(self._exit_side, True) or 0,
                     reduce_only=True, link_id=self._make_link(0),
                     borrow=self._borrow)

@@ -171,6 +171,8 @@ def spec_S6_the_reset_list_is_complete_and_documented():
                   '_round_hwm_held',    # M25: the holding it last saw
                   '_close_streak', '_defer_cycles',   # M14/G15: lag counters
                   '_slide_since',                     # G21: confirmation clock
+                  '_spot_sell_cap', '_sell_cap_said', '_inverse_rows',
+                  '_inverse_listed', '_inverse_to_ms',  # D169: re-read from the log
                   '_entry_since', '_quoted_at',       # D37: the entry's clocks
                   '_stop_since', '_candle_seen',   # X9/X12: the cool-down
                                    # clocks — a restart delays the stop,

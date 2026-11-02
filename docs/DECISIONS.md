@@ -1639,6 +1639,16 @@ stands unless the owner corrects it.
   resizes its orders unasked. Sizes in coins are not worked out (D89: no price
   at the row). The quick setup's own default ladder is unchanged.
 
+- **D169 — A spot row and an inverse market share a coin's wallet (2026-11-03).**
+  The owner, offered separate accounts or a shared wallet: "2". The first live
+  inverse DCA, beside a spot grid on the coin, moved the grid's position by its
+  fee and its funding, each an urgent G26 warning: D58 bounds a row by the wallet,
+  so a row whose fills stand above the wallet tracks it. Measured on the demo key:
+  the cash log lists each under the inverse symbol, equal to the move to the last
+  digit. Amends D58 for such a row: the wallet is read less the inverse rows of
+  the log, and is the most it may sell. D76's statement is unchanged and still
+  available; this asks for none.
+
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
 inline above.*

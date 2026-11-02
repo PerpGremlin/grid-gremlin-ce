@@ -35,6 +35,7 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
     # finds, so a restart can only loosen it by what the price gave back),
     # _round_hwm_basis (M22: the average the round's gauge belongs to),
     # _round_hwm_held (M25: the holding it last saw; a shrink asks the fills),
+    # _spot_sell_cap/_sell_cap_said/_inverse_* (D169: re-read from the cash log),
     # _folded (D71: the slivers folded this round, said once). The round's own
     # fields are declared once in bot_round.ROUND_SCOPED and reset together.
     # Everything else the bot knows
@@ -88,6 +89,13 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
         self.alive = True
         self._spot_seen = None         # D58: (wallet, own net) last cycle
         self._spot_lag_since = None    # D58: since when the fill list lagged
+        self.wallet_coin = None        # D169: a spot row's coin (the build's)
+        self.beside_inverse = None     # D169: the coin an inverse market shares (the build's)
+        self._spot_sell_cap = None     # D169: the wallet, the most this row may sell
+        self._sell_cap_said = False    # D169
+        self._inverse_rows = {}        # D169: other markets' cash log rows, by id
+        self._inverse_listed = 0.0     # D169: their sum, as listed
+        self._inverse_to_ms = None     # D169: the log's read so far
         self.capped = None             # D56: the account cap's reason, set
                                        # by the fleet each cycle; None = free
         self.notional_now = 0.0        # D56: |held| at mark, in quote
@@ -578,6 +586,7 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
             desired = plan_grid(cfg, adapter, ref, held, basis, bid, ask,
                                 resting_exits, offset=self.offset,
                                 held_rungs=held_rungs)
+        desired = self._exits_to_wallet(desired)                   # D169
         if self.capped or self.paused:
             # D145: a paused bot likewise. D56: the account is at its cap — no order that ADDS exposure
             # rests; exits keep working, so the cap is reached and left by

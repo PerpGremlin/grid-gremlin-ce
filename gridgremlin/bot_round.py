@@ -79,7 +79,7 @@ class RoundMixin:
         try:
             self.client.place_market(
                 cfg['market_type'], cfg['symbol'], self._exit_side,
-                adapter.fmt_qty(abs(held)),
+                adapter.fmt_qty(self._wallet_capped(abs(held))),
                 adapter.position_idx(self._exit_side, True) or 0,
                 reduce_only=True, link_id=self._make_link(rung),
                 borrow=self._borrow)
@@ -391,7 +391,7 @@ class RoundMixin:
                               + (reason or f'after {fired} tranche(s) filled '
                                            '(D38)'))
         self._be_level = want
-        lv_s, qty_s = adapter.fmt_price(want), adapter.fmt_qty(abs(held))
+        lv_s, qty_s = adapter.fmt_price(want), adapter.fmt_qty(self._wallet_capped(abs(held)))
         resting = [o for o in book
                    if adapter.fmt_price(float(o.get('triggerPrice') or 0))
                    == lv_s]
@@ -453,7 +453,7 @@ class RoundMixin:
         try:
             self.client.place_market(
                 cfg['market_type'], cfg['symbol'], self._exit_side,
-                adapter.fmt_qty(abs(held)),
+                adapter.fmt_qty(self._wallet_capped(abs(held))),
                 adapter.position_idx(self._exit_side, True) or 0,
                 reduce_only=True, link_id=self._make_link(0),
                 borrow=self._borrow)
@@ -513,7 +513,7 @@ class RoundMixin:
         self._gen += 1
         self.client.place_order(
             cfg['market_type'], cfg['symbol'], self._exit_side,
-            adapter.fmt_qty(uncovered), adapter.fmt_price(best),
+            adapter.fmt_qty(self._wallet_capped(uncovered)), adapter.fmt_price(best),
             self._make_link(0),
             adapter.position_idx(self._exit_side, True) or 0,
             reduce_only=True, post_only=False, borrow=self._borrow)
@@ -602,7 +602,7 @@ class RoundMixin:
             try:
                 self.client.place_order(
                     cfg['market_type'], cfg['symbol'], self._exit_side,
-                    adapter.fmt_qty(q), adapter.fmt_price(p),
+                    adapter.fmt_qty(self._wallet_capped(q)), adapter.fmt_price(p),
                     self._make_link(0),
                     adapter.position_idx(self._exit_side, True) or 0,
                     reduce_only=True, post_only=False, borrow=self._borrow)
@@ -1034,7 +1034,7 @@ class RoundMixin:
             link = self._make_link(0)
             self.client.place_order(
                 cfg['market_type'], cfg['symbol'], self._exit_side,
-                adapter.fmt_qty(abs(held)), adapter.fmt_price(target), link,
+                adapter.fmt_qty(self._wallet_capped(abs(held))), adapter.fmt_price(target), link,
                 adapter.position_idx(self._exit_side, True) or 0,
                 reduce_only=True, post_only=False,     # marketable: target or better
                 borrow=self._borrow)
@@ -1061,7 +1061,7 @@ class RoundMixin:
                     self._gen += 1
                     self.client.place_order(
                         cfg['market_type'], cfg['symbol'], self._exit_side,
-                        adapter.fmt_qty(abs(held)), adapter.fmt_price(target),
+                        adapter.fmt_qty(self._wallet_capped(abs(held))), adapter.fmt_price(target),
                         self._make_link(0),
                         adapter.position_idx(self._exit_side, True) or 0,
                         reduce_only=True, post_only=False, borrow=self._borrow)
