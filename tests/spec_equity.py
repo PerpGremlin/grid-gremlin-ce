@@ -315,3 +315,55 @@ def spec_U91b_a_sharpe_never_shows_alone():
     html = equity_boxes({'equity': {'all': line, 'sharpe': {'all': 1.67},
                                     'trust': {'all': {'likely': 0.761, 'more': 279.8}}}})
     assert '76% likely above zero · about 280 more days to tell from luck' in html
+
+
+def spec_H8c_an_inverse_legs_realised_stays_in_the_coin():
+    """Closed at a loss, an inverse short owes coins, not a fixed sum: booked in
+    quote it was a debt at no interest, and the book grew against its equity
+    (found by the carry take-profit study, 2026-11-02). SABOTAGE: book the close
+    in quote and the coins read nothing; book funding in quote and it misses too."""
+    import gridgremlin.portfolio_rehearse as pr
+    leg = pr._Leg(True)
+    leg.trade('sell', 1.0, 100.0)                     # 100 contracts at 100
+    assert abs(leg.funding(0.01, 100.0) - 1.0) < 1e-9
+    assert abs(leg.real_coins - 0.01) < 1e-12 and leg.real == 0.0
+    leg.trade('buy', 0.5, 200.0)                      # all 100 closed at 200
+    assert leg.qty == 0.0 and leg.real == 0.0
+    assert abs(leg.real_coins - (0.01 + 100 * (1 / 200 - 1 / 100))) < 1e-12
+    lin = pr._Leg(False)
+    lin.trade('sell', 1.0, 100.0)
+    assert lin.funding(0.01, 100.0) == 1.0 and lin.real_coins == 0.0   # linear: in quote, as before
+    lin.trade('buy', 1.0, 200.0)
+    assert lin.real == -100.0 and lin.real_coins == 0.0
+
+
+def spec_H8c_the_coins_it_earned_are_in_the_book_and_its_equity():
+    """A flat price and funding paid to the short, in the coin. They are the
+    row's worth, so equity rises by what was paid, and coins the planner can see,
+    so the hedge grows to cover them. SABOTAGE: leave them out of equity and the
+    row earns nothing; out of the book and the hedge never moves."""
+    import gridgremlin.portfolio_rehearse as pr
+    from gridgremlin.config import validate_config
+    row = validate_config({'strategy': 'portfolio', 'name': 't', 'venue': 'bybit', 'capital': 10000,
+                           'assets': [{'coin': 'BTC', 'weight': 1.0}], 'risk': {'max_weight': 1.0},
+                           'hedge': {'product': 'inverse', 'ratio': 1.0},
+                           'rebalance': {'every_hours': 24, 'drift_pct': 0.05}})
+    saved = pr.SPOT_FEE, pr.PERP_FEE
+    pr.SPOT_FEE = pr.PERP_FEE = 0.0
+    try:
+        H, hours = 3_600_000, 30 * 24
+        bars = {'BTC': [{'t': i * H, 'c': 100.0} for i in range(hours + 1)]}
+        rates = [{'t': i * 8 * H, 'rate': 0.002} for i in range(hours // 8 + 1)]
+        seen, plan = [], pr.plan_portfolio
+
+        def watching(cfg, book, *a, **k):
+            seen.append(book['coins']['BTC'])
+            return plan(cfg, book, *a, **k)
+        pr.plan_portfolio = watching
+        r = pr.rehearse(row, bars, {'BTC': rates})
+        assert r['funding'] > 0.1
+        assert abs(r['equity'] - 1.0 - r['funding']) < 0.01, (r['equity'], r['funding'])
+        assert seen[-1] > seen[1] * (1 + 0.5 * r['funding']), (seen[1], seen[-1])
+    finally:
+        pr.plan_portfolio = plan
+        pr.SPOT_FEE, pr.PERP_FEE = saved

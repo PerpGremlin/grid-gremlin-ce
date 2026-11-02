@@ -3554,6 +3554,10 @@ that pins it (T1).
   stack times its gross weights, never under the stack: at 1x or under it is
   the stack as before. A hedge's stays a share of its own holding, and spare
   cash a share of the stack. `spec_D167_*`, with sabotage.
+- **H8c** In the rehearsal an inverse leg's realised P&L and funding stay in its
+  coin, in the book the planner sees and in equity at today's price. In quote, a
+  loss was a fixed debt at no interest. The live bot reads the wallet and never had
+  this. *(found by the carry take-profit study, 2026-11-02; owner's yes 2026-11-03)*
 - **H3b** The funding rule judges the MARKET's funding, never the row's own
   payments: the sum of the hedge contract's funding rates over
   `trailing_days`, as a yearly rate (`trailing_yield`), judged only after a

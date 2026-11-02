@@ -24,6 +24,7 @@ class _Leg:
 
     def __init__(self, inverse):
         self.inverse, self.qty, self.entry, self.real = inverse, 0.0, 0.0, 0.0
+        self.real_coins = 0.0      # H8c: an inverse leg's realised P&L, in its coin
 
     def coins(self, p):
         return self.qty / p if self.inverse else self.qty
@@ -36,15 +37,23 @@ class _Leg:
         return (self.entry - p) * self.qty
 
     def funding(self, rate, p):
-        return rate * (self.qty if self.inverse else self.qty * p)
+        got = rate * (self.qty if self.inverse else self.qty * p)
+        if self.inverse:
+            self.real_coins += got / p     # H8c: paid in the coin, as a close is
+        return got
 
     def trade(self, side, coins, p):
         """'sell' adds, 'buy' reduces; returns quote notional traded."""
         delta = coins * p if self.inverse else coins
         if side == 'buy':
             closed = min(self.qty, delta)
-            self.real += (closed * (1 / p - 1 / self.entry) * p if self.inverse
-                          else (self.entry - p) * closed)
+            # H8c: an inverse close settles in the coin and stays there; in
+            # quote, a loss was a fixed debt at no interest and the book grew
+            # against its equity (the carry take-profit study, 2026-11-02)
+            if self.inverse:
+                self.real_coins += closed * (1 / p - 1 / self.entry)
+            else:
+                self.real += (self.entry - p) * closed
             self.qty -= closed
             if self.qty <= 1e-12:
                 self.qty, self.entry = 0.0, 0.0
@@ -132,12 +141,12 @@ def rehearse(cfg, bars1h, funding, regimes=None, start_cash=None):
             seen.add(bucket)
             for c in coins:
                 got = legs[c].funding(fund[c].get(bucket, 0.0), px[c])
-                cash += got
+                cash += 0.0 if legs[c].inverse else got        # H8c: else in the coin
                 paid += got
         # H8: the planner sees what the book owns — each coin with its inverse
-        # leg's open coin P&L, the cash with every realised P&L (in quote here)
-        # and the linear legs' open P&L — so a ratio-1 hedge stays static
-        book = {'coins': {c: held[c] + legs[c].open_coins(px[c]) for c in coins},
+        # leg's coin P&L, open and realised (H8c), the cash with the linear
+        # legs' P&L — so a ratio-1 hedge stays static
+        book = {'coins': {c: held[c] + legs[c].open_coins(px[c]) + legs[c].real_coins for c in coins},
                 'cash': cash + sum(l.real + (0.0 if l.inverse else l.unreal(px[c])) for c, l in legs.items()),
                 'hedged': {c: legs[c].coins(px[c]) for c in coins if (cfg['hedges'].get(c) or {}).get('ratio', 0) > 0},
                 'shorts': {c: legs[c].coins(px[c]) for c in coins if c in cfg['short_products']}}
@@ -179,7 +188,7 @@ def rehearse(cfg, bars1h, funding, regimes=None, start_cash=None):
             fees += interest
             cash -= interest
         value = sum(held[c] * px[c] for c in coins)
-        perp = sum(l.real + l.unreal(px[c]) for c, l in legs.items())
+        perp = sum(l.real + l.real_coins * px[c] + l.unreal(px[c]) for c, l in legs.items())
         equity = value + cash + perp                    # fees and interest already left the cash
         notional = sum(l.coins(px[c]) * px[c] for c, l in legs.items())
         path.append(equity)
