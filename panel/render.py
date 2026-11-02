@@ -7,7 +7,7 @@ import time
 import urllib.parse
 from .css import CSS
 from .reference import KEEP_JS, THEME_JS
-from .card import card, pnl_parts, unpriced
+from .card import card, not_whole, pnl_parts, unpriced
 from .drawings import equity_boxes
 from .fleet_bits import sweep_note
 from .html_bits import REFRESH_S, _num_cls, esc, qarg
@@ -101,6 +101,9 @@ def cards_section(idx, label, contract, view='all', scripted=True, watch=None):
     left = (f'<div class="parts neg">{gap} bot{"s" if gap != 1 else ""} holding a position '
             'not priced (mark unread): their open part is not in this total</div>'
             if gap else '')
+    cut = sum(1 for b in contract['bots'].values() if not_whole(b))       # R14c
+    left += (f'<div class="parts neg">{cut} bot{"s" if cut != 1 else ""} never flat since '
+             'its record began: not whole, not in this total</div>' if cut else '')
     cards = '</div><div class="cards">'.join(
         (f'<div class="grp">{esc(title)}</div>' if title else '')
         + ''.join(card(idx, botid, b, contract, belief)

@@ -870,6 +870,161 @@ def spec_R14_the_widening_shares_one_history_read_per_venue_and_horizon():
     assert pulls == [now - 24 * h, now - 48 * h, now - 96 * h]   # once each
 
 
+# --- R14c: the widening never reaches before a bot's cut ---------------------
+
+def spec_R14c_the_widening_stops_at_the_bots_cut():
+    """A cut (R18c) is a hard floor: no read before it, no fill before it
+    counted. At the floor the bot began flat — fills since it that add up
+    to the venue's holding are its round; anything else is the cap there."""
+    from gridgremlin.report import count_from_flat
+    L, h = 'linBTCUSDTl', 3_600_000
+    now, cut = 1000 * h, 1000 * h - 200 * h
+    hist = _cut_history(now, cut)
+    pulls = []
+
+    def pull(since):
+        pulls.append(since)
+        return [f for f in hist if f['time_ms'] >= since]
+    own, how, start = count_from_flat(L, 24.0, now, pull, 'buy',
+                                      venue_size=2.0, floor_ms=cut)
+    assert how == 'flat' and start == now - 150 * h, (how, start)
+    assert [f['time_ms'] for f in own] == [now - 150 * h, now - 100 * h, now - 50 * h]
+    assert min(pulls) == cut and pulls[-1] == cut          # never read before it
+    own2, how2, start2 = count_from_flat(L, 24.0, now, pull, 'buy',
+                                         venue_size=3.0, floor_ms=cut)
+    assert how2 == 'cap' and start2 == cut and len(own2) == 3
+    assert all(f['time_ms'] >= cut for f in own2)          # the old bot's never
+
+
+def _cut_history(now, cut):
+    """The old bot under the id: bought 5 at 100, sold 3 at 200 (+300),
+    never flat, then cut; the new bot under the same id: 2 at 150, 1 at
+    140, 1 sold at 145 — holding 2, a small loss."""
+    L, h = 'linBTCUSDTl', 3_600_000
+    old = [dict(_fill(now - 600 * h, 'buy', 100, 5, link=f'{L}-1-a'), market_type='linear'),
+           dict(_fill(now - 500 * h, 'sell', 200, 3, link=f'{L}-0-b'), market_type='linear')]
+    new = [dict(_fill(now - 150 * h, 'buy', 150, 2, link=f'{L}-2-c'), market_type='linear'),
+           dict(_fill(now - 100 * h, 'buy', 140, 1, link=f'{L}-3-d'), market_type='linear'),
+           dict(_fill(now - 50 * h, 'sell', 145, 1, link=f'{L}-0-e'), market_type='linear')]
+    assert old[-1]['time_ms'] < cut < new[0]['time_ms']
+    return old + new
+
+
+def _cut_readout(venue_size=2.0, behind=False):
+    """The readout end to end on a fleet whose BTC long was cut and made
+    again under its id: the kept ledger holds both bots' fills and the cut;
+    the venue answers both too."""
+    import io
+    import json
+    import os
+    import sys
+    import tempfile
+    from pathlib import Path
+    import gridgremlin.report as rp
+    h = 3_600_000
+    now, cut = 1000 * h, 1000 * h - 200 * h
+    hist = _cut_history(now, cut)
+    d = Path(tempfile.mkdtemp())
+    (d / 'wd.json').write_text(json.dumps({
+        'tag': 't', 'snapshot': 's', 'state': 'st', 'staleness_seconds': 9,
+        'mm_rate_max': 0.5, 'equity_min': 10, 're_alert_seconds': 9,
+        'assumes_sole_actor': True}))
+    (d / 'fleet.x.json').write_text(json.dumps({'watchdog': str(d / 'wd.json'), 'bots': [
+        {'market_type': 'linear', 'symbol': 'BTCUSDT', 'side': 'long',
+         'capital': 1000, 'leverage': 5, 'lower': 100, 'upper': 200,
+         'rungs': 11, 'spacing_type': 'fixed'}]}))
+    (d / 'logs' / 'fills').mkdir(parents=True)
+    (d / 'logs' / 'fills' / 'x.json').write_text(json.dumps({
+        'version': 1, 'fills': [dict(f, venue='bybit') for f in hist],
+        'collected': {'bybit:linear:BTCUSDT': now - 30 * h if behind else now},
+        'cuts': {'linBTCUSDTl': cut}}))
+
+    def pull(rows, since, until):
+        return ([f for f in hist if f['time_ms'] >= since],
+                {('linear', 'BTCUSDT'): 150.0})
+    saved = (rp._bybit_pull, rp._venue_held_all, rp._funding_pull, rp.time.time,
+             sys.stdout, os.getcwd())
+    try:
+        os.chdir(d)
+        rp._bybit_pull = pull
+        rp._venue_held_all = lambda venue, rows: {'linBTCUSDTl': venue_size}
+        rp._funding_pull = lambda by_venue, start_of, now_ms: ([], set())
+        rp.time.time = lambda: now / 1000.0
+        sys.stdout = io.StringIO()
+        rp.main([str(d / 'fleet.x.json'), '--hours', '24', '--json'])
+        out = json.loads(sys.stdout.getvalue())
+    finally:
+        (rp._bybit_pull, rp._venue_held_all, rp._funding_pull, rp.time.time,
+         sys.stdout, here) = saved
+        os.chdir(here)
+    return out
+
+
+def spec_R14c_a_bot_made_again_under_its_id_never_counts_the_old_bots_fills():
+    """2026-11-02: the demo BTC long's card read a six-figure profit on a
+    bot the exchange showed at a loss — the widening read a month back
+    across the record's cut and booked the old bot's fills (R18c: a new
+    bot, never heir to them). The card counts the new bot alone."""
+    from panel.card import card
+    h = 3_600_000
+    out = _cut_readout()
+    b = out['bots']['linBTCUSDTl']
+    assert b['counted_from'] == 'flat' and b['counted_since_ms'] == 1000 * h - 150 * h
+    assert b['fills'] == 3 and abs(b['position'] - 2.0) < 1e-9
+    assert abs(b['realized'] - (145 - 440 / 3)) < 1e-9          # -1.67, never +300
+    sf = out['since_first']['linBTCUSDTl']
+    assert sf['fills'] == 3 and abs(sf['realized'] - b['realized']) < 1e-9
+    html = card(0, 'linBTCUSDTl', b, out, {})
+    assert 'since it was last flat' in html
+    assert '>+5.00<' in html            # -1.67 realised + 2 x (150 - 146.67) open, nothing older
+
+
+def spec_R14c_never_flat_since_the_cut_is_the_kept_book_or_not_whole():
+    """A widening that never finds its flat is not the bot's profit: the
+    kept book stands in when whole; when it is not, no number is shown or
+    summed and the card says why."""
+    from gridgremlin.report import prefer_kept
+    from panel.card import card
+    from panel.render import cards_section
+    cap = {'counted_from': 'cap', 'realized': 300.0}
+    kept = {'whole': True, 'first_ms': 5, 'realized': -1.0, 'series': [1]}
+    got = prefer_kept({'x': dict(cap)}, ({'x': kept}, {'x': None}), ['x'])['x']
+    assert got['counted_from'] == 'first' and got['counted_since_ms'] == 5
+    assert got['realized'] == -1.0 and 'series' not in got
+    for sf in (({'x': dict(kept, whole=False)}, {'x': None}),     # not whole
+               ({'x': kept}, {'x': 3}),                             # behind
+               None):                                               # nothing kept
+        assert prefer_kept({'x': dict(cap)}, sf, ['x'])['x']['whole'] is False
+    out = _cut_readout(venue_size=3.0, behind=True)       # neither book whole
+    b = out['bots']['linBTCUSDTl']
+    assert b['whole'] is False and b['realized'] is None and b['unreal_at_mark'] is None
+    html = card(0, 'linBTCUSDTl', b, out, {})
+    assert 'not whole' in html and 'no fills' not in html
+    page = cards_section(0, 'x', out)
+    assert '1 bot never flat since its record began' in page
+
+
+def spec_R14c_sabotage_without_the_clip_the_old_bots_profit_comes_back():
+    """Remove the floor (and the kept book's stand-in behind it): the month's
+    widening books the old bot's +300 as the new bot's profit — the guard is
+    what keeps the card honest."""
+    import gridgremlin.report as rp
+    real, real_pk = rp.count_from_flat, rp.prefer_kept
+
+    def unclipped(*a, floor_ms=None, **k):
+        return real(*a, **k)                            # the clip removed
+    try:
+        rp.count_from_flat = unclipped
+        b = _cut_readout()['bots']['linBTCUSDTl']
+        assert b['counted_from'] != 'flat'               # the clip alone bites
+        rp.prefer_kept = lambda books, since_first, botids: books
+        b = _cut_readout()['bots']['linBTCUSDTl']
+    finally:
+        rp.count_from_flat, rp.prefer_kept = real, real_pk
+    assert b['counted_from'] == 'cap' and b['fills'] == 5
+    assert b['realized'] > 200.0, b['realized']          # the phantom, as on 11-02
+
+
 def spec_R17_the_day_is_archived_once_per_fleet_and_date():
     """2026-10-05, for the results chapter the owner will write: the
     readout answered "now" and nothing kept yesterday. The archive writes

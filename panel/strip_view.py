@@ -1,6 +1,6 @@
 """The strip pinned to the top (U50) and the exchange figures it shows: network badges, leverage, MMR, the totals. Out of render.py (D91 step 3)."""
 from gridgremlin.report import contract_tiers, card_total
-from .card import since_first_total, snapshot_age, unpriced
+from .card import not_whole, since_first_total, snapshot_age, unpriced
 from .drawings import equity_svg
 from .html_bits import _num_cls, esc, units_of
 
@@ -316,6 +316,7 @@ def hero_strip(labelled, tabs=False):
                 if b is not None and b.get('realized') is not None]    # book: no dollars yet
         total = sum(card_total(b) for b in live) + portfolio_total(c)       # H6
         gap = sum(1 for b in c['bots'].values() if unpriced(b))
+        cut = sum(1 for b in c['bots'].values() if not_whole(b))           # R14c
         belief = ((c.get('watchdog') or {}).get('belief') or {}).get('bots', {})
         dead = sum(1 for bl in belief.values() if bl.get('alive') is False)
         frozen = sum(1 for bl in belief.values()                       # U146
@@ -347,6 +348,7 @@ def hero_strip(labelled, tabs=False):
             f'<span class="big num {_num_cls(total)}">{total:+,.2f} '
             f'<span class="dim">{venue_money(c)}</span>'
             + (f' <span class="neg">+ {gap} unpriced</span>' if gap else '')        # U95
+            + (f' <span class="neg">+ {cut} not whole</span>' if cut else '')       # R14c
             + '</span>'
             f'<span class="dim num">{len(c["bots"])} bots</span>'
             + count_cell

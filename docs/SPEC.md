@@ -1776,6 +1776,19 @@ eventually pin (T1).
   own direction: exits alone after a slice's phantom flat sum to minus the
   holding and are refused. *(audit 2026-10-16: invETHUSDl read -3,076 on the
   card and the paper bots page against the exchange's +3,076.)*
+- **R14c** A bot's record has a floor. The widening never reads before
+  the bot's cut (R18c) and never counts a fill before it: an older bot of
+  the same coin and side is not this one, and a cut inside the window
+  widens the book too. At the floor the bot began flat — fills since it
+  that add up to the exchange's holding are its round (`flat`, from its
+  first fill); otherwise `cap` there. A `cap` book is never shown as the
+  bot's profit: the kept book (R18) stands in when it is whole and not
+  behind (`counted_from: first`, "since its record began"); else the book
+  is `whole: false`, the contract carries no dollars for it, the card says
+  "not whole" and the totals leave it out, by name. *(2026-11-02: the demo
+  BTC long's card read a six-figure profit on a bot the exchange showed at
+  a loss — a month of fills reached back across the 10-22 cut, never flat,
+  realising against nothing; the kept book had it right)*
 - **R13** A round begins flat at its base order. A martingale's book in a
   window that opened mid-round carries a phantom position that no later close
   can land at zero, so its rounds and average per round counted nothing (the

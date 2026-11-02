@@ -510,22 +510,36 @@ def kept_venue_key(venue, market_type, symbol):
             else f'bybit:{market_type}:{symbol}')
 
 
-def kept_books(fleet_path, fresh, venue_of, key_of, since_ms, inverse_ids,
-               entry_sides, closers, grids, rounders, held,
-               root='logs/fills'):
-    """R18: every bot's book since its first kept fill — the kept ledger
-    merged with this readout's own fresh fills, one fill once (I4). A bot
-    whose market was last collected before this window began has a hole
-    between the two: `behind` names the moment collection reached, and
-    the figure is not shown as whole. None when nothing is kept."""
-    from .kept_fills import load, merge, store_path
+def load_kept(fleet_path, root='logs/fills'):
+    """R18: the fleet's kept ledger, or None when nothing is kept or it
+    will not parse (said, never restarted)."""
+    from .kept_fills import load, store_path
     path = store_path(fleet_path, root)
     if not path.exists():
         return None
     try:
-        kept = load(path)
+        return load(path)
     except RuntimeError as e:
         print(f'[warn] {e}', file=sys.stderr)
+        return None
+
+
+_READ = object()
+
+
+def kept_books(fleet_path, fresh, venue_of, key_of, since_ms, inverse_ids,
+               entry_sides, closers, grids, rounders, held,
+               root='logs/fills', kept=_READ):
+    """R18: every bot's book since its first kept fill — the kept ledger
+    merged with this readout's own fresh fills, one fill once (I4). A bot
+    whose market was last collected before this window began has a hole
+    between the two: `behind` names the moment collection reached, and
+    the figure is not shown as whole. None when nothing is kept. `kept`,
+    when given, is the ledger the caller already read (one read a readout)."""
+    from .kept_fills import merge
+    if kept is _READ:
+        kept = load_kept(fleet_path, root)
+    if kept is None:
         return None
     tagged = [dict(f, venue='hyperliquid'
                    if venue_of.get((f['market_type'], f['symbol']))
@@ -676,20 +690,33 @@ def first_flat_ms(fills, entry_side, venue_size):
 
 
 def count_from_flat(botid, hours, now_ms, pull, entry_side,
-                    closers=None, venue_size=None):
+                    closers=None, venue_size=None, floor_ms=None):
     """R14: widen this bot's window in doublings up to WIDEN_CAP_HOURS until
     its own fills show a return to flat AND the fills since it add up to
     what the exchange says is held (`venue_size`, the proof that the flat
     is real and not a slice's phantom — R7's lesson); return (fills since
     that point, counted_from, counted_since_ms). `pull(since_ms)` is the
     venue read for this bot's market. 'flat' = found; 'cap' = never in a
-    month, the month's fills returned and the truncation stands."""
+    month, the month's fills returned and the truncation stands.
+
+    R14c: `floor_ms` is where this bot's record begins (its R18c cut) — a
+    hard floor. The widening never reads before it and never counts a fill
+    before it: an older bot of the same coin and side is not this one. At
+    the floor the bot began flat, so fills since it that add up to the
+    venue's holding are its whole round ('flat' from its first fill);
+    otherwise 'cap' at the floor."""
     entry_sides = {botid: entry_side}
+    tol = 1e-9 * max(1.0, venue_size or 0.0) + EPS
     h, fills = hours, []
     while True:
         h = min(h * 2.0, WIDEN_CAP_HOURS)
         wide_since = now_ms - int(h * 3600 * 1000)
+        floored = floor_ms is not None and wide_since <= floor_ms
+        if floored:
+            wide_since = floor_ms
         fills = bot_fills(pull(wide_since), botid, closers, entry_sides)
+        if floor_ms is not None:
+            fills = [f for f in fills if f['time_ms'] >= floor_ms]
         start = last_flat_ms(fills, entry_side)
         if start is not None and start > wide_since:
             since = [f for f in fills if f['time_ms'] >= start]
@@ -698,11 +725,37 @@ def count_from_flat(botid, hours, now_ms, pull, entry_side,
             # signed: exits alone after a slice's phantom flat sum to minus
             # the holding (invETHUSDl -3076 against the venue's +3076, the
             # audit of 2026-10-16) — the bot's own direction or nothing
-            if venue_size is None or abs(held - venue_size) <= (
-                    1e-9 * max(1.0, venue_size) + EPS):
+            if venue_size is None or abs(held - venue_size) <= tol:
                 return since, 'flat', start
+        if floored:
+            held = sum(f['qty'] if f['side'] == entry_side else -f['qty']
+                       for f in fills)
+            if fills and venue_size is not None and abs(held - venue_size) <= tol:
+                return fills, 'flat', fills[0]['time_ms']
+            return fills, 'cap', wide_since
         if h >= WIDEN_CAP_HOURS:
             return fills, 'cap', wide_since
+
+
+def prefer_kept(books, since_first, botids):
+    """R14c: a widened book that never found its flat ('cap') is not the
+    bot's profit. The kept book (R18) stands in when it is whole and not
+    behind — `counted_from: first`, from its first counted fill; else the
+    book is `whole: False` and the contract carries no dollars for it.
+    (2026-11-02: a month of fills reaching across the record's cut read a
+    six-figure phantom profit on a bot the exchange showed at a loss.)"""
+    sf_books, behind = since_first if since_first else ({}, {})
+    for b in botids:
+        bk = books.get(b)
+        if bk is None or bk.get('counted_from') != 'cap':
+            continue
+        sf = sf_books.get(b)
+        if sf and sf.get('whole') and sf.get('first_ms') and behind.get(b) is None:
+            books[b] = dict({k: v for k, v in sf.items() if k != 'series'},
+                            counted_from='first', counted_since_ms=sf['first_ms'])
+        else:
+            bk['whole'] = False
+    return books
 
 
 def _venue_held_all(venue, rows):
@@ -1181,6 +1234,12 @@ def public_book(book, mark=None, side=None, strategy=None, symbol=None):
         else:
             out['realized'] = out['fees'] = out['unreal_at_mark'] = None
             out['per_trip'] = out['funding'] = out['per_trip_net'] = None
+    if book.get('whole') is False:
+        # R14c: never flat since its record began — no dollars are whole,
+        # so none are shown or summed; the exchange's position is the truth
+        for k in ('realized', 'gap_realized', 'unreal_at_mark', 'per_trip',
+                  'per_trip_net'):
+            out[k] = None
     return out
 
 
@@ -1349,6 +1408,8 @@ def main(argv):
     held = {}
     for venue, rows in by_venue.items():
         held.update(_venue_held_all(venue, rows))
+    kept = load_kept(argv[0])                     # R18: read once a readout
+    cuts = (kept or {}).get('cuts') or {}          # R14c: each record's floor
     pulled = {}          # (venue, market, since) -> fills: one read serves
                          # every bot that widens to that horizon — HL's
                          # history read is per ADDRESS, so every bot's
@@ -1364,6 +1425,9 @@ def main(argv):
         # (the sign test alone let every short's partial book through)
         partial = (size is not None
                    and abs(shown - size) > 1e-9 * max(1.0, size) + EPS)
+        cut = cuts.get(botid)
+        if cut is not None and cut > since_ms:    # R14c: the window holds
+            partial = True                        # an older bot's fills
         if not partial and (book is None
                             or not window_truncated(book, side_of.get(botid))):
             continue
@@ -1382,7 +1446,7 @@ def main(argv):
         try:
             own, how, start = count_from_flat(
                 botid, hours, now_ms, pull, entry_sides[botid],
-                closers, venue_size=size)
+                closers, venue_size=size, floor_ms=cut)
         except (VenueError, OSError) as e:
             print(f'[warn] {botid}: could not widen the window — {e}',
                   file=sys.stderr)
@@ -1397,8 +1461,9 @@ def main(argv):
     fresh = fills + [f for got in pulled.values() for f in got]
     since_first = kept_books(argv[0], fresh, venue_of, key_of, since_ms,
                              inverse_ids, entry_sides, closers, grids,
-                             rounders, kept_held(fleet, held))
+                             rounders, kept_held(fleet, held), kept=kept)
     gone = since_first[0].pop('_gone', {}) if since_first else {}    # R24
+    prefer_kept(books, since_first, botids)                         # R14c
     # D63: funding over each book's own window, one pull from the earliest
     starts = {b: (books[b].get('counted_since_ms') or since_ms)
               for b in botids if b in books}

@@ -20,7 +20,7 @@ def run_rate(b, contract, capital=None, trade=False):
     gen = contract.get('generated_ms')
     how = b.get('counted_from')
     start = (b.get('counted_since_ms') if how == 'flat' else
-             b.get('first_ms') if how == 'cap' else
+             b.get('first_ms') if how in ('cap', 'first') else
              gen - contract.get('window_hours', 24) * 3.6e6 if gen else None)
     if not gen or not start or not b.get('fills'):
         return ''
@@ -275,7 +275,20 @@ def unpriced(b):
     (its mark unread): its total counts that part as nothing, so every
     total it enters says so (the audit, 2026-10-16)."""
     return (b is not None and abs(b.get('position') or 0.0) > 1e-12
+            and b.get('whole') is not False                    # R14c: said apart
             and (b.get('realized') is None or b.get('unreal_at_mark') is None))
+
+
+def not_whole(b):
+    """R14c: a book never flat since its record began (the month's widening
+    found no flat): no figure is whole, so the card says so and the totals
+    leave it out, never a number realised against nothing."""
+    return b is not None and b.get('whole') is False
+
+
+NOT_WHOLE = ('<span class="big dim">not whole</span> <span class="dim">— never flat '
+             'since its record began, so no figure is whole; the exchange\'s own '
+             'position is the truth</span>')
 
 
 UNPRICED = ' <span class="neg">+ an open position not priced (its mark was not read)</span>'
@@ -373,6 +386,7 @@ def card(idx, botid, b, contract, belief, full=False):
         # what was last seen, never "nothing" it did not read
         last_seen = (belief.get(botid) or {}).get('position') if botid in belief else None
         belief = {}
+    unwhole = not_whole(b)                               # R14c
     if b is not None and b.get('realized') is None:
         b = None             # an inverse book with no mark has no dollars (the second
                              # audit, 2026-10-13): shown as the engine's belief, never a crash
@@ -385,6 +399,7 @@ def card(idx, botid, b, contract, belief, full=False):
                  'HOLDING' if abs(pos) > 1e-12 else
                  'NOT STARTED' if botid not in belief else 'RESTING')  # U34
         head = (f'<span class="big dim">{HALT_HEAD[halted]}</span>' if halted else
+                NOT_WHOLE if unwhole else
                 '<span class="big dim">starts at its account\'s next restart</span>'
                 if botid not in belief else
                 '<span class="big dim">no fills</span>'
@@ -424,6 +439,10 @@ def card(idx, botid, b, contract, belief, full=False):
             days = (contract['generated_ms'] - b['counted_since_ms']) / 8.64e7
             span = (f'since it was last flat, {days:.1f} d'
                     if days >= 1 else f'since it was last flat, {days * 24:.0f} h')
+        elif b.get('counted_from') == 'first':                # R14c: the kept book
+            days = (contract['generated_ms'] - b['counted_since_ms']) / 8.64e7
+            span = (f'since its record began, {days:.1f} d'
+                    if days >= 1 else f'since its record began, {days * 24:.0f} h')
         elif b.get('counted_from') == 'cap':
             # the cap is how far back it LOOKED; the figure is the fills it
             # found — say where they start when that is later (2026-10-06:
