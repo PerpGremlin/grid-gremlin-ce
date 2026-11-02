@@ -2653,7 +2653,7 @@ def spec_U112_every_theme_overrides_every_colour_classic_sets():
     Each theme is classic's colour tokens overridden, every one of them (a
     token left out would leak the green look into it), and a class on <html>."""
     from panel.css import CSS, DEFAULT_THEME, THEMES
-    assert THEMES == ('classic', 'dark', 'light', 'broker', 'mt5', 'win95')
+    assert THEMES == ('classic', 'dark', 'black', 'light', 'broker', 'mt5', 'win95')
     assert DEFAULT_THEME == 'dark' and DEFAULT_THEME in THEMES
     colours = {k for k, v in _theme_block(CSS, 'classic').items() if v.startswith('#')}
     assert {'--bg', '--fg', '--pos', '--neg', '--accent', '--line', '--edge', '--raise'} <= colours
@@ -2701,6 +2701,32 @@ def spec_U112_dark_is_neutral_grey_and_its_words_pass_AA():
         rgb = [int(_theme_block(CSS, 'classic')[k][i:i + 2], 16) for i in (1, 3, 5)]
         assert rgb[1] > rgb[2], k
     assert ratio('#9aa0a6', '#9aa0a6') == 1 and ratio('#000000', '#ffffff') > 20.9   # the yardstick
+
+
+def spec_U181_black_is_darker_than_dark_and_its_words_pass_AA():
+    """Page and panels both darker than dark's, the panels still a step above
+    the page, grey, and every word AA on both. SABOTAGE: panels at the page's
+    colour lose the cards; dim at dark's --line fails AA."""
+    def lum(h):
+        h = h.lstrip('#')
+        c = [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+        c = [x / 12.92 if x <= 0.03928 else ((x + 0.055) / 1.055) ** 2.4 for x in c]
+        return .2126 * c[0] + .7152 * c[1] + .0722 * c[2]
+
+    def ratio(a, b):
+        hi, lo = sorted((lum(a), lum(b)), reverse=True)
+        return (hi + .05) / (lo + .05)
+    from panel.css import CSS
+    dark, black = _theme_block(CSS, 'dark'), _theme_block(CSS, 'black')
+    assert lum(black['--bg']) < lum(dark['--bg'])
+    assert lum(black['--raise']) < lum(dark['--raise'])
+    assert lum(black['--bg']) < lum(black['--raise'])
+    for k in ('--bg', '--raise', '--line', '--edge'):
+        rgb = [int(black[k][i:i + 2], 16) for i in (1, 3, 5)]
+        assert max(rgb) - min(rgb) <= 16 and rgb[1] <= rgb[2], (k, black[k])
+    for bg in (black['--bg'], black['--raise']):
+        for k in ('--fg', '--dim', '--pos', '--neg', '--accent'):
+            assert ratio(black[k], bg) >= 4.5, (k, bg)
 
 
 def _theme_sizes(css):
@@ -2780,7 +2806,7 @@ def spec_U112_the_button_cycles_every_theme_before_the_page_paints():
     from panel.css import THEMES
     from panel.server import KEEP_JS, render
     from panel.reference import THEME_JS
-    assert 'var T=["classic","dark","light","broker","mt5","win95"]' in THEME_JS
+    assert 'var T=["classic","dark","black","light","broker","mt5","win95"]' in THEME_JS
     assert 'var T=' + json.dumps(list(THEMES)).replace(' ', '') in THEME_JS
     assert "t=T[(T.indexOf(t)+1)%T.length]" in THEME_JS                 # the next, wrapping to the first
     assert "classList.toggle('t-'+n,n===t&&n!==T[0])" in THEME_JS       # classic is :root, no class

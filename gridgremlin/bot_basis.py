@@ -486,7 +486,8 @@ class BasisMixin:
         filled in parts is one lot, its parts summed under its link), and
         no further back than the last flat — where undoing the fills from
         the holding leaves nothing held. Returns (the lots' rungs, the
-        quantity left uncovered)."""
+        quantity left uncovered). D166: a lot held for under half its order
+        names no rung; it still counts against the quantity."""
         orders, merged = {}, []
         for f in sorted(fills, key=lambda f: f['time_ms']):
             link = f.get('link_id') or ''
@@ -518,8 +519,13 @@ class BasisMixin:
                 # never `> 0`: five sells netted against five buys leave a
                 # float residue of 1e-18, and that dust named a sold lot as
                 # held — its exit placed again (the rehearsal, 2026-10-31)
-                lots.append(lot['rung'])
                 remaining -= take
+                if take * 2 >= qty:
+                    # D166: under half its order is a residue, still counted
+                    # in the holding but no lot: a short exit's 0.001 named
+                    # a whole lot, and that lot's full-size exit sold the
+                    # next lot up, whose rung bought straight back (2026-11-02)
+                    lots.append(lot['rung'])
             if remaining <= slack or pos <= flat:
                 break                         # covered, or the last flat
         return lots, remaining

@@ -170,7 +170,8 @@ eventually pin (T1).
   on every wobble across a rung (the churn B2 was built to cure).
 - **G8** The exit ladder covers the sellable position one lot per rung, nearest-first;
   remainders fold without creating sub-lot rungs; the nearest exit sits within ~one rung
-  of the mark. *(the dead-band incident, 2026-07-31)*
+  of the mark. *(the dead-band incident, 2026-07-31)* D166 (rung mode): a remainder
+  goes to the next exit, folding only where no further exit could hold it.
 - **G9** The floor (`min_position`) core is never offered for sale; the cap measures
   *held* while the ladder covers *held − floor* — two named quantities, never one
   variable. *(the overnight cap failure)*
@@ -271,6 +272,14 @@ eventually pin (T1).
   lots older than two days are walked from the thirty-day read; the
   pairing specs' venue answered every fill to every window, so that split
   never ran in a spec until this date.)*
+  *(D166, 2026-11-02: a lot held for under half its order is a residue: it counts
+  in the holding and names no rung, so its rung may re-arm. Beside the lots the
+  fills name, what is left counts in whole lots at the ref, and a part under half
+  a lot in none: it keeps an exit already resting, or takes one if nothing else
+  would sell it, sized to itself. An exit partly filled past half keeps its
+  remainder resting, unless it sits at or below the lowest named lot's rung,
+  where it is cancelled and poured. A displaced lot takes an exit already resting
+  before a nearer one. `spec_D166_*`, each with its sabotage.)*
   *(2026-10-31, the review: an unlinked exit-side fill is a close only where
   the venue does not say otherwise — Bybit's closedSize, HL's 'Close'
   direction; a fill that reduced nothing (a hand opening the opposite side
@@ -2103,7 +2112,7 @@ eventually pin (T1).
   once. Charts draw with the tokens, so they follow. The export carries
   no script. *(owner, 2026-10-28: "more themes… windows 95,
   or Metatrader")*
-  **(2026-11-01)** Six themes, the button stepping classic → dark →
+  **(2026-11-01)** Six themes (seven with U181), the button stepping classic → dark →
   light → broker → mt5 → win95. classic is the green one above, renamed,
   and still the stylesheet's own `:root` (no class): the export and the
   published page wear it. dark is new and is what a new visitor gets:
@@ -2121,6 +2130,10 @@ eventually pin (T1).
   property may hold one. *(owner, 2026-11-01: the green one "classic",
   "an actual dark theme", "a version that looks like a retail broker platform as
   well, or MetaTrader 5")*
+- **U181** (2026-11-02) A seventh theme, black, between dark and light on the
+  button: dark's colours and face with the page and panels taken down to near
+  black, the panels still a step above the page, every word AA on both.
+  dark stays the default. *(owner, 2026-11-02: "a darker darkmode")*
 - **U112b** (2026-11-02) Every theme is the same size: 14px type at a 1.5
   line height and the same spacing tokens and padding, so switching theme
   never moves the page. A theme changes colours, faces, edges and corners

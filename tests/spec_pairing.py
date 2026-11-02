@@ -1650,3 +1650,99 @@ def spec_G29_sabotage_an_id_at_the_end_is_cut_off():
     bot, clock, rec, back = _frozen_for(0.1, step=2.0, why=long_tail)
     assert 'fill id 2999250522' not in bot.frozen_view['frozen_why']
     assert len(bot.frozen_view['frozen_why']) == 160
+
+
+# --- D166: a residue is no lot (2026-11-02) ----------------------------------
+
+def spec_D166_an_exits_residue_names_no_rung():
+    """Rung 14 bought, then rung 12 twice, 0.007 each; the exits sold 0.006 and
+    0.007, leaving 0.001 under the older of rung 12's buys. Measured on demo
+    2026-11-02: that residue named a whole lot, whose full-size exit sold the
+    next lot up, and that rung bought straight back. SABOTAGE: name any take
+    over half a step and rung 12 comes back."""
+    clock, fills = _Clock(), []
+    bot = _reader(fills, clock)
+    b = bot.botid
+    for side, price, qty, link in (('Buy', 64000.0, 0.007, f'{b}-14-z'),
+                                   ('Buy', 62000.0, 0.007, f'{b}-12-a'),
+                                   ('Buy', 62000.0, 0.007, f'{b}-12-b'),
+                                   ('Sell', 63000.0, 0.006, f'{b}-13-c'),
+                                   ('Sell', 63000.0, 0.007, f'{b}-13-d')):
+        clock.t += 60.0
+        fills.append(_fill_row(fills, clock, side, price, qty, link))
+    assert bot._held_rungs(0.008) == [14]
+
+
+def spec_D166_half_of_an_order_held_is_still_its_lot():
+    """The rule's other edge: an entry filled in part is all held, and an exit
+    that took under half leaves the lot named. SABOTAGE: require the whole
+    order and both rungs go."""
+    clock, fills = _Clock(), []
+    bot = _reader(fills, clock)
+    b = bot.botid
+    for side, price, qty, link in (('Buy', 60000.0, 0.007, f'{b}-10-a'),
+                                   ('Buy', 59000.0, 0.003, f'{b}-9-b'),
+                                   ('Sell', 60000.0, 0.001, f'{b}-10-c')):
+        clock.t += 60.0
+        fills.append(_fill_row(fills, clock, side, price, qty, link))
+    assert sorted(bot._walk_lots(fills, 0.009, 'buy')[0]) == [9, 10]
+
+
+def spec_D166_a_residue_never_gets_a_full_lots_exit():
+    """Lots at rungs 8 and 12, 0.001 over. Each lot's exit stays one rung above
+    it. SABOTAGE: count any step of a lot as a lot (D87's ceil) and the residue
+    takes a full lot's exit at rung 10, the nearest free one, selling what rung
+    12 bought two rungs under its cost."""
+    from gridgremlin.ladder import own_lot
+    cfg = _cfg()
+    held = own_lot(cfg, ADAPTER, 8, 0) + own_lot(cfg, ADAPTER, 12, 0) + 0.001
+    orders = plan_grid(cfg, ADAPTER, 57500.0, held_base=held,
+                       basis=60000.0, held_rungs=[8, 12])
+    sells = [o for o in orders if o['side'] == 'Sell']
+    assert [o['rung'] for o in sorted(sells, key=lambda o: o['rung'])] == [9, 13]
+    assert round(sum(o['qty'] for o in sells), 6) == round(held, 6)
+
+
+def spec_D166_a_partly_filled_exit_keeps_its_remainder_resting():
+    """Past half filled, the lot is a residue, but its exit's remainder rests:
+    it stays, sized to itself, and is not cancelled to sell elsewhere.
+    SABOTAGE: drop the residue branch and rung 12's exit leaves the plan."""
+    cfg = _cfg()
+    orders = plan_grid(cfg, ADAPTER, 60500.0, held_base=LOT + 0.002,
+                       basis=60000.0, held_rungs=[10],
+                       resting_exit_rungs=frozenset({11, 12}))
+    sells = {o['rung']: o['qty'] for o in orders if o['side'] == 'Sell'}
+    assert sells == {11: LOT, 12: 0.002}
+
+
+def spec_D166_a_residue_alone_still_gets_an_exit():
+    """Nothing else held: the residue is the whole holding and must be
+    sellable. SABOTAGE: no exit taken when nothing rests, and it sits forever."""
+    cfg = _cfg()
+    orders = plan_grid(cfg, ADAPTER, 60500.0, held_base=0.002, basis=60000.0,
+                       held_rungs=[])
+    sells = [o for o in orders if o['side'] == 'Sell']
+    assert len(sells) == 1 and sells[0]['qty'] == 0.002
+
+
+def spec_D166_a_displaced_lot_keeps_the_exit_that_rests():
+    """The HL flip-flop: a displaced lot took the nearest placeable exit each
+    cycle, so a ref crossing a rung moved its size between orders (ladder's
+    docstring said it would not). SABOTAGE: nearest first and rung 12's order
+    gives way to rung 11."""
+    cfg = _cfg()
+    orders = plan_grid(cfg, ADAPTER, 60500.0, held_base=LOT, basis=60000.0,
+                       held_rungs=[], resting_exit_rungs=frozenset({12}))
+    assert [o['rung'] for o in orders if o['side'] == 'Sell'] == [12]
+
+
+def spec_D166_a_remainder_goes_to_the_next_exit_not_the_nearest():
+    """HL 2026-11-01: lots at rungs 3 and 9 on 1.4 lots' holding. The half-lot
+    fold put all of it on the nearest exit, so what rung 9 bought sold far
+    under its cost and rung 10's exit got nothing. SABOTAGE: fold up to half
+    a lot (the old rule) and rung 15 leaves the plan."""
+    cfg = _cfg()
+    orders = plan_grid(cfg, ADAPTER, 60500.0, held_base=LOT + 0.003,
+                       basis=60000.0, held_rungs=[3, 14])
+    sells = {o['rung']: o['qty'] for o in orders if o['side'] == 'Sell'}
+    assert sells == {11: LOT, 15: 0.003}

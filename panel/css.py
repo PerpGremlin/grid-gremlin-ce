@@ -21,7 +21,7 @@ from panel.chart import _f
 # carries no script; each other is a class t-<name> on <html>, its tokens
 # overridden at the stylesheet's end. A new visitor gets DEFAULT_THEME; a
 # browser that kept a name since renamed is moved once (RENAMED_THEMES).
-THEMES = ('classic', 'dark', 'light', 'broker', 'mt5', 'win95')
+THEMES = ('classic', 'dark', 'black', 'light', 'broker', 'mt5', 'win95')
 DEFAULT_THEME = 'dark'
 RENAMED_THEMES = {'dark': 'classic', 'metatrader': 'mt5'}
 
@@ -337,8 +337,13 @@ readable green and red (each AA on both greys), thin edges, a sans face */
 :root.t-dark{--bg:#15171c;--fg:#e6e6e6;--dim:#9aa0a6;--line:#262a32;--edge:#30353e;
 --pos:#3fb97a;--neg:#f2645c;--accent:#6f9fd8;--accent-soft:#6f9fd824;
 --calm:#5fb0c4;--wild:#e0a050;--s3:#b496e8;--raise:#1d2027;--bw:1px;color-scheme:dark}
-:root.t-dark body,:root.t-broker body{font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-variant-numeric:tabular-nums}
-:root.t-dark .card:hover{border-color:var(--dim)}
+/* U181 (2026-11-02): black — dark with the greys taken down to near black,
+panels still a step above the page, every word still AA */
+:root.t-black{--bg:#07080a;--fg:#e6e6e6;--dim:#9aa0a6;--line:#1a1d22;--edge:#262a31;
+--pos:#3fb97a;--neg:#f2645c;--accent:#6f9fd8;--accent-soft:#6f9fd824;
+--calm:#5fb0c4;--wild:#e0a050;--s3:#b496e8;--raise:#101216;--bw:1px;color-scheme:dark}
+:root.t-dark body,:root.t-black body,:root.t-broker body{font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-variant-numeric:tabular-nums}
+:root.t-dark .card:hover,:root.t-black .card:hover{border-color:var(--dim)}
 /* U112 (2026-11-01): broker — inspired by retail broker platforms (no one
 platform's name, mark or colours): a white page, a deep navy strip and side
 column, a teal accent, soft white cards on thin light edges, more room, the

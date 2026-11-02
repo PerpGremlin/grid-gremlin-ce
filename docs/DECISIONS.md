@@ -1598,6 +1598,16 @@ stands unless the owner corrects it.
   bot runs is the bot's under I2 and stays so until a decision says
   otherwise.
 
+- **D166 — A residue is no lot (2026-11-02).** The owner, on the leftover
+  fix (11-02): "go ahead with your suggestions". A lot held for under half
+  its order names no rung, where any leftover over half a quantity step
+  named one (G23). A remainder goes to the next exit rather than folding
+  onto the nearest (G8, rung mode). A displaced lot prefers the exit
+  already resting, which is what `paired_exits` always said it did. Found
+  by the 11-02 check of #601: a short exit's leftover read as a whole lot,
+  whose full-size exit sold the next lot up, and that rung bought straight
+  back; on Hyperliquid a leftover bought high sold about 4% under its cost.
+
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
 inline above.*

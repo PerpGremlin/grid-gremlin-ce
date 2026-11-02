@@ -267,7 +267,7 @@ def rung_floor(cfg, adapter, side, split_ref, held_rungs):
 
 def paired_exits(cfg, adapter, split_ref, held_rungs, n_lots, window_exits,
                  bid=None, ask=None, resting=frozenset(), within=None,
-                 offset=0):
+                 offset=0, residue=0.0):
     """G25 (D36): every held lot's exit rests where it was intended — one
     rung beyond the rung it was bought at (a long's above, a short's below)
     — wherever that rung now lies on the lattice, inside the slid window or
@@ -277,7 +277,8 @@ def paired_exits(cfg, adapter, split_ref, held_rungs, n_lots, window_exits,
     fallback). A lot whose own rung cannot be placed now (not beyond the
     ref, or inside B4's guard band) and does not already rest there is
     displaced: it takes the nearest free placeable window exit, as G23 did,
-    so a mark jittering across the rung keeps the exit it already has.
+    so a mark jittering across the rung keeps the exit it already has (D166:
+    a free exit already resting is taken before a nearer one).
     Seed lots (off every lattice) are displaced too. `within` (lo, hi)
     confines the own rungs to the window: set when the rungs are the block
     the average pins, not the bot's fills — a guess never places an order
@@ -315,13 +316,24 @@ def paired_exits(cfg, adapter, split_ref, held_rungs, n_lots, window_exits,
             out.append((j, price, own_lot(cfg, adapter, h, offset)))
     displaced = max(0, n_lots - len(out))
     at_ref = lot(cfg, adapter, split_ref)
-    for j, price in placeable_exits(side, window_exits, bid, ask, resting):
+    free = placeable_exits(side, window_exits, bid, ask, resting)
+    # D166: what already rests first, so a mark crossing a rung moves nothing
+    free = [e for e in free if e[0] in resting] + [e for e in free
+                                                  if e[0] not in resting]
+    for j, price in free:
         if displaced <= 0:
             break
         if j not in taken:
             taken.add(j)
             out.append((j, price, at_ref))
             displaced -= 1
+    if residue > 0:
+        # D166: a residue keeps the exit it rests on (a partly filled exit's
+        # remainder), or takes one when nothing else would sell it
+        for j, price in free:
+            if j not in taken and (j in resting or not out):
+                out.append((j, price, residue))
+                break
     out.sort(key=lambda ip: ip[1], reverse=not long)
     return out
 
@@ -451,9 +463,9 @@ def exit_ladder(exits, sellable, lot_qty, adapter):
 
 def exit_ladder_sized(exits, sellable, adapter):
     """G8 over G25's exits: each rung takes the lot it closes, nearest-first;
-    a remainder of up to half that lot folds onto it, the last rung absorbs
-    whatever is left (G8 covers the whole sellable), sub-minimum shares fold
-    back. Integer qty-steps, as exit_ladder."""
+    what the next exit could not hold folds onto it (D166), the last rung
+    absorbs whatever is left (G8 covers the whole sellable), sub-minimum
+    shares fold back. Integer qty-steps, as exit_ladder."""
     step = adapter.qty_step
     if sellable <= 0 or not exits or step <= 0:
         return []
@@ -467,7 +479,12 @@ def exit_ladder_sized(exits, sellable, adapter):
         if remaining <= 0:
             break
         want = max(1, int(round(lot_q / step)))
-        dump = remaining * 2 <= want * 3 or n == len(exits) - 1
+        # D166: a remainder folds only where no further exit can hold it, or
+        # a lot bought high is sold at the rung of a lot bought low (HL,
+        # 2026-11-01: 4% under its cost, the exit one rung above it unused)
+        dump = (n == len(exits) - 1 or remaining <= want
+                or not adapter.meets_minimum(qty(remaining - want),
+                                             exits[n + 1][1]))
         share = remaining if dump else want
         if adapter.meets_minimum(qty(share), price):
             kept.append([i, price, share])
@@ -516,7 +533,7 @@ def plan_grid(cfg, adapter, split_ref, held_base=0.0, basis=None,
     lot_qty = lot(cfg, adapter, split_ref)
     sellable = sellable_base(cfg, adapter, held_base)
     suppressed = lots_held(sellable, lot_qty, adapter)                # D87: whole steps
-    floor, held_set = None, None
+    floor, held_set, residue = None, None, 0.0
     from_fills = held_rungs is not None
     if cfg.get('exit_floor', 'rung') == 'rung':
         if held_rungs is None:
@@ -540,8 +557,15 @@ def plan_grid(cfg, adapter, split_ref, held_base=0.0, basis=None,
             # only what they leave (a seed's lots) counts in lots at the ref
             own = sum(adapter.to_steps(own_lot(cfg, adapter, h, offset))
                       for h in held_rungs)
-            rest = adapter.from_steps(max(0, adapter.to_steps(sellable) - own))
-            suppressed = len(held_rungs) + lots_held(rest, lot_qty, adapter)
+            rest_s = max(0, adapter.to_steps(sellable) - own)
+            lot_s = max(1, adapter.to_steps(lot_qty))
+            # D166: what the fills leave counts in whole lots at the ref, a
+            # part under half a lot in none: it is a residue, and a full
+            # lot's exit for it would sell the next lot up. It rests apart,
+            # sized to itself; a named exit's pour absorbs it otherwise
+            whole = (2 * rest_s + lot_s) // (2 * lot_s)
+            residue = adapter.from_steps(max(0, rest_s - whole * lot_s))
+            suppressed = len(held_rungs) + whole
         floor = rung_floor(cfg, adapter, cfg['side'], split_ref, held_rungs)
     parts = split(cfg['side'], rungs, split_ref, basis,
                   cfg.get('market_type'), offset, floor=floor)
@@ -552,7 +576,7 @@ def plan_grid(cfg, adapter, split_ref, held_base=0.0, basis=None,
                                       resting_exit_rungs,
                                       within=(None if from_fills else
                                               (offset, offset + len(rungs) - 1)),
-                                      offset=offset)
+                                      offset=offset, residue=residue)
     sized = None
     if floor is not None:
         sized = parts['exits']              # G25: already placeable, sized
