@@ -2121,6 +2121,14 @@ eventually pin (T1).
   property may hold one. *(owner, 2026-11-01: the green one "classic",
   "an actual dark theme", "a version that looks like a retail broker platform as
   well, or MetaTrader 5")*
+- **U112b** (2026-11-02) Every theme is the same size: 14px type at a 1.5
+  line height and the same spacing tokens and padding, so switching theme
+  never moves the page. A theme changes colours, faces, edges and corners
+  only. The exceptions are win95's window frame round the page and the
+  title bars of win95 and mt5, which share one padding. Before this mt5
+  was 11px and tight, win95 12px and broker roomier. `spec_U112b`, with
+  sabotage for each way back. *(owner, 2026-11-02: "make sure that the
+  sizing for all the themes is consistent")*
 - **U113** A grid's fills say each trip, as Bybit and Pionex do: an
   exit's "made" is its gain against the entry it closes (R12, the entry
   by R15/R15b) less both legs' fees — the entry fill's own fee per unit

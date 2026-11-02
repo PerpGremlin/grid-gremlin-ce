@@ -2700,6 +2700,49 @@ def spec_U112_dark_is_neutral_grey_and_its_words_pass_AA():
     assert ratio('#9aa0a6', '#9aa0a6') == 1 and ratio('#000000', '#ffffff') > 20.9   # the yardstick
 
 
+def _theme_sizes(css):
+    """U112b: every size a theme's own rules set — a font's size and line
+    height other than the shared 14px/1.5, a spacing token, a padding or a
+    margin — but for the one frame and the title bars (TITLE_ROOM)."""
+    import re
+    from panel.css import THEMES
+    keep = {':root.t-win95 main': 'padding:.2em .8em .8em'}
+    title = 'padding:.2em .5em'
+    found = []
+    for sel, body in re.findall(r'([^{}]+)\{([^{}]*)\}', css):
+        sel = sel.strip()
+        if not any(f':root.t-{n}' in sel for n in THEMES[1:]):
+            continue
+        for decl in (d.strip() for d in body.split(';') if d.strip()):
+            prop, _, value = decl.partition(':')
+            if prop == 'font' and not value.startswith('14px/1.5 '):
+                found.append(f'{sel} {decl}')
+            elif prop in ('font-size', 'line-height', '--gap', '--gap-s', '--hero'):
+                found.append(f'{sel} {decl}')
+            elif prop.startswith(('padding', 'margin')):
+                if keep.get(sel) == decl or (decl == title and 'h1' in sel):
+                    continue
+                found.append(f'{sel} {decl}')
+    return found
+
+
+def spec_U112b_every_theme_is_the_same_size():
+    """The owner, 2026-11-02: "make sure that the sizing for all the themes
+    is consistent". A theme is colours, faces, edges and corners; the type
+    size, line height and the room between things are every theme's alike,
+    so switching theme never moves the page (mt5 was 11px and tight, win95
+    12px, broker roomier). Only win95's window frame and the title bars of
+    win95 and mt5 (one padding, both) add room."""
+    from panel.css import CSS
+    assert _theme_sizes(CSS) == []
+    assert ':root.t-mt5 body{font:14px/1.5 ' in CSS and ':root.t-win95 body{font:14px/1.5 ' in CSS
+    # sabotage: each way a theme could resize itself is caught
+    assert _theme_sizes(CSS + ':root.t-mt5 body{font:11px/1.35 Tahoma}') != []
+    assert _theme_sizes(CSS + ':root.t-broker{--gap:1.3em}') != []
+    assert _theme_sizes(CSS + ':root.t-broker .card{padding:1em 1.1em}') != []
+    assert _theme_sizes(CSS + ':root.t-dark td{font-size:12px}') != []
+
+
 def spec_U112_win95_and_mt5_are_square_and_the_guard_bites():
     from panel.css import CSS
     assert ':root.t-win95 *,:root.t-mt5 *{border-radius:0!important}' in CSS
