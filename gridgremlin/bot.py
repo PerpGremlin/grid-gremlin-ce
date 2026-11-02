@@ -12,6 +12,7 @@ from .ladder import (SEED_RUNG, anchor_from_rung, fee_floor_for, grid_rungs,
                      guard_band, lot, min_gap, plan_grid, plan_martingale,
                      sellable_base, slide_floor, slide_is_adverse, slide_offset,
                      split, stop_level_for)
+from .live_levels import levels_view
 from .window import window
 from .bot_constants import (FLAT_CONFIRMATIONS, RUNGS_LAG_SECONDS, FROZEN_REMIND_SECONDS, DEFER_ESCALATE_CYCLES, FLAP_LIMIT, FLAP_COOLDOWN, BACKOFF_BASE, BACKOFF_CEILING, HISTORY_WINDOW_DAYS, VENUE_STOP, STOP_RUNG)  # noqa: F401  (re-exported: the specs read them here)
 from .bot_basis import BasisMixin
@@ -101,6 +102,7 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
         self.notional_now = 0.0        # D56: |held| at mark, in quote
         self.paused = None             # D145: retire's pause, set by the
                                        # fleet's RetireWatch: no new exposure
+        self.levels_view = None        # U190: its orders and stop, for the chart
         self.exits_view = None         # U102: a round's take-profits as kept at
                                        # the venue — where, and at what prices
         self.retire_request = None     # D145: retire's stand-down (hold or
@@ -625,6 +627,12 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
                         'nearest': (min((o['price'] for o in waiting),
                                         key=lambda p: abs(p - ref))
                                     if waiting and ref else None)}}
+        # U190: and where, for the position's price chart
+        try:
+            self.levels_view = levels_view(desired, live_keys, ref, self._exit_side,
+                                           self._stop_now(truth))
+        except Exception:                   # noqa: BLE001  the chart's, never the cycle's
+            self.levels_view = None
         self._last_desired = [d for d in desired
                               if d['side'] == self._entry_side] or desired
         if spot_lag:

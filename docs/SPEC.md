@@ -2202,6 +2202,18 @@ eventually pin (T1).
   button: dark's colours and face with the page and panels taken down to near
   black, the panels still a step above the page, every word AA on both.
   dark stays the default. *(owner, 2026-11-02: "a darker darkmode")*
+- **U190** (2026-11-03) A position's price charts draw the bot's own levels: each
+  planned order (solid rests on the exchange, dashed waits for the price, green an
+  exit), a round's take profit, the stop, a DCA's average, liquidation. They are
+  what the engine last planned and the exchange holds, never worked out from today's
+  price, so a slide and a running round are where they are. The engine replaces one
+  file beside its snapshots at each snapshot (`live_levels`, the nearest 60, older
+  than 15 minutes drawn as none), because the snapshot file is read whole at every
+  readout. The chart reaches 1.5 times the price's range for levels, keeping the line
+  a quarter of the height; the rest are named beneath. A filled add-on leaves the plan
+  and its fill is the dot. Nothing is drawn for a stopped row or a Portfolio Bot; a
+  fleet not yet restarted keeps its window and says so. *(owner: "the 24hr price should
+  display grid rungs and tps, as well as dca ladder and tps etc.")*
 - **U189** (2026-11-03) A card shows no APR until the bot has closed something: a
   round, a trip or a matched trip. Before that the only realised figure is the
   opening fee. Runtime and the day's figure stay. *(owner: "hide apr until a round

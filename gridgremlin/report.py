@@ -863,6 +863,10 @@ def _watchdog_view(fleet):
             lines = Path(snap).read_text().strip().splitlines()
             if lines:
                 row = json.loads(lines[-1])
+                from .live_levels import read as read_levels
+                for b, lv in read_levels(snap).items():         # U190
+                    if b in row.get('bots', {}):
+                        row['bots'][b]['levels'] = lv
                 belief = {'age_s': max(0, int(time.time() - row.get('t', 0))),
                           'bots': row.get('bots', {}),
                           'equity': row.get('equity'),        # R19

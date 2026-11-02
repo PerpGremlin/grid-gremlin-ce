@@ -6,6 +6,7 @@ import json
 import time
 from pathlib import Path
 
+from . import live_levels
 from .apply import (bot_identity, check_fleet_unique, check_link_fits,
                     make_botid, widest_rung)
 from .adapters import adapter_for
@@ -1059,6 +1060,10 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
                                        {v: c.env for v, c in clients.items()})
                     with open(snapshot, 'a') as f:
                         f.write(json.dumps(row) + '\n')
+                    try:
+                        live_levels.write(snapshot, bots, time.time())   # U190
+                    except Exception:            # noqa: BLE001
+                        pass                     # the chart's, never the cycle's
             except Exception as e:                       # noqa: BLE001
                 # E7 at the loop: a failed read, a malformed venue response
                 # (truncated JSON, an LB error page — the audit's M4), or an

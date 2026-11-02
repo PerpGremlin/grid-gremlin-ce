@@ -68,7 +68,58 @@ def equity_svg(points, width=120, height=18, labels=False):
             f'<b class="{cls}">{change:+{f}} ({pct:+.1f}%)</b></div>{svg}</div>')
 
 
-def price_svg(series, window=None, liq=None, fills=(), height=180):
+LEVEL_ROOM = 1.5     # U190: how far past the price's own range the chart reaches for levels
+LEVEL_GAP = 12.0     # the margin's labels, stacked rather than overprinted
+
+
+def level_lines(bl, avg=None, stopped=False):
+    """U190: the bot's real levels as (price, kind, label, tooltip), and a word
+    when there are none to draw. From what the engine last planned and the
+    exchange holds: never worked out from today's price. An add-on that has
+    filled is simply not in the plan; its fill is a dot on the line."""
+    if stopped or bl.get('alive') is False:
+        return [], 'stopped: no orders to draw'
+    lv = bl.get('levels')
+    held = (bl.get('exits') or {}).get('prices') or []
+    if not lv and not held:
+        return [], 'its orders are drawn from its fleet\'s next restart'
+    out, near = [], set()
+    for price, side, is_exit, rests in (lv or {}).get('orders') or []:
+        word = 'exit' if is_exit else side.lower()
+        kind = 'exit' if is_exit else 'order'
+        state = 'rests on the exchange' if rests else 'waits for the price to come near'
+        label = '' if kind in near else ('TP' if is_exit else word)  # the nearest of each, named
+        near.add(kind)
+        out.append((price, kind if rests else f'{kind}-wait', label, f'{word} {price:,.6g} · {state}'))
+    known = {r[0] for r in out}
+    for price in held:
+        if price not in known:
+            out.append((price, 'exit', 'TP', f'take profit {price:,.6g} · held by the exchange'))
+    stop = (lv or {}).get('stop')
+    if stop:
+        out.append((stop, 'stop', 'stop', f'stop loss {stop:,.6g}'))
+    if avg:
+        out.append((avg, 'avg', 'avg', f'average entry {avg:,.6g}'))
+    more = (lv or {}).get('more')
+    return out, (f'{more} further orders not drawn' if more else '')
+
+
+def _off_chart(lines, lo, hi):
+    """U190: what the chart could not reach, named: below and above, by kind."""
+    said = []
+    mid = (lo + hi) / 2
+    for where, rows in (('below', [r for r in lines if r[0] < lo]),
+                        ('above', [r for r in lines if r[0] > hi])):
+        for word, kinds in (('order', ('order', 'order-wait')), ('exit', ('exit', 'exit-wait')),
+                            ('stop', ('stop',)), ('average', ('avg',))):
+            got = sorted((r[0] for r in rows if r[1] in kinds), key=lambda p: abs(p - mid))
+            if got:
+                many = f'{len(got)} {word}s' if len(got) > 1 else word
+                said.append(f'{many} {where}, nearest {got[0]:,.6g}')
+    return said
+
+
+def price_svg(series, window=None, liq=None, fills=(), height=180, levels=None, note=''):
     """U65: one position's price over the window, with the bot's own
     levels and fills — the price line in the accent, the window's rungs as
     faint lines and its edges dashed, buys and sells as ringed dots (a
@@ -81,10 +132,18 @@ def price_svg(series, window=None, liq=None, fills=(), height=180):
     t0, t1 = pts[0][0], pts[-1][0]
     fs = [(t, p, s) for t, p, s in fills if t0 <= t <= t1]
     ys = [p for _, p in pts] + [p for _, p, _ in fs]
+    levels = levels or []
     lo, hi = min(ys), max(ys)
+    # U190: the chart reaches for the levels near the price, and no further: a far
+    # rung would squash the day's line flat. The line keeps a quarter of the height
+    reach = (hi - lo or hi * 0.002 or 1.0) * LEVEL_ROOM
+    near = [r[0] for r in levels if lo - reach <= r[0] <= hi + reach]
+    lo, hi = min([lo] + near), max([hi] + near)
     pad_y = (hi - lo) * 0.08 or hi * 0.002 or 1.0
     lo, hi = lo - pad_y, hi + pad_y
-    W, H, L, R, T, B = 800.0, float(height), 4.0, 64.0, 6.0, 18.0
+    if levels:
+        height = max(height, 240)
+    W, H, L, R, T, B = 800.0, float(height), 4.0, 96.0 if levels else 64.0, 6.0, 18.0
     def x(t):
         return L + (t - t0) / ((t1 - t0) or 1.0) * (W - L - R)
     def y(p):
@@ -96,7 +155,7 @@ def price_svg(series, window=None, liq=None, fills=(), height=180):
         dash = ' stroke-dasharray="4 3"'
         for i in range(n):
             lv = lw + i * gap
-            if lo <= lv <= hi:
+            if lo <= lv <= hi and (not levels or i in (0, n - 1)):    # U190: the orders are the rungs
                 edge = i in (0, n - 1)
                 parts.append(f'<line x1="{L}" x2="{W - R}" y1="{y(lv):.1f}" y2="{y(lv):.1f}" stroke="var(--line)" '
                              f'stroke-width="1"{dash if edge else ""}/>')
@@ -125,19 +184,36 @@ def price_svg(series, window=None, liq=None, fills=(), height=180):
     parts.append(f'<text x="{L}" y="{H - 4}" class="ax">{_t.strftime("%d %b %H:%M", _t.gmtime(t0))}</text>'
                  f'<text x="{W - R}" y="{H - 4}" class="ax" text-anchor="end">{_t.strftime("%d %b %H:%M", _t.gmtime(t1))} UTC</text>'
                  f'<text x="{W - R + 4}" y="{y(pts[-1][1]) + 4:.1f}" class="ax">{pts[-1][1]:,.6g}</text>')
+    drawn = sorted((r for r in levels if lo <= r[0] <= hi), key=lambda r: -r[0])
+    style = {'order': ('var(--accent)', '', 'acc'), 'order-wait': ('var(--accent)', '4 4', 'acc'),
+             'exit': ('var(--pos)', '', 'pos'), 'exit-wait': ('var(--pos)', '4 4', 'pos'),
+             'stop': ('var(--neg)', '6 3', 'neg'), 'avg': ('var(--dim)', '2 3', '')}
+    slot = T - LEVEL_GAP
+    for price, kind, label, tip in drawn:                # above the hover strips: each its tooltip
+        colour, dash, cls = style[kind]
+        dashed = f' stroke-dasharray="{dash}"' if dash else ''
+        parts.append(f'<line x1="{L}" x2="{W - R}" y1="{y(price):.1f}" y2="{y(price):.1f}" stroke="{colour}" '
+                     f'stroke-width="1"{dashed}><title>{tip}</title></line>')
+        if label:
+            slot = max(y(price) + 4, slot + LEVEL_GAP)
+            parts.append(f'<text x="{W - R + 4}" y="{slot:.1f}" class="ax {cls}">{label} {price:,.6g}</text>')
     buys = sum(1 for f in fs if f[2] == 'buy')
     key = (f'<div class="dim pkey"><span class="k-line"></span>price · <span class="k-buy"></span>{buys} buys · '
-           f'<span class="k-sell"></span>{len(fs) - buys} sells · rungs of the window{off}</div>')
+           f'<span class="k-sell"></span>{len(fs) - buys} sells · '
+           + ('<span class="k-ord"></span>orders · <span class="k-wait"></span>waiting for the price · '
+              '<span class="k-tp"></span>exits' if levels else 'rungs of the window')
+           + off + ''.join(f' · {w}' for w in _off_chart(levels, lo, hi))
+           + (f' · {note}' if note else '') + '</div>')
     return (f'<svg class="px" viewBox="0 0 {W:.0f} {H:.0f}" width="100%" role="img" '
             f'aria-label="price with the bot\'s levels and fills">{"".join(parts)}</svg>{key}')
 
 
-def price_boxes(prices, window, liq, fills):
+def price_boxes(prices, window, liq, fills, levels=None, note=''):
     """U65: the day and the week of one position's price, or one quiet
     line until the snapshots carry it."""
     prices = prices or {}
-    day = price_svg(prices.get('24h'), window, liq, fills)
-    week = price_svg(prices.get('7d'), window, liq, fills)
+    day = price_svg(prices.get('24h'), window, liq, fills, levels=levels, note=note)
+    week = price_svg(prices.get('7d'), window, liq, fills, levels=levels, note=note)
     if not day and not week:
         return ('<p class="dim">price line: the engine has not recorded this bot\'s price yet '
                 '(it starts with the fleet\'s next restart)</p>')

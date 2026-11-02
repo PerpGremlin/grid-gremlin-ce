@@ -273,7 +273,7 @@ portfolio's assets) behind one word. Click to fold or open; it is remembered.</t
 <tr><td>price, 24 h / 7 d</td><td class="dim">chart</td><td class="dim">on a position's
 page: the price the engine read each minute, the range's grid levels (edges dashed),
 the bot's own buys and sells as dots, liquidation in red. Hover a dot or the line for
-its time.</td></tr>
+its time. The bot's own orders are lines on it: solid rests on the exchange, dashed waits for the price, green is an exit, red dashes the stop; those too far from the price are named beneath.</td></tr>
 <tr><td>equity, 24 h / 7 d</td><td class="dim">account value</td><td class="dim">the
 account's equity as the engine's own snapshot saw it, one point a minute or so: the
 low, the high and the change over the span; hover a point for its time. The small

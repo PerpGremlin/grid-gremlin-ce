@@ -63,6 +63,14 @@ class StopsMixin:
         hit = mark <= sl if long else mark >= sl
         return f'position_sl {sl:.10g} (yours, on the venue)' if hit else None
 
+    def _stop_now(self, truth):
+        """U190: the stop level to draw: the row's on the mark, else the one on
+        the venue's position. None when it has none."""
+        if (self.cfg.get('stop') or {}).get('watch') == 'mark_price':
+            return self._mark_stop_level(truth)[0]
+        idx = self.adapter.position_idx(self._entry_side, False) or 0
+        return truth['positions'].get(idx, {}).get('stop_loss') or None
+
     def _mark_stop_level(self, truth):
         """The `mark_price` stop's level right now and how to say it:
         X10's percent from the round's base, X8's rungs beyond the window,

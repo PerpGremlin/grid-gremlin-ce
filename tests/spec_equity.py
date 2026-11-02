@@ -367,3 +367,178 @@ def spec_H8c_the_coins_it_earned_are_in_the_book_and_its_equity():
     finally:
         pr.plan_portfolio = plan
         pr.SPOT_FEE, pr.PERP_FEE = saved
+
+
+# --- U190: the bot's own levels on its price chart ----------------------------
+
+def _u190_series(mid=100.0, amp=1.0):
+    return [(1000.0 + 60 * i, mid + amp * ((i % 9) - 4) / 4) for i in range(120)]
+
+
+def spec_U190_the_plan_is_kept_with_its_exits_and_what_rests():
+    """The engine says each planned price, whether it is an exit and whether it
+    rests or waits. SABOTAGE: leave the view unset and the chart has nothing;
+    mark every order resting and a far rung reads as placed."""
+    from gridgremlin.bot import Bot
+    from gridgremlin.events import Notifier
+    from spec_pairing import ADAPTER, _cfg
+    from spec_loop import FakeVenue
+    venue = FakeVenue(mark=60500.0)
+    bot = Bot(_cfg(), ADAPTER, venue, Notifier(sink=lambda ln: None), gen_seed=1)
+    assert bot.levels_view is None
+    bot.cycle()
+    orders = bot.levels_view['orders']
+    assert orders and all(o[1] == 'Buy' and not o[2] for o in orders)   # flat: entries alone
+    resting = {o[0] for o in orders if o[3]}
+    assert resting == {o['price'] for o in venue.orders}                # what is placed is what rests
+    assert any(not o[3] for o in orders)                                # W1: the rest wait
+    assert [abs(o[0] - 60500.0) for o in orders] == sorted(abs(o[0] - 60500.0) for o in orders)
+
+
+def spec_U190_a_dcas_ladder_stays_where_the_round_put_it():
+    """The creation chart works a ladder out from today's price; a running round's
+    is where it began. Here the mark moves and the planned add-ons do not.
+    SABOTAGE: build them from the mark and they follow it."""
+    from gridgremlin.bot import Bot
+    from gridgremlin.events import Notifier
+    from spec_round import ADAPTER, FakeVenue, _cfg
+    venue = FakeVenue()
+    bot = Bot(_cfg(), ADAPTER, venue, Notifier(sink=lambda ln: None), gen_seed=1)
+    bot.cycle()
+    bot.cycle()
+    first = sorted(o[0] for o in bot.levels_view['orders'] if not o[2])
+    assert first
+    venue.mark *= 1.002
+    bot.cycle()
+    assert sorted(o[0] for o in bot.levels_view['orders'] if not o[2]) == first
+
+
+def spec_U190_the_cap_keeps_the_nearest_and_says_how_many_it_left():
+    """A row of thousands of rungs must not fill the file. SABOTAGE: no cap and
+    the view is the whole plan; cap from the far end and the next order is lost."""
+    from gridgremlin.live_levels import MAX_ORDERS, levels_view
+    desired = [{'price': 100.0 + i, 'side': 'Sell', 'rung': i} for i in range(MAX_ORDERS + 25)]
+    view = levels_view(desired, {(0, 'Sell')}, 99.0, 'Sell', 90.0)
+    assert len(view['orders']) == MAX_ORDERS and view['more'] == 25
+    assert view['orders'][0] == [100.0, 'Sell', True, True] and view['stop'] == 90.0
+
+
+def spec_U190_the_file_is_replaced_and_an_old_one_draws_nothing():
+    """Replaced, never appended: the snapshot file already runs to 100 MB. A fleet
+    that stopped writing has no live plan. SABOTAGE: read any age and a stopped
+    fleet's orders are drawn as live; a torn file must read as none."""
+    import tempfile
+    from pathlib import Path
+    from gridgremlin.live_levels import STALE_S, path_for, read, write
+
+    class B:
+        botid, alive, levels_view = 'x', True, {'orders': [[1.0, 'Buy', False, True]], 'more': 0, 'stop': None}
+
+    class Dead(B):
+        botid, alive = 'dead', False
+    with tempfile.TemporaryDirectory() as d:
+        snap = Path(d) / 'snapshots-x.jsonl'
+        write(snap, [B(), Dead()], 1000.0)
+        write(snap, [B(), Dead()], 1001.0)
+        assert list(read(snap, 1001.0)) == ['x']
+        assert read(snap, 1001.0 + STALE_S + 1) == {}
+        path_for(snap).write_text('{torn')
+        assert read(snap) == {}
+        assert read(Path(d) / 'none.jsonl') == {}
+
+
+def spec_U190_far_levels_are_named_and_never_squash_the_line():
+    """A rung 40% away would flatten the day's line against the edge. The chart
+    reaches for what is near and names the rest beneath. SABOTAGE: scale to every
+    level and the line's height collapses; drop the words and a level vanishes."""
+    import re
+    from panel.drawings import level_lines, price_svg
+    bl = {'levels': {'orders': [[103.0, 'Sell', True, True], [60.0, 'Buy', False, False],
+                                [58.0, 'Buy', False, False]], 'more': 0, 'stop': 40.0},
+          'exits': {'at': 'position', 'prices': [97.5]}}
+    lines, note = level_lines(bl, 99.0)
+    assert note == ''
+    svg = price_svg(_u190_series(), None, None, (), levels=lines)
+    assert 'TP 103' in svg and 'TP 97.5' in svg and 'avg 99' in svg and 'stroke-dasharray="2 3"' in svg
+    assert '2 orders below, nearest 60' in svg and 'stop below, nearest 40' in svg
+    pts = re.search(r'<polyline points="([^"]+)"', svg).group(1).split()
+    ys = [float(p.split(',')[1]) for p in pts]
+    assert max(ys) - min(ys) > 240 * 0.25                                # a quarter of the height
+
+
+def spec_U190_what_there_is_no_plan_for_says_so():
+    """A stopped row draws no orders; a fleet not restarted yet says when they
+    come, and keeps the window it always drew. SABOTAGE: draw a stopped row's plan
+    and it reads as live."""
+    from panel.drawings import level_lines, price_svg
+    plan = {'levels': {'orders': [[99.0, 'Buy', False, True]], 'more': 3, 'stop': None}}
+    assert level_lines(plan, stopped=True) == ([], 'stopped: no orders to draw')
+    assert level_lines(dict(plan, alive=False))[1] == 'stopped: no orders to draw'
+    lines, note = level_lines(plan)
+    assert lines[0][1] == 'order' and note == '3 further orders not drawn'
+    assert level_lines({'alive': True})[0] == [] and 'next restart' in level_lines({'alive': True})[1]
+    old = price_svg(_u190_series(), {'lower': 99.0, 'upper': 101.0, 'rungs': 5}, None, (),
+                    note='its orders are drawn from its fleet\'s next restart')
+    assert 'rungs of the window' in old and 'next restart' in old
+
+
+def spec_U190_a_portfolio_bot_has_no_chart_to_mark():
+    """Its page stays as it is. SABOTAGE: drop its guard and it reads a window it
+    does not have."""
+    from panel.position_view import position_body
+    assert 'price, 24 h' not in position_body(0, 'pfox', {'terms': {'pfox': {'strategy': 'portfolio'}},
+                                                          'bots': {}}, {'pfox': {}}, {}, ())
+
+
+def spec_U190_the_readout_carries_the_plan_to_the_page():
+    """The file reaches the belief the page reads, for the bots the snapshot names.
+    The engine's loop writes it beside the snapshot. SABOTAGE: drop the read from
+    the readout, or the write from the loop, and the chart stays empty."""
+    import inspect
+    import json
+    import tempfile
+    import time
+    from pathlib import Path
+    from gridgremlin import main as engine
+    from gridgremlin.live_levels import path_for
+    from gridgremlin.report import _watchdog_view
+    with tempfile.TemporaryDirectory() as d:
+        snap, wd = Path(d) / 'snapshots-x.jsonl', Path(d) / 'watchdog.json'
+        snap.write_text(json.dumps({'t': time.time(), 'bots': {'x': {'alive': True}}}) + '\n')
+        wd.write_text(json.dumps({'snapshot': str(snap), 'positions': {}}))
+        view = {'orders': [[1.0, 'Buy', False, True]], 'more': 0, 'stop': None}
+        path_for(snap).write_text(json.dumps({'t': time.time(), 'bots': {'x': view, 'gone': view}}))
+        bots = _watchdog_view({'watchdog': str(wd)})['belief']['bots']
+        assert bots == {'x': {'alive': True, 'levels': view}}
+    assert 'live_levels.write(snapshot, bots,' in inspect.getsource(engine)
+
+
+def spec_U190_a_broken_chart_never_costs_a_cycle():
+    """The view is worked out inside the trading cycle. A failure there leaves
+    the chart empty and the orders placed. SABOTAGE: let it raise and the bot
+    loses every cycle over a drawing; catch less in the fleet's write and a value
+    JSON refuses ends the cycle."""
+    import inspect
+    from gridgremlin.adapters import LinearAdapter
+    from gridgremlin.bot import Bot
+    from gridgremlin.config import validate_config
+    from gridgremlin.events import Notifier
+    from gridgremlin.main import run
+    from spec_loop import FakeVenue
+    adapter = LinearAdapter({'symbol': 'BTCUSDT', 'qty_step': 0.001, 'price_tick': 0.1,
+                             'min_qty': 0.001, 'min_notional': 5.0, 'settle_coin': 'USDT'})
+    cfg = validate_config({'market_type': 'linear', 'symbol': 'BTCUSDT', 'side': 'long',
+                           'capital': 1000.0, 'leverage': 10, 'upper': 70000.0, 'lower': 50000.0,
+                           'rungs': 21, 'spacing_type': 'fixed'})
+    bot = Bot(cfg, adapter, FakeVenue(mark=60000.0), Notifier(sink=[].append), gen_seed=1)
+    bot.cycle()
+    assert bot.levels_view and bot.levels_view['orders']          # it does draw
+    def broken(truth):
+        raise KeyError('a missing field')
+    bot._stop_now = broken
+    bot.cycle()
+    assert bot.levels_view is None and bot.alive
+    src = inspect.getsource(run)
+    assert 'live_levels.write(snapshot, bots, time.time())' in src
+    after = src.split('live_levels.write(snapshot, bots, time.time())', 1)[1]
+    assert after.lstrip().startswith('# U190') and 'except Exception:' in after.split('\n')[1]

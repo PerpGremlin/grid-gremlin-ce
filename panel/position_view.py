@@ -1,6 +1,6 @@
 """One position's page (U56): the exchange's view first, then the price, then the full card. Out of render.py (D91 step 3)."""
 from .card import _plain_name, card
-from .drawings import price_boxes
+from .drawings import level_lines, price_boxes
 from .html_bits import REFRESH_S, coin_of, esc, units_of
 
 
@@ -66,6 +66,11 @@ def position_body(idx, botid, contract, belief, prices=None, fills=()):
         if rng and off and rng.get('rungs', 0) > 1:
             gap = (rng['upper'] - rng['lower']) / (rng['rungs'] - 1)
             rng = dict(rng, lower=rng['lower'] + off * gap, upper=rng['upper'] + off * gap)
-        liq = ((belief.get(botid) or {}).get('margin') or {}).get('liq')
-        xch += price_boxes(prices, rng, liq, fills)
+        bl = belief.get(botid) or {}
+        liq = (bl.get('margin') or {}).get('liq')
+        avg = (b or {}).get('avg_cost') if ((terms or {}).get('strategy') == 'martingale'
+                                            and (b or {}).get('position')
+                                            and (b or {}).get('whole') is not False) else None
+        lines, note = level_lines(bl, avg, stopped=bool(contract.get('stopped')))
+        xch += price_boxes(prices, rng, liq, fills, lines, note)
     return f'{xch}<div class="cards one">{card(idx, botid, b, contract, belief, full=True)}</div>'

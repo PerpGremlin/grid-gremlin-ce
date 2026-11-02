@@ -124,9 +124,10 @@ align-items:baseline}.hero .fleet{display:contents}.hero .num{text-align:right}
 .eqnote{max-width:63em;font-size:.88em;margin:0 0 var(--gap-s)}
 .eqbox{border:var(--bw) solid var(--edge);border-radius:6px;padding:.35em .6em}.eqlab{display:flex;gap:var(--gap-s);justify-content:space-between;font-size:.9em}
 svg.eq{display:block}svg.px{display:block;max-width:calc(63em + 2*var(--gap));overflow:visible}
-svg.px .ax{font-size:11px;fill:var(--dim)}svg.px .ax.neg{fill:var(--neg)}
+svg.px .ax{font-size:11px;fill:var(--dim)}svg.px .ax.neg{fill:var(--neg)}svg.px .ax.pos{fill:var(--pos)}svg.px .ax.acc{fill:var(--accent)}
 .pkey{font-size:.9em;margin:.2em 0 var(--gap-s)}.pkey span{display:inline-block;vertical-align:middle;margin:0 .35em 0 .6em}
 .k-line{width:1.2em;height:2px;background:var(--accent)}.k-buy,.k-sell{width:.6em;height:.6em;border-radius:50%}
+.k-ord,.k-wait,.k-tp{width:1.2em;height:0;border-top:1.5px solid var(--accent)}.k-wait{border-top-style:dashed}.k-tp{border-top-color:var(--pos)}
 .k-buy{background:var(--pos)}.k-sell{background:var(--neg)}.pnl .rate{color:var(--dim);font-size:.92em}.pnl .rate b{font-weight:normal}
 .page{display:grid;grid-template-columns:14em minmax(0,1fr);gap:0 calc(var(--gap)*1.5)}
 nav.side{position:sticky;top:var(--hero);align-self:start;max-height:calc(100vh - var(--hero));overflow:auto;
