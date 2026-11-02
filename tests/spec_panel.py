@@ -651,9 +651,10 @@ def spec_U50_the_exchange_boxes_ride_in_a_strip_pinned_to_the_top():
     strip = strip.split('<div class="hero">', 1)[1]
     assert strip.count('<div class="fleet">') == 2 and strip.index('>demo<') < strip.index('>hl<')
     demo, hl = strip.split('<div class="fleet">')[1:]
-    assert 'href="#fleet0"' in demo and '<span class="big num neg">-1.86 <span class="dim">USDT</span></span>' in demo
+    # D163: with account tabs the name opens its account's tab; the public page (no tabs) jumps
+    assert 'href="/?acct=demo" data-acct="demo"' in demo and '<span class="big num neg">-1.86 <span class="dim">USDT</span></span>' in demo
     assert '>1 bots</span><span></span><span class="dim">leverage —</span>' in demo
-    assert 'href="#fleet1"' in hl and '<span class="big num pos">+13.10 <span class="dim">USDT</span></span>' in hl
+    assert 'href="/?acct=hl" data-acct="hl"' in hl and '<span class="big num pos">+13.10 <span class="dim">USDT</span></span>' in hl
     assert '1 stopped</b><span class="dim">leverage 2.78x</span>' in hl and ' dead<' not in hl
     assert '.hero{display:grid;grid-template-columns:repeat(7,max-content)' in CSS   # squared; the 7th is U63's line
     assert '.hero .fleet{display:contents}' in CSS
@@ -704,7 +705,7 @@ def spec_U86_the_sites_look_each_part_boxed_and_the_right_half_never_slides():
     the gap under it — exactly where it starts — so it never moves."""
     from panel.server import CSS, render
     page = render([('demo', CONTRACT), ('hl', CONTRACT)])
-    assert page.count('<section class="fbox"><h1 id="fleet') == 2
+    assert page.count('<section class="fbox"><div class="acchead"><h1 id="fleet') == 2      # D163: the header row
     assert page.count('</details></section>') == 2
     assert ':root{--bg:#0b0f0c;--fg:#d7e4da;--dim:#7c8c80;--line:#1c2620;--edge:#2c3d31;' in CSS
     assert '--pos:#36d17a;--neg:#e5534b;--accent:#36d17a;' in CSS and '--bw:2px}' in CSS
@@ -2459,7 +2460,7 @@ def spec_U96_the_table_and_the_card_agree_on_state_and_window():
     gap = (0.23 - 0.155) / 15
     lo = 0.155 + 2 * gap
     assert f"{(0.2017 - lo) / 0.2017 * 100:.1f}%" in row
-    assert 'Stopped (by its rule)' in render([('demo', c)]).split('spoADAUSDTl')[1]
+    assert 'Stopped (by its rule)' in render([('demo', c)]).split('class="cards"')[1].split('spoADAUSDTl')[1]
 
 
 def spec_P6b_only_the_panels_own_scripts_run_and_its_forms_carry_a_secret():
@@ -2846,4 +2847,5 @@ def spec_U146_sabotage_without_the_words_the_card_reads_running():
         page = render([('demo', _frozen_contract())])
     finally:
         pc.frozen_words = real
+    page = page.split('class="cards"')[1]          # the card (D163: the box's needs-a-look reads its own)
     assert 'Frozen since' not in page and 'Running · in position' in page

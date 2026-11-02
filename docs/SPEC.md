@@ -2474,6 +2474,45 @@ eventually pin (T1).
   window is drawn and the switch shows one, 24 h without script. Nothing
   shows for a missing or stale readout (U138's ten minutes). Sabotage:
   with no age limit, an hour-old change reads as now.
+- **U170** (D163, 2026-11-01) The bots' half opens with a tab strip:
+  "all", then one tab per account by its name, each with its bot count and
+  a red dot when the account or a bot on it needs a look (U85's list, the
+  account's red MMR or free share). One account alone has no tabs; an
+  export and the public page never do. Sabotage: without the needs-a-look
+  reading no tab is red.
+- **U171** (D163) `?acct=<name>` is read on the server: that account's
+  box and cards alone, the box keeping its own index; "all", none or a name
+  no account has shows every account. The tabs keep the rest of the
+  address (view, the right half's pick), the arrange choice carries the
+  tab, and the table face is filtered the same. Sabotage: a chooser that
+  ignores the address shows every account.
+- **U172** (D163) The tab survives the refresh and the browser tab: the
+  route passes `?acct=` on every answer and the refresh fetches the page's
+  own address; with script a tab is a swap (no reload), kept per browser
+  tab (gg-acct), carried on every in-page pick, and given back — the other
+  accounts hidden at once, the address corrected — to an address that
+  names none. Sabotage: a route that drops the tab serves every account.
+- **U173** (D163) The account box's header row holds the name and
+  network, Total P&L, equity, account leverage (now, or if every order
+  filled, by R19's switch), available to trade (U100's red kept) and the
+  one since switch (U154), before anything folded. Sabotage: without the
+  header cells the numbers are not in the row.
+- **U174** (D163) Everything else in the box — the P&L's parts, all-time,
+  leverage in full, MMR, free to trade, balances and debt (U138), what
+  changed (D162), the equity windows (U91) — sits in one "account details"
+  fold, shut by default and remembered per browser tab (its data-k); the
+  cards' fold stays open. Sabotage: an open fold, or a line moved outside
+  it, is caught.
+- **U175** (D163) What needs a look on an account stands in its box,
+  never folded: each of its bots on U85's list (a link opening the bot),
+  a red MMR, a free share under 20%; nothing drawn when nothing is wrong.
+  Sabotage: without the reading the box says nothing.
+- **U176** (D163) The cards are a grid of as many a row as fit (at least
+  18em each, one column on a phone), a slim Portfolio Bot card one cell;
+  the account header wraps; what changed scrolls inside its box; on a
+  phone the tab strip scrolls in its own row. Measured in headless Chrome
+  over five accounts: no page scrolls sideways at 1280, 1920 or 2560 px.
+  Sabotage: a stylesheet without the grid is caught.
 - **U111** A carry bot's hedge may differ by coin — inverse, usdt or usdc,
   the common one above and the others named ("SOL usdt") — and the form
   shows each coin's three perpetuals side by side: what a short was paid

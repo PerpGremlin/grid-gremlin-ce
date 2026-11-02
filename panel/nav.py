@@ -132,7 +132,7 @@ def page_links(table=False, view='all'):
             + '<a href="/key">key</a>')
 
 
-def view_block(table=False, view='all', here='/'):
+def view_block(table=False, view='all', here='/', acct='all'):
     """D161: the view switches, one control each, every one naming what is
     on now (as theme does): cards or table; arrange (a choice that goes on
     change, a go button without script); accounts full or folded (cards
@@ -147,7 +147,8 @@ def view_block(table=False, view='all', here='/'):
                    for k, w in VIEWS)
     arrange = (f'<form method="get" action="{here}" class="arrange"><label>arrange '
                f'<select name="view" data-go>{opts}</select></label>'
-               '<noscript><button class="quiet">go</button></noscript></form>')
+               + (f'<input type="hidden" name="acct" value="{acct}">' if acct != 'all' else '')   # D163
+               + '<noscript><button class="quiet">go</button></noscript></form>')
     # U59: every account's cards behind its heading and its box
     accounts = ('' if table else
                 '<button type="button" class="quiet tog" data-tog="acct">accounts: full</button>')
@@ -178,7 +179,7 @@ def side_nav():
 PAGE_END = '</main></div>'
 
 
-def nav_panel(table, view):
+def nav_panel(table, view, acct='all'):
     """U51, D161: the bots' page's column, pinned while the page scrolls:
     the name and overview (each back to the overview, the arrangement
     kept), new bot, control, results, key; then the view block and the
@@ -187,6 +188,6 @@ def nav_panel(table, view):
     title = TITLE.replace('href="/"', f'href="/{"" if view == "all" else "?view=" + view}"'
                           + ('' if table else ' data-pick'))
     return (f'<nav class="side">{title}<h3>pages</h3>{page_links(table, view)}'
-            f'{view_block(table, view, here)}'
+            f'{view_block(table, view, here, acct)}'
             '<button class="quiet theme" data-theme>theme</button>'
             f'{new_dialog(not table)}</nav>')

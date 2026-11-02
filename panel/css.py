@@ -248,6 +248,34 @@ padding-bottom:.55em;border-bottom:1px solid var(--edge);margin-top:0}
 .card .foot{border-top:1px solid var(--edge);padding-top:.55em;margin-bottom:0}
 .card .foot a[href]{padding:.1em .6em;font-size:.92em}
 .card span.big.dim{font-size:1.1em}
+/* D163: the left half fits the screen — account tabs across its top, each
+account box one header row (the name, Total P&L, equity, leverage, free,
+the since switch) with its details folded, the cards as many a row as fit
+and tighter; nothing scrolls sideways (a phone scrolls the tabs alone) */
+.acctabs{display:flex;flex-wrap:wrap;gap:.25em;margin:0 0 var(--gap-s)}
+.acctabs a.tab{margin:0;padding:.15em .6em;white-space:nowrap}.acctabs .n{opacity:.7;font-size:.9em}
+.acctabs .dot{display:inline-block;width:.55em;height:.55em;border-radius:50%;background:var(--neg);margin-left:.35em;vertical-align:middle}
+.acctbox[hidden]{display:none}
+.acchead{display:flex;flex-wrap:wrap;align-items:center;gap:.3em 1.3em;margin:var(--gap-s) 0 .3em}
+.acchead h1{margin:0;flex:1 1 100%}.acchead h1 .meta{display:inline;margin:0 0 0 .4em}
+.acchead .pnl{margin:0;padding:.2em .6em}.acchead .pnl .big{font-size:1.3em}
+.acchead .hc{white-space:nowrap}.acchead .hc .lev-filled{white-space:normal}.acchead button.tog{margin:0}
+ul.watch.look{margin:.2em 0 .3em}
+details.acctd{margin:.2em 0 .4em}details.acctd>summary{color:var(--dim)}details.acctd>summary:hover{color:var(--accent)}
+details.acctd[open]>summary{margin-bottom:.3em}
+.acctchg{overflow-x:auto;max-width:100%}
+.cards{grid-template-columns:repeat(auto-fill,minmax(min(18em,100%),1fr));gap:var(--gap-s)}
+.cards .card{padding:.4em .65em;line-height:1.35}.cards .card>div{margin:.25em 0}
+.cards .card>div:first-child{padding-bottom:.3em;margin-top:0}
+.cards .card .pnl{padding:.25em .55em;margin:.25em 0}.cards .card .foot{padding-top:.3em}
+.cards .card .big{font-size:1.3em}.cards .card .rng{gap:.4em}.cards .card .bar{margin:.2em 0}
+.cards .card.pfo.slim{grid-column:auto;max-width:none;width:auto;justify-self:stretch}.cards .card{min-width:0}
+.cards .card .foot .code{font-size:.85em;line-height:1.25}
+/* the bots' half a little wider than the picked item's: three cards a row from a 1920 screen */
+.split{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr)}
+section.fbox{padding:0 .8em .4em;margin:0 0 var(--gap)}details.acct>summary{margin:0 0 .3em}
+@media(max-width:40em){.acctabs{flex-wrap:nowrap;overflow-x:auto;padding-bottom:.2em}
+.hero{position:static}}
 /* D105: the published read-only page — the note on top, and the panel's
 links that lead nowhere there drawn as buttons that cannot be pressed */
 .pubnote{margin:-2em -2em 2em;padding:.5em 2em;background:color-mix(in srgb,var(--accent) 14%,var(--bg));

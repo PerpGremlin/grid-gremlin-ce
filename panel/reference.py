@@ -405,15 +405,35 @@ document.addEventListener('click',function(e){
   else if('back' in d)history.back();else if(window.ggTheme)ggTheme(1);return;}
  var o=e.target.closest&&e.target.closest('button[data-once]');
  if(o)setTimeout(function(){o.disabled=true;o.textContent=o.dataset.once;},0);
+ var ta=e.target.closest&&e.target.closest('a[data-acct]');
+ if(ta&&!e.ctrlKey&&!e.metaKey&&!e.shiftKey&&!e.button&&document.querySelector('.acctabs')){
+  e.preventDefault();var k=ta.dataset.acct,tu=new URL(location.href);tu.hash='';tu.searchParams.set('acct',k);
+  S.setItem('gg-acct',k);swap(tu.href).then(function(ok){
+   if(ok){history.pushState(null,'',tu.pathname+tu.search);window.scrollTo(0,0);}else if(ok===false)location.href=tu.href;})
+  .catch(function(){location.href=tu.href;});return;}
  var a=e.target.closest&&e.target.closest('a[data-pick]');
  if(!a||e.ctrlKey||e.metaKey||e.shiftKey||e.button)return;
- var u=new URL(a.href,location.href),v=new URLSearchParams(location.search).get('view');
+ var u=new URL(a.href,location.href),here=new URLSearchParams(location.search),v=here.get('view');
  if(u.origin!==location.origin||u.pathname!==location.pathname)return;
  if(v)u.searchParams.set('view',v);
+ if(here.get('acct')&&!u.searchParams.has('acct'))u.searchParams.set('acct',here.get('acct'));
  e.preventDefault();swap(u.href).then(function(ok){
   if(ok)history.pushState(null,'',u.pathname+u.search);else if(ok===false)location.href=u.href;})
  .catch(function(){location.href=u.href;});});
-window.addEventListener('popstate',function(){swap(location.href).catch(function(){});});
+window.addEventListener('popstate',function(){
+ if(document.querySelector('.acctabs'))S.setItem('gg-acct',new URLSearchParams(location.search).get('acct')||'all');
+ swap(location.href).catch(function(){});});
+// D163: the account tab, kept per browser tab — the address names it
+// (?acct=, the server shows that account alone); an address that names
+// none (a page's way back to the overview) gets the kept one: the other
+// accounts hidden at once, the address corrected, so every later refresh
+// asks for that account alone
+(function(){var q=new URLSearchParams(location.search),k=q.get('acct'),t=document.querySelector('.acctabs');
+ if(!t)return;if(k){S.setItem('gg-acct',k);return;}
+ k=S.getItem('gg-acct');if(!k||k==='all'||!t.querySelector('[data-acct="'+k+'"]'))return;
+ document.querySelectorAll('.acctbox[data-box]').forEach(function(b){b.hidden=b.dataset.box!==k;});
+ t.querySelectorAll('[data-acct]').forEach(function(a){a.classList.toggle('pick',a.dataset.acct===k);});
+ q.set('acct',k);history.replaceState(null,'',location.pathname+'?'+q.toString()+location.hash);})();
 var m=document.querySelector('meta[name="gg-refresh"]'),every=m?Number(m.content):0;
 if(every>0)setInterval(function(){if(busy||dirty())return;
  swap(location.href,1).catch(function(){});},every*1000);

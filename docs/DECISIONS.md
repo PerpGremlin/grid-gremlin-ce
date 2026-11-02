@@ -1534,6 +1534,35 @@ stands unless the owner corrects it.
   live panel: never in an export, and taken off the public page (which a
   fresh readout had put D160's lines on). Engine trading behaviour, the
   mainnet double gate (D25, D64, D97) and D29 are untouched.
+- **D163 — The left half fits the screen (2026-11-01).** The owner: "you
+  just have to scroll down so much. maybe instead of scrolling we have tabs
+  for each account on the left half. and theres also a lot of blank space."
+  **Account tabs:** a strip across the top of the bots' half — "all", then
+  one tab per account by its name — each with its bot count and a red dot
+  when the account or one of its bots needs a look (the overview's own
+  list, U85, and the account's red MMR or free share). A tab shows that
+  account's box and cards alone; "all" is the stacked view as before. The
+  choice is in the address (`?acct=`), so the refresh, which fetches the
+  page's own address, keeps it; with script it is kept per browser tab too,
+  carried on every in-page pick, and given back to an address that names
+  none. Without script the tabs are plain links read on the server. The
+  arrange choice and the view switches apply within a tab; the strip's
+  account names open their tab. An export and the public page have no
+  tabs: every account stacked. **The account box:** one header row — the
+  name and network, Total P&L, equity, account leverage (now, or if every
+  order filled, by the same switch), available to trade, and D162's since
+  switch. What needs a look on that account stands under it and is never
+  folded. Every other line — the P&L's parts, all-time, leverage in full,
+  MMR, free to trade, balances and debt (U138), what changed (D162), the
+  equity windows (U91) — sits behind one "account details" fold, shut by
+  default, the click remembered per browser tab. **The cards** fill the
+  half: as many a row as fit, at least about 250 pixels each, a Portfolio
+  Bot's slim card one cell like any other, each card's padding and line
+  spacing tighter with nothing dropped; the bots' half is a little wider
+  than the picked item's (5 : 4). Nothing scrolls sideways on a desktop
+  screen; on a phone the tab strip scrolls in its own row, the cards are
+  one column and the pinned strip scrolls away. Layout only: no figure,
+  no colour token and no engine behaviour changes.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

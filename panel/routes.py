@@ -410,7 +410,7 @@ class Handler(RehearsePages, CarryFlowPages, CreateFlowPages, FleetAdminPages, C
         body = (json.dumps({lb: c for lb, c in labelled})
                 if self.path == '/data' else
                 render(labelled, table=base == '/table', view=view, pane=pane,
-                       notice=self._drift_notice()))
+                       notice=self._drift_notice(), acct=q.get('acct'), query=q))
         self.send_response(200)
         self.send_header('Content-Type',
                          'application/json' if self.path == '/data'

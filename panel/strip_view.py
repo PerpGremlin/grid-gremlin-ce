@@ -208,7 +208,7 @@ def _window(w, venue):
     return f'{head}{btab}{ptab}<h4>money in/out of the account</h4><p>{money}</p>'
 
 
-def account_change_lines(contract, now=None):
+def account_change_lines(contract, now=None, switch=True):
     """D162 (U150–U153): what changed on the account — its coins and its
     perpetual positions, since 1 h, 24 h or 7 d (one switch naming what is
     on, D161's look) — and its positions no bot runs. The readout's own
@@ -221,9 +221,11 @@ def account_change_lines(contract, now=None):
     if not change or gen is None or now - gen / 1000.0 > READOUT_STALE_S:
         return ''
     figs = contract.get('account') or {}
+    # D163: the account box carries the switch in its header row (switch=False)
     out = ['<div class="parts acctchg"><b>what changed on the account</b> '
-           '<button type="button" class="quiet tog" data-tog="since">since: '
-           + ''.join(f'<span class="s{k}">{w}</span>' for k, w in SINCE_WORDS) + '</button>']
+           + ('<button type="button" class="quiet tog" data-tog="since">since: '
+              + ''.join(f'<span class="s{k}">{w}</span>' for k, w in SINCE_WORDS) + '</button>'
+              if switch else '')]
     for venue, got in sorted(change.items()):
         name = esc(TIER_NAMES.get((venue, (figs.get(venue) or {}).get('tier')), venue))
         out.append(f'<div><b>{name}</b>')
@@ -294,14 +296,21 @@ def portfolio_total(contract):
     return portfolio_rows_total(belief) or 0.0
 
 
-def hero_strip(labelled):
+def hero_strip(labelled, tabs=False):
     """U50 (the owner: the exchange boxes "get lost while scrolling"): a
     strip pinned to the top of the page, one row per fleet — its name and
     network, the exchange's total after fees, bots and how many are dead,
     the account's leverage now — read from the same contract as the box
-    below, so the two can never disagree; the name jumps to the box."""
+    below, so the two can never disagree; the name jumps to the box —
+    with account tabs (D163), to its account's tab."""
     from gridgremlin.report import account_leverage
     lines = []
+
+    def jump(label, idx):
+        if not tabs:
+            return f'#fleet{idx}'
+        from .render import acct_key
+        return f'/?acct={acct_key(label)}" data-acct="{acct_key(label)}'
     for idx, (label, c) in enumerate(labelled):
         live = [b for b in c['bots'].values()                         # an unpriced inverse
                 if b is not None and b.get('realized') is not None]    # book: no dollars yet
@@ -334,7 +343,7 @@ def hero_strip(labelled):
         # the words' lengths (the owner: "so it looks squared")
         spark = equity_svg(((c.get('equity') or {}).get('24h')), 120, 18)       # U63
         lines.append(
-            f'<div class="fleet"><a href="#fleet{idx}">{esc(label)}</a>{tier_badge(c)}'
+            f'<div class="fleet"><a href="{jump(label, idx)}">{esc(label)}</a>{tier_badge(c)}'
             f'<span class="big num {_num_cls(total)}">{total:+,.2f} '
             f'<span class="dim">{venue_money(c)}</span>'
             + (f' <span class="neg">+ {gap} unpriced</span>' if gap else '')        # U95
