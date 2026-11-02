@@ -1746,3 +1746,26 @@ def spec_D166_a_remainder_goes_to_the_next_exit_not_the_nearest():
                        basis=60000.0, held_rungs=[3, 14])
     sells = {o['rung']: o['qty'] for o in orders if o['side'] == 'Sell'}
     assert sells == {11: LOT, 15: 0.003}
+
+
+def spec_D166_a_remainder_under_the_lowest_lot_keeps_resting():
+    """Rung 11's exit rests half sold, under rung 11's own lot, so the floor
+    leaves it off the window's free exits. It stays, sized to itself, beside
+    the lot's own exit one rung up. SABOTAGE: look for it among the free exits
+    and it is cancelled, its coins poured onto rung 12."""
+    from gridgremlin.ladder import own_lot
+    cfg = _cfg()
+    lot_q = own_lot(cfg, ADAPTER, 11, 0)
+    orders = plan_grid(cfg, ADAPTER, 60500.0, held_base=lot_q + 0.002, basis=61000.0,
+                       held_rungs=[11], resting_exit_rungs=frozenset({11}))
+    sells = {o['rung']: o['qty'] for o in orders if o['side'] == 'Sell'}
+    assert sells == {11: 0.002, 12: lot_q}
+
+
+def spec_D166_a_residue_never_keeps_an_exit_the_ref_has_passed():
+    """Resting under the ref, that exit would sell at once below the mark (G13):
+    the residue goes with the lot instead. SABOTAGE: drop the check on the ref
+    and rung 9's order stays in the plan."""
+    orders = plan_grid(_cfg(), ADAPTER, 60500.0, held_base=LOT + 0.002, basis=60000.0,
+                       held_rungs=[10], resting_exit_rungs=frozenset({9}))
+    assert 9 not in {o['rung'] for o in orders if o['side'] == 'Sell'}

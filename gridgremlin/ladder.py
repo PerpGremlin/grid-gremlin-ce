@@ -329,11 +329,16 @@ def paired_exits(cfg, adapter, split_ref, held_rungs, n_lots, window_exits,
             displaced -= 1
     if residue > 0:
         # D166: a residue keeps the exit it rests on (a partly filled exit's
-        # remainder), or takes one when nothing else would sell it
-        for j, price in free:
-            if j not in taken and (j in resting or not out):
-                out.append((j, price, residue))
-                break
+        # remainder), wherever that is beyond the ref, even under the lots the
+        # fills name; or takes one when nothing else would sell it
+        held = next((j for j in sorted(resting, reverse=not long) if j not in taken
+                     and beyond(adapter.round_price(lattice_price(cfg, j)))), None)
+        if held is not None:
+            out.append((held, adapter.round_price(lattice_price(cfg, held)), residue))
+        elif not out:
+            spare = next(((j, p) for j, p in free if j not in taken), None)
+            if spare:
+                out.append((*spare, residue))
     out.sort(key=lambda ip: ip[1], reverse=not long)
     return out
 

@@ -277,8 +277,8 @@ eventually pin (T1).
   fills name, what is left counts in whole lots at the ref, and a part under half
   a lot in none: it keeps an exit already resting, or takes one if nothing else
   would sell it, sized to itself. An exit partly filled past half keeps its
-  remainder resting, unless it sits at or below the lowest named lot's rung,
-  where it is cancelled and poured. A displaced lot takes an exit already resting
+  remainder resting wherever it sits beyond the ref, under the lowest named
+  lot's rung too. A displaced lot takes an exit already resting
   before a nearer one. `spec_D166_*`, each with its sabotage.)*
   *(2026-10-31, the review: an unlinked exit-side fill is a close only where
   the venue does not say otherwise — Bybit's closedSize, HL's 'Close'
