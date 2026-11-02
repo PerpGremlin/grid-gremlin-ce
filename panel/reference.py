@@ -123,7 +123,8 @@ the exchange's own record. Spot has none; — when it could not be read.</td></t
 long the bot has run in the figure's span, its grid profit (a DCA's or a trade's
 realised profit) after fees per day, and that as a yearly rate on its investment,
 as Bybit counts it: profit ÷ investment ÷ days × 365, a run under a day counted as
-a day. A big APR on a short run is arithmetic, not a promise.</td></tr>
+a day. A big APR on a short run is arithmetic, not a promise; none shows until the
+bot has closed something.</td></tr>
 <tr><td>USDT · USDC · USD · BTC …</td><td class="dim">quote coin, settle coin</td><td class="dim">every
 money figure names its coin: a USDT/USDC perpetual's or a spot bot's money is its
 settle coin (Bybit USDT or USDC, Hyperliquid USDC); a coin-margined bot's

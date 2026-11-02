@@ -298,7 +298,7 @@ def spec_L1_a_live_trade_sets_its_symbols_leverage_as_the_start_does():
 def spec_L6_a_trades_rate_line_says_profit_not_grid_profit():
     from panel.card import run_rate
     gen = 10 * 86_400_000
-    b = {'fills': 2, 'realized': 3.0, 'fees': 0.14, 'counted_from': 'flat', 'counted_since_ms': gen - 86_400_000}
+    b = {'fills': 2, 'realized': 3.0, 'fees': 0.14, 'counted_from': 'flat', 'rounds': 1, 'counted_since_ms': gen - 86_400_000}
     t = run_rate(b, {'generated_ms': gen, 'window_hours': 24}, 200.0, trade=True)
     assert 'grid' not in t.lower() and 'Profit <b' in t and 'APR</span> <b' in t
     assert 'Grid profit' in run_rate(b, {'generated_ms': gen, 'window_hours': 24}, 200.0)

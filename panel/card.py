@@ -37,7 +37,9 @@ def run_rate(b, contract, capital=None, trade=False):
     word = 'Profit' if trade else 'Grid profit'          # a trade (D81) or a DCA has no grid
     # D157: Bybit's words — Runtime, the profit a day, APR
     line = (f'Runtime {run} · {word} <b class="{_num_cls(per_day)}">{per_day:+,.2f}</b>/day')
-    if capital:
+    # U189: nothing closed yet, the only realised figure is the opening fee, and
+    # a year of that says nothing (-28.9% on a bot two hours old, 2026-11-02)
+    if capital and (b.get('rounds') or b.get('trips') or b.get('gap_trips')):
         apr = net / capital / days * 365 * 100
         apr = 0.0 if abs(apr) < 0.05 else apr
         line += (f' · <span class="st" title="{word.lower()} after fees ÷ investment ÷ days × 365, '

@@ -2202,6 +2202,10 @@ eventually pin (T1).
   button: dark's colours and face with the page and panels taken down to near
   black, the panels still a step above the page, every word AA on both.
   dark stays the default. *(owner, 2026-11-02: "a darker darkmode")*
+- **U189** (2026-11-03) A card shows no APR until the bot has closed something: a
+  round, a trip or a matched trip. Before that the only realised figure is the
+  opening fee. Runtime and the day's figure stay. *(owner: "hide apr until a round
+  closes")*
 - **U183** (2026-11-02) The side column runs the screen's height and the theme
   button sits at its foot, out of the way; on a phone the column stays a strip.
   *(owner, 2026-11-02: "move the theme all the way out of the way to the bottom

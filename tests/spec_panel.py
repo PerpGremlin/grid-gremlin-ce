@@ -2026,7 +2026,7 @@ def spec_U64_a_card_says_how_long_it_has_run_and_its_grid_profit_per_day_and_a_y
     import copy
     from panel.card import run_rate
     gen = 10 * 86_400_000
-    b = {'fills': 10, 'realized': 120.0, 'fees': 20.0, 'counted_from': 'flat',
+    b = {'fills': 10, 'realized': 120.0, 'fees': 20.0, 'counted_from': 'flat', 'trips': 3,
          'counted_since_ms': gen - 4 * 86_400_000}
     c = {'generated_ms': gen, 'window_hours': 24}
     line = run_rate(b, c, capital=1000.0)
@@ -2921,3 +2921,20 @@ def spec_U146_sabotage_without_the_words_the_card_reads_running():
         pc.frozen_words = real
     page = page.split('class="cards"')[1]          # the card (D163: the box's needs-a-look reads its own)
     assert 'Frozen since' not in page and 'Running · in position' in page
+
+
+def spec_U189_no_APR_until_something_has_closed():
+    """Two hours in, a bot's only realised figure is its opening fee: the card
+    annualised it to -28.9%. The runtime and the day's figure stay; the APR waits
+    for a closed round, a grid's trip or a matched trip. SABOTAGE: drop the
+    condition and the fee is a yearly rate again; require rounds alone and a
+    grid never shows one."""
+    from panel.card import run_rate
+    gen = 10 * 86_400_000
+    c = {'generated_ms': gen, 'window_hours': 24}
+    open_ = {'fills': 1, 'realized': 0.0, 'fees': 20.0, 'counted_from': 'flat',
+             'counted_since_ms': gen - 2 * 3_600_000, 'trips': 0, 'rounds': 0}
+    line = run_rate(open_, c, 25000.0)
+    assert 'APR' not in line and 'Runtime 2 h' in line and '/day' in line
+    for closed in ({'rounds': 1}, {'trips': 2}, {'gap_trips': 1}):
+        assert 'APR</span>' in run_rate(dict(open_, **closed), c, 25000.0), closed
