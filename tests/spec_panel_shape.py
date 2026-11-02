@@ -303,3 +303,18 @@ def spec_U145_the_card_and_the_confirm_say_one_name_for_each_market():
     page = _everything(c)
     assert '<span class="side long">LONG</span> <b><a class="bname" data-pick' in page
     assert 'ADAUSDT Margined Spot Grid</a></b>' in page
+
+
+def spec_U183_theme_sits_at_the_foot_of_the_column():
+    """The column runs the screen's height with theme last, pushed to its foot,
+    at desktop width only (driven in headless Chrome at both widths). SABOTAGE:
+    without the auto margin it follows the view block again; a link after it
+    leaves the foot."""
+    from panel.css import CSS
+    from panel.nav import nav_panel
+    wide = CSS.split('@media(min-width:60.01em){nav.side{', 1)[1]
+    assert wide.startswith('display:flex;flex-direction:column;height:calc(100vh - var(--hero) - 2*var(--gap))}')
+    assert 'nav.side>button.theme{margin-top:auto;align-self:flex-start}' in wide
+    nav = nav_panel(False, 'pairs')
+    after = nav.split('data-theme>theme</button>', 1)[1]
+    assert '<a ' not in after.split('<dialog', 1)[0] and '<form' not in after.split('<dialog', 1)[0]

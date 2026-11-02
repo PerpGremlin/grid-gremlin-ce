@@ -446,7 +446,8 @@ class CreateFlowPages:
             return self._fragment('<p class="dim">the price chart draws '
                                   'here once a coin is typed.</p>')
         try:
-            row = bot_from_form(form, self._fleet_venue(fi))
+            from panel.dca_ladder import resolve_ladder
+            row = bot_from_form(resolve_ladder(form), self._fleet_venue(fi))     # D168: its gaps
             row.setdefault('market_type', 'linear')
             bars = self._bars_for(row)
             mark = bars[-1]['c'] if bars else None
@@ -580,6 +581,7 @@ class CreateFlowPages:
         from panel.consequence import block, least_capital, numbers
         from panel.create import (edit_proposal, merge_proposal,
                                   order_minimum_problem, validate_whole)
+        from panel.dca_ladder import fit_words, resolve_ladder
         from panel.setup import (bot_from_form, missing_required, quick_bot,
                                  resolve_size, size_market)
         fi = min(int(_f(form.get('fleet')) or 0), len(self.fleets) - 1)
@@ -593,10 +595,11 @@ class CreateFlowPages:
         else:
             miss = missing_required(form.get('strategy', 'grid'), form)
             if miss:
-                return self._fragment('<p class="dim">the numbers show here once '
+                return self._fragment(self._ladder_fill(form, venue)
+                                      + '<p class="dim">the numbers show here once '
                                       'these are filled: '
                                       + html.escape('; '.join(miss)) + '.</p>')
-        said = ''
+        said, bot = '', None
         try:
             if form.get('how') == 'quick':
                 import panel.create as pc                     # U161: the symbol says it
@@ -606,8 +609,9 @@ class CreateFlowPages:
                 bot = quick_bot(form, venue, self._mark_for(dict(linear, market_type=kind)),
                                 kind)
             else:
-                bot = bot_from_form(resolve_size(               # U160: its own market
-                    form, lambda: self._mark_for(size_market(form, venue))), venue)
+                said = self._ladder_fill(form, venue)            # D168
+                bot = bot_from_form(resolve_ladder(resolve_size(  # U160: its own market
+                    form, lambda: self._mark_for(size_market(form, venue)))), venue)
             fleet_raw = json.loads(Path(self.fleets[fi]).read_text())
             wd_raw = json.loads(Path(fleet_raw['watchdog']).read_text())
             raw = apply_profile(dict(bot), validate_profiles(
@@ -616,7 +620,10 @@ class CreateFlowPages:
             adapter = self._adapter_for(vbot)
             mark = self._mark_for(vbot)
         except Exception as e:                              # noqa: BLE001
-            return self._fragment(said + self._live_refusal(e))
+            # D168: M2's refusal, and what it means, in the person's words too
+            words = fit_words(bot) if bot else None
+            return self._fragment(said + (f'<p class="fitsay">{html.escape(words)}</p>' if words else '')
+                                  + self._live_refusal(e))
         refusal = None
         try:
             if vbot['strategy'] == 'martingale':
@@ -643,6 +650,23 @@ class CreateFlowPages:
         except Exception as e:                              # noqa: BLE001
             body = f'<p class="dim">no numbers: {html.escape(str(e))}</p>'
         return self._fragment(said + (self._live_refusal(refusal) if refusal else '') + body)
+
+    def _ladder_fill(self, form, venue):
+        """D168: the orders the shape works out, for the page's script to put
+        in their boxes. Nothing when the form asks for no shape, or the
+        investment cannot be read yet; a script-free form is worked out at
+        the review."""
+        from panel.dca_ladder import TYPED_KEYS, resolve_ladder, shape_asked
+        from panel.setup import resolve_size, size_market
+        if not shape_asked(form):
+            return ''
+        try:
+            got = resolve_ladder(resolve_size(
+                form, lambda: self._mark_for(size_market(form, venue))))
+        except Exception:                                   # noqa: BLE001
+            return ''
+        data = ''.join(f' data-{k}="{html.escape(got[k], quote=True)}"' for k in TYPED_KEYS)
+        return f'<span data-fill hidden{data}></span>'
 
     @staticmethod
     def _live_refusal(why):
@@ -737,8 +761,9 @@ class CreateFlowPages:
                 miss = missing_required(form.get('strategy', 'grid'), form)   # U105
                 if miss:
                     raise ValueError('still needed: ' + '; '.join(miss))
-                sized = resolve_size(form, lambda: public_mark(   # U24, U160
-                    size_market(form, venue)))
+                from panel.dca_ladder import resolve_ladder
+                sized = resolve_ladder(resolve_size(form, lambda: public_mark(   # U24, U160, D168
+                    size_market(form, venue))))
                 bot = bot_from_form(sized, venue)    # D157: `form` stays as typed
         except Exception as e:                              # noqa: BLE001
             note = refusal_box('not yet', e)

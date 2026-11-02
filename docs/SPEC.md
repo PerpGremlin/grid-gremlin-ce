@@ -2139,6 +2139,37 @@ eventually pin (T1).
   property may hold one. *(owner, 2026-11-01: the green one "classic",
   "an actual dark theme", "a version that looks like a retail broker platform as
   well, or MetaTrader 5")*
+- **U184** (D168) A shape works out the orders. On a DCA form, `even`, `gentle` or
+  `steep` with the investment, the leverage (margin spot's `spot_leverage`; blank
+  1x) and the add-ons give `base_order_size`, `safety_order_size`,
+  `order_size_multiplier` and `deviation_step_multiplier`, replacing what was in
+  those boxes; base and every add-on fit 98% of investment x leverage, the rest
+  for fees (M2). `panel/dca_ladder.py`, one function with the quick setup's. No
+  script is needed: the server works it out on `/numbers` and on the review. Sizes
+  in coins are never worked out (D89).
+- **U185** (D168) The choice sits above the two sizes. A blank new form starts on
+  gentle, its sizes unstarred and saying they are worked out; a form holding
+  orders keeps them unless they are exactly a shape, read back from the row; an
+  edit keeps its own unless a shape is chosen. The file never holds a shape, and
+  row and form round-trip (U19). `/numbers` hands the worked-out values to the
+  page's script, which fills the boxes; typing a size or a growth setting switches
+  the choice to My own orders. The quick form offers shapes for its DCA presets,
+  blank being what "How careful?" says.
+- **U186** (D168) Typed orders are told how they fit: too much for the investment
+  and leverage (beside M2's refusal), or under 97% of it with what would sit
+  unused. A worked-out ladder says so. An order under the market's smallest (U107)
+  also names the investment this ladder's shape needs.
+- **U187** (D168) The form's numbers and the review show the orders as a table:
+  price, size, invested so far (the money over the leverage), average entry (money
+  over coins, so harmonic on a coin-margined market, in USD) and where that position
+  would be liquidated if no more orders filled, MM_RATE on its own investment with
+  no fees (T10's reckoning; the last row within fees of it). An order past the
+  liquidation before it says it never fills. Spot has no liquidation column. It
+  scrolls in its own box at phone width.
+- **U188** (D168) Through the panel: the live answer carries the fill and the
+  table, the fill arriving before every field is filled; a form sent with blank
+  sizes reaches the review with them in its row. `tests/spec_dca_ladder.py`, each
+  guard with its sabotage.
 - **U182** (D165) The DCA form offers the inverse market; its investment, order
   sizes and loss limit say USD with U160's words, the quick setup makes an inverse
   row from the symbol (U161), the review's sentence and order sizes say USD, its
@@ -2151,6 +2182,10 @@ eventually pin (T1).
   button: dark's colours and face with the page and panels taken down to near
   black, the panels still a step above the page, every word AA on both.
   dark stays the default. *(owner, 2026-11-02: "a darker darkmode")*
+- **U183** (2026-11-02) The side column runs the screen's height and the theme
+  button sits at its foot, out of the way; on a phone the column stays a strip.
+  *(owner, 2026-11-02: "move the theme all the way out of the way to the bottom
+  of the left nav column")*
 - **U112b** (2026-11-02) Every theme is the same size: 14px type at a 1.5
   line height and the same spacing tokens and padding, so switching theme
   never moves the page. A theme changes colours, faces, edges and corners
@@ -3490,6 +3525,10 @@ that pins it (T1).
   own last tick; spare cash buys only once it is past the drift of the
   stack. The rehearsal plans the same way. *(owner, 2026-10-23: "threshold
   and time based rebalancing")*
+  **D167 (2026-11-02):** a leg's drift is measured against the book, the
+  stack times its gross weights, never under the stack: at 1x or under it is
+  the stack as before. A hedge's stays a share of its own holding, and spare
+  cash a share of the stack. `spec_D167_*`, with sabotage.
 - **H3b** The funding rule judges the MARKET's funding, never the row's own
   payments: the sum of the hedge contract's funding rates over
   `trailing_days`, as a yearly rate (`trailing_yield`), judged only after a

@@ -281,3 +281,37 @@ def spec_U111d_a_perp_on_a_lot_coin_is_refused_by_the_engine():
         with open(f) as fh:
             raw = json.load(fh)
         validate_fleet({'bots': raw} if isinstance(raw, list) else raw)
+
+
+# --- D167: a leg's drift is a share of the book -------------------------------
+
+def _drift_plan(weights, moved):
+    """A book at its weights on 1000 of equity, priced 100, then one coin moved."""
+    from gridgremlin.portfolio import plan_portfolio
+    cfg = {'assets': [{'coin': c, 'weight': w} for c, w in weights.items()],
+           'hedges': {}, 'funding_rule': {'stand_down_below': -1.0},
+           'rebalance': {'trigger': 'drift', 'every_hours': 24.0, 'drift_pct': 0.05,
+                         'min_notional': 0.0, 'cash_reserve': 0.0}}
+    coins = {c: w * 1000.0 / 100.0 for c, w in weights.items() if w > 0}
+    cash = 1000.0 - sum(w * 1000.0 for w in weights.values() if w > 0)
+    prices = {c: 100.0 * (1.0 + moved.get(c, 0.0)) for c in weights}
+    book = {'coins': coins, 'hedged': {}, 'shorts': {}, 'cash': cash}
+    return plan_portfolio(cfg, book, prices, 1, 0)['orders']
+
+
+def spec_D167_at_10x_a_small_move_trades_nothing():
+    """A row at 8.5 and 1.5 traded on a 0.08% move of its coin, under a round
+    trip's fees (150 orders a day, measured 2026-11-02). SABOTAGE: the drift
+    as a share of the stack and the 0.2% move trades."""
+    assert _drift_plan({'BTC': 8.5, 'XAUT': 1.5}, {'BTC': 0.002}) == []
+    moved = _drift_plan({'BTC': 8.5, 'XAUT': 1.5}, {'BTC': 0.01})
+    assert [o['leg'] for o in moved] == [('spot', 'BTC')] and moved[0]['side'] == 'buy'
+
+
+def spec_D167_at_1x_or_under_the_band_is_the_stacks_as_before():
+    """Unlevered, the book is the stack. Half and half: a 25% rise puts each
+    leg 5.9% of the stack out, past the band; 15% puts each 3.5% out, inside
+    it. SABOTAGE: each leg's own target as the measure and the 15% trades."""
+    assert _drift_plan({'BTC': .5, 'ETH': .5}, {'BTC': .15}) == []
+    assert len(_drift_plan({'BTC': .5, 'ETH': .5}, {'BTC': .25})) == 2
+    assert _drift_plan({'BTC': .3}, {'BTC': .15}) == []          # under 1x: the stack too

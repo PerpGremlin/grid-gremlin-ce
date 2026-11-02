@@ -57,7 +57,7 @@ ADVANCED = (
     ('every_hours', ('rebalance', 'every_hours'), 'num', 'Rebalance every (h)',
      'the clock, for clock or either. Blank = 24', False),
     ('drift_pct', ('rebalance', 'drift_pct'), 'pct', 'Drift',
-     'percent a weight or hedge may drift before it is traded back. Blank = 5', False),
+     'how far a coin may drift before it is traded back, as a percent of the whole book (leverage included); a hedge, of its own coins. Blank = 5', False),
     ('min_notional', ('rebalance', 'min_notional'), 'num', 'Smallest trade',
      'in USDT: a rebalance smaller than this is left. Blank = 0', False),
     ('cash_reserve', ('rebalance', 'cash_reserve'), 'pct', 'Cash kept for fees',

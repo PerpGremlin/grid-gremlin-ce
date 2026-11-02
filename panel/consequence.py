@@ -205,6 +205,49 @@ def _m(v):
     return f'{v:.2g}'
 
 
+def _liquidation_at(cfg, notional, coins, price_avg, mark):
+    """D168: where the position so far would be liquidated if no more orders
+    filled, on the bot's own investment; the same reckoning as the whole
+    ladder's (maintenance at MM_RATE, D165's coin-margined collateral), with
+    no fees. None where it has none."""
+    c, mm = float(cfg['capital']), MM_RATE
+    long = cfg['side'] == 'long'
+    if cfg.get('market_type') == 'inverse':
+        worth = c / mark                               # the investment in coins
+        if long:
+            at = notional * (1.0 + mm) / (worth + notional / price_avg)
+        else:
+            room = notional / price_avg - worth
+            at = notional * (1.0 - mm) / room if room > 0 else None
+    else:
+        at = ((coins * price_avg - c) / (coins * (1.0 - mm)) if long
+              else (c + coins * price_avg) / (coins * (1.0 + mm)))
+    return at if at is not None and at > 0 else None
+
+
+def ladder_rows(cfg, rows, mark):
+    """D168: the ladder, order by order, before anything is placed: where each
+    fills, its size, what is invested once it has, the average then (money
+    over coins, which is the harmonic mean on a coin-margined market) and
+    where that position would be liquidated. `reached` False: the position
+    before it is liquidated first, so this order never fills."""
+    lev = float(cfg.get('leverage') or 1.0)
+    spot = cfg.get('market_type') == 'spot'
+    long = cfg['side'] == 'long'
+    out, money, coins, before = [], 0.0, 0.0, None
+    for r in rows:
+        price, notional = r['price'], r['notional']
+        money += notional
+        coins += notional / price if price > 0 else 0.0
+        avg = money / coins if coins else price
+        reached = before is None or (price > before if long else price < before)
+        liq = None if spot else _liquidation_at(cfg, money, coins, avg, mark)
+        out.append({'price': price, 'notional': notional, 'invested': money / lev,
+                    'avg': avg, 'liq': liq, 'reached': reached})
+        before = liq if liq is not None else before
+    return out
+
+
 def numbers(cfg, adapter, mark, free=None, least=None):
     """The facts for a VALIDATED row at today's price. `least` is
     least_capital() of the raw row (the review and the form both have it);
@@ -227,6 +270,7 @@ def numbers(cfg, adapter, mark, free=None, least=None):
     rows, _ = martingale_preview(cfg, mark)
     out['orders'] = [(r['qty'], r['notional']) for r in rows]
     out['full'] = sum(r['notional'] for r in rows)
+    out['ladder'] = ladder_rows(cfg, rows, mark)
     first = rows[0]
     tp = cfg.get('take_profit_avg_pct')
     if tp is None:
@@ -321,7 +365,35 @@ NOTE = ('estimates at today\'s price, from the engine\'s own orders. Fees at '
         'is the one that counts.')
 
 
+def ladder_html(cfg, n, money=''):
+    """D168: the orders as a table, under the numbers. A wide one scrolls in
+    its own box, never the page."""
+    from panel.dca_ladder import fit_words
+    rows = n.get('ladder')
+    if not rows:
+        return ''
+    unit = 'USD' if cfg.get('market_type') == 'inverse' else (money or '')
+    spot = cfg.get('market_type') == 'spot'
+    head = ''.join(f'<th>{html.escape(t)}</th>' for t in (
+        'Order', 'Price', f'Size {unit}'.strip(), f'Invested so far {unit}'.strip(),
+        'Average entry') + (() if spot else ('Liquidation if it stops here', '')))
+    body = []
+    for i, r in enumerate(rows):
+        cells = [('First' if i == 0 else f'Add-on {i}'), _p(r['price']), _m(r['notional']),
+                 _m(r['invested']), _p(r['avg'])]
+        if not spot:
+            cells.append('none' if r['liq'] is None else
+                         f"{_p(r['liq'])} ({r['liq'] / r['price'] - 1.0:+.1%})")
+            cells.append('' if r['reached'] else 'liquidated before this fills')
+        cls = '' if r['reached'] else ' class="neg"'
+        body.append(f'<tr{cls}>' + ''.join(f'<td>{html.escape(c)}</td>' for c in cells) + '</tr>')
+    words = fit_words(cfg)
+    return ((f'<p class="fitsay">{html.escape(words)}</p>' if words else '')
+            + f'<div class="ladderbox"><table class="ladder"><tr>{head}</tr>{"".join(body)}'
+            '</table></div>')
+
+
 def block(cfg, n, money=''):
     """The numbers as one box: under the inputs, and on the review page."""
     return (f'<table class="numbers">{rows_html(cfg, n, money)}</table>'
-            f'<p class="dim">{NOTE}</p>')
+            + ladder_html(cfg, n, money) + f'<p class="dim">{NOTE}</p>')

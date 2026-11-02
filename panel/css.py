@@ -50,6 +50,8 @@ input.derived{color:var(--dim);font-style:italic}
 #numbers{max-width:62em;margin:.4em 0}#numbers .refusal{font-size:1em;margin:.3em 0}
 table.numbers td:first-child{white-space:nowrap;color:var(--dim)}
 tr.only-reversal{display:none}form:has(input[name=preset][value=reversal]:checked) tr.only-reversal{display:table-row}
+tr.only-dca{display:none}form:has(input[name=preset][value^=dca]:checked) tr.only-dca{display:table-row}
+.ladderbox{overflow-x:auto;margin:.6em 0}table.ladder{border-collapse:collapse}table.ladder th{text-align:right;color:var(--dim);font-weight:normal;padding:.1em .6em}table.ladder td{text-align:right;white-space:nowrap;padding:.1em .6em}table.ladder :is(th,td):first-child{text-align:left}
 .refusal{border:2px solid var(--neg);color:var(--neg);padding:.7em 1em;
 margin:0 0 1em;max-width:62em;font-size:1.1em}
 .refusal a{color:var(--accent)}
@@ -129,6 +131,9 @@ svg.px .ax{font-size:11px;fill:var(--dim)}svg.px .ax.neg{fill:var(--neg)}
 .page{display:grid;grid-template-columns:14em minmax(0,1fr);gap:0 calc(var(--gap)*1.5)}
 nav.side{position:sticky;top:var(--hero);align-self:start;max-height:calc(100vh - var(--hero));overflow:auto;
 padding-right:var(--gap-s);border-right:var(--bw) solid var(--edge)}
+/* U183: the column runs the screen's height, theme at its foot; on a phone it is a strip */
+@media(min-width:60.01em){nav.side{display:flex;flex-direction:column;height:calc(100vh - var(--hero) - 2*var(--gap))}
+nav.side>button.theme{margin-top:auto;align-self:flex-start}}
 nav.side h3{font-size:1em;font-weight:normal;color:var(--dim);margin:var(--gap) 0 var(--gap-s)}
 nav.side h3:first-child{margin-top:var(--gap-s)}
 nav.side a[href],nav.side b.on,nav.side a{display:block;margin:.15em var(--gap-s) .15em 0}

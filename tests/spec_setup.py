@@ -2332,7 +2332,7 @@ def spec_U105_a_bot_asks_first_for_what_it_needs_and_folds_the_rest():
     from panel.setup import ESSENTIAL, advanced_page, missing_required
     page = advanced_page('martingale', {}, ['Bybit demo'], 0)
     head, _, rest = page.partition('class="adv"')
-    for label in ('First order size *', 'First add-on order size *', 'How many add-on orders *',
+    for label in ('How many add-on orders *',    # D168: a blank form's sizes are worked out
                   'First add-on after a move of (%) *', 'Take profit at (%) from the average price *'):
         assert label in head, label
     assert '<details class="adv">' in page and 'Trailing stop (%)' in rest and 'Trailing stop' not in head

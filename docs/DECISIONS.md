@@ -1616,6 +1616,29 @@ stands unless the owner corrects it.
   counts the investment as coins (M27, U182), since that is what is at risk on
   this market; and the row's coin is switched on as collateral at build.
 
+- **D167 — A leg's drift is a share of the book (2026-11-02).** The owner:
+  "go with option one as it fixes the stuff". Option one read "against each
+  coin's own target"; built instead against the book (stack times gross
+  weights), because a coin's own target tightens a small coin's band in an
+  unlevered basket, and the book leaves 1x exactly as it was. Said to the owner
+  with the PR. Measured on 14.6 days of real one-minute prices, at 10 bp a side:
+  the 10x row 229 → 4.7 orders a day, fees 1.18% → 0.19% of equity a day.
+
+- **D168 — The DCA creators do the ladder's arithmetic (2026-11-02).** The
+  owner: "get the bot to do the ladder math and weights etc when we put it
+  together… the user has to do mental math… its cool if you wanted to really
+  customise your orders now, but auto filling the results and giving different
+  setting helps." A shape (even, gentle, steep) with the investment, leverage
+  and add-ons gives the first order, the add-ons and how they grow, in the
+  row's existing keys: the engine and the file never hold a shape, and existing
+  rows are untouched. Typed orders stay available and are told when they stop
+  matching the money. 2% stays unspent for the orders' fees, the quick setup's
+  figure since it was written: "uses all of it" would have the last order
+  refused by the fees of the ones before. An edit keeps its own orders unless a
+  shape is chosen on the page, so raising a running bot's investment never
+  resizes its orders unasked. Sizes in coins are not worked out (D89: no price
+  at the row). The quick setup's own default ladder is unchanged.
+
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
 inline above.*

@@ -406,6 +406,10 @@ def plan_portfolio(cfg, book, prices, now_ms, last_tick_ms, regimes=None,
     # is weight × equity, so the coins held are spot_leverage × equity)
     stack = sum(coins.get(a['coin'], 0.0) * prices[a['coin']] for a in longs) + cash
     big = reb['min_notional']
+    # D167: a leg's drift is a share of the book, the weights carrying the
+    # leverage: of the stack alone, 10x traded on a 0.08% move of its coin,
+    # under a round trip's fees. At 1x or under the book is the stack
+    book = max(stack * max(1.0, sum(abs(a['weight']) for a in cfg['assets'])), 1e-9)
 
     def want(leg, side, qty, price, why):
         if qty <= 0 or qty * price < big:
@@ -441,7 +445,7 @@ def plan_portfolio(cfg, book, prices, now_ms, last_tick_ms, regimes=None,
         have_v = coins.get(c, 0.0) * p
         delta_v = target_v - have_v
         targets[c] = {'weight_value': target_v}
-        if abs(delta_v) / max(stack, 1e-9) > reb['drift_pct']:
+        if abs(delta_v) / book > reb['drift_pct']:
             q = abs(delta_v) / p
             want(('spot', c), 'buy' if delta_v > 0 else 'sell', q, p, 'weight')
             coins[c] = coins.get(c, 0.0) + (q if delta_v > 0 else -q)
@@ -450,7 +454,7 @@ def plan_portfolio(cfg, book, prices, now_ms, last_tick_ms, regimes=None,
         target_q = abs(a['weight']) * stack / p
         have_q = shorts.get(c, 0.0)
         targets[c] = {'short_coins': target_q}
-        if abs(target_q - have_q) * p / max(stack, 1e-9) > reb['drift_pct']:
+        if abs(target_q - have_q) * p / book > reb['drift_pct']:
             want(('short', c), 'sell' if target_q > have_q else 'buy', abs(target_q - have_q), p,
                  'outright short')
     _hedges(cfg, longs, coins, hedged, prices, regimes, funding_trailing, orders, targets)   # (4)

@@ -380,7 +380,12 @@ def order_minimum_problem(vbot, adapter, m0):
                        f"({adapter.min_qty:g} coins at {m0:g}) — ") +
                     f'raise the {what} size to at least that (it is '
                     "the order's whole value, leverage included), or "
-                    'raise the investment the quick setup draws it from')
+                    'raise the investment the orders are worked out from, or '
+                    'use fewer add-ons'
+                    # D168: what it takes to fund this ladder, its shape kept
+                    + ('' if coins else
+                       ". This ladder's shape needs an investment of about "
+                       f"{vbot['capital'] * least / size:.4g}"))
     return None
 
 

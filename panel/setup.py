@@ -22,6 +22,7 @@ from gridgremlin.apply import check_link_fits, make_botid, widest_rung
 from gridgremlin.config import ConfigError
 from gridgremlin.main import BYBIT_LINK_LIMIT
 from panel.chart import CHART_BOX, CHART_JS
+from panel.dca_ladder import OWN, SHAPES, SHAPE_WORDS, order_unit, shape_asked, shape_of
 
 # (form name, config path, kind, label, help)
 # kinds: num · int · pct · choice:<a|b> · switch · cap · weights · tranches
@@ -323,12 +324,18 @@ REQUIRED = {
 }
 
 
+WORKED_OUT = ('base_order_size', 'safety_order_size')     # D168: from the shape
+
+
 def missing_required(strategy, form):
     """U105: every required setting left blank, by its label, all at once —
     the engine refused them one at a time ("'base_order_size' is required")."""
     labels = {r[0]: r[3] for rows in SCHEMAS[strategy].values() for r in rows}
     out = []
+    worked_out = WORKED_OUT if shape_asked(dict(form, strategy=strategy)) else ()   # D168
     for alts in REQUIRED.get(strategy, ()):
+        if alts[0] in worked_out:
+            continue
         if not any(str(form.get(a) or '').strip() for a in alts):
             words = [labels.get(a, a) for a in alts]
             out.append(' or '.join([words[0]] + [w[3:] if w.lower().startswith('or ') else w
@@ -561,11 +568,19 @@ NUMBERS_JS = """<script>(function(){
 var box=document.getElementById('numbers');if(!box)return;
 var form=box.closest('form');if(!form)return;
 var asked=0,wait=null;
+var shape=form.querySelector('select[name=ladder_shape]'),TYPED=['base_order_size',
+ 'safety_order_size','order_size_multiplier','deviation_step_multiplier'];
+function fill(){var f=box.querySelector('[data-fill]');if(!f)return;
+ TYPED.forEach(function(n){var e=form.querySelector('[name='+n+']');
+  if(e&&f.dataset[n]!==undefined)e.value=f.dataset[n];});}
+TYPED.forEach(function(n){var e=form.querySelector('[name='+n+']');
+ if(e&&shape&&shape.querySelector('option[value=own]'))
+  e.addEventListener('input',function(){shape.value='own';});});
 function ask(){var mine=++asked,data=new URLSearchParams(new FormData(form));
  form.querySelectorAll('.derived').forEach(function(e){data.delete(e.name);});
  fetch('/numbers',{method:'POST',credentials:'same-origin',body:data})
  .then(function(r){return r.text();})
- .then(function(t){if(mine===asked)box.innerHTML=t;});}
+ .then(function(t){if(mine===asked){box.innerHTML=t;fill();}});}
 function soon(){clearTimeout(wait);wait=setTimeout(ask,600);}
 form.addEventListener('input',soon);form.addEventListener('change',soon);
 ask();})();</script>"""
@@ -745,14 +760,15 @@ def quick_bot(form, venue, mark, market_type='linear'):
         lev = DCA_LEVERAGE[caution]
         money = _sig(capital_from(size, unit, lev, mark), 6)
         k = DCA_SIZE_MULTIPLIER
-        # M2: base + every add-on must fit inside money x leverage
-        unit = money * lev * 0.98 / (1.0 + sum(k ** i for i in range(n)))
+        if form.get('ladder_shape') in SHAPES:             # D168: how it grows, if asked
+            k, step = SHAPES[form['ladder_shape']]
+        unit = order_unit(money, lev, n, k)                # M2
         bot = {**_venue_key(venue), 'strategy': 'martingale',
                'market_type': market_type, 'symbol': symbol,
                'side': 'long' if preset == 'dca_long' else 'short',
                'capital': money, 'leverage': lev,
-               'base_order_size': _sig(unit, 4),
-               'safety_order_size': _sig(unit, 4),
+               'base_order_size': unit,
+               'safety_order_size': unit,
                'order_size_multiplier': k, 'deviation_pct': dev,
                'deviation_step_multiplier': step,
                'max_averaging_orders': n, 'take_profit_avg_pct': tp,
@@ -1150,8 +1166,26 @@ def default_words(kind, value):
     return f'default {value}'
 
 
+def _shape_row(chosen, quick=False):
+    """D168: how the ladder grows. Not a row's key: it works out four that
+    are, and the row is all the file ever holds."""
+    def options(names):
+        return ''.join(f'<option value="{s}"{" selected" if s == chosen else ""}>'
+                       f'{html.escape(SHAPE_WORDS[s])}</option>' for s in names)
+    if quick:
+        return ('<tr class="only-dca"><td>How the orders grow</td><td><select name="ladder_shape">'
+                '<option value="">as "How careful?" says</option>' + options(SHAPES)
+                + '</select></td><td class="dim">each order\'s size and how far apart they '
+                'sit. The sizes are worked out from your investment</td></tr>')
+    return ('<tr><td>How the orders grow</td><td><select name="ladder_shape">'
+            + options((*SHAPES, OWN)) + '</select></td><td class="dim">from your investment, '
+            'leverage and add-ons this works out the two sizes below and how they grow, and '
+            'fills them in. Typing a size or a growth setting yourself switches this to your '
+            'own</td></tr>')
+
+
 def _field(name, kind, label, help_, value, fixed=False, unit=None,
-           default=..., market_type=None, symbol=None):
+           default=..., market_type=None, symbol=None, blank_says=None):
     e = html.escape
     v = e(str(value)) if value is not None else ''
     # U33: the empty box says what a blank becomes — the engine's own default,
@@ -1159,6 +1193,8 @@ def _field(name, kind, label, help_, value, fixed=False, unit=None,
     ph = (f' placeholder="{e(default_words(kind, default))}"'
           if default is not ... and kind not in ('switch', 'block')
           and not kind.startswith('choice:') else '')
+    if blank_says:                         # D168: blank here is no refusal
+        ph = f' placeholder="{e(blank_says)}"'
     if fixed:                              # an edit never changes identity
         control = f'<b>{v}</b><input type="hidden" name="{name}" value="{v}">'
     elif kind.startswith('choice:'):
@@ -1271,6 +1307,7 @@ def quick_page(fleets, chosen=0, symbols=(), values=None, carry=True, account=''
         'leverage it picks: careful is wider and lower, bold tighter and '
         'higher. Nothing caps it; the review shows where it would be '
         'liquidated</td></tr>'
+        + (_shape_row(t.get('ladder_shape'), quick=True) if kind != 'grid' else '') +
         '<tr><td>Stop loss</td><td><input type="checkbox" name="stop_on" '
         f'value="1"{" checked" if t.get("stop_on") else ""}></td><td class="dim">off by default: sells everything '
         'and stops the bot for good if the price goes well past its '
@@ -1317,16 +1354,21 @@ def advanced_page(strategy, values, fleets, chosen=0, note='', edit=None,
     needed = {a for alts in REQUIRED.get(strategy, ()) for a in alts[:1]}
     every = {r[0]: r for rows in SCHEMAS[strategy].values() for r in rows}
 
+    shape = shape_of(values, bool(edit)) if strategy == 'martingale' else None    # D168
+    worked_out = WORKED_OUT if shape in SHAPES else ()
+
     def field(r, mark=False):
         n, p, k, lb, h = r
-        return _field(n, k, lb + (' *' if mark else ''), h, values.get(n),
+        return _field(n, k, lb + (' *' if mark and n not in worked_out else ''), h, values.get(n),
                       fixed=bool(edit) and n in IDENTITY,
                       unit=values.get('size_unit'),
                       market_type=values.get('market_type'),
                       symbol=values.get('symbol'),
-                      default=dflts.get(p, ...))
+                      default=dflts.get(p, ...),
+                      blank_says='worked out for you' if n in worked_out else None)
     # U105: what the bot needs, open and first; required ones starred
-    first = ''.join(field(every[n], mark=n in needed) for n in essential if n in every)
+    first = ''.join((_shape_row(shape) if n == 'base_order_size' and shape else '')
+                    + field(every[n], mark=n in needed) for n in essential if n in every)
     groups.append('<details open><summary>What the bot needs</summary>'
                   f'<table>{first}</table>' + account + NUMBERS_BOX +
                   '<p class="dim">* required. Everything '
