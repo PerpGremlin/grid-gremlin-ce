@@ -2202,6 +2202,13 @@ eventually pin (T1).
   button: dark's colours and face with the page and panels taken down to near
   black, the panels still a step above the page, every word AA on both.
   dark stays the default. *(owner, 2026-11-02: "a darker darkmode")*
+- **U191** (2026-11-03) A position's price chart has four windows, one shown at a
+  time: 1 h, 4 h, 24 h and 7 d, opening on the day. Every line is the fleet's own
+  snapshot marks, about one every 76 s, so an hour is about 47 points and not
+  candles. Only a window with a line is offered; every bot has its own switch, and
+  a refresh keeps its pick (U103's radios and memory, so the public page's switch
+  works with no script). No month: the snapshot tail is read and held for a week.
+  *(owner: "have 1hr 4hr etc for the numbers, so the user can zoom out a little")*
 - **U190** (2026-11-03) A position's price charts draw the bot's own levels: each
   planned order (solid rests on the exchange, dashed waits for the price, green an
   exit), a round's take profit, the stop, a DCA's average, liquidation. They are

@@ -1,6 +1,7 @@
 """U63: the account's equity over time, read from the fleet's own snapshot
 file — the tail, once cold and then only what was appended."""
 import json
+import re
 import tempfile
 import time
 from pathlib import Path
@@ -112,7 +113,7 @@ def spec_U65_the_snapshot_carries_each_bots_price_and_the_page_draws_it_with_lev
          'terms': {}, 'generated_ms': int(now * 1000), 'window_hours': 24}
     belief = {'linBTCUSDTl': {'alive': True, 'position': 0.5, 'margin': {'liq': 59000.0}}}
     page = position_page(0, 'demo', 'linBTCUSDTl', c, belief, w, fills)
-    assert '<h3>price, 24 h</h3><svg class="px"' in page and page.index('price, 24 h') < page.index('class="cards one"')
+    assert '<h3>price, 24 h' in page and page.index('price, 24 h') < page.index('class="cards one"')
     quiet = position_page(0, 'demo', 'linBTCUSDTl', c, belief)
     assert 'it starts with the fleet' in quiet and '<svg class="px"' not in quiet
 
@@ -480,6 +481,82 @@ def spec_U190_what_there_is_no_plan_for_says_so():
     old = price_svg(_u190_series(), {'lower': 99.0, 'upper': 101.0, 'rungs': 5}, None, (),
                     note='its orders are drawn from its fleet\'s next restart')
     assert 'rungs of the window' in old and 'next restart' in old
+
+
+# --- U191: the price chart's windows ------------------------------------------
+
+def _u191_rows(tmp, now, hours=30):
+    """A mark every 76 s, as the box writes them."""
+    p = Path(tmp) / 'snapshots-x.jsonl'
+    n = int(hours * 3600 / 76)
+    with open(p, 'w') as f:
+        for i in range(n):
+            f.write(json.dumps({'t': now - (n - 1 - i) * 76, 'equity': 1000.0,
+                                'bots': {'linBTCUSDTl': {'mark': 60000.0 + i}}}) + '\n')
+    return p
+
+
+def spec_U191_each_window_holds_its_own_span():
+    """1 h and 4 h are their spans, not the day cut short, and each still ends at
+    the latest price. SABOTAGE: drop a window, or give it the day's span."""
+    from gridgremlin.equity_series import price_windows
+    now = 2_000_000_000.0
+    w = price_windows(str(_u191_rows(tempfile.mkdtemp(), now)), 'linBTCUSDTl', now)
+    assert list(w) == ['1h', '4h', '24h', '7d']
+    for key, span in (('1h', 3600), ('4h', 4 * 3600), ('24h', 86400)):
+        assert now - span <= w[key][0][0] <= now - span + 600, key
+        assert w[key][-1][0] == now, key
+    assert 45 <= len(w['1h']) <= 48                         # every row of the hour: none thinned away
+    assert 110 <= len(w['4h']) <= 125
+
+
+def spec_U191_one_window_shows_and_the_day_opens():
+    """A radio for each window, the day checked, every other window a label for
+    its radio, and CSS showing only the checked one. SABOTAGE: check the first
+    radio, drop a label's target, or remove a CSS rule."""
+    from panel.css import CSS
+    from panel.drawings import price_boxes
+    series = [(1000.0 + 60 * i, 100.0 + i) for i in range(5)]
+    out = price_boxes({k: series for k in ('1h', '4h', '24h', '7d')}, None, None, (), name='px-0-b')
+    radios = re.findall(r'<input type="radio" name="px-0-b" id="(px-0-b-\w+)" class="rsel eqpick"( checked)?>', out)
+    assert [r[0] for r in radios] == [f'px-0-b-{k}' for k in ('1h', '4h', '24h', '7d')]
+    assert [r[0] for r in radios if r[1]] == ['px-0-b-24h']
+    assert out.count('class="pxwin"') == out.count('<svg class="px"') == 4
+    for k, word in (('1h', '1 h'), ('4h', '4 h'), ('24h', '24 h'), ('7d', '7 d')):
+        assert out.count(f'<label for="px-0-b-{k}">{word}</label>') == 3     # from the three other windows
+        assert out.count(f'<b>{word}</b>') == 1
+    assert '.pxsw>.pxwin{display:none}' in CSS
+    for i in range(1, 5):
+        assert f'.pxsw>input:nth-of-type({i}):checked~.pxwin:nth-of-type({i}){{display:block}}' in CSS
+
+
+def spec_U191_only_the_windows_with_a_line_are_offered():
+    """A young bot has no empty tab, a window with no line opens nothing, and one
+    window has no switch. SABOTAGE: offer every window, or open on the 24 h always."""
+    from panel.drawings import price_boxes
+    series = [(1000.0, 100.0), (1060.0, 101.0)]
+    out = price_boxes({'1h': series, '4h': [[1000.0, 100.0]], '24h': None, '7d': series}, None, None, ())
+    assert 'px-4h' not in out and 'px-24h' not in out and out.count('<svg class="px"') == 2
+    assert re.search(r'id="px-1h" class="rsel eqpick" checked', out)         # the day is missing: the first opens
+    lone = price_boxes({'24h': series}, None, None, ())
+    assert 'pxpick' not in lone and '<h3>price, 24 h</h3><svg class="px"' in lone
+    assert 'it starts with the fleet' in price_boxes({'24h': None}, None, None, ())
+    assert 'it starts with the fleet' in price_boxes(None, None, None, ())
+
+
+def spec_U191_every_bot_has_its_own_switch():
+    """Two bots on one page (the public one) never share a radio, or a click moves
+    the other's chart; bad text in a name stays text. SABOTAGE: the fixed default name."""
+    from panel.position_view import position_body
+    series = [(1000.0, 100.0), (1060.0, 101.0)]
+    w = {k: series for k in ('1h', '4h', '24h', '7d')}
+    def body(idx, bot):
+        return position_body(idx, bot, {'bots': {bot: None}, 'terms': {}, 'generated_ms': 0, 'window_hours': 24},
+                             {bot: {}}, w, ())
+    a, b, other = body(0, 'linBTCUSDTl'), body(0, 'linETHUSDTl'), body(1, 'linBTCUSDTl')
+    ids = [set(re.findall(r'id="(px-[^"]+)"', x)) for x in (a, b, other)]
+    assert all(len(s) == 4 for s in ids) and not ids[0] & ids[1] and not ids[0] & ids[2]
+    assert '<script' not in body(0, 'x"><script>')
 
 
 def spec_U190_a_portfolio_bot_has_no_chart_to_mark():

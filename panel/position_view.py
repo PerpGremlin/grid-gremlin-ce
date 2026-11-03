@@ -72,5 +72,5 @@ def position_body(idx, botid, contract, belief, prices=None, fills=()):
                                             and (b or {}).get('position')
                                             and (b or {}).get('whole') is not False) else None
         lines, note = level_lines(bl, avg, stopped=bool(contract.get('stopped')))
-        xch += price_boxes(prices, rng, liq, fills, lines, note)
+        xch += price_boxes(prices, rng, liq, fills, lines, note, name=esc(f'px-{idx}-{botid}'))
     return f'{xch}<div class="cards one">{card(idx, botid, b, contract, belief, full=True)}</div>'

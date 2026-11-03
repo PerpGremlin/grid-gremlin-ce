@@ -12,7 +12,9 @@ from pathlib import Path
 
 DAY = 86_400.0
 CHUNK = 1 << 20                      # 1 MB: a day of the busiest fleet
-WINDOWS = (('24h', DAY, 300.0),       # name, span, bucket seconds
+WINDOWS = (('1h', 3600.0, 60.0),      # name, span, bucket seconds (U191: a row is about 76 s)
+           ('4h', 4 * 3600.0, 120.0),
+           ('24h', DAY, 300.0),
            ('7d', 7 * DAY, 1800.0))
 EQ_WINDOWS = (('24h', DAY, 600.0),    # U91: equity keeps each bucket's low, high and
               ('7d', 7 * DAY, 3600.0))  # last, so the buckets are wider for the same weight
@@ -121,8 +123,8 @@ def windows(points, now):
 
 
 def mark_windows(points, botid, now):
-    """U65: the same two windows of one bot's price, from the rows that
-    carry its mark; None when no row does."""
+    """U65, U191: the windows of one bot's price, from the rows that carry
+    its mark; None when no row does."""
     ms = [(p[0], p[2][botid]) for p in points if len(p) > 2 and botid in p[2]]
     if not ms:
         return None
@@ -267,7 +269,7 @@ def long_windows(path, now, cache=None):
 
 
 def price_windows(path, botid, now, cache=None):
-    """U65: one bot's price over a day and a week, from the same tail."""
+    """U65, U191: one bot's price over an hour to a week, from the same tail."""
     if not path:
         return None
     return mark_windows(read_tail(path, now - 7 * DAY, cache), botid, now)

@@ -208,16 +208,31 @@ def price_svg(series, window=None, liq=None, fills=(), height=180, levels=None, 
             f'aria-label="price with the bot\'s levels and fills">{"".join(parts)}</svg>{key}')
 
 
-def price_boxes(prices, window, liq, fills, levels=None, note=''):
-    """U65: the day and the week of one position's price, or one quiet
-    line until the snapshots carry it."""
+PRICE_WINDOWS = (('1h', '1 h'), ('4h', '4 h'), ('24h', '24 h'), ('7d', '7 d'))
+
+
+def price_boxes(prices, window, liq, fills, levels=None, note='', name='px'):
+    """U65, U191: one position's price, one window at a time, or one quiet line
+    until the snapshots carry it. Radios and CSS as U103's equity switch, so an
+    export works the same, and the same memory, so a refresh keeps the pick.
+    Opens on the day. `name` is unique on a page: every bot has its own switch."""
     prices = prices or {}
-    day = price_svg(prices.get('24h'), window, liq, fills, levels=levels, note=note)
-    week = price_svg(prices.get('7d'), window, liq, fills, levels=levels, note=note)
-    if not day and not week:
+    drawn = [(k, word, price_svg(prices.get(k), window, liq, fills, levels=levels, note=note))
+             for k, word in PRICE_WINDOWS]
+    drawn = [row for row in drawn if row[2]]
+    if not drawn:
         return ('<p class="dim">price line: the engine has not recorded this bot\'s price yet '
                 '(it starts with the fleet\'s next restart)</p>')
-    return ((f'<h3>price, 24 h</h3>{day}' if day else '') + (f'<h3>price, 7 d</h3>{week}' if week else ''))
+    opens = '24h' if any(k == '24h' for k, *_ in drawn) else drawn[0][0]
+    radios = ''.join(f'<input type="radio" name="{name}" id="{name}-{k}" class="rsel eqpick"'
+                     f'{" checked" if k == opens else ""}>' for k, *_ in drawn)
+    wins = []
+    for k, word, svg in drawn:
+        picks = ''.join(f'<b>{w}</b>' if other == k else f'<label for="{name}-{other}">{w}</label>'
+                        for other, w, _ in drawn) if len(drawn) > 1 else ''
+        wins.append(f'<div class="pxwin"><h3>price, {word}'
+                    + (f'<span class="pxpick">{picks}</span>' if picks else '') + f'</h3>{svg}</div>')
+    return f'<div class="pxsw">{radios}{"".join(wins)}</div>'
 
 
 def equity_boxes(contract, idx=0):
