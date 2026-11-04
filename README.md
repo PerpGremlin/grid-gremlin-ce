@@ -126,6 +126,11 @@ will do (`CONTRIBUTING.md`).
 - `docs/THREECOMMAS.md` — the mechanics ledger: what 3Commas does, what this does.
 - `ops/README.md` — running it unattended on a box (units, watchdog, pages, a daily box hygiene check).
 
+## Thanks
+
+Samuele, a trader, reviewed this edition and sent twenty findings, each with a
+failing spec. Meph, the author of SvL, helped with bug fixes.
+
 ## Licence and terms
 
 **Apache License 2.0** — `LICENSE` and `NOTICE`. Use it, change it, build on

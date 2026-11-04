@@ -1649,6 +1649,26 @@ stands unless the owner corrects it.
   the log, and is the most it may sell. D76's statement is unchanged and still
   available; this asks for none.
 
+- **D170 — The confluence gate: a board that grows by versions (2026-11-03).** The
+  owner, a week into the five-vote board's forward record: signals and their factors "listed together" and
+  "scored against each other or with each other", a multi-level gate, the most
+  bullish and bearish days marked, any market type, "an amazing research tool". His
+  view: no test has beaten random, "but theres also a position somewhere in spacetime
+  that this works". It lives on the website and the data box, with the Terminal Gremlin
+  app after the rules settle, never in the trading app. Levels: factors build a signal;
+  signals sit in families, one vote each, because signals built from one input do not
+  confirm each other; the families give a direction score; a conditions gate (volatility,
+  touch odds, funding, hour) states the market and never votes on direction. A lead
+  weighs 2 and a failed signal 1 (his word), with every row's evidence shown. The test
+  of "somewhere": a grid of market, regime and period, counted against luck, and whether
+  a cell that worked keeps working in the next period. That five-vote board stays untouched: its
+  method (`research/confluence.py`) makes a new vote set a new test. *"this might be an evolving project… there may be
+  additions"*: so the board grows by versions. Each version's rules are fixed before its
+  first reading and never change; an addition or a changed weight is a new version with
+  its own record from zero, and the versions run side by side. A candidate can be shown,
+  not counted, so it builds a forward record before it joins a version. Preview only until
+  his word. A demo account following it is a separate word; none is started by this.
+
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
 inline above.*
