@@ -267,6 +267,8 @@ and tighter; nothing scrolls sideways (a phone scrolls the tabs alone) */
 .acchead h1{margin:0;flex:1 1 100%}.acchead h1 .meta{display:inline;margin:0 0 0 .4em}
 .acchead .pnl{margin:0;padding:.2em .6em}.acchead .pnl .big{font-size:1.3em}
 .acchead .hc{white-space:nowrap}.acchead .hc .lev-filled{white-space:normal}.acchead button.tog{margin:0}
+@media(max-width:40em){.acchead .hc{white-space:normal}}
+@media(min-width:40.01em) and (max-width:70em){.hero:not(.tabbed){overflow-x:auto}}
 ul.watch.look{margin:.2em 0 .3em}
 details.acctd{margin:.2em 0 .4em}details.acctd>summary{color:var(--dim)}details.acctd>summary:hover{color:var(--accent)}
 details.acctd[open]>summary{margin-bottom:.3em}

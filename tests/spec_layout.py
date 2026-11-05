@@ -378,3 +378,13 @@ def spec_U177_sabotage_a_tab_without_the_strip_figures_is_caught():
     from panel.strip_view import hero_strip
     rows = page.replace('<div class="hero tabbed">', hero_strip(world, True) + '<div class="hero tabbed">', 1)
     assert strip_moved(rows, world) != []                                # the rows back above the tabs
+
+
+def spec_U192_the_strip_and_the_account_line_never_widen_the_page():
+    # the seven-column strip needs about 1,076 px; between the phone layout and that it
+    # scrolled the whole page (308 px at 768), and the account line 17 px at 390
+    from panel.css import CSS
+    assert '@media(min-width:40.01em) and (max-width:70em){.hero:not(.tabbed){overflow-x:auto}}' in CSS
+    assert '@media(max-width:40em){.acchead .hc{white-space:normal}}' in CSS
+    assert CSS.index('.acchead .hc{white-space:nowrap}') < CSS.index('@media(max-width:40em){.acchead .hc')
+

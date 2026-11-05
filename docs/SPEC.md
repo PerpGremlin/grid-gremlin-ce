@@ -2202,6 +2202,10 @@ eventually pin (T1).
   button: dark's colours and face with the page and panels taken down to near
   black, the panels still a step above the page, every word AA on both.
   dark stays the default. *(owner, 2026-11-02: "a darker darkmode")*
+- **U192** (2026-11-05) The strip and the account line never widen the page. Without
+  account tabs (the public page) the seven-column strip needs about 1,076 px, so from
+  the phone layout up to 70em it scrolls inside itself, and on a phone the account
+  line wraps. Found measuring the site: the page scrolled 308 px at 768 and 7 at 390.
 - **U191** (2026-11-03) A position's price chart has four windows, one shown at a
   time: 1 h, 4 h, 24 h and 7 d, opening on the day. Every line is the fleet's own
   snapshot marks, about one every 76 s, so an hour is about 47 points and not
