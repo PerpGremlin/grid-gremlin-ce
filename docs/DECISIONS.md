@@ -1669,6 +1669,18 @@ stands unless the owner corrects it.
   not counted, so it builds a forward record before it joins a version. Preview only until
   his word. A demo account following it is a separate word; none is started by this.
 
+- **D171 — An estimated liquidation map, on the site and beside the board (2026-11-05).**
+  Seeing Meph's liquidation chart, the owner wanted what it shows users, as an addition to
+  an existing page or the confluence board, not as a study first: *"id like to make it look
+  different and we can add or remove some things."* Meph has no objection so long as his
+  work is not copied outright, the owner reports. So: our own code and our own look, the
+  idea credited. Estimated levels are drawn as bands over price on the Liquidations page,
+  BTC first, with the real liquidations on top, preview until his word. The page says the
+  bands are estimates and the method unproven, and when each venue's open interest joins.
+  From the map, a few facts go to D170's board as candidates, shown and not counted, in the
+  conditions gate. The first look at the bands against real liquidations stays as it was
+  fixed; testing a new rule is a new study and a separate word.
+
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
 inline above.*
