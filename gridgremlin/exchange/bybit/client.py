@@ -129,7 +129,17 @@ class Client:
                        'X-BAPI-RECV-WINDOW': RECV_WINDOW,
                        'X-BAPI-SIGN': self._sign(ts, query)}
         url = self.base + path + ('?' + query if query else '')
-        data = self._transport(url, headers)
+        try:
+            data = self._transport(url, headers)
+        except urllib.error.HTTPError as e:
+            if e.code in HTTP_REFUSED_CODES:
+                # E6f: a read refused for rate is the same definite no a
+                # write's is (E6d) — raw, the log said HTTPError where it
+                # meant "slowed down" (audit 2026-11-05 leftover)
+                raise VenueError(f'bybit {path}: HTTP {e.code} — refused for rate, '
+                                 'read again at the next cycle (E6f)',
+                                 kind='rate_limit') from e
+            raise
         code = int(data.get('retCode', -1))
         if code == 0:
             return data['result']
@@ -170,8 +180,17 @@ class Client:
     def fee_rates(self, category, symbol):
         """G16: ask the venue what it CHARGES — a grid whose rung spacing
         cannot clear the round trip loses on every trip by construction."""
-        r = self.get('/v5/account/fee-rate',
-                     {'category': category, 'symbol': symbol}, signed=True)
+        try:
+            r = self.get('/v5/account/fee-rate',
+                         {'category': category, 'symbol': symbol}, signed=True)
+        except VenueError as e:
+            if self.env == 'demo' and category != 'spot' and 'retCode 10001' in str(e):
+                # G16c: Bybit's demo service answers its derivative fee rate
+                # with 10001 (measured on all three demo accounts,
+                # 2026-11-06; spot answers) — the venue's gap, not this
+                # account's: None, and the build says it once, quietly
+                return None
+            raise
         row = (r.get('list') or [{}])[0]
         maker, taker = _f(row.get('makerFeeRate')), _f(row.get('takerFeeRate'))
         if maker is None or taker is None:

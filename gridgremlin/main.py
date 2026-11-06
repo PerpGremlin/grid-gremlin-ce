@@ -609,21 +609,32 @@ def build_market_bot(cfg, client, notifier, tombs, slide):
             # G16b: a rate above the assumed, or a read that failed, is said
             # (a warn, never urgent) — both passed in silence until the audit
             # of 2026-11-05
+            # G16c: on real money an unread fee is urgent — the account's own
+            # tier is what every trip pays; elsewhere it stays a warn
+            real = getattr(client, 'env', None) == 'mainnet'
             try:
                 from .ladder import grid_rungs as _g16, fee_notes
-                maker = rates(cfg['market_type'], cfg['symbol'])['maker']
-                for note in fee_notes(_g16(cfg, adapter), maker, cfg['market_type']):
-                    _vn(notifier, venue).event('warn', cfg['symbol'], note)
+                got = rates(cfg['market_type'], cfg['symbol'])
+                if got is None:
+                    # G16c: the demo venue serves no derivative fee rate — its
+                    # gap, said in the log only, never a warn every start
+                    _vn(notifier, venue).event(
+                        'net', cfg['symbol'],
+                        'fee rate not served on demo derivatives — the round trip is '
+                        'checked against the assumed fee (G16c)')
+                else:
+                    for note in fee_notes(_g16(cfg, adapter), got['maker'], cfg['market_type']):
+                        _vn(notifier, venue).event('warn', cfg['symbol'], note)
             except (VenueError, OSError, KeyError, TypeError) as e:
                 _vn(notifier, venue).event(
                     'warn', cfg['symbol'],
                     f'fee rate unread ({type(e).__name__}: {e}) — the round trip '
-                    'is not checked against the account\'s own fee (G16b)')
+                    'is not checked against the account\'s own fee (G16b)', urgent=real)
             except (http.client.HTTPException, ValueError) as e:
                 _vn(notifier, venue).event(
                     'warn', cfg['symbol'],
                     f'fee rate unreadable ({type(e).__name__}: {e}) — the round '
-                    'trip is not checked against the account\'s own fee (G16b)')
+                    'trip is not checked against the account\'s own fee (G16b)', urgent=real)
         try:                                     # G27: said at the start — on every venue
             from .ladder import rounding_note    # (the second audit, 2026-10-13: it sat
             note = rounding_note(cfg, adapter)   # inside G16's Bybit-only fee check)

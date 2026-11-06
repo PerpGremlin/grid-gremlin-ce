@@ -260,7 +260,7 @@ def spec_G16_a_grid_that_cannot_clear_its_round_trip_is_named():
     assert trip_economics([100.0], 0.001) == (None, None, None)
 
 
-def _g16_build(rates):
+def _g16_build(rates, env=None):
     """build_market_bot's fee check against a client whose fee_rates is
     `rates`; the warns it said. What the build does after the fee check
     is not this spec's: anything it raises there is ignored."""
@@ -282,6 +282,8 @@ def _g16_build(rates):
             raise OSError('not this spec')
     client = Client()
     client.fee_rates = rates
+    if env:
+        client.env = env
     lines = []
 
     class Said(Notifier):
@@ -334,3 +336,37 @@ def spec_G16b_a_fee_above_the_assumed_or_unread_is_said():
     assert said[0].startswith('warn ') and 'URGENT' not in said[0], said
     said = _g16_build(lambda m, s: {'maker': 0.0006, 'taker': 0.001})
     assert len(said) == 1 and 'exit floor' in said[0], said
+
+
+def spec_G16c_demo_derivatives_serve_no_fee_and_mainnet_unread_is_urgent():
+    """2026-11-06, measured on the box: Bybit's demo service answers
+    /v5/account/fee-rate with 10001 for linear and inverse on all three demo
+    accounts (spot answers), so every demo grid warned "fee rate unread" at
+    each start. That gap is now None and a log-only line; on mainnet an
+    unread fee is URGENT — the account's own tier is what every trip pays.
+    SABOTAGE: drop the env == 'demo' test in fee_rates -> red; urgent=real
+    back to plain -> red."""
+    from gridgremlin.exchange.bybit.client import Client
+    from gridgremlin.exchange.errors import VenueError
+
+    def answer(code):
+        return lambda url, h: ({'retCode': 0, 'result': {'timeSecond': '1'}}
+                               if 'market/time' in url else {'retCode': code, 'retMsg': ''})
+    assert Client(env='demo', api_key='k', api_secret='s',
+                  transport=answer(10001)).fee_rates('linear', 'BTCUSDT') is None
+    for env, cat in (('mainnet', 'linear'), ('demo', 'spot'), ('testnet', 'linear')):
+        try:
+            Client(env=env, api_key='k', api_secret='s',
+                   transport=answer(10001)).fee_rates(cat, 'BTCUSDT')
+            raise AssertionError(f'{env} {cat}: a 10001 read as the demo gap')
+        except VenueError:
+            pass
+    said = _g16_build(lambda m, s: None)
+    assert len(said) == 1 and said[0].startswith('net ') and 'G16c' in said[0], said
+
+    def unread(m, s):
+        raise VenueError('retCode 10002', kind='other')
+    said = _g16_build(unread, env='mainnet')
+    assert len(said) == 1 and said[0].startswith('warn URGENT ') and 'G16b' in said[0], said
+    said = _g16_build(unread, env='demo')
+    assert len(said) == 1 and 'URGENT' not in said[0], said

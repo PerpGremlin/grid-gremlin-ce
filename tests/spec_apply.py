@@ -479,3 +479,31 @@ def spec_E6e_x17_an_unanswered_cancel_still_rests_and_a_place_is_never_resent():
     grid.cycle()
     assert Landed.calls == first, (Landed.calls, first)         # read back, none re-sent
     assert len(venue.orders) == first
+
+
+def spec_E6f_a_read_refused_for_rate_is_a_rate_limit_not_a_raw_error():
+    """Audit 2026-11-05 leftover: E6d made a WRITE's 403/429 a refusal, but
+    a read's still raised urllib's raw HTTPError — the log said a crash
+    where the venue said "slow down". A read's 403/429 is now a
+    VenueError(kind='rate_limit'); a 5xx read still raises as itself.
+    SABOTAGE: drop the HTTPError clause in Client.get -> red."""
+    import io
+    import urllib.error
+    from gridgremlin.exchange.bybit.client import Client
+    from gridgremlin.exchange.errors import VenueError
+
+    def refuse(code):
+        def transport(url, h):
+            raise urllib.error.HTTPError(url, code, 'no', {}, io.BytesIO(b''))
+        return transport
+    for code in (403, 429):
+        try:
+            Client(env='demo', transport=refuse(code)).tickers('linear', 'BTCUSDT')
+            raise AssertionError(f'{code}: read without an error')
+        except VenueError as e:
+            assert e.kind == 'rate_limit' and 'E6f' in str(e), (code, e)
+    try:
+        Client(env='demo', transport=refuse(502)).tickers('linear', 'BTCUSDT')
+        raise AssertionError('502: read without an error')
+    except urllib.error.HTTPError as e:
+        assert e.code == 502
