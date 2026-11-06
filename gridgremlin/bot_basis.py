@@ -352,6 +352,7 @@ class BasisMixin:
         flatten of 2026-10-21 was sold by hand), and an order filled in
         parts is one lot."""
         if not held:
+            self._entries_held = False            # G26b: nothing to explain
             return None
         cached = self._rungs_cache                # (held, newest id, rungs)
         same = bool(cached) and abs(cached[0] - held) < 1e-12
@@ -407,6 +408,22 @@ class BasisMixin:
                 and not self._rungs_lag):
             return cached[2]              # an outside cancel: the same lots
         escalated = False
+        unexplained = (self._rungs_seen is None and remaining > slack
+                       and self.cfg['market_type'] != 'spot')
+        if unexplained and not (pending or behind):
+            # G26b: a restart whose list holds less than the position — an
+            # entry that just filled, not listed yet, or a holding older
+            # than the list (adoption). Which, only the wait can tell, and
+            # the just-bought rung must not look empty meanwhile: the block
+            # (the venue's own size and average) keeps its exits, and no
+            # entry is placed until the list covers the holding or the wait
+            # runs out. An old holding is no fault: nothing to say
+            if self._unexplained_since is None:
+                self._unexplained_since = now
+            self._entries_held = (now - self._unexplained_since
+                                  < RUNGS_LAG_SECONDS)
+            return None                           # adoption: the block
+        self._entries_held = False
         if pending or behind or self._fills_lag(fills, want, entry):
             # G26: the position moved — or an own order left the book — and
             # the fill list has not caught up. Covering the holding from it
@@ -755,8 +772,8 @@ class BasisMixin:
         NEW must net to the change in the holding. A fill the venue has not
         listed yet shows as a change nothing explains."""
         seen = self._rungs_seen
-        if seen is None:
-            return False                  # first sight (a restart): no claim
+        if seen is None:                  # first sight (a restart)
+            return self._fills_overdrawn(fills, want, entry)
         was, ids, newest = seen
         net = 0.0
         for f in fills:
@@ -767,12 +784,34 @@ class BasisMixin:
         change = want - was
         return abs(net - change) > abs(change) * 0.02 + self.adapter.qty_step
 
-    def _how_round_ended(self):
+    def _fills_overdrawn(self, fills, want, entry):
+        """G26b: a restart has no baseline, yet the list can still be caught
+        lagging. Undone from the holding, newest first, every listed fill
+        gives the position as it was then — never below flat, for a book
+        whose list holds every fill that moved it. A list missing an exit
+        that just filled holds one lot too many, and the position it gives
+        before that lot's round goes below flat: the list is behind (the
+        audit of 2026-11-05: a restart inside the lag paired the sold lot
+        as held and bought the held lot's rung again). Not on spot, whose
+        wallet's other sales are never listed as ours (D58)."""
+        if self.cfg['market_type'] == 'spot':
+            return False
+        pos, flat = want, self.adapter.qty_step * 0.5
+        for f in sorted(fills, key=lambda f: f['time_ms'], reverse=True):
+            qty = abs(f['qty'])
+            pos += -qty if str(f.get('side', '')).lower() == entry else qty
+            if pos < -flat:
+                return True
+        return False
+
+    def _how_round_ended(self, days=2):
         """M14: read the venue's own account of the closing fill — our exit
         (link or hosted TP), a liquidation, or an outside hand. None means
-        the venue could not tell us, and silence is never evidence."""
+        the venue could not tell us, and silence is never evidence. Two
+        days for the close just seen; a restart asks over the whole window
+        (M14b), the round having ended at any time it was down."""
         try:
-            fills = self._own_fills_all()
+            fills = self._own_fills_all(days=days)
         except (VenueError, OSError):
             return None
         if fills is None:
@@ -1115,7 +1154,8 @@ class BasisMixin:
                               f'the wallet holds {cap:.10g} of the coin, under what '
                               'this row would sell; its sells are trimmed to it, '
                               'never borrowed (D169)', urgent=True)
-        self._sell_cap_said = trimmed
+        if sells:     # a plan with no sells (a DCA's ladder) judges nothing
+            self._sell_cap_said = trimmed
         return out + [d for d in desired if d['side'] != self._exit_side]
 
     def _held(self, truth):

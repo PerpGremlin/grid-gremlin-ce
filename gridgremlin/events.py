@@ -65,6 +65,41 @@ def stamped_print(line):
     print(f'{line} @{utc_stamp()}', flush=True)
 
 
+LOG_LOST = ('log write FAILED ({e}) — the disk may be full; the fleet '
+            'runs on, its stops and pages still go, and the log misses '
+            'lines until there is room (X17b)')
+
+
+class SafeStream:
+    """X17b: the fleet's stdout and stderr. A full disk (ENOSPC on the log
+    the unit appends to) loses the line, never the cycle: the write is
+    swallowed and `on_fail` hears it, so the phone can say so."""
+
+    def __init__(self, stream, on_fail=None):
+        self._stream = stream
+        self._on_fail = on_fail
+
+    def _failed(self, e):
+        if self._on_fail is not None:
+            self._on_fail(e)
+
+    def write(self, s):
+        try:
+            return self._stream.write(s)
+        except OSError as e:
+            self._failed(e)
+            return len(s)
+
+    def flush(self):
+        try:
+            self._stream.flush()
+        except OSError as e:
+            self._failed(e)
+
+    def __getattr__(self, name):
+        return getattr(self._stream, name)
+
+
 class Notifier:
     def __init__(self, ship_orders=False, sink=None):
         self.ship_orders = ship_orders
@@ -76,7 +111,14 @@ class Notifier:
         route = 'log' if ((kind in ORDER_KINDS and not self.ship_orders)
                           or kind in LOG_ONLY_KINDS) else 'ship'
         label = kind if botid == kind else f'{kind} {botid}'   # no "fleet fleet"
-        self.sink(f'[{route}] {label}: {text}')
+        try:
+            self.sink(f'[{route}] {label}: {text}')
+        except OSError as e:     # X17b: a full disk never stops the caller
+            self.log_lost(e)     # (a stop's flatten, a cycle) — said instead
+
+    def log_lost(self, e):
+        """X17b: a log line could not be written. The terminal has nowhere
+        else to say it; the phone's notifier does (TelegramNotifier)."""
 
 
 class TelegramNotifier(Notifier):
@@ -144,6 +186,18 @@ class TelegramNotifier(Notifier):
         # a kill page must not sit in the buffer until some later event
         # arrives (the audit's M6) — it flushes NOW, rate limit or not
         self._maybe_flush(force=(kind == 'kill'))
+
+    def log_lost(self, e):
+        """X17b: the log could not be written — urgent on the phone, the
+        first time and then at most every URGENT_REPEAT while it lasts.
+        Buffered only (never printed: that is what failed); the next flush
+        sends it."""
+        text = self._recurring('fleet', LOG_LOST.format(e=e))
+        if text is None:
+            return
+        line = _Line(f'fleet: {text}')
+        line.vital = True
+        self._buffer.append(line)
 
     def _recurring(self, botid, text, every=URGENT_REPEAT):
         """D60: an urgent line is said the first time; the same bot's same

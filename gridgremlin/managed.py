@@ -254,8 +254,9 @@ def close_part(path, key, record, client, adapter, run, qty=None):
         for oid in record.get('orders') or []:
             try:
                 client.cancel_order(market, symbol, oid)
-            except VenueError:
-                pass
+            except VenueError as e:
+                if e.ambiguous:      # E6e: unknown fate, kept as a timeout kept it
+                    raise
         drop(path, key)
     return {'key': key, 'closed': size - left, 'left': left, 'mark': mark}
 

@@ -235,36 +235,34 @@ def check_realised(record, cfg, botid, fleet, start_ms, end_ms, unowned, venue_r
 
 def open_lots(counted, botid, entry_side, inverse=False):
     """F41's lots, walked from the record by its own hand (not report's):
-    each entry fill a lot; each exit consumes the lots it closes as the
-    engine nets them (G23) — the lot one rung inside it first (G25), then
-    the newest open lot of any rung, seed lots included; an exit with no
-    rung (a venue's or a hand's close) the newest first. Returns {lots
+    each entry ORDER a lot (its parts one lot, newest at its last part);
+    each exit consumes the lots it closes as the engine nets them (G23's
+    walk, LIFO) — the newest open lot first, whatever its rung, seed lots
+    included, and a venue's or a hand's close the same. Returns {lots
     [(price, qty)] left, no_lot (exits the whole inventory could not
     cover), same_rung (exits whose lot was bought at their own rung, R9:
     said, not a failure), exits [(fill, qty covered, its cost)] — the cost
     in quote, or in coin for an inverse}."""
     from .apply import rung_of
-    from .ladder import SEED_RUNG
-    step = -1 if entry_side == 'buy' else 1
-    book = {}                                   # seq -> [rung, price, qty]
+    book = {}                                   # seq -> [rung, price, qty, link]
     seq = 0
     no_lot = same = 0
     exits = []
     for f in counted:
-        rung = rung_of(f.get('link_id') or '', botid)
+        link = f.get('link_id') or ''
+        rung = rung_of(link, botid)
         if f['side'] == entry_side:
+            for k in [k for k in sorted(book) if link and book[k][3] == link]:
+                seq += 1                        # G23: one lot per order, newest
+                book[seq] = book.pop(k)         # at its last part
             seq += 1
-            book[seq] = [rung, f['price'], f['qty']]
+            book[seq] = [rung, f['price'], f['qty'], link]
             continue
-        inside = rung + step if rung is not None and rung != SEED_RUNG else None
-        newest = sorted(book, reverse=True)
-        order = [k for k in newest if book[k][0] == inside] + \
-                [k for k in newest if book[k][0] != inside]
         left, cost, own_rung = f['qty'], 0.0, False
-        for k in order:
+        for k in sorted(book, reverse=True):
             if left <= 1e-12 * max(1.0, f['qty']):
                 break
-            r, p, q = book[k]
+            r, p, q, _ = book[k]
             take = q if q < left else left
             book[k][2] = q - take
             if book[k][2] <= 1e-12 * max(1.0, f['qty']):
@@ -276,7 +274,10 @@ def open_lots(counted, botid, entry_side, inverse=False):
             no_lot += 1
         same += own_rung
         exits.append((f, f['qty'] - left, cost))
-    return {'lots': [(p, q) for _, p, q in book.values()], 'no_lot': no_lot,
+    return {'lots': [(p, q) for _, p, q, _ in book.values()],
+            'rungs': [r for i, (r, _, _, ln) in enumerate(book.values())   # a lot per order
+                      if not ln or ln not in [lot[3] for lot in list(book.values())[:i]]],
+            'no_lot': no_lot,
             'same_rung': same, 'exits': exits}
 
 

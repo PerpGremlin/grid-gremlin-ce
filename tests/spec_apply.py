@@ -269,3 +269,213 @@ def spec_I3_every_shipped_fleet_row_fits_its_venues_link():
                 make_botid(cfg['market_type'], cfg['symbol'], cfg['side']),
                 widest_rung(cfg), 16 if hl else BYBIT_LINK_LIMIT,
                 gen_chars=4 if hl else 10)
+
+
+# --- E6c/E6d: what a write's answer means (audit 2026-11-05) ----------------
+
+class _Resp:
+    """urlopen's answer: a body, or a read that is cut off."""
+
+    def __init__(self, body=None, err=None):
+        self.body, self.err, self.headers = body, err, {}
+
+    def read(self):
+        if self.err is not None:
+            raise self.err
+        return self.body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def _bybit_post(answer):
+    """One WriteClient cancel against a stubbed urlopen: `answer` is the
+    response, or the exception urlopen raises. Returns what was raised."""
+    import urllib.request
+    from gridgremlin.exchange.bybit.client import WriteClient
+    from gridgremlin.exchange.pacer import Pacer
+    c = WriteClient(env='demo', api_key='k', api_secret='s',
+                    transport=lambda url, h: {})
+    c._synced, c._pacer = True, Pacer(min_gap=0.0)
+
+    def urlopen(req, timeout=None):
+        if isinstance(answer, BaseException):
+            raise answer
+        return answer
+    saved = urllib.request.urlopen
+    urllib.request.urlopen = urlopen
+    try:
+        c.cancel_order('linear', 'BTCUSDT', 'o1')
+    except Exception as e:      # noqa: BLE001 — the spec reads what was raised
+        return e
+    finally:
+        urllib.request.urlopen = saved
+    return None
+
+
+def spec_E6c_a_cancel_of_a_finished_order_is_gone():
+    """Bybit v5's error table: 110008 "The order has been completed or
+    cancelled.", 110010 "The order has been cancelled". Read as 'other',
+    every cancel path kept the rung uncancelled, held its replacement back
+    and warned of an order that had already filled. SABOTAGE: drop 110008
+    from ORDER_GONE_CODES -> red."""
+    import json
+    from gridgremlin.exchange.bybit.client import _kind, _post_kind
+    from gridgremlin.exchange.errors import may_have_landed
+    for code in (110001, 110008, 110010, 170213):
+        assert _post_kind(code, '') == 'gone', code
+        assert _kind(code) == 'gone', code
+        e = _bybit_post(_Resp(json.dumps({'retCode': code,
+                                          'retMsg': 'finished'}).encode()))
+        assert e is not None and e.kind == 'gone' and not may_have_landed(e), (code, e)
+        assert KIND_REACTIONS[e.kind] == 'treat_done'
+
+
+def spec_E6d_a_cut_off_answer_is_ambiguous_and_403_429_are_refusals():
+    """A write whose answer is cut off (IncompleteRead) or garbled (JSON
+    that does not parse) may have landed: it is ambiguous, a VenueError the
+    write paths catch and reconcile — raw, neither is an OSError, so the
+    whole cycle was lost instead. HTTP 403/429 are refusals before
+    processing (Bybit v5: "IP rate limit breached", "System level frequency
+    protection"): a definite no that waits for the window — raw, an
+    HTTPError is an OSError and was taken for an unknown fate. A 5xx keeps
+    E6b's careful reading. SABOTAGE: drop the cut-off clause in
+    WriteClient.post -> red; drop 429 from HTTP_REFUSED_CODES -> red."""
+    import http.client
+    import io
+    import urllib.error
+    from gridgremlin.exchange.errors import VenueError, may_have_landed
+    for resp in (_Resp(err=http.client.IncompleteRead(b'{"retCode":0,"res')),
+                 _Resp(b'{"retCode":0,"res')):
+        e = _bybit_post(resp)
+        assert isinstance(e, VenueError) and e.ambiguous and may_have_landed(e), e
+        assert 'may have landed' in str(e)
+    for code in (403, 429):
+        e = _bybit_post(urllib.error.HTTPError('u', code, 'no', {}, io.BytesIO(b'')))
+        assert isinstance(e, VenueError) and e.kind == 'rate_limit', (code, e)
+        assert not may_have_landed(e), code
+        assert KIND_REACTIONS[e.kind] == 'wait_for_window'
+    e = _bybit_post(urllib.error.HTTPError('u', 502, 'bad gateway', {}, io.BytesIO(b'')))
+    assert may_have_landed(e)                    # 5xx: the fate is unknown
+
+
+def spec_E6d_hl_a_cut_off_answer_is_ambiguous():
+    """Hyperliquid's write transport, the same: a cut-off or garbled answer
+    is HLError(ambiguous=True), never a raw exception. SABOTAGE: drop the
+    clause in _post_action -> red."""
+    import http.client
+    import json
+    from gridgremlin.exchange.hyperliquid.exchange import ExchangeClient
+    from gridgremlin.exchange.errors import VenueError, may_have_landed
+    c = ExchangeClient(env='testnet', address='0x' + '22' * 20,
+                       private_key='0x' + '11' * 32)
+    for err in (http.client.IncompleteRead(b'{"status":"o'),
+                json.JSONDecodeError('Expecting value', '{"st', 4)):
+        def post(path, body, retry_429=True, err=err):
+            raise err
+        c._post = post
+        try:
+            c.cancel_order(0, order_id=1)
+            raised = None
+        except Exception as e:      # noqa: BLE001 — the spec reads what was raised
+            raised = e
+        assert isinstance(raised, VenueError) and raised.ambiguous, raised
+        assert may_have_landed(raised)
+
+
+# --- E6e: no answer to a write is an ambiguous VenueError -------------------
+
+def _no_answer(exc):
+    """What the Bybit adapter raises when urlopen raises `exc` on a write."""
+    e = _bybit_post(exc)
+    assert e is not None, exc
+    return e
+
+
+def spec_E6e_a_write_with_no_answer_is_an_ambiguous_venue_error():
+    """A timeout, a reset or a dropped line after the send, and a 5xx: the
+    write may have landed. Raw (an OSError), each escaped every `except
+    VenueError` write path — the ladder's cancels, amends and places, the
+    round's exits — and lost the cycle. Both venues now raise an ambiguous
+    VenueError, never `gone`. SABOTAGE: drop the OSError clause in
+    WriteClient.post -> red; drop the HTTPError fall-through -> red; drop
+    the HL network clause in _post_action -> red."""
+    import io
+    import urllib.error
+    from gridgremlin.exchange.errors import VenueError, may_have_landed
+    for exc in (TimeoutError('timed out'), ConnectionResetError('reset'),
+                urllib.error.URLError('no route'),
+                urllib.error.HTTPError('u', 502, 'bad gateway', {}, io.BytesIO(b'')),
+                urllib.error.HTTPError('u', 500, 'error', {}, io.BytesIO(b''))):
+        e = _no_answer(exc)
+        assert isinstance(e, VenueError) and e.ambiguous and may_have_landed(e), (exc, e)
+        assert e.kind == 'other', (exc, e.kind)          # never 'gone'
+    from gridgremlin.exchange.hyperliquid.client import HLError
+    from gridgremlin.exchange.hyperliquid.exchange import ExchangeClient
+    c = ExchangeClient(env='testnet', address='0x' + '22' * 20,
+                       private_key='0x' + '11' * 32)
+    for err in (TimeoutError('timed out'), urllib.error.URLError('no route'),
+                HLError(502, '/exchange: HTTP 502', 'bad gateway')):
+        def post(path, body, retry_429=True, err=err):
+            raise err
+        c._post = post
+        try:
+            c.cancel_order(0, order_id=1)
+            raised = None
+        except Exception as e:      # noqa: BLE001 — the spec reads what was raised
+            raised = e
+        assert isinstance(raised, VenueError) and raised.ambiguous, (err, raised)
+        assert raised.kind != 'gone'
+
+
+def spec_E6e_x17_an_unanswered_cancel_still_rests_and_a_place_is_never_resent():
+    """The callers, as the adapter now raises: X17 counts a cancel with no
+    answer as STILL RESTING (never gone) and the bot stays up doing the
+    stop's work; a ladder place with no answer is not sent again in its
+    cycle, and the next cycle reads the book first — an order that landed
+    is never placed twice."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent))
+    from spec_loop import FakeVenue, _cfg as loop_cfg, ADAPTER as LOOP_ADAPTER
+    from spec_stops import _holding, _tombed
+    from gridgremlin.bot import Bot
+    from gridgremlin.events import Notifier
+    timeout = _no_answer(TimeoutError('timed out'))
+
+    class Unanswered(FakeVenue):
+        def cancel_order(self, *a, **kw):
+            raise timeout
+    venue, lines = Unanswered(mark=61000.0), []
+    _holding(venue)
+    bot = _tombed(venue, lines, stop={'watch': 'mark_price', 'level': 58000})
+    bot.cycle()
+    resting = len(venue.orders)
+    assert resting
+    venue.mark = 57000.0
+    bot.cycle()                                      # the adapter's error, caught
+    said = next(ln for ln in lines if 'stop NOT finished' in ln)
+    assert f'{resting} owned orders STILL REST' in said, said
+    assert bot.alive and bot.stopping and len(venue.orders) == resting
+    assert not any(' kill ' in ln for ln in lines)
+
+    class Landed(FakeVenue):
+        """Every place lands on the venue, and its answer never arrives."""
+        calls = 0
+
+        def place_order(self, *a, **kw):
+            type(self).calls += 1
+            super().place_order(*a, **kw)
+            raise timeout
+    venue, lines = Landed(), []
+    grid = Bot(loop_cfg(), LOOP_ADAPTER, venue, Notifier(sink=lines.append), gen_seed=1)
+    grid.cycle()                                     # the cycle is not lost
+    first = Landed.calls
+    rungs = {(o['side'], o['price']) for o in venue.orders}
+    assert first and len(rungs) == first == len(venue.orders)   # each rung once
+    grid.cycle()
+    assert Landed.calls == first, (Landed.calls, first)         # read back, none re-sent
+    assert len(venue.orders) == first

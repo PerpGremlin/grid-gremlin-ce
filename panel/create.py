@@ -99,9 +99,8 @@ def size_jumps(fleet_raw, mode, orig, bot):
     if mode == 'create':
         cap = _num_or_none(bot.get('capital'))
         return [('capital', None, cap)] if cap else []
-    old = next((b for b in fleet_raw.get('bots', [])
-                if make_botid(b.get('market_type', 'linear'), b.get('symbol'),
-                              b.get('side')) == orig), None)
+    old = next((b for b in (fleet_raw or {}).get('bots') or []
+                if _raw_botid(b) == orig), None)
     if old is None:
         return []
     out = []
@@ -111,6 +110,21 @@ def size_jumps(fleet_raw, mode, orig, bot):
         if was and now and now > 2.0 * was:
             out.append((key, was, now))
     return out
+
+
+def _raw_botid(row):
+    """D64c: a raw fleet row's id, or None when it has none to give. A
+    portfolio row has no side and a half-typed row may lack a symbol:
+    make_botid on either raised TypeError and the review of ANY edit on a
+    Mainnet fleet holding one crashed (audit 2026-11-05)."""
+    if not isinstance(row, dict):
+        return None
+    if row.get('strategy') == 'portfolio':
+        return row_botid(row)
+    if not (row.get('symbol') and row.get('side')):
+        return None
+    return make_botid(row.get('market_type') or 'linear', row['symbol'],
+                      row['side'])
 
 
 def retype_refusal(jumps, form):

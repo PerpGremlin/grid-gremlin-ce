@@ -15,7 +15,6 @@ from common.env import load_env
 from .exchange.errors import VenueError
 
 EPS = 1e-12
-HL_FILL_CAP = 2000
 
 
 def owner_of(link_id, botids):
@@ -220,25 +219,36 @@ def attribute(fills, botids, closers=None, entry_sides=None):
     return out
 
 
-def take_lots(held, qty, inside=None):
+def take_lots(held, qty):
     """R15: consume `qty` from a bot's open lots `held` ([rung, price, qty,
-    fee per unit], oldest first) as the engine nets them (G23): the lots at
-    rung `inside` newest first, then the newest open lot of any rung. Lots
-    left empty are removed. Returns [(price, qty taken, fee per unit)]."""
+    fee per unit, link], oldest first) as the engine nets them (G23's walk):
+    the newest open lot first, whatever its rung — LIFO, the pairing every
+    exit is placed from. Lots left empty are removed. Returns [(price, qty
+    taken, fee per unit)]."""
     took, left = [], qty
     tol = EPS * max(1.0, qty)
-    for want in ((inside,) if inside is not None else ()) + (None,):
-        for lot in reversed(held):
-            if left <= tol:
-                break
-            if lot[2] <= 0.0 or (want is not None and lot[0] != want):
-                continue
-            q = min(lot[2], left)
-            lot[2] -= q
-            left -= q
-            took.append((lot[1], q, lot[3]))
+    for lot in reversed(held):
+        if left <= tol:
+            break
+        if lot[2] <= 0.0:
+            continue
+        q = min(lot[2], left)
+        lot[2] -= q
+        left -= q
+        took.append((lot[1], q, lot[3]))
     held[:] = [lot for lot in held if lot[2] > tol]
     return took
+
+
+def add_lot(held, rung, price, qty, fee, link):
+    """R15: an entry fill is a lot at its own price. G23's walk takes an
+    order filled in parts as ONE lot, completed (and so newest) at its last
+    part: the order's earlier parts still open move up to the newest place
+    with it, so no other lot is taken between them."""
+    parts = [lot for lot in held if link and lot[4] == link]
+    if parts:
+        held[:] = [lot for lot in held if lot[4] != link] + parts
+    held.append([rung, price, qty, fee / qty if qty else 0.0, link])
 
 
 def forget(held):
@@ -296,19 +306,19 @@ def ledger(fills, botids, inverse_ids=(), entry_sides=None, closers=None,
                 # it is held (the second audit, 2026-10-13)
                 seed_link[key] = f['link_id']
                 forget(held)
-            held.append([rung, f['price'], f['qty'], f['fee'] / f['qty'] if f['qty'] else 0.0])
+            add_lot(held, rung, f['price'], f['qty'], f['fee'], f.get('link_id') or '')
         elif key in grids and isinstance(key, str):
             # R15 (2026-10-31): an exit CONSUMES the lots it closes, as the
-            # engine nets them (G23): the lot one rung inside it first (G25),
-            # then the newest open lot of any rung, seed lots included — so
-            # a duplicate exit, a same-rung re-buy or a partial entry fill is
-            # priced at the lot it really took, never at a price the lot
-            # left with. The lattice prices only quantity no seen lot covers
-            # (an entry before the window); the seed only what it still holds.
+            # engine nets them (G23's walk, LIFO: the newest open lot first,
+            # seed lots included; 2026-11-06, the inside rung first had
+            # disagreed with the walk) — so a duplicate exit, a same-rung
+            # re-buy or a partial entry fill is priced at the lot it really
+            # took, never at a price the lot left with. The lattice prices
+            # only quantity no seen lot covers (an entry before the window);
+            # the seed only what it still holds.
             step = -1 if entry_sides.get(key) == 'buy' else 1
             linked = rung is not None and rung != SEED_RUNG
-            took = take_lots(lots.setdefault(key, []), f['qty'],
-                             rung + step if linked else None)
+            took = take_lots(lots.setdefault(key, []), f['qty'])
             if linked:
                 inverse = key in inverse_ids
                 left = f['qty'] - sum(q for _, q, _ in took)
@@ -609,12 +619,14 @@ def _bybit_pull(rows, since_ms, now_ms):
 def _hl_pull(rows, since_ms):
     from .exchange.hyperliquid.client import InfoClient
     from .exchange.hyperliquid.truth import read_fills
+    from .kept_fills import hl_history
     client = InfoClient()
     coins = sorted({r['symbol'] for r in rows})
-    raw = client.user_fills_by_time(since_ms)
-    if len(raw) >= HL_FILL_CAP:
-        print(f'[warn] HL answered its {HL_FILL_CAP}-fill cap — the window '
-              'is truncated, narrow --hours', file=sys.stderr)
+    # R1b: one call answers at most 2000 fills, oldest first — the report
+    # took that page as the window and only warned. Paged by R1's time
+    # cursor to the end; a full millisecond that cannot page is refused
+    # (`partial_read`), never read short (audit 2026-11-05)
+    raw = hl_history(client, int(since_ms), None, strict=True)
     fills = read_fills(raw, set(coins), client.address)
     marks = {}
     try:                       # ONE read for every coin's mark: the panel's

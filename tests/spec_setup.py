@@ -2069,6 +2069,29 @@ def spec_D64_a_mainnet_number_past_double_is_typed_twice():
     assert retype_refusal(jumps, {'retype_capital': '25,000'}) is None
 
 
+def spec_D64c_size_jumps_reads_a_fleet_holding_a_portfolio_row():
+    """Audit 2026-11-05: size_jumps named every raw row by make_botid, and
+    a portfolio row has no side — `None[0]`, TypeError — so the review of
+    ANY edit on a Mainnet fleet holding one crashed; a `"bots": null` file
+    did the same. A portfolio row is named pfo<name> (row_botid), a row
+    with no symbol or side names nothing. SABOTAGE: make_botid back on
+    every row -> red."""
+    from panel.create import size_jumps
+    fleet = {'bots': [{'strategy': 'portfolio', 'name': 'carry', 'capital': 1000},
+                      {'market_type': 'linear', 'symbol': 'ETHUSDT'},
+                      'not a row',
+                      {'market_type': 'linear', 'symbol': 'BTCUSDT',
+                       'side': 'long', 'capital': 1000, 'leverage': 5}]}
+    row = {'market_type': 'linear', 'symbol': 'BTCUSDT', 'side': 'long',
+           'capital': 2500, 'leverage': 5}
+    assert size_jumps(fleet, 'edit', 'linBTCUSDTl', row) == [('capital', 1000.0, 2500.0)]
+    assert size_jumps(fleet, 'edit', 'pfocarry',
+                      {'strategy': 'portfolio', 'name': 'carry', 'capital': 3000}) == \
+        [('capital', 1000.0, 3000.0)]
+    assert size_jumps({'bots': None}, 'edit', 'linBTCUSDTl', row) == []
+    assert size_jumps(None, 'edit', 'linBTCUSDTl', row) == []
+
+
 def spec_D64_the_served_panel_asks_twice_on_mainnet_only():
     import html
     import re

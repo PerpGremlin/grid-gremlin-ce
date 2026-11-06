@@ -88,7 +88,7 @@ def spec_G27b_the_step_is_said_on_inverse_and_on_every_venue():
     src = (Path(__file__).resolve().parents[1] / 'gridgremlin' / 'main.py').read_text()
     g16 = src.index("rates = getattr(client, 'fee_rates', None)")
     g27 = src.index('note = rounding_note(cfg, adapter)')
-    assert src[g16:g27].count('except (VenueError, OSError, KeyError, TypeError):') == 1   # after G16's block
+    assert src[g16:g27].count('except (VenueError, OSError, KeyError, TypeError) as e:') == 1   # after G16's block
 
 
 def spec_F1b_G27_are_called_where_they_guard():

@@ -17,7 +17,7 @@ from .config import (ConfigError, VENUE_ICONS, check_placeable, market_rows,
                      slide_leverage_warning, validate_fleet)
 import os
 
-from .events import Notifier, TelegramNotifier, VenueNotifier
+from .events import Notifier, SafeStream, TelegramNotifier, VenueNotifier
 from .exchange.bybit.client import WriteClient
 from .exchange.bybit.truth import parse_instrument
 from .exchange.errors import VenueError
@@ -606,23 +606,24 @@ def build_market_bot(cfg, client, notifier, tombs, slide):
         # and nothing else in the build would ever say so.
         rates = getattr(client, 'fee_rates', None)
         if rates is not None:
+            # G16b: a rate above the assumed, or a read that failed, is said
+            # (a warn, never urgent) — both passed in silence until the audit
+            # of 2026-11-05
             try:
-                from .ladder import grid_rungs as _g16, trip_economics
+                from .ladder import grid_rungs as _g16, fee_notes
                 maker = rates(cfg['market_type'], cfg['symbol'])['maker']
-                net, gap, trip = trip_economics(_g16(cfg, adapter), maker)
-                if net is not None and net <= 0:
-                    _vn(notifier, venue).event(
-                        'warn', cfg['symbol'],
-                        f'EVERY ROUND TRIP LOSES: rung gap {gap:.4%} vs '
-                        f'round-trip fee {trip:.4%} — widen the range or '
-                        f'cut rungs (G16)')
-                elif net is not None and net < trip:
-                    _vn(notifier, venue).event(
-                        'warn', cfg['symbol'],
-                        f'thin margin: rung gap {gap:.4%} barely clears '
-                        f'the {trip:.4%} round trip (net {net:.4%}/trip)')
-            except (VenueError, OSError, KeyError, TypeError):
-                pass
+                for note in fee_notes(_g16(cfg, adapter), maker, cfg['market_type']):
+                    _vn(notifier, venue).event('warn', cfg['symbol'], note)
+            except (VenueError, OSError, KeyError, TypeError) as e:
+                _vn(notifier, venue).event(
+                    'warn', cfg['symbol'],
+                    f'fee rate unread ({type(e).__name__}: {e}) — the round trip '
+                    'is not checked against the account\'s own fee (G16b)')
+            except (http.client.HTTPException, ValueError) as e:
+                _vn(notifier, venue).event(
+                    'warn', cfg['symbol'],
+                    f'fee rate unreadable ({type(e).__name__}: {e}) — the round '
+                    'trip is not checked against the account\'s own fee (G16b)')
         try:                                     # G27: said at the start — on every venue
             from .ladder import rounding_note    # (the second audit, 2026-10-13: it sat
             note = rounding_note(cfg, adapter)   # inside G16's Bybit-only fee check)
@@ -1037,6 +1038,10 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
     lock_tag = lock_tag_for(clients, fleet.get('account', 'default'))
     lock = acquire_fleet_lock(lock_path
                               or str(lockdir / f'{lock_tag}.lock'))
+    import sys
+    streams = sys.stdout, sys.stderr     # X17b: a full disk loses log lines,
+    lost = getattr(notifier, 'log_lost', None)   # never the fleet: said on
+    sys.stdout, sys.stderr = SafeStream(streams[0], lost), SafeStream(streams[1], lost)
     try:
         notifier.ship_orders = (fleet['notify_orders'] if ship_orders is None
                                 else ship_orders)
@@ -1208,5 +1213,6 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
     finally:
         if hasattr(notifier, 'close'):
             notifier.close()
+        sys.stdout, sys.stderr = streams
         lock.close()
         prelock.close()

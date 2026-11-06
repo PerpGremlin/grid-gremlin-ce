@@ -634,6 +634,126 @@ def spec_G26_a_lagging_entry_fill_is_never_bought_twice():
     assert 59000.0 not in _buys(venue.orders)          # held, not re-bought
 
 
+# --- G26b: a restart inside the lag (the audit of 2026-11-05) -----------------
+
+def _restarted_inside_the_lag(lag=True, overdrawn=None):
+    """The 59k lot's exit at 60k fills; the fleet restarts before the fill
+    list shows it. The new process has no baseline (E3)."""
+    venue, bot, fills, late, lines = _two_lots_then_the_lower_exit_fills(lag)
+    bot = Bot(_cfg(), ADAPTER, venue, Notifier(sink=lines.append), gen_seed=2,
+              clock=bot._now)
+    if overdrawn is not None:
+        bot._fills_overdrawn = overdrawn
+    return venue, bot, fills, late, lines
+
+
+def spec_G26b_a_restart_inside_the_lag_waits_for_the_exit_that_just_filled():
+    """Listed, the two buys hold one lot more than the position: undone from
+    the holding, the list goes below flat, so it is behind. Nothing moves
+    until the sale is listed; then the 60k lot keeps its 61k exit and 59k,
+    sold, is bought again."""
+    venue, bot, fills, late, _ = _restarted_inside_the_lag()
+    for _ in range(3):
+        bot.cycle()
+        assert _sells(venue.orders) == [61000.0]       # no 60k exit for a
+        assert 59000.0 not in _buys(venue.orders)      # lot already sold
+    fills.append(late)
+    bot.cycle()
+    assert _sells(venue.orders) == [61000.0]
+    assert _buys(venue.orders)[-1] == 59000.0
+    assert bot._rungs_cache[2] == [10]
+
+
+def spec_G26b_sabotage_without_the_check_the_restart_sells_the_held_lot_at_cost():
+    """The sabotage half: the check taken out, the restart's walk covers
+    the holding with the 59k lot just sold and moves the exit to 60k —
+    the held lot was bought at 60k: a trip at zero spread — and 59k, sold,
+    looks held and is not bought again."""
+    venue, bot, _, _, _ = _restarted_inside_the_lag(overdrawn=lambda *a: False)
+    bot.cycle()
+    assert _sells(venue.orders) == [60000.0]
+    assert 59000.0 not in _buys(venue.orders)
+    assert bot._rungs_cache[2] == [9]
+
+
+def _restarted_after_an_entry_fill(entries_held=True):
+    """60k is held; the 59k buy fills and the fleet restarts before the list
+    shows it: the list holds less than the position."""
+    venue, lines = FakeVenue(mark=60500.0), []
+    clock = _Clock()
+    fills = _recording(venue, clock)
+    bot = Bot(_cfg(), ADAPTER, venue, Notifier(sink=lines.append), gen_seed=1,
+              clock=clock)
+    bot.cycle()
+    buy = next(o for o in venue.orders if o['side'] == 'Buy'
+               and float(o['price']) == 60000.0)
+    q1 = float(buy['qty'])
+    venue.fill(buy['order_id'], buy['price'])
+    venue.mark = 59600.0
+    bot.cycle()
+    nxt = next(o for o in venue.orders if o['side'] == 'Buy'
+               and float(o['price']) == 59000.0)
+    q2 = float(nxt['qty'])
+    clock.t += 1.0
+    late = _fill_row(fills, clock, 'Buy', 59000.0, q2, nxt['link_id'], 'late')
+    venue.orders.remove(nxt)
+    venue.position = dict(venue.position, size=f'{q1 + q2:.3f}',
+                          avgPrice=str((60000 * q1 + 59000 * q2) / (q1 + q2)))
+    venue.mark = 59100.0
+    class NoHold(Bot):                    # the sabotage: the hold, never set
+        _entries_held = property(lambda s: False, lambda s, v: None)
+    bot = (Bot if entries_held else NoHold)(
+        _cfg(), ADAPTER, venue, Notifier(sink=lines.append), gen_seed=2,
+        clock=clock)
+    return venue, bot, fills, late, clock
+
+
+def spec_G26b_a_restart_short_of_the_holding_buys_no_rung_until_it_is_listed():
+    """The list short of the position (an entry just filled, not listed):
+    the block keeps its exits, and no entry is placed — the 59k rung, just
+    bought, looks empty — until the list covers the holding."""
+    venue, bot, fills, late, clock = _restarted_after_an_entry_fill()
+    for _ in range(3):
+        bot.cycle()
+        clock.t += 2.0
+        assert 59000.0 not in _buys(venue.orders)
+        assert _sells(venue.orders)                    # the block's exits
+    fills.append(late)
+    bot.cycle()
+    assert _sells(venue.orders) == [60000.0, 61000.0]  # both lots' exits
+    assert 59000.0 not in _buys(venue.orders)          # held, not re-bought
+    assert not bot._entries_held
+
+
+def spec_G26b_sabotage_without_the_hold_the_restart_buys_the_rung_again():
+    venue, bot, _, _, _ = _restarted_after_an_entry_fill(entries_held=False)
+    bot.cycle()
+    assert 59000.0 in _buys(venue.orders)              # bought twice, if it fills
+
+
+def spec_G26b_an_old_holding_waits_the_lag_once_then_is_adopted_quietly():
+    """A holding older than the list is the other reading of a list short of
+    the position: past the wait it is adopted as before (the block), with
+    nothing said and entries placed again."""
+    from gridgremlin.bot import RUNGS_LAG_SECONDS
+    venue, bot, fills, late, clock = _restarted_after_an_entry_fill()
+    lines = []
+    bot.notify = Notifier(sink=lines.append)
+    bot.cycle()
+    assert bot._entries_held
+    clock.t += RUNGS_LAG_SECONDS + 1.0
+    bot.cycle()
+    assert not bot._entries_held and 59000.0 in _buys(venue.orders)
+    assert not any('warn' in ln for ln in lines)
+
+
+def spec_G26b_a_restart_with_a_prompt_list_costs_nothing():
+    venue, bot, _, _, _ = _restarted_inside_the_lag(lag=False)
+    bot.cycle()
+    assert _sells(venue.orders) == [61000.0]
+    assert _buys(venue.orders)[-1] == 59000.0          # re-armed at once
+
+
 # --- G23/G26: one list per derivation, reads only move forward (2026-10-31) ---
 # Measured on the demo and HL fleets 2026-10-22..30: 28 and 23 orders a full
 # account would never have planned — a rung re-bought while its lot was held,

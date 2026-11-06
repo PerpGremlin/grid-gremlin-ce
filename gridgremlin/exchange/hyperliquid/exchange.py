@@ -20,6 +20,7 @@ nonce. The discipline mirrors the Bybit client's hard-won stances:
 
 Key + address come from `.env` (HL_PRIVATE_KEY / HL_ACCOUNT_ADDRESS).
 """
+import http.client
 import json
 import os
 import time
@@ -98,6 +99,13 @@ class ExchangeClient(InfoClient):
             raise HLError(0, f'{action["type"]}: network failure after send — the write '
                              f'may have landed; reconcile decides ({e})',
                           ambiguous=True) from e
+        except (http.client.HTTPException, ValueError) as e:
+            # E6d: sent, and the answer cut off or garbled (IncompleteRead,
+            # truncated JSON) — the fate is unknown, never a refusal, and
+            # never an exception the write paths do not catch (audit 2026-11-05)
+            raise HLError(0, f'{action["type"]}: the answer was cut off or unreadable '
+                             f'({type(e).__name__}: {e}) — the write may have landed; '
+                             'reconcile decides', ambiguous=True) from e
         if resp.get('status') != 'ok':
             raise HLError(200, f'{action["type"]}: {resp.get("response")}', str(resp))
         return (resp.get('response') or {}).get('data') or {}

@@ -141,6 +141,10 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
         self._rungs_lag = 0            # the last derivation; cycles it lagged,
         self._rungs_lag_since = None   # since when, and whether the wait's
         self._rungs_lag_said = False   # end was said
+        self._seed_retry_at = None     # S3b: a refused seed's next ask, and
+        self._seed_backoff = 0.0       # its backoff (B7's schedule)
+        self._unexplained_since = None  # G26b: a restart's list short of the
+        self._entries_held = False     # holding: since when; entries held
         self._rungs_awaited = {}       # G23: own link that left the book
                                        # unasked -> when; settled by its fill
         self._rungs_links = None       # G23: own links resting after last cycle
@@ -185,6 +189,9 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
             * len(exit_rungs))
         if qty <= 0 or not self.adapter.meets_minimum(qty, ref):
             return False
+        now = self._now()
+        if self._seed_retry_at is not None and now < self._seed_retry_at:
+            return 'refused'                  # S3b: backing off; nothing else rests
         idx = self.adapter.position_idx(self._entry_side, False) or 0
         self._gen += 1
         try:
@@ -195,10 +202,17 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
                                      borrow=self._borrow)
         except (VenueError, OSError) as e:
             if not may_have_landed(e):              # E6b: a clear no — nothing landed
+                # S3b: asked again at B7's backoff (30 s doubling to 300 s);
+                # meanwhile nothing else rests — the ladder is the seed's.
+                # The log hears each; the phone a margin refusal at D82's
+                # cadence, any other once it persists (D60)
+                self._seed_backoff = min(max(BACKOFF_BASE, self._seed_backoff * 2.0),
+                                         BACKOFF_CEILING)
+                self._seed_retry_at = now + self._seed_backoff
                 self.notify.event('margin' if e.kind == 'margin' else 'warn', self.botid,
-                                  f'seed refused ({e}) — nothing placed; tried again '
-                                  'next cycle (E6b)')
-                return True                          # this cycle places nothing else
+                                  f'seed refused ({e}) — nothing placed; asked again '
+                                  f'in {self._seed_backoff:.0f}s (S3b, E6b)')
+                return 'refused'
             # E6: the write may have landed. Treating it as done is the SAFE
             # direction here — a re-fired seed doubles the ladder, while a
             # lost seed is visible as an uncovered position next cycle.
@@ -206,6 +220,7 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
                               f'seed ambiguous ({e}) — assuming placed; the '
                               'next truth read reconciles (E6)')
             return True
+        self._seed_retry_at, self._seed_backoff = None, 0.0
         self.notify.event('seed', self.botid,
                           f'{self._entry_side} {qty:.10g} at market for '
                           f'{len(exit_rungs)} exit rungs')
@@ -425,7 +440,10 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
             # until the fill is listed; stops above have already been judged.
             return {'lagging': 'own fill in flight (D58)'}
 
-        if self._maybe_seed(truth, held, truth['split_ref']):
+        seeded = self._maybe_seed(truth, held, truth['split_ref'])
+        if seeded == 'refused':                    # S3b: asked again, never
+            return {'seed_refused': True}          # taken as done
+        if seeded:
             self._last_pos = 0.0                   # the fill lands next cycle
             return {'seeded': True}
 
@@ -684,6 +702,11 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
             # re-buys that rung). Nothing is placed, nothing cancelled,
             # until the fills account for the position: seconds, usually.
             to_cancel, to_create = [], []
+        if self._entries_held:
+            # G26b: a restart's list holds less than the position; until it
+            # covers it (or the wait runs out) a rung that looks empty may
+            # be one just bought — the block keeps its exits, no entry goes
+            to_create = [o for o in to_create if o['side'] != self._entry_side]
         amends, cancels, placed_now, placed_exit_links, skipped = self._reconcile(
             to_cancel, to_create, bid, ask, now)
         if cfg['strategy'] != 'martingale':    # G23: what rests now, ours:

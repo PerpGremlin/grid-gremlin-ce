@@ -1,9 +1,11 @@
 # Bybit v5 REST reads (SPEC V, E5, E8). Writes land with the applying slices.
 import hashlib
 import hmac
+import http.client
 import json
 import os
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -17,7 +19,19 @@ BASE_URLS = {'demo': 'https://api-demo.bybit.com',
 RECV_WINDOW = '15000'
 RATE_LIMIT_FLOOR = 3     # glide: when the window has fewer calls left, wait
 RATE_LIMIT_CODES = {10006, 10018, 10429, 429}
-ORDER_GONE_CODES = {110001, 170213}
+# E6c: an order the venue no longer holds. Bybit v5's error table:
+# 110001 "Order does not exist", 110008 "The order has been completed or
+# cancelled.", 110010 "The order has been cancelled", 170213 (spot) "Order
+# does not exist." A cancel of a finished order has met its goal — the
+# order no longer rests — so it is gone, never a refusal that keeps the rung
+# uncancelled and its replacement held back (audit 2026-11-05).
+ORDER_GONE_CODES = {110001, 110008, 110010, 170213}
+# E6d: HTTP answers that refuse before the order is processed. Bybit v5:
+# 403 "Forbidden request. Possible causes: IP rate limit breached ...", 429
+# "System level frequency protection. Please retry". A definite no that
+# waits for the window — read as a raw HTTPError (an OSError) it was taken
+# for an unknown fate (audit 2026-11-05).
+HTTP_REFUSED_CODES = {403, 429}
 CLOCK_CODE = 10002
 
 
@@ -159,8 +173,13 @@ class Client:
         r = self.get('/v5/account/fee-rate',
                      {'category': category, 'symbol': symbol}, signed=True)
         row = (r.get('list') or [{}])[0]
-        return {'maker': _f(row.get('makerFeeRate'), 0.0),
-                'taker': _f(row.get('takerFeeRate'), 0.0)}
+        maker, taker = _f(row.get('makerFeeRate')), _f(row.get('takerFeeRate'))
+        if maker is None or taker is None:
+            # G16b: an empty answer is no rate, never a zero fee — a zero
+            # passed every grid's fee check without a word
+            raise VenueError(f'{symbol}: the venue named no fee rate ({category})',
+                             kind='partial_read')
+        return {'maker': maker, 'taker': taker}
 
     def executions_page(self, category, symbol, start_ms, end_ms, cursor=None,
                         exec_type=None):
@@ -321,9 +340,37 @@ class WriteClient(Client):
                    'Content-Type': 'application/json'}
         req = urllib.request.Request(self.base + path, data=payload.encode(),
                                      headers=headers, method='POST')
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read().decode())
-            pacer.learn(resp.headers)                        # E11: the venue's budget word
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read().decode())
+                pacer.learn(resp.headers)                    # E11: the venue's budget word
+        except urllib.error.HTTPError as e:
+            if e.code in HTTP_REFUSED_CODES:                 # E6d: refused, not processed
+                raise VenueError(f'bybit {path}: HTTP {e.code} — refused before '
+                                 'processing, nothing placed', kind='rate_limit') from e
+            # E6e: a 5xx (or any other status) — the fate is unknown
+            raise VenueError(f'bybit {path}: HTTP {e.code} — the write may have '
+                             'landed; the next read reconciles (E6)',
+                             ambiguous=True) from e
+        except OSError as e:
+            # E6e: a timeout, a reset, a dropped line after the send — the
+            # write may have landed. Raw, it escaped every `except
+            # VenueError` write path (cancel, amend, the ladder's places)
+            # and lost the cycle; as an ambiguous VenueError each path's own
+            # careful reading takes it: a cancel counts the order still
+            # resting, a place is never re-sent before a read (audit 2026-11-05)
+            raise VenueError(f'bybit {path}: no answer ({type(e).__name__}: {e}) — '
+                             'the write may have landed; the next read reconciles (E6)',
+                             ambiguous=True) from e
+        except (http.client.HTTPException, ValueError) as e:
+            # E6d: the request was sent and the answer cut off or garbled
+            # (IncompleteRead, truncated JSON) — the write may have landed,
+            # and an exception the engine's write paths do not catch lost
+            # the whole cycle instead of reading back (audit 2026-11-05)
+            raise VenueError(f'bybit {path}: the answer was cut off or unreadable '
+                             f'({type(e).__name__}: {e}) — the write may have '
+                             'landed; the next read reconciles (E6)',
+                             ambiguous=True) from e
         code = int(data.get('retCode', -1))
         if code in NOT_MODIFIED_CODES or code == 0:
             return data.get('result', {})

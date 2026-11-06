@@ -735,7 +735,7 @@ def spec_X15g_the_engine_reads_the_close_as_its_own_exit_never_an_outside_hand()
                        ('', 'an outside close')):
         bot = _bot(FakeVenue(mark=11.1), [], side='short')
         closing = dict(entry, time_ms=5, side='buy', price=11.1, link_id=link)
-        bot._own_fills_all = lambda: [entry, closing]
+        bot._own_fills_all = lambda days=2: [entry, closing]
         assert bot._how_round_ended() == kind, (link, kind)
 
 
@@ -1079,3 +1079,115 @@ def spec_X17_a_kill_whose_cancel_is_refused_stays_up_until_nothing_rests():
         assert bot.cycle() in ({'stopping': bot.stopping['reason']}, None)
     assert venue.orders == []
     assert 'nothing owned rests' in next(ln for ln in lines if ' kill ' in ln)
+
+
+# --- X17b: a full disk never stops a stop --------------------------------------
+# The audit of 2026-11-05: on a full disk the tombstone write failed, the
+# urgent line saying so raised from the log's print, and the stop died before
+# its flatten; the fleet's own error print then raised out of the loop.
+
+class _FullDisk(OSError):
+    def __init__(self):
+        super().__init__(28, 'No space left on device')
+
+
+class _FullTombs:
+    path = 'tombs.json'
+
+    def has(self, botid):
+        return False
+
+    def add(self, botid, reason):
+        raise _FullDisk()
+
+
+def _full_sink(line):
+    raise _FullDisk()
+
+
+def _disk_full_stop(sink):
+    from gridgremlin.events import TelegramNotifier
+    venue, sent = FakeVenue(mark=61000.0), []
+    _holding(venue)
+    note = TelegramNotifier('t', 'c', transport=sent.append, sink=[].append,
+                            clock=lambda: 0.0)
+    note.startup = False
+    bot = Bot(_cfg(stop={'watch': 'mark_price', 'level': 58000}), ADAPTER,
+              venue, note, gen_seed=1, tombstones=_FullTombs())
+    bot.cycle()                                   # the ladder, room on disk
+    note.sink = sink                              # then the disk fills
+    venue.mark = 57000.0
+    bot.cycle()
+    note.close()
+    return venue, bot, '\n'.join(sent)
+
+
+def spec_X17b_a_full_disk_still_flattens_and_the_phone_says_the_disk_failed():
+    venue, bot, sent = _disk_full_stop(_full_sink)
+    assert venue.position is None and venue.orders == []   # sold, cancelled
+    assert not bot.alive
+    assert 'tombstone write FAILED' in sent and 'No space left' in sent
+    assert 'log write FAILED' in sent and '(X17b)' in sent
+    assert 'stop fired' in sent                           # the kill, paged
+
+
+def spec_X17b_the_fleet_runs_on_when_its_log_cannot_be_written():
+    """stdout and stderr on a full disk (the unit appends both to the log):
+    every print the loop makes — a cycle's counts, an error's traceback —
+    loses its line, never the fleet; the phone hears it, urgent, once in
+    URGENT_REPEAT."""
+    import sys
+    from gridgremlin import main as m
+    from gridgremlin.events import SafeStream, TelegramNotifier
+
+    class Full:
+        def write(self, s):
+            raise _FullDisk()
+
+        def flush(self):
+            raise _FullDisk()
+
+    class Wallet:
+        env = 'demo'
+
+        def read_wallet(self):
+            return {'equity': 1000.0, 'mm_rate': 0.01}
+
+    class Busy:
+        alive = True
+        cfg = {'venue': 'bybit'}
+        botid = 'busy'
+        n = 0
+
+        def cycle(self, equity=None):
+            self.n += 1
+            if self.n == 2:
+                raise ValueError('a bug')          # a warning's print
+            return {'placed': 1}                   # the counts' print
+
+    sent, bot = [], Busy()
+    note = TelegramNotifier('t', 'c', transport=sent.append,
+                            sink=lambda ln: print(ln, flush=True),
+                            clock=lambda: 0.0)
+    saved = (m.build_fleet, m.make_notifier, m.load_env, m.acquire_fleet_lock,
+             m.check_snapshot_watched)
+    m.build_fleet = lambda p, notif, **kw: ({'notify_orders': False,
+                                             'poll_seconds': 0},
+                                            {'bybit': Wallet()}, [bot])
+    m.make_notifier = lambda: note
+    m.load_env = lambda: None
+    m.acquire_fleet_lock = lambda path: open('/dev/null')
+    m.check_snapshot_watched = lambda *a: None
+    streams = sys.stdout, sys.stderr
+    sys.stdout = sys.stderr = Full()
+    try:
+        rc = m.run('ignored', cycles=4, poll_seconds=0)
+        after = sys.stdout, sys.stderr
+    finally:
+        sys.stdout, sys.stderr = streams
+        (m.build_fleet, m.make_notifier, m.load_env, m.acquire_fleet_lock,
+         m.check_snapshot_watched) = saved
+    assert rc == 0 and bot.n == 4                     # every cycle ran
+    assert not any(isinstance(s, SafeStream) for s in after)   # put back
+    said = '\n'.join(sent)
+    assert said.count('log write FAILED') == 1 and 'No space left' in said

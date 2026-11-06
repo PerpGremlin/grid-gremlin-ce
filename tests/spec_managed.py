@@ -229,6 +229,34 @@ def spec_L12_a_close_is_one_reduce_only_order_bounded_by_the_uncovered_part():
         assert KEY not in json.loads(path.read_text())               # all closed: the record goes
 
 
+def spec_E6e_managed_an_unanswered_cancel_keeps_the_record():
+    """E6e, the one caller a raw timeout guarded by accident: after the last
+    close, a cancel of the trade's exits with no answer used to raise (an
+    OSError) and the record stayed; as an ambiguous VenueError the old
+    `except VenueError: pass` would drop the record while its exits may
+    still rest. It still raises, the record kept; a plain refusal is
+    passed over as before. SABOTAGE: `pass` back for every VenueError -> red."""
+    from gridgremlin.managed import close_part, set_exits
+    for err, kept in ((VenueError('bybit: no answer (TimeoutError)', ambiguous=True), True),
+                      (VenueError('bybit: retCode 10001: params', kind='other'), False)):
+        with tempfile.TemporaryDirectory() as d:
+            path, rec = _adopted(d)
+            venue = _Venue(_short())
+            set_exits(path, KEY, rec, venue, ADAPTER, NOBODY, tp=2800.0, sl=3150.0)
+            rec = json.loads(path.read_text())[KEY]
+
+            def cancel(category, symbol, order_id, err=err):
+                raise err
+            venue.cancel_order = cancel
+            try:
+                close_part(path, KEY, rec, venue, ADAPTER, NOBODY)
+                raised = False
+            except VenueError:
+                raised = True
+            assert 2 not in venue.positions                          # the close itself went
+            assert raised is kept and (KEY in json.loads(path.read_text())) is kept, err
+
+
 # --- L13: Demo and Testnet only ------------------------------------------------
 
 def spec_L13_mainnet_is_refused_whatever_the_fleet_file_says():

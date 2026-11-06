@@ -14,3 +14,10 @@ def fee_floor_for(market_type):
     """G6: the floor is the venue's ROUND TRIP plus margin — spot charges
     about ten times a perp per side, so one constant cannot serve both."""
     return SPOT_FEE_FLOOR_PCT if market_type == 'spot' else FEE_FLOOR_PCT
+
+
+def assumed_maker(market_type):
+    """G16b: the maker rate per side the engine's own figures assume —
+    the panel's consequences, the rehearsal, the backtests. Spot's base
+    tier charges a maker what it charges a taker."""
+    return BYBIT_SPOT_TAKER if market_type == 'spot' else BYBIT_MAKER

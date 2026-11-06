@@ -38,6 +38,9 @@ ROUND_SCOPED = (
     ('_trail_said', None),       # M21: the trail level last announced
     ('_trail_best', None),       # M21: best mark since this average
     ('_trail_basis', None),      # M21: the average the trail is for
+    ('_base_links', ()),         # M32: the base orders sent, not yet seen held
+    ('_base_wait_since', None),  # M32: first flat read with none of them resting
+    ('_base_wait_said', False),  # M32: an unreadable fill list, said once
 )
 
 
@@ -744,6 +747,7 @@ class RoundMixin:
         self.exits_view = None                   # U102: set below while a round holds
         if held:
             self._flat_wait_since, self._flat_wait_said = None, False   # M29
+            self._base_links, self._base_wait_since = (), None          # M32
         if held == 0:
             # D37: a resting maker base is a round STARTING, not the
             # leftovers of one that finished — a restart mid-entry with
@@ -753,12 +757,17 @@ class RoundMixin:
                          or (self._last_pos is None and any(
                              rung_of(o['link_id'], self.botid) is not None
                              and o is not base for o in truth['orders'])))
-            if completed and self._last_pos:
+            if completed:
                 # M14: a round that ended by LIQUIDATION or by the operator's
                 # own hand is not a completed round — re-entering there walks
                 # straight back into what just killed it. Ask the venue how
-                # the position actually closed.
-                how = self._how_round_ended()
+                # the position actually closed. M14b: a restart (no last
+                # position) that finds our rungs resting over a flat asks the
+                # same, over the fills' whole window — judged only by M29,
+                # a liquidation while it was down read as a completed round
+                # and bought the next base (audit 2026-11-05)
+                how = self._how_round_ended(
+                    days=2 if self._last_pos else HISTORY_WINDOW_DAYS)
                 if how is None:
                     # the fill list lags the position by seconds — the
                     # account of the close usually arrives on the next read
@@ -790,15 +799,7 @@ class RoundMixin:
                     self._kill(truth, f'round ended by {how}, not by our exit '
                                       '— standing down (M14/D1)')
                     return {'round': how}
-            if completed and self._last_pos is None:
-                # M29 on a restart: resting rungs and a flat read are a round
-                # that ended while the process was down only if its fills say
-                # so — one blank first read counted as completed (killed, or
-                # its orders cancelled as cleanup)
-                wait = self._confirm_round_flat()
-                if wait is not None:
-                    return wait
-            if completed:
+                # our own exit, its flat explained: the round completed
                 if not cfg['repeat']:
                     self._kill(truth, 'round complete (TP hit), repeat off')
                     return {'round': 'complete'}
@@ -889,6 +890,10 @@ class RoundMixin:
                     return {'round': 'liquidation'}
             if base is not None:
                 return self._chase_base(truth, base, idx)
+            if self._base_links:
+                wait = self._base_landing()                         # M32
+                if wait is not None:
+                    return wait
             if self._last_pos is None:
                 # D41 across a restart: the count is the venue's, so a
                 # process that came back flat asks before it opens
@@ -921,11 +926,12 @@ class RoundMixin:
             if cfg['start_order_type'] == 'maker':
                 return self._quote_base(truth, qty, idx)
             self._gen += 1
+            link = self._make_link(0)
             try:
                 self.client.place_market(cfg['market_type'], cfg['symbol'],
                                          self._entry_side,
                                          adapter.fmt_qty(qty), idx,
-                                         link_id=self._make_link(0),
+                                         link_id=link,
                                          borrow=self._borrow)
             except (VenueError, OSError) as e:      # E6: may have landed
                 if not may_have_landed(e):          # E6b: a clear no — nothing landed
@@ -933,12 +939,14 @@ class RoundMixin:
                                       f'base order refused ({e}) — nothing placed; '
                                       'tried again next cycle (E6b)')
                     return {'round': 'refused'}
+                self._base_sent(link)               # M32: it may land late
                 self._anchor = truth['mark']
                 self._last_pos = 0.0
                 self.notify.event('warn', self.botid,
                                   f'base order ambiguous ({e}) — assuming '
                                   'placed; the next read reconciles (E6)')
                 return {'round': 'ambiguous'}
+            self._base_sent(link)                   # M32
             self._anchor = truth['mark']
             self.notify.event('start', self.botid,
                               f'round {self._round + 1}: base '
@@ -1016,6 +1024,8 @@ class RoundMixin:
                     # capacity (110017) and warns every cycle forever.
                     want, resting = self._exits_cover(truth, held, idx,
                                                       hosted)
+                    if self._spot_sell_cap is not None:     # M33 (D169)
+                        want = min(want, self._spot_sell_cap)
                     # M20/D87: the gap in whole steps, the holding floored
                     # (M23a) — round_qty(0.03 - 0.01) floored to 0.019 and
                     # a step of slack left the last lot with no exit ever
@@ -1045,7 +1055,13 @@ class RoundMixin:
                 if hosted:
                     self._maintain_partial_tps(truth, targets, idx)
                 else:
-                    self._maintain_resting_exits(truth, targets)
+                    # M33 (D169): the tranches together sell no more than the
+                    # wallet holds, nearest first, as the grid's sells
+                    kept = self._exits_to_wallet(
+                        [{'side': self._exit_side, 'price': p, 'qty': q}
+                         for p, q in targets if q > 0])
+                    self._maintain_resting_exits(
+                        truth, [(d['price'], d['qty']) for d in kept])
             except VenueError as e:
                 if e.kind == 'ro_capacity':
                     # the venue already holds what we asked for — quiet,
@@ -1067,23 +1083,39 @@ class RoundMixin:
         targets = self._round_targets(basis, held)
         target = targets[0][0]
         self.exits_view = {'at': 'position' if hosted else 'orders', 'prices': [target]}   # U102
-        tp_order = None
+        tp_order = next(
+            (o for o in truth['orders']
+             if o['reduce_only'] and o['side'] == self._exit_side
+             and rung_of(o['link_id'], self.botid) == 0), None)
         if hosted:
             venue_tp = truth['positions'].get(idx, {}).get('take_profit')
         else:
-            tp_order = next(
-                (o for o in truth['orders']
-                 if o['reduce_only'] and o['side'] == self._exit_side
-                 and rung_of(o['link_id'], self.botid) == 0), None)
             venue_tp = tp_order['price'] if tp_order else None
+        qty = self._wallet_capped(abs(held))
+        if not hosted:
+            # M33 (D169): the exit asks for no more than the wallet holds,
+            # as the grid's sells are trimmed; none there, none rests
+            kept = self._exits_to_wallet([{'side': self._exit_side,
+                                           'price': target, 'qty': qty}])
+            qty = kept[0]['qty'] if kept else 0.0
+            if qty <= 0:
+                if tp_order is not None:
+                    self._cancel_exit(tp_order)
+                return None
+        off_price, off_qty = self._exit_off_terms(venue_tp, tp_order, target,
+                                                  qty, hosted)        # M4b
         through = (truth['mark'] >= target if cfg['side'] == 'long'
                    else truth['mark'] <= target)
-        if venue_tp is None and through:
+        if through and (venue_tp is None or off_price):
+            if tp_order is not None:
+                if hosted:
+                    return {'round': 'closing'}    # the close already rests
+                self._cancel_exit(tp_order)
             self._gen += 1
             link = self._make_link(0)
             self.client.place_order(
                 cfg['market_type'], cfg['symbol'], self._exit_side,
-                adapter.fmt_qty(self._wallet_capped(abs(held))), adapter.fmt_price(target), link,
+                adapter.fmt_qty(self._wallet_capped(qty)), adapter.fmt_price(target), link,
                 adapter.position_idx(self._exit_side, True) or 0,
                 reduce_only=True, post_only=False,     # marketable: target or better
                 borrow=self._borrow)
@@ -1092,7 +1124,7 @@ class RoundMixin:
                               'round at target or better')
             return {'round': 'closing'}
         grew = self._last_pos is not None and abs(held) > abs(self._last_pos)
-        if venue_tp is None or grew:
+        if venue_tp is None or grew or off_price or off_qty:
             try:
                 if hosted:
                     self.client.set_trading_stop(
@@ -1100,26 +1132,107 @@ class RoundMixin:
                         take_profit=adapter.fmt_price(target))
                 else:                        # D21: the venue-resting exit
                     if tp_order is not None:
-                        try:
-                            self.client.cancel_order(cfg['market_type'],
-                                                     cfg['symbol'],
-                                                     tp_order['order_id'])
-                        except VenueError as e:
-                            if e.kind != 'gone':
-                                raise
+                        self._cancel_exit(tp_order)
                     self._gen += 1
                     self.client.place_order(
                         cfg['market_type'], cfg['symbol'], self._exit_side,
-                        adapter.fmt_qty(self._wallet_capped(abs(held))), adapter.fmt_price(target),
+                        adapter.fmt_qty(self._wallet_capped(qty)), adapter.fmt_price(target),
                         self._make_link(0),
                         adapter.position_idx(self._exit_side, True) or 0,
                         reduce_only=True, post_only=False, borrow=self._borrow)
                 if venue_tp is None:
                     self.notify.event('tp', self.botid,
                                       f'round TP resting: {target:.10g}')
+                elif not grew:
+                    self.notify.event('tp', self.botid,
+                                      f'round TP follows the round: {target:.10g}'
+                                      + ('' if hosted else f' for {qty:.10g}')
+                                      + ' (M4b)')
             except VenueError as e:
                 if e.kind != 'flat':             # the round just closed
                     self.notify.event('warn', self.botid, f'tp: {e}', urgent=True)
+        return None
+
+    def _exit_off_terms(self, venue_tp, tp_order, target, qty, hosted):
+        """M4b: does the resting single exit stand off the round's terms —
+        its price off the target from the current average, or (a resting
+        order) its unfilled size off what it should sell? Re-priced only on
+        growth, it rested at the old price after a partial exit, a
+        fee-adjusted average, or a restart reading another average, and at
+        the old size after a restart that found a safety filled while down
+        (audit 2026-11-05). An exit part-filled reads short of a holding not
+        yet read down: that is the fill, not a stale size."""
+        adapter = self.adapter
+        off_price = (venue_tp is not None and adapter.fmt_price(venue_tp)
+                     != adapter.fmt_price(target))
+        off_qty = False
+        if not hosted and tp_order is not None:
+            done = tp_order.get('cum_exec_qty') or 0.0
+            left = adapter.from_steps(max(0, adapter.to_steps(tp_order['qty'])
+                                          - adapter.to_steps(done)))
+            filling = done > 0 and left < qty
+            off_qty = adapter.fmt_qty(left) != adapter.fmt_qty(qty) and not filling
+        return off_price, off_qty
+
+    def _cancel_exit(self, order):
+        """Cancel one of the round's resting exits; gone is what we wanted."""
+        try:
+            self.client.cancel_order(self.cfg['market_type'], self.cfg['symbol'],
+                                     order['order_id'])
+        except VenueError as e:
+            if e.kind != 'gone':
+                raise
+
+    def _base_sent(self, link):
+        """M32: a base order is out; until a read shows it held, a flat read
+        with none of it resting is its fill not yet seen, never a round to
+        open again."""
+        self._base_links = tuple(self._base_links) + (link,)
+        self._base_wait_since = None
+
+    def _base_landing(self):
+        """M32: a base was sent and the position still reads flat with none
+        of it resting. The read lags the fill (a market base's fill shown a
+        cycle late bought a second base): wait RUNGS_LAG_SECONDS (G26's, as
+        G32/M29 do), nothing placed. Past the wait the fills say: a fill of
+        ours under a base link is a round that held, its flat judged as any
+        round's is (M14, M29); none, the base never landed and the round
+        opens again, said. A fill list that cannot be read keeps the wait,
+        said once. Returns None to go on, or the cycle's result."""
+        now = self._now()
+        if self._base_wait_since is None:
+            self._base_wait_since = now
+        if now - self._base_wait_since < RUNGS_LAG_SECONDS:
+            return {'round': 'base_pending'}
+        try:
+            fills = self._own_fills_all()
+        except (VenueError, OSError) as e:
+            if not self._base_wait_said:
+                self._base_wait_said = True
+                self.notify.event('warn', self.botid,
+                                  'the base order sent has not shown after '
+                                  f'{RUNGS_LAG_SECONDS:g}s and the fills cannot '
+                                  f'be read ({e}) — no new base until they say '
+                                  'whether it filled (M32)', urgent=True)
+            return {'round': 'base_pending'}
+        entry = self._entry_side.lower()
+        filled = sum(abs(f['qty']) for f in (fills or [])
+                     if f.get('link_id') in self._base_links
+                     and str(f.get('side', '')).lower() == entry)
+        self._base_links, self._base_wait_since = (), None
+        self._base_wait_said = False
+        if filled > 0:
+            self._last_pos = filled   # the round held: its flat is judged
+            self.notify.event('warn', self.botid,
+                              f'the base filled ({filled:.10g}) but the position '
+                              f'never showed it in {RUNGS_LAG_SECONDS:g}s — '
+                              'judging the flat as a round that held, no new '
+                              'base (M32/M14)', urgent=True)
+            return {'round': 'base_unseen'}
+        self.notify.event('warn', self.botid,
+                          'the base order sent has not shown after '
+                          f'{RUNGS_LAG_SECONDS:g}s and no fill of it is listed '
+                          '— it never landed; the round opens again (M32)')
         return None
 
     def _base_order(self, truth):
@@ -1157,17 +1270,19 @@ class RoundMixin:
         cfg, adapter, now = self.cfg, self.adapter, self._now()
         price = self._near_side(truth)
         self._gen += 1
+        link = self._make_link(0)
         try:
             self.client.place_order(cfg['market_type'], cfg['symbol'],
                                     self._entry_side, adapter.fmt_qty(qty),
                                     adapter.fmt_price(price),
-                                    self._make_link(0), idx,
+                                    link, idx,
                                     reduce_only=False, post_only=True,
                                     borrow=self._borrow)
         except VenueError as e:
             if e.kind != 'post_only_reject':
                 self.notify.event('warn', self.botid, f'base order: {e}')
             return {'round': 'entering'}
+        self._base_sent(link)                       # M32
         self._anchor, self._quoted_at = price, now
         self._last_pos = 0.0
         if self._entry_since is not None:    # vanished without a fill
@@ -1219,17 +1334,19 @@ class RoundMixin:
         if left <= 0 or not adapter.meets_minimum(left, price):
             return {'round': 'entering'}  # the remainder is dust: base done
         self._gen += 1
+        link = self._make_link(0)
         try:
             self.client.place_order(cfg['market_type'], cfg['symbol'],
                                     self._entry_side, adapter.fmt_qty(left),
                                     adapter.fmt_price(price),
-                                    self._make_link(0), idx,
+                                    link, idx,
                                     reduce_only=False, post_only=True,
                                     borrow=self._borrow)
         except VenueError as e:
             if e.kind != 'post_only_reject':
                 self.notify.event('warn', self.botid, f'base requote: {e}')
             return {'round': 'entering'}  # flat: re-quoted whole next cycle
+        self._base_sent(link)                       # M32
         self._anchor, self._quoted_at = price, now
         self.notify.event('placed', self.botid,
                           f'base re-quoted: {self._entry_side} {left:.10g} '

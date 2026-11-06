@@ -112,6 +112,83 @@ def spec_S3_next_cycle_covers_the_seed():
     assert counts['desired'] == 20             # 10 exits + 10 entries (G23, W1)
 
 
+class RefusingSeedVenue(SeedVenue):
+    """The venue says a plain no to the seed `refusals` times (E6b)."""
+    def __init__(self, refusals, kind='insufficient', mark=60000.0):
+        super().__init__(mark)
+        self.refusals, self.kind, self.tries = refusals, kind, 0
+
+    def place_market(self, *a, **kw):
+        from gridgremlin.exchange.errors import VenueError
+        self.tries += 1
+        if self.tries <= self.refusals:
+            raise VenueError('bybit /v5/order: retCode 170131: Insufficient balance',
+                             kind=self.kind)
+        return super().place_market(*a, **kw)
+
+
+def spec_S3b_a_refused_seed_is_asked_again_and_the_ladder_waits():
+    """The audit of 2026-11-05: the seed's refusal said "tried again next
+    cycle" and set the bot's first reading, so the seed was never asked
+    again and the grid ran its entries alone, the exits' lots never bought.
+    A refused seed is asked again — at B7's backoff, from 30 s doubling to
+    300 s — and nothing else rests meanwhile; it lands, the ladder covers it."""
+    venue, lines = RefusingSeedVenue(2), []
+    clock = [1_800_000_000.0]
+    bot = Bot(_cfg(seed=True), ADAPTER, venue, Notifier(sink=lines.append),
+              gen_seed=1, clock=lambda: clock[0])
+    assert bot.cycle() == {'seed_refused': True} and venue.tries == 1
+    assert bot.cycle() == {'seed_refused': True} and venue.tries == 1   # backing off
+    assert venue.orders == []                          # no ladder without it
+    clock[0] += 31.0
+    bot.cycle()
+    assert venue.tries == 2                            # asked again
+    clock[0] += 31.0
+    bot.cycle()
+    assert venue.tries == 2                            # 60 s now
+    clock[0] += 30.0
+    assert bot.cycle() == {'seeded': True} and venue.tries == 3
+    bot.cycle()
+    assert [o for o in venue.orders if o['side'] == 'Sell']   # covered
+    assert sum('seed refused' in ln for ln in lines) == 2
+    assert not any('[ship] seed refused' in ln and 'urgent' in ln for ln in lines)
+
+
+def spec_S3b_sabotage_a_refusal_taken_as_seeded_never_asks_again():
+    """The sabotage half: the bot that takes its refusal as seeded (the old
+    return) asks once and runs its entries with no seed."""
+    venue, lines = RefusingSeedVenue(1), []
+    bot = _bot(venue, lines, seed=True)
+    bot.cycle()
+    bot._last_pos = 0.0                                # what the old return set
+    for _ in range(3):
+        bot.cycle()
+    assert venue.tries == 1 and venue.position is None
+    assert venue.orders and all(o['side'] == 'Buy' for o in venue.orders)
+
+
+def spec_S3b_a_refused_seed_that_persists_reaches_the_phone():
+    """D60: a refusal is the log's; one that keeps coming is the phone's
+    (a margin refusal at D82's cadence, any other once it persists)."""
+    from gridgremlin.events import PERSIST_COUNT, TelegramNotifier
+    venue, sent = RefusingSeedVenue(99, kind='rejected'), []
+    clock = [1_800_000_000.0]
+    note = TelegramNotifier('t', 'c', transport=sent.append, sink=[].append,
+                            clock=lambda: clock[0])
+    note.startup = False
+    bot = Bot(_cfg(seed=True), ADAPTER, venue, note, gen_seed=1,
+              clock=lambda: clock[0])
+    bot.cycle()
+    note.flush()
+    assert not sent                                    # once: the log's
+    for _ in range(PERSIST_COUNT):
+        clock[0] += 31.0
+        bot._seed_retry_at = 0.0                       # the backoff aside
+        bot.cycle()
+        note.flush()
+    assert any('seed refused' in s and 'persisting' in s for s in sent), sent
+
+
 def spec_S2_a_position_means_the_seed_already_happened():
     venue, lines = SeedVenue(), []
     venue.position = {'positionIdx': 1, 'side': 'Buy', 'size': '0.070',
@@ -202,9 +279,12 @@ def spec_S6_the_reset_list_is_complete_and_documented():
                   '_last_mark',   # U65: the price last read, re-read next cycle
                   '_rungs_seen', '_rungs_lag', '_rungs_lag_since',
                   '_rungs_lag_said', '_fills_known',   # G26: no baseline and
-                  # no fills remembered after a restart, so the first
-                  # derivation is not lag-checked — a restart within seconds
-                  # of an exit fill can still mis-pair once
+                  # no fills remembered after a restart; the first
+                  # derivation is checked against the holding alone (G26b)
+                  '_seed_retry_at', '_seed_backoff',   # S3b: a restart
+                  # asks a refused seed again at once
+                  '_unexplained_since', '_entries_held',   # G26b: the
+                  # restart's wait for a list short of the holding
                   '_rungs_awaited', '_rungs_links',   # G23: the next cycle
                   '_cancelled_links', '_placed_links',   # compares the book
                   # with this one; a restart re-reads the fills
@@ -215,8 +295,11 @@ def spec_S6_the_reset_list_is_complete_and_documented():
                   # a restart starts a new session
                   '_flat_wait_since', '_flat_wait_said',   # M29: a restart
                   # reads the flat afresh
-                  '_reach_ms', '_reach_kept', '_reach_hint'}   # M31: a new
+                  '_reach_ms', '_reach_kept', '_reach_hint',   # M31: a new
                   # process seeks an open round's base again
+                  '_base_links', '_base_wait_since', '_base_wait_said'}
+                  # M32: a new process knows no base sent; its first read
+                  # comes after the restart's own seconds
     state = {k for k, v in vars(bot).items()
              if k.startswith('_') and not callable(v)
              and k not in ('_now', '_entry_side', '_exit_side', '_min_gap',

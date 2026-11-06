@@ -181,6 +181,34 @@ def trip_economics(rungs, maker_fee):
     return gap - round_trip, gap, round_trip
 
 
+def fee_notes(rungs, maker_fee, market_type):
+    """G16/G16b, pure: what the build says of the account's own maker
+    rate — a grid whose gap cannot clear the round trip, one that barely
+    does, and a rate above what the engine assumed: G6's exit floor,
+    which must clear the round trip, and the fee table's per-side figure
+    every estimate is drawn from. A rate at or below them says nothing."""
+    from .fees import assumed_maker
+    out = []
+    net, gap, trip = trip_economics(rungs, maker_fee)
+    if net is not None and net <= 0:
+        out.append(f'EVERY ROUND TRIP LOSES: rung gap {gap:.4%} vs '
+                   f'round-trip fee {trip:.4%} — widen the range or '
+                   f'cut rungs (G16)')
+    elif net is not None and net < trip:
+        out.append(f'thin margin: rung gap {gap:.4%} barely clears '
+                   f'the {trip:.4%} round trip (net {net:.4%}/trip)')
+    maker = maker_fee or 0.0
+    floor, assumed = fee_floor_for(market_type), assumed_maker(market_type)
+    if 2.0 * maker > floor:
+        out.append(f'fee above the exit floor: the account pays {maker:.4%} a side, '
+                   f'a {2.0 * maker:.4%} round trip, and G6 floors an exit at '
+                   f'{floor:.4%} over cost — an exit at the floor loses (G16b)')
+    elif maker > assumed * (1.0 + 1e-9):
+        out.append(f'fee above the assumed: the account pays {maker:.4%} a side, '
+                   f'the engine\'s figures assume {assumed:.4%} (G16b)')
+    return out
+
+
 def exit_floor(side, split_ref, basis, market_type=None):
     """G6: the price an exit must clear; no basis -> the ref alone."""
     if basis is None or basis <= 0:

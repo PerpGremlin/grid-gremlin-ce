@@ -1,9 +1,10 @@
 # Specs for SPEC R15/R15b/U113/F41 (2026-10-31): a grid exit consumes the
 # lots it closes. The pairing (report.ledger, the price each exit is judged
 # against) and the drift check's walk (pnl_drift.open_lots, written apart)
-# use one disposal rule — the engine's own netting (G23): the lot one rung
-# inside the exit first (G25), then the newest open lot of any rung, seed
-# lots included. Before it, `entry_px` and the seed's price were lookups no
+# use one disposal rule — the engine's own netting (G23's walk, LIFO): the
+# newest open lot first, whatever its rung, seed lots included, an order's
+# parts one lot (2026-11-06: the lot one rung inside first had disagreed
+# with the walk the exits are placed from). Before it, `entry_px` and the seed's price were lookups no
 # exit ever consumed: a duplicate exit, a same-rung re-buy and a partial
 # entry fill were credited as full-gap trips against lots already gone.
 # Every guard has a sabotage spec that puts the lookup back. Magnitudes in
@@ -170,9 +171,11 @@ def spec_R15_sabotage_the_last_partial_pricing_the_whole_exit_is_caught():
 
 
 def spec_R15_a_short_and_an_inverse_book_consume_their_mirror():
-    """A short's exit closes the lot one rung ABOVE it (its mirror); an
-    inverse book's own entry is the harmonic price of the coins it took."""
-    fills = [f(1, 'sell', 160.0, 1.0, 12, bot=S), f(2, 'sell', 155.0, 1.0, 11, bot=S),
+    """A short sells its lots on the way up and its exits fill on the way
+    down: each exit closes the newest lot, the one rung ABOVE it (its
+    mirror); an inverse book's own entry is the harmonic price of the coins
+    it took."""
+    fills = [f(1, 'sell', 155.0, 1.0, 11, bot=S), f(2, 'sell', 160.0, 1.0, 12, bot=S),
              f(3, 'buy', 155.0, 1.0, 11, bot=S), f(4, 'buy', 150.0, 1.0, 10, bot=S)]
     book, own = trips(fills, bot=S, entry='sell')
     assert own[2:] == [160.0, 155.0] and abs(book['gap_realized'] - 10.0) < 1e-9, own
@@ -353,3 +356,115 @@ def spec_F41_property_the_pairing_and_the_walk_agree_and_the_identity_holds():
 
 def spec_F41_sabotage_the_property_catches_a_looked_up_price():
     assert _sabotaged(lambda: _property(n=60))
+
+
+# --- R15c: the readout's lots are the engine's lots (2026-11-06) -------------------
+# The audit of 2026-11-05 (the rehearsal's LIFO_LOSS): the engine's walk (G23)
+# nets LIFO — a sell takes the newest buy, whatever its rung — and places every
+# exit from that; R15 and F41 took the lot one rung inside the exit first. A
+# same-rung exit over an older lot one rung down read as a full-gap trip while
+# the engine had sold the newest lot at its cost, and the two kept different
+# lots from then on.
+
+def _engine_walk(fills, held, entry='buy'):
+    from gridgremlin.adapters import LinearAdapter
+    from gridgremlin.bot import Bot
+    from gridgremlin.events import Notifier
+    from spec_loop import FakeVenue
+    ad = LinearAdapter({'symbol': 'XUSDT', 'qty_step': 0.01, 'price_tick': 0.01,
+                        'min_qty': 0.01, 'min_notional': 1.0, 'settle_coin': 'USDT'})
+    cfg = CFG if entry == 'buy' else dict(CFG, side='short')
+    bot = Bot(cfg, ad, FakeVenue(), Notifier(sink=[].append), gen_seed=1)
+    lots, left = bot._walk_lots(fills, held, entry)
+    return sorted(lots), left
+
+
+def _rungs_agree(walk=None, seed=20261106, n=200):
+    """Whole lots of 1 (an entry's parts back to back, one order), exits at
+    random rungs — same-rung, out of order, gaps: after every fill the lots
+    the readout keeps are the lots the engine's walk names."""
+    walk = walk or pd.open_lots
+    rng = random.Random(seed)
+    for i in range(n):
+        entry = rng.choice(('buy', 'sell'))
+        bot = B if entry == 'buy' else S
+        exit_side = 'sell' if entry == 'buy' else 'buy'
+        out, held, t = [], 0, 0
+        for _ in range(rng.randint(4, 40)):
+            t += 2
+            if held and rng.random() < 0.45:
+                r = rng.randint(4, 16)
+                out.append(f(t, exit_side, 100.0 + 5 * r, 1.0, r, bot=bot))
+                held -= 1
+            elif rng.random() < 0.1 and not held:
+                link = f'{bot}-{SEED_RUNG}-g{t}'
+                out += [f(t, entry, 150.0, 0.5, SEED_RUNG, bot=bot, link=link),
+                        f(t + 1, entry, 150.0, 0.5, SEED_RUNG, bot=bot, link=link)]
+                held += 1
+            else:
+                r = rng.randint(4, 16)
+                link = f'{bot}-{r}-g{t}'
+                parts = (1.0,) if rng.random() < 0.7 else (0.5, 0.5)
+                out += [f(t + k, entry, 100.0 + 5 * r, q, r, bot=bot, link=link)
+                        for k, q in enumerate(parts)]
+                held += 1
+            got = sorted(walk(out, bot, entry)['rungs'])
+            want, left = _engine_walk(out, float(held), entry)
+            assert left < 1e-9 and got == want, (i, got, want)
+
+
+def spec_R15c_the_readouts_lots_are_the_engines_lots_after_every_fill():
+    _rungs_agree()
+
+
+def _inside_first(counted, botid, entry_side, inverse=False):
+    """The sabotage: R15/F41 before 2026-11-06 — the lot one rung inside the
+    exit first, then the newest of any rung."""
+    from gridgremlin.apply import rung_of
+    step = -1 if entry_side == 'buy' else 1
+    book, seq = {}, 0
+    for x in counted:
+        rung = rung_of(x.get('link_id') or '', botid)
+        if x['side'] == entry_side:
+            for k in [k for k in sorted(book) if book[k][2] == x['link_id']]:
+                seq += 1
+                book[seq] = book.pop(k)
+            seq += 1
+            book[seq] = [rung, x['qty'], x['link_id']]
+            continue
+        inside = rung + step if rung is not None and rung != SEED_RUNG else None
+        newest = sorted(book, reverse=True)
+        order = [k for k in newest if book[k][0] == inside]
+        order += [k for k in newest if book[k][0] != inside]
+        left = x['qty']
+        for k in order:
+            take = min(book[k][1], left)
+            book[k][1] -= take
+            left -= take
+            if book[k][1] <= 1e-12:
+                del book[k]
+            if left <= 1e-12:
+                break
+    per_order = {}
+    for r, _, link in book.values():
+        per_order.setdefault(link, r)
+    return {'rungs': list(per_order.values())}
+
+
+def spec_R15c_sabotage_the_inside_rung_first_keeps_other_lots_than_the_engine():
+    try:
+        _rungs_agree(_inside_first)
+    except AssertionError:
+        return
+    raise AssertionError('the inside-first rule agreed with the walk')
+
+
+def spec_R15c_a_same_rung_exit_over_an_older_lot_below_is_a_trip_of_zero():
+    """The rehearsal's case: a lot at rung 10 (150), a newer one at rung 11
+    (155), and an exit at rung 11. The engine sold its newest lot, at its
+    cost: the trip reads 0, counted same-rung, and rung 10's lot is held."""
+    fills = [f(1, 'buy', 150.0, 1.0, 10), f(2, 'buy', 155.0, 1.0, 11),
+             f(3, 'sell', 155.0, 1.0, 11)]
+    book, own = trips(fills)
+    assert own[2] == 155.0 and abs(book['gap_realized']) < 1e-12 and book['same_rung'] == 1
+    assert pd.open_lots(fills, B, 'buy')['rungs'] == [10] == _engine_walk(fills, 1.0)[0]

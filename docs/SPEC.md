@@ -43,6 +43,26 @@ eventually pin (T1).
   "ambiguous" writes in the logs, 2026-10-04..10, were Bybit 110007 refusals
   of one bot's base order, each logged "assuming placed"; none was a real
   unknown.)*
+- **E6c** A cancel of an order the venue no longer holds is `gone`: Bybit
+  110001, 110008 ("completed or cancelled"), 110010 ("has been cancelled")
+  and spot 170213. The cancel's goal is met; the rung is not kept
+  uncancelled and no warn is said. `spec_E6c_*`, with sabotage. *(audit
+  2026-11-05: 110008 and 110010 read as `other`)*
+- **E6d** A write whose answer is cut off (`IncompleteRead`) or unreadable
+  (JSON that does not parse) is ambiguous on both venues — a VenueError the
+  write paths catch and reconcile, never a raw exception that loses the
+  cycle. Bybit's HTTP 403 and 429 refuse before processing (v5: "IP rate
+  limit breached", "System level frequency protection"): `rate_limit`, a
+  definite no, never ambiguous; a 5xx keeps E6b's unknown fate.
+  `spec_E6d_*`, with sabotage. *(audit 2026-11-05)*
+- **E6e** A write with no answer — a timeout, a reset, a dropped line, a
+  5xx — is an ambiguous VenueError on both venues (kind `other`, never
+  `gone`), so every `except VenueError` write path takes its own careful
+  reading instead of losing the cycle: X17 counts the cancel still
+  resting, the ladder never re-sends a place before its next read, and a
+  managed trade's record is kept while its exits' cancel is unanswered.
+  `spec_E6e_*`, with sabotage. *(audit 2026-11-05: raw, an OSError escaped
+  every cancel and amend path)*
 - **E7** No error kind kills: every kind maps to retry, backoff, skip, or warn;
   stand-down happens only by stop rule or operator. This holds at the fleet loop
   too: a failed read or venue error costs the cycle, never the process — no
@@ -116,6 +136,11 @@ eventually pin (T1).
 - **D64b** A typed number is finite: the one parser (`float_or`) reads nan
   and inf as no number, so D64's and D97's second typings ask again and the
   close sends nothing. *(the audit, 2026-10-13: "nan" passed both)*
+- **D64c** D64's comparison names a raw fleet row as the engine does — a
+  portfolio row `pfo<name>`, a row with no symbol or side nothing — so a
+  Mainnet fleet holding either is reviewed, not crashed. `spec_D64c_*`,
+  with sabotage. *(audit 2026-11-05: a portfolio row's missing side raised
+  TypeError on every edit's review)*
 - **E15** Every account starts from the default keys, and an account with
   no Bybit keys has none: a process reading several fleets never carries one
   account's keys into the next. *(the audit: an account with only a
@@ -259,6 +284,12 @@ eventually pin (T1).
 - **G16** A grid whose rung gap cannot clear the venue's own round-trip fee loses on
   every completed trip by construction — the build asks the venue what it charges and
   says so, before a single order rests. *(the spot fee lesson, 2026-08-06)*
+- **G16b** The fee check is never silent: an account maker rate above what
+  the engine assumes (a round trip past G6's exit floor, or a side above
+  the fee table's figure) is a warn, and so is a fee read that failed; an
+  empty answer is no rate, never a zero fee. Never urgent; a rate at or
+  below the assumed says nothing. `spec_G16b_*`, with sabotage. *(audit
+  2026-11-05)*
 - **G17** One lattice, many windows: the home range defines an unbounded lattice
   (geometric or arithmetic, extended past both ends by the same rule); a window is N
   consecutive absolute indices starting at an `offset` (home: 0). Rung ids in plans and
@@ -434,7 +465,8 @@ eventually pin (T1).
   rung. The plan itself is left whole, so S5 still sees its exits. After `RUNGS_LAG_SECONDS` (60; 20 cycles until 2026-10-31)
   the change is taken as one no fill of ours will explain (an outside hand, a
   venue close): one warning, and pairing resumes from the fills there are. The
-  baseline is in memory: a restart's first derivation is not checked. *(measured
+  baseline is in memory: a restart's first derivation is checked against the
+  holding alone (G26b). *(measured
   live 2026-10-02: 21 of 93 trips at zero spread, 11 at a loss — an exit that had
   just filled was missing from the list, so its lot still looked held and its
   exit was placed again. The first cut froze exits only and planned entries from
@@ -493,6 +525,22 @@ eventually pin (T1).
   outage of the fill reads longer than the wait, an awaited order expires
   as cancelled from outside, unverified; the proposal that freezes on a
   failed read closes it.)*
+- **G26b** A restart's list is checked against the holding alone. With no
+  baseline in memory (E3), the first derivation is lagging when undoing
+  the listed fills from the holding, newest first, takes the position
+  below flat — the list holds an entry whose exit has filled but is not
+  listed — and then waits like G26: nothing placed or cancelled, then
+  the escalation. A list SHORT of the holding (it does not cover it) is
+  either an entry just filled and not yet listed or a holding older than
+  the list: for up to `RUNGS_LAG_SECONDS` the block (the venue's own size
+  and average) keeps its exits and no entry is placed, so a rung just
+  bought never looks empty; covered, the lots pair at once; past the wait
+  the block is adopted as before, with nothing said. Not on spot (D58:
+  the wallet's other sales are never listed as ours). The limit: a lost
+  exit is seen only where the list reaches back to a flat. *(the audit of
+  2026-11-05: a restart inside the fill list's lag paired the lot just
+  sold as held, moved the held lot's exit down to its cost and bought its
+  rung again)*
 
 ## W — the window
  When a lagging list catches up, the log says after how many cycles
@@ -564,6 +612,14 @@ eventually pin (T1).
   via reduce-only marketable limit. *(the stale-target incident)*
 - **M4** The round TP measures from average entry, recomputed as fills deepen, the
   basis named into the key. *(D12)*
+- **M4b** A single take profit follows the round's terms whenever they change,
+  not only when the holding grows: its price off the target from the current
+  average, or (a resting exit) its unfilled size off what it should sell, it is
+  set again, said once. An exit part-filled while the position still reads the
+  old size is its fill, left to fill. A target the mark has passed closes at the
+  target or better (M3), the stale exit cancelled first. `spec_M4b_*`, with
+  sabotage. *(audit 2026-11-05: a restart after a safety filled while down left
+  the exit at the old average's target for the base's size alone)*
 - **M5** `repeat` re-anchors only from flat; an absolute TP is refused alongside it.
 - **M5a** On a venue that hosts the position-TP, a TP fill and an operator's manual
   close are INDISTINGUISHABLE in truth (both leave flat with no owned order gone) —
@@ -606,6 +662,12 @@ eventually pin (T1).
   but our own exit stands the bot down instead of re-entering. Silence from the venue
   is never evidence. *(audit 2026-08-06: `repeat` walked straight back into what had
   just liquidated it)*
+- **M14b** A restart judges how the round ended as the live path does: our rungs
+  resting over a flat at a new process's first read ask M14 (over the fills'
+  whole window, the close having come any time it was down), then M29, before
+  the round counts as completed. `spec_M14b_*`, with sabotage. *(audit
+  2026-11-05: judged by M29 alone, a liquidation's fill explained the flat, and
+  `repeat` cleaned up and bought the next base)*
 - **M12** Reinvest is a toggle (D26): on, the round's sizes scale by
   1 + realized-net/capital over the last 30 days of the bot's own venue fills
   (bounded — an epoch-0 history pull was ~3,000 requests, the audit's H1; the
@@ -806,6 +868,23 @@ eventually pin (T1).
   reach is said once. `spec_M31_*`, with sabotage. *(audit 2026-11-05: a spot
   round 34 days old lost its base's coins from the holding and its exit; at
   54 days a restart read it as flat and bought a new base on them)*
+- **M32** A base order just sent waits for its fill to show: a flat read with
+  none of the round's base orders resting holds the bot, nothing placed, for up
+  to `RUNGS_LAG_SECONDS` (G26's wait, as G32 and M29 use). A read that shows the
+  holding ends the wait. Past it the fills say: a fill under one of the base's
+  links is a round that held, said urgently and judged as its flat is (M14,
+  M29); none listed, the base never landed and the round opens again, said. A
+  fill list that cannot be read keeps the wait, said once. Market and maker
+  bases alike; an ambiguous send (E6) waits the same. Nothing is persisted (E3).
+  `spec_M32_*`, with sabotage. *(audit 2026-11-05: a position read one cycle
+  behind a market base bought a second base)*
+- **M33** (D169, G30) A long spot DCA round beside an inverse market sells no
+  more than the wallet holds: its exits, a single one or the tranches together,
+  are trimmed to the wallet nearest first, as the grid's sells are, said once;
+  resting exits above it are re-placed at the trimmed size, and an empty wallet
+  rests none. The round's book stands. `spec_M33_*`, with sabotage. *(audit
+  2026-11-05: each exit was capped alone, so two tranches asked to sell 500
+  coins from a wallet of 300, and an emptied wallet was refused every cycle)*
 
 ## S — start states
 
@@ -817,6 +896,15 @@ eventually pin (T1).
   exit-side rungs implied by bounds + mark (lower in range ⇒ larger seed); on failure,
   refuse and retry with backoff; windowing governs which exits rest, never how much is
   seeded. *(D9)*
+- **S3b** A refused seed is asked again. A plain no from the venue (E6b)
+  is never taken as seeded: the seed is asked again at B7's backoff (30 s
+  doubling to 300 s; a restart asks at once) and nothing else rests
+  meanwhile — the ladder's exits are the seed's lots. The log hears each
+  refusal; the phone a margin refusal at D82's cadence, any other once it
+  persists (D60). An ambiguous answer is still taken as placed (E6).
+  *(the audit of 2026-11-05: the refusal said "tried again next cycle"
+  and set the bot's first reading, so the seed was never asked again and
+  the grid ran its entries alone)*
 - **S4** Adopting: the venue's basis always wins; a basis is never invented, fills are
   never fabricated, and a position the bot cannot explain halts and alerts. *(nautilus
   REJECT of phantom orders)*
@@ -1226,6 +1314,16 @@ eventually pin (T1).
   builds dead (X7, D98). *(the audit of 2026-11-05: a rate-limited
   flatten left the bot dead and the position open; a refused cancel left
   entries resting under a kill that said nothing rests)*
+- **X17b** A full disk never stops a stop, nor the fleet. A log line that
+  cannot be written (ENOSPC on the log the unit appends stdout and stderr
+  to) is lost, never raised: the notifier's sink and the fleet's own
+  streams swallow the error, so the tombstone's failure is said, the
+  flatten and the cancels still go, and the loop runs on. The phone hears
+  it urgent — "log write FAILED", first and then at most every 15 minutes
+  while it lasts (D60) — buffered, never printed, since printing is what
+  failed. *(the audit of 2026-11-05: the urgent line saying the tombstone
+  write failed raised from its print, the stop died before its flatten,
+  and the loop's own traceback print took the fleet down)*
 - **F1** Every fleet names a watchdog config, and its account guards (staleness,
   mm_rate, equity floor, drawdown) cover every bot. A per-bot position bound is
   opt-in (D32): present, it is checked; absent, the bot has no limit of its own. A
@@ -1653,6 +1751,8 @@ eventually pin (T1).
   counts same-rung exits (said, not a failure) and names the first exit
   whose pairing cost differs from the walk's consumed cost, by fill id and
   time.)*
+  *(2026-11-06, R15c: the walk consumes as the engine does — the newest
+  open lot first, whatever its rung; an order's parts one lot.)*
 - **F42** A bot that cannot read is heard. A bot's own cycle that raises
   checks nothing for it, its stop included, while the fleet runs on and
   the snapshot stays fresh. Past 3 lost cycles in a row AND a minute since
@@ -1688,6 +1788,10 @@ eventually pin (T1).
   every full answer, about 1,000 weight a thirty-day read against the
   1,200 a minute the box's IP shares. R18's collection pages the same way;
   2000 fills in one millisecond cannot be paged and are refused.)*
+- **R1b** The report's Hyperliquid pull pages the same way, to the end, and
+  refuses a millisecond that cannot page (`partial_read`) — never one
+  answer read as the window. `spec_R1b_*`, with sabotage. *(audit
+  2026-11-05: it took the first 2000 fills and only warned)*
 - **R2** Per-bot profit is average-cost accounting over time-ordered fills: a reduce
   realises against the basis, a flip re-anchors at the flip price — in the
   contract's own PnL coin (A4): base for inverse, quote elsewhere. *(the
@@ -1932,6 +2036,7 @@ eventually pin (T1).
   counted same-rung (R9). A flat lets every lot go, as a seed does. The first
   live drift run found grid profit wrong on 9 of 10 bots; with the lots, U113's
   identity held on all 10.)*
+  *(2026-11-06: the consuming rule is G23's walk itself — R15c.)*
 - **R15b** A seed lot's exit is judged against the seed's own price. The seed
   buys at market, off every lattice, and runs only from flat (S3): a lot whose
   buy the window did not see after a seed it holds is a seed lot, its level the
@@ -1943,6 +2048,20 @@ eventually pin (T1).
   each seed fill is a lot under R15's consuming rule, the newest taken first, so
   an exit of the whole seed is judged at its average and an exit past it on the
   lattice.)*
+- **R15c** The readout's lots are the engine's lots. An exit consumes
+  the newest open lot first, whatever its rung (G23's walk, LIFO — the
+  pairing every exit is placed from), seed lots included; an order filled
+  in parts is one lot, newest at its last part, each part priced at its
+  own fill. After every fill the lots R15 and F41 keep are the lots the
+  engine's walk names. The lot one rung inside the exit no longer goes
+  first: a same-rung exit over an older lot a rung down is a trip of 0,
+  counted same-rung, because the engine sold its newest lot and kept the
+  older one, whose exit it places next. The limit: an exit that fills
+  between an entry order's parts is netted by the walk against the lots
+  before the order, by the readout against the parts already filled.
+  *(the audit of 2026-11-05: on its grid fuzz, a lagging venue over 40
+  runs, 188 exits in 13 runs were priced against another lot than the
+  walk's — its LIFO_LOSS read as full-gap trips; 0 after)*
 - **R12** Per trip is what the trip earned. The book's realized is average-cost
   (R2): a long grid that bought cheaper lots on the way down carries an average
   above its exits, so every full-gap trip "realises" a loss while the

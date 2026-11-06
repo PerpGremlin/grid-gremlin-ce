@@ -258,3 +258,79 @@ def spec_G16_a_grid_that_cannot_clear_its_round_trip_is_named():
     net, gap, trip = trip_economics(wide, 0.001)
     assert net > 0 and abs(gap - 0.02) < 1e-9
     assert trip_economics([100.0], 0.001) == (None, None, None)
+
+
+def _g16_build(rates):
+    """build_market_bot's fee check against a client whose fee_rates is
+    `rates`; the warns it said. What the build does after the fee check
+    is not this spec's: anything it raises there is ignored."""
+    from gridgremlin.config import validate_fleet
+    from gridgremlin.events import Notifier
+    from gridgremlin.main import build_market_bot
+    cfg = validate_fleet({'bots': [{'market_type': 'linear', 'symbol': 'ETHUSDT',
+                                    'side': 'long', 'capital': 1000, 'leverage': 2,
+                                    'lower': 2100, 'upper': 2900, 'rungs': 8}]})['bots'][0]
+
+    class Client:
+        def instruments_info(self, category, symbol):
+            return {'symbol': symbol, 'status': 'Trading',
+                    'priceFilter': {'tickSize': '0.01'},
+                    'lotSizeFilter': {'qtyStep': '0.001', 'minOrderQty': '0.001'},
+                    'fundingInterval': 480}
+
+        def read_symbol_truth(self, *a):
+            raise OSError('not this spec')
+    client = Client()
+    client.fee_rates = rates
+    lines = []
+
+    class Said(Notifier):
+        def event(self, kind, botid, text, urgent=False, **k):
+            lines.append((kind, text, urgent))
+    try:
+        build_market_bot(cfg, client, Said(sink=lambda s: None), None, None)
+    except Exception:      # noqa: BLE001 — past the fee check is not this spec's
+        pass
+    return [f'{kind} {"URGENT " if urgent else ""}{text}'
+            for kind, text, urgent in lines if 'fee' in text]
+
+
+def spec_G16b_a_fee_above_the_assumed_or_unread_is_said():
+    """Audit 2026-11-05: the build's fee check said nothing when the
+    account's own maker rate sat above what the engine assumed (G6's exit
+    floor, the fee table), nothing when the read failed, and an empty
+    answer read as a zero fee. Each is now a warn, never urgent; a rate at
+    or below the assumed says nothing. SABOTAGE: `pass` back in main's fee
+    except -> red; fee_notes without its floor clause -> red."""
+    from gridgremlin.ladder import fee_notes
+    from gridgremlin.exchange.bybit.client import Client
+    from gridgremlin.exchange.errors import VenueError
+    wide = [100.0, 102.0, 104.04]
+    assert fee_notes(wide, 0.0002, 'linear') == []           # the base tier
+    assert fee_notes(wide, 0.0001, 'linear') == []           # cheaper: nothing
+    assert fee_notes(wide, 0.001, 'spot') == []
+    above = fee_notes(wide, 0.0003, 'linear')
+    assert len(above) == 1 and 'assume' in above[0] and 'G16b' in above[0]
+    floor = fee_notes(wide, 0.0006, 'linear')                # a 0.12% trip > 0.1%
+    assert len(floor) == 1 and 'exit floor' in floor[0]
+    assert any('EVERY ROUND TRIP LOSES' in n
+               for n in fee_notes([100.0, 100.05, 100.10], 0.001, 'spot'))
+    c = Client(env='demo', api_key='k', api_secret='s',
+               transport=lambda url, h: ({'retCode': 0, 'result': {'timeSecond': '1'}}
+                                         if 'market/time' in url else
+                                         {'retCode': 0, 'result': {'list': []}}))
+    try:
+        c.fee_rates('linear', 'ETHUSDT')
+        raise AssertionError('an empty answer read as a zero fee')
+    except VenueError as e:
+        assert e.kind == 'partial_read'
+    # the build says each, as a plain warn
+    assert _g16_build(lambda m, s: {'maker': 0.0002, 'taker': 0.00055}) == []
+
+    def unread(m, s):
+        raise VenueError('retCode 10002', kind='other')
+    said = _g16_build(unread)
+    assert len(said) == 1 and 'fee rate unread' in said[0] and 'G16b' in said[0], said
+    assert said[0].startswith('warn ') and 'URGENT' not in said[0], said
+    said = _g16_build(lambda m, s: {'maker': 0.0006, 'taker': 0.001})
+    assert len(said) == 1 and 'exit floor' in said[0], said

@@ -1387,3 +1387,53 @@ def spec_R14d_a_spot_row_never_loses_the_others_held_read():
         assert _venue_held_all('bybit', rows) == {'invBTCUSDs': 36210.0}
     finally:
         bc.Client = saved
+
+
+def spec_R1b_the_report_pages_hyperliquid_fills_to_the_end():
+    """Audit 2026-11-05: the report's Hyperliquid pull took one answer —
+    at most 2000 fills, the OLDEST in the window — and only warned, so a
+    busy account's newest fills were missing from every book. Paged by
+    R1's time cursor to the end; 2000 fills inside one millisecond cannot
+    page and are refused (`partial_read`), never read short. SABOTAGE: one
+    call instead of hl_history -> red."""
+    import gridgremlin.exchange.hyperliquid.client as hc
+    import gridgremlin.report as rp
+    from gridgremlin.kept_fills import HL_CAP
+
+    class Fake:
+        address = '0x' + '22' * 20
+        times = []
+
+        def __init__(self):
+            self.calls = 0
+
+        def user_fills_by_time(self, start_ms, end_ms=None):
+            self.calls += 1
+            got = [{'coin': 'SUI', 'tid': i, 'time': t, 'side': 'B', 'px': '1',
+                    'sz': '1', 'fee': '0', 'cloid': None}
+                   for i, t in enumerate(self.times) if t >= start_ms]
+            return got[:HL_CAP]
+
+        def meta_and_ctxs(self):
+            return {'universe': [{'name': 'SUI'}]}, [{'markPx': '2'}]
+    made = []
+
+    def make():
+        made.append(Fake())
+        return made[-1]
+    saved = hc.InfoClient
+    try:
+        hc.InfoClient = make
+        Fake.times = [1000 + i for i in range(2 * HL_CAP + 5)]
+        fills, marks = rp._hl_pull([{'symbol': 'SUI'}], 0)
+        assert len(fills) == 2 * HL_CAP + 5, len(fills)
+        assert made[-1].calls == 3, made[-1].calls
+        assert marks[('linear', 'SUI')] == 2.0
+        Fake.times = [1000] * HL_CAP
+        try:
+            rp._hl_pull([{'symbol': 'SUI'}], 0)
+            raise AssertionError('a full millisecond was read short')
+        except VenueError as e:
+            assert e.kind == 'partial_read'
+    finally:
+        hc.InfoClient = saved
