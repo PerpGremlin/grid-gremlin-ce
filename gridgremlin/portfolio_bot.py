@@ -222,6 +222,7 @@ class PortfolioBot:
         self._now = clock or time.time
         self._regime = regime_reader or (lambda coin: None)
         self.alive = True
+        self.stopping = None           # H4d: a fired flatten still being finished (X17)
         self._last_pos = None            # the stack's value in quote (D70 reads "holding")
         self.notional_now = 0.0          # the shorts at mark (D56)
         self.capped = None
@@ -686,12 +687,21 @@ class PortfolioBot:
     def _note_slices(m, left_c, px, cap):
         m['slices'] = m['done'] + max(math.ceil(left_c * px / cap - 1e-9), 0)
 
-    def _own_fills(self, mt, symbol, since_ms, now_ms):
+    def _own_fills(self, mt, symbol, since_ms, now_ms, unlinked_buys=False):
+        """The row's own fills on a market. `unlinked_buys` (a short leg's
+        market, which the row owns as an identity, H2): a buy that carries no
+        link at all — a liquidation, an auto-deleverage, a close by hand on
+        the venue's page — closes the row's short too, and joins its book so
+        its realised is counted (the audit of 2026-11-05: an unlinked close of
+        a USDT hedge left its book open and its loss out of the cash, read
+        apart as the book's)."""
         hist = getattr(self.client, 'fills_history', None)
         if hist is None:
             return []
+        mine = self.botid + '-'
         return [f for f in hist(mt, symbol, since_ms, now_ms)
-                if str(f.get('link_id') or '').startswith(self.botid + '-')]
+                if str(f.get('link_id') or '').startswith(mine)
+                or (unlinked_buys and not f.get('link_id') and f.get('side') == 'buy')]
 
     def _funding_rows(self, mt, symbol, since_ms, now_ms):
         hist = getattr(self.client, 'funding_history', None)
@@ -702,14 +712,24 @@ class PortfolioBot:
     def _settle_fills(self, now_ms):
         """The book from the row's own fills since the watermark: spot fills
         move the coins; a short leg's fills move its book. Deduped across
-        the overlap by execution id."""
+        the overlap by execution id. H2b: every market is read before any
+        fill is booked — a read refused part way books nothing and moves no
+        watermark, so the next read takes the same span whole (booked as it
+        was read, a refusal part way counted the markets before it again at
+        every retry: 2.25 BTC against the true 0.75, and hedged to match —
+        the audit of 2026-11-05)."""
         row = self.row
         since = row['fills_to_ms'] - OVERLAP_MS
+        spot_reads = [(coin, self._own_fills('spot', leg['symbol'], since, now_ms))
+                      for coin, leg in self.legs['spot'].items()]
+        perp_reads = [(key, leg, self._own_fills(leg['market_type'], leg['symbol'], since, now_ms,
+                                                 unlinked_buys=True))
+                      for _, _, leg, key in self._perp_legs()]
         seen = set(row['seen'])
         fresh = []
         opened, done, filled = row.get('spot_open') or {}, row.get('spot_done') or {}, {}
-        for coin, leg in self.legs['spot'].items():
-            for f in self._own_fills('spot', leg['symbol'], since, now_ms):
+        for coin, fills in spot_reads:
+            for f in fills:
                 if f['exec_id'] in seen:
                     continue
                 seen.add(f['exec_id'])
@@ -751,12 +771,20 @@ class PortfolioBot:
                     spot_fill(book, f['side'], q, float(f['price']), float(f.get('fee') or 0.0))
                 fresh.append(f['exec_id'])
         self._settle_spot_orders(filled)
-        for kind, coin, leg, key in self._perp_legs():
+        for key, leg, fills in perp_reads:
             book = row['books'].setdefault(key, {'position': 0.0, 'avg': 0.0, 'realized': 0.0, 'fees': 0.0})
-            for f in self._own_fills(leg['market_type'], leg['symbol'], since, now_ms):
+            for f in fills:
                 if f['exec_id'] in seen:
                     continue
                 seen.add(f['exec_id'])
+                if not f.get('link_id'):
+                    if book['position'] <= 1e-12:
+                        fresh.append(f['exec_id'])   # kept seen: never a later short's close
+                        continue                     # not the row's short: nothing of its to close
+                    self.notify.event('warn', self.botid,
+                                      f"{leg['symbol']}: a buy of {float(f['qty']):.10g} not placed by the row "
+                                      f"({f.get('venue_kind') or 'no link'}) closed its short — booked, its "
+                                      'realised counted (H2b)')
                 _apply(book, f['side'], float(f['price']), float(f['qty']),
                        float(f.get('fee') or 0.0), leg['market_type'] == 'inverse')
                 fresh.append(f['exec_id'])
@@ -777,12 +805,14 @@ class PortfolioBot:
         # twice (the 2026-10-11 review). A row from before the list re-reads
         # nothing it may already have counted, once.
         since = row['funding_to_ms'] - (OVERLAP_MS if 'funding_seen' in row else 0)
+        # H2b: every market read before any settlement is booked, as the fills
+        reads = [(kind, coin, leg, self._funding_rows(leg['market_type'], leg['symbol'], since, now_ms))
+                 for kind, coin, leg, _ in self._perp_legs()]
         seen = set(row.setdefault('funding_seen', []))
         fresh = []
-        for kind, coin, leg, _ in self._perp_legs():
+        for kind, coin, leg, rows in reads:
             inverse = leg['market_type'] == 'inverse'
-            for f in self._funding_rows(leg['market_type'], leg['symbol'],
-                                        since, now_ms):
+            for f in rows:
                 key = f.get('exec_id') or f"{f.get('symbol')}:{f['time_ms']}"
                 if key in seen:
                     continue
@@ -1145,22 +1175,44 @@ class PortfolioBot:
 
     def _flatten(self, reason, coins, held, prices):
         """Every leg together in one cycle: shorts bought back, the stack
-        sold, as market orders; then the tombstone (X7). A leg that refuses
-        is said and the rest still go — a hedged book cut on one side is a
-        directional bet taken at the worst moment. The stack sold is what
-        the wallet holds for the row once the shorts are closed (H8)."""
-        left = []
+        sold, as market orders. A leg that refuses is said and the rest
+        still go — a hedged book cut on one side is a directional bet taken
+        at the worst moment. The stack sold is what the wallet holds for the
+        row once the shorts are closed (H8).
+        H4d (X17's law for the row, the audit of 2026-11-05): the tombstone
+        first (X7), then the row stands down only once every leg reads
+        closed. A refused or unanswered leg, or a close whose read-back still
+        shows it, keeps the row up doing nothing but this flatten each read
+        (never its tick, whatever the loss does), paged while it lasts; an
+        accepted close whose read-back still shows its leg gets one read's
+        look before another order, so a slow read never sells twice. Before,
+        the row died on the first pass with its refused legs open, never
+        asked again."""
+        from .bot_stops import StopsMixin
+        if self.stopping is None:
+            StopsMixin._tombstone(self, reason, 'flattening')
+            self.stopping = {'kind': 'flatten', 'reason': reason, 'wait': []}
+        st = self.stopping
+        wait = {tuple(k) for k in st.get('wait') or []}
+        left, still, sent, sold = [], [], {}, {}
         before = self._wallet_coins()
         for kind in ('hedge', 'short'):
             for coin, size in held[kind].items():
                 if size <= 0:
                     continue
+                if (kind, coin) in wait:
+                    still.append(f'{kind} {coin} (its close is read again first)')
+                    continue
                 try:
-                    self._place(kind, coin, 'Buy', size, prices[coin], f'flatten: {reason}')
+                    if self._place(kind, coin, 'Buy', size, prices[coin], f'flatten: {reason}'):
+                        sent[(kind, coin)] = self.legs[kind][coin]
                 except (VenueError, OSError) as e:
                     left.append(f'{kind} {coin}: {e}')
         for coin, (leg, size) in self._moving_now.items():      # H17: a move's old short
             if size <= 0:
+                continue
+            if ('move', coin) in wait:
+                still.append(f"hedge {coin} {leg['symbol']} (its close is read again first)")
                 continue
             ad = leg['adapter']
             try:
@@ -1169,21 +1221,61 @@ class PortfolioBot:
                                          link_id=self._link('hedge', coin))
                 self.notify.event('order', self.botid,
                                   f"buy {ad.fmt_qty(size)} {leg['symbol']} hedge (flatten: {reason})")
+                sent[('move', coin)] = leg
             except (VenueError, OSError) as e:
                 left.append(f"hedge {coin} {leg['symbol']}: {e}")
-        for coin, q in self._settled(coins, before).items():
+        at_sale = self._wallet_coins() if before is not None else None
+        settled = (dict(coins) if at_sale is None else
+                   {c: max(min(q + at_sale[c] - before[c], at_sale[c]), 0.0) for c, q in coins.items()})
+        for coin, q in settled.items():
             if q <= 0:
                 continue
+            if ('spot', coin) in wait:
+                if self.legs['spot'][coin]['adapter'].meets_minimum(q, prices[coin]):
+                    still.append(f'spot {coin} (its sale is read again first)')
+                continue
             try:
-                self._place('spot', coin, 'Sell', q, prices[coin], f'flatten: {reason}')
+                got = self._place('spot', coin, 'Sell', q, prices[coin], f'flatten: {reason}')
+                if got:
+                    sold[coin] = got
             except (VenueError, OSError) as e:
                 left.append(f'spot {coin}: {e}')
-        if self.tombs is not None:
-            self.tombs.add(self.botid, reason)
+        if sold and self.row is not None:
+            # H14: a sale's proceeds are the row's cash, as the tick's — the
+            # row stays up while a leg is open, and its value must not read
+            # as everything sold lost
+            proceeds = sum(got * prices[c] for c, got in sold.items())
+            self.row['cash'] += proceeds
+            self.row['spent'] = self.row.get('spent', 0.0) - proceeds
+        # X17: read back, never assume an accepted close filled
+        wait = set()
+        for key, leg in sent.items():
+            try:
+                size = self._short_size(self.client.read_symbol_truth(leg['market_type'], leg['symbol']), leg)[0]
+            except (VenueError, OSError):
+                size = None
+            if size is None or size > 0:
+                wait.add(key)
+                still.append(f'{key[0]} {key[1]} ' + ('unread after its close' if size is None
+                                                      else f'{size:.10g} still open after its close'))
+        end = self._wallet_coins() if sold else None
+        for coin, got in sold.items():
+            base = (at_sale or {}).get(coin)
+            unsold = None if end is None or base is None else end[coin] - (base - got)
+            if unsold is None or unsold > 1e-3 * got:
+                wait.add(('spot', coin))
+                still.append(f'spot {coin} ' + ('unread after its sale' if unsold is None
+                                                else f'{unsold:.10g} unsold after its sale'))
+        st['wait'] = sorted(wait)
+        if left or still:
+            StopsMixin._not_finished(self, f'flatten ({reason}): '
+                                     + (f"NOT closed: {'; '.join(left)}" if left else '')
+                                     + ('; ' if left and still else '')
+                                     + (f"still open: {'; '.join(still)}" if still else ''))
+            return
         self.alive = False
-        tail = f" — NOT closed: {'; '.join(left)}" if left else ''
         self.notify.event('kill', self.botid,
-                          f'{reason} — every leg flattened together (H4){tail}', urgent=True)
+                          f'{reason} — every leg flattened together (H4)', urgent=True)
 
     @staticmethod
     def cut_for_floor(available, equity, im, floor):
@@ -1207,30 +1299,66 @@ class PortfolioBot:
         the hedge's close settles into the wallet), bounded by the wallet's.
         The read's own views move with the cut — coins, the planner's coins,
         the shorts — so the plan later in the read sizes from the cut book,
-        never from the old one plus the cut's proceeds."""
+        never from the old one plus the cut's proceeds.
+        H4c: a coin's cut is a pair, its hedge first — the coins sold are
+        the share its hedge's buy-back confirmed (by what the venue took of
+        it); a refused buy-back sells none of its coins and pages, asked
+        again at the next read. Sold first, a refused buy-back left the
+        short standing over coins sold away, a naked short grown every read
+        (the audit of 2026-11-05). A coin the row does not hedge is cut
+        alone, as before; a refused sale pages and the rest still go."""
         n, sold = 0, 0.0
         open_coin = {c: plan_coins.get(c, q) - q for c, q in coins.items()}   # H8: a hedge's open coin P&L
         for coin, q in coins.items():
-            want = min(plan_coins.get(coin, q) * share, q)
-            done = self._place('spot', coin, 'Sell', want, prices[coin], 'margin floor') if want > 0 else 0.0
-            if done:
+            pair, size = 1.0, held['hedge'].get(coin, 0.0)
+            if size > 0:
+                asked = size * share
+                try:
+                    done = self._place('hedge', coin, 'Buy', asked, prices[coin], 'margin floor')
+                except (VenueError, OSError) as e:
+                    self.notify.event('margin', self.botid,                 # the phone (D60)
+                                      f'{coin}: the margin floor\'s hedge buy-back was refused: {e} — '
+                                      'none of its coins sold, so no short stands over coins sold away; '
+                                      'asked again at the next read (H4c)', urgent=True)
+                    continue
+                if done:
+                    n += 1
+                    pair = min(done / asked, 1.0)
+                    held['hedge'][coin] = max(size - done, 0.0)
+            want = min(plan_coins.get(coin, q) * share * pair, q)
+            try:
+                got = self._place('spot', coin, 'Sell', want, prices[coin], 'margin floor') if want > 0 else 0.0
+            except (VenueError, OSError) as e:
+                self.notify.event('margin', self.botid,                     # the phone (D60)
+                                  f'{coin}: the margin floor\'s spot sale was refused: {e} — asked '
+                                  'again at the next read (H4c)', urgent=True)
+                got = 0.0
+            if got:
                 n += 1
-                sold += done * prices[coin]
-                coins[coin] = max(q - done, 0.0)
-                plan_coins[coin] = plan_coins.get(coin, q) - done
+                sold += got * prices[coin]
+                coins[coin] = max(q - got, 0.0)
+                plan_coins[coin] = plan_coins.get(coin, q) - got
+            if size > 0 and coin in coins:
+                # the close settles its share of the open coin into the wallet
+                coins[coin] += open_coin.get(coin, 0.0) * min((size - held['hedge'][coin]) / size, 1.0)
         # H4: the sale's proceeds are the row's cash (they repay its loan) —
         # left out, a cut read as a loss of everything it sold
         self.row['cash'] += sold
         self.row['spent'] -= sold
         for kind in ('hedge', 'short'):
             for coin, size in held[kind].items():
-                done = self._place(kind, coin, 'Buy', size * share, prices[coin], 'margin floor') if size > 0 else 0.0
+                if size <= 0 or (kind == 'hedge' and coin in coins):
+                    continue                          # a long's hedge went with its coins
+                try:
+                    done = self._place(kind, coin, 'Buy', size * share, prices[coin], 'margin floor')
+                except (VenueError, OSError) as e:
+                    self.notify.event('margin', self.botid,
+                                      f'{kind} {coin}: the margin floor\'s buy-back was refused: {e} — '
+                                      'asked again at the next read (H4c)', urgent=True)
+                    continue
                 if done:
                     n += 1
                     held[kind][coin] = max(size - done, 0.0)
-                    if kind == 'hedge' and coin in coins:
-                        # the close settles its share of the open coin into the wallet
-                        coins[coin] += open_coin.get(coin, 0.0) * min(done / size, 1.0)
         self.row['delevered'] += 1
         return n
 
@@ -1420,6 +1548,12 @@ class PortfolioBot:
         quote = cfg.get('spot_quote', 'USDT')
         wq = float((wallet.get('coins') or {}).get(quote, {}).get('wallet_balance', 0.0))
         wallet_quote = wq                  # U136: the account's quote as the venue holds it
+        # H4b: a basis stop's parked cash sits in the wallet's quote and is
+        # counted once, as parked — never the row's cash as well. Read as
+        # cash too, a levered row's loan shrank by the sale it already
+        # counted, and its re-entry bought on both (3.0× on a 2× row, the
+        # audit of 2026-11-05)
+        wq -= sum(row['parked'].values())
         if cfg.get('margin'):
             # the balance, less what the siblings and the row's linear books
             # put there (the owner, 2026-10-11)
@@ -1523,11 +1657,13 @@ class PortfolioBot:
         self._loss_now = loss if risk.get('max_loss') is not None else None
         placed = 0
         # --- H4 -----------------------------------------------------------------
-        if risk.get('max_loss') is not None and loss >= risk['max_loss']:
-            self._flatten(f"loss {loss:,.2f} >= max_loss {risk['max_loss']:,.2f}",
-                          coins, held, prices)
+        if self.stopping is not None or (risk.get('max_loss') is not None and loss >= risk['max_loss']):
+            # H4d: a fired flatten is all the row does until every leg is closed
+            reason = (self.stopping['reason'] if self.stopping is not None
+                      else f"loss {loss:,.2f} >= max_loss {risk['max_loss']:,.2f}")
+            self._flatten(reason, coins, held, prices)
             self.state.set(self.botid, row)
-            return {'flattened': True}
+            return {'flattened': True} if not self.alive else {'stopping': reason}
         eq = wallet.get('equity')
         avail = wallet.get('available')
         if eq and avail is not None and avail / eq < risk['margin_floor_pct'] and self.notional_now > 0:

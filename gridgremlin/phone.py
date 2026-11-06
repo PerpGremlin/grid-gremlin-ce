@@ -19,7 +19,8 @@ from common.env import load_env
 
 STATE = Path('logs/relay.state.json')   # the channel's offset, shared on
                                         # purpose: one consumer, one place
-LIMIT = 3900                            # Telegram refuses > 4096
+from common.telegram import LIMIT, chunks   # Telegram refuses > 4096: one
+                                            # splitter for every sender (E12c)
 READOUT_TTL = 60.0                      # a readout serves a minute of asks
 WARM_EVERY = 60.0                       # the service keeps one warm: /pnl
                                         # answers at once, its age said
@@ -40,22 +41,6 @@ def accepted(update, owner_id):
     if not text.startswith('/'):
         return None, 'not a command'
     return text, 'command'
-
-
-def chunks(text, limit=LIMIT):
-    """Telegram's cap, split on line ends."""
-    out, cur = [], ''
-    for line in text.splitlines():
-        while len(line) > limit:
-            out.append(line[:limit])
-            line = line[limit:]
-        if len(cur) + len(line) + 1 > limit:
-            out.append(cur)
-            cur = ''
-        cur += ('\n' if cur else '') + line
-    if cur:
-        out.append(cur)
-    return out or ['(empty)']
 
 
 def _m(v):

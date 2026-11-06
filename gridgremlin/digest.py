@@ -20,6 +20,43 @@ from .report import kept_total as kept_total_of, portfolio_rows_total
 
 STATE = Path('logs/digest.state.json')
 STALE_S = 600            # a snapshot older than this: the fleet is not running
+FIGURES_STALE_S = 2 * 3600   # F17b: the ledger is topped up hourly and again
+                             # minutes before the digest, the archive two
+                             # minutes before it (pnl_drift.BEHIND_MS, STALE_S):
+                             # older than this, its figures are stale
+
+
+def _ago(s):
+    return f'{s / 3600:.1f} h' if s >= 3600 else f'{s / 60:.0f} min'
+
+
+def ledger_marks(fleet, kept, now):
+    """F17b: each of the fleet's markets and how long since the ledger
+    collected it — {market: seconds, or None when never}."""
+    from .report import kept_venue_key
+    out = {}
+    for c in market_rows(fleet):
+        mark = (kept.get('collected') or {}).get(
+            kept_venue_key(c['venue'], c['market_type'], c['symbol']))
+        out[f"{c['market_type']} {c['symbol']}"] = (None if mark is None
+                                                    else now - mark / 1000.0)
+    return out
+
+
+def archive_age(record, now):
+    """F17b: seconds since the day's archive was written, or None when it
+    carries no stamp."""
+    from common.fmt import utc_parse
+    t = utc_parse(record.get('written_utc'))
+    return None if t is None else now - t
+
+
+def stale_ledger(marks):
+    """F17b: the markets whose ledger figures are stale, said with their
+    age — never collected, or older than FIGURES_STALE_S."""
+    return [f'{m} never collected' if age is None else f'{m} {_ago(age)} old'
+            for m, age in sorted(marks.items())
+            if age is None or age > FIGURES_STALE_S]
 
 
 def fleet_tag(fleet_path):
@@ -136,10 +173,12 @@ def section(fleet_path, now, day_start, archive_root='logs/daily',
     bots = contract.get('bots') or {}
     sf = contract.get('since_first') or {}
     lines = [head]
+    unread = None
     try:
         kept = load(store_path(fleet_path, kept_root))
-    except RuntimeError:
-        kept = {'fills': [], 'anchors': {}, 'collected': {}}
+    except RuntimeError as e:
+        kept, unread = {'fills': [], 'anchors': {}, 'collected': {}}, str(e)
+    stale = ([] if unread else stale_ledger(ledger_marks(fleet, kept, now)))   # F17b
     books = day_books(fleet, kept, int(day_start * 1000), int(now * 1000))
     dca = {make_botid(c['market_type'], c['symbol'], c['side'])
            for c in market_rows(fleet) if c.get('strategy') == 'martingale'}
@@ -162,10 +201,14 @@ def section(fleet_path, now, day_start, archive_root='logs/daily',
             per_bot.append((d, b))
     # D63: the day is the kept fills' — trading after fees, before funding;
     # funding lands in the kept-history figure below and on every card
-    lines.append(f'day {_m(day_net)} after fees, before funding '
-                 f'(fees {fees:,.2f}) · '
-                 f'{trips} trips · {rounds} rounds'
-                 + (f' · {left} not counted' if left else ''))
+    if unread:                         # F17b: an unreadable ledger is no zero day
+        lines.append(f'day unread — ⚠️ the kept ledger will not load: {unread}')
+    else:
+        lines.append(f'day {_m(day_net)} after fees, before funding '
+                     f'(fees {fees:,.2f}) · '
+                     f'{trips} trips · {rounds} rounds'
+                     + (f' · {left} not counted' if left else '')
+                     + (f" · ⚠️ stale ledger: {', '.join(stale)}" if stale else ''))
     open_now = [v.get('unreal_at_mark') for v in bots.values()
                 if v and v.get('unreal_at_mark') is not None]
     kept_total, kept_out = 0.0, 0
@@ -180,9 +223,12 @@ def section(fleet_path, now, day_start, archive_root='logs/daily',
     if record is None:
         lines.append('no archive for today — open and kept figures unread')
     else:
+        written = archive_age(record, now)                        # F17b
         lines.append(f'open now {_m(sum(open_now) if open_now else None)} · '
                      f'kept history {_m(kept_total)}'
-                     + (f' ({kept_out} left out)' if kept_out else ''))
+                     + (f' ({kept_out} left out)' if kept_out else '')
+                     + (f' · ⚠️ stale: the archive was written {_ago(written)} ago'
+                        if written is not None and written > FIGURES_STALE_S else ''))
     from .archive import last_snapshot as _last
     pf = portfolio_rows_total(((_last(fleet_path) or (record or {}).get('snapshot') or {})
                                .get('bots')))                       # H6: the portfolio rows too
@@ -242,10 +288,14 @@ def section(fleet_path, now, day_start, archive_root='logs/daily',
     wd = _watchdog_view(fleet) or contract.get('watchdog') or {}
     if wd.get('swept_s_ago') is not None:
         health.append(f"watchdog {wd['swept_s_ago'] // 60:.0f} min ago")
-    if kept.get('collected'):
-        health.append('ledger '
-                      f"{(now * 1000 - max(kept['collected'].values())) / 6e4:.0f}"
-                      ' min ago')
+    if unread:
+        health.append('⚠️ ledger unreadable')
+    elif stale:                        # F17b: the oldest market, never the newest
+        health.append(f"⚠️ ledger stale: {', '.join(stale)}")
+    elif kept.get('collected'):
+        marks = [a for a in ledger_marks(fleet, kept, now).values() if a is not None]
+        oldest = max(marks) if marks else now - max(kept['collected'].values()) / 1000.0
+        health.append(f'ledger {oldest / 60:.0f} min ago')
     lines.append('health: ' + ' · '.join(health))
     if fleet.get('agent'):
         lines.extend(agent_lines(fleet_path, fleet['agent']))
@@ -322,8 +372,9 @@ def main(argv):
     print(text)
     if dry:
         return 0
-    from common.telegram import send_telegram
-    send_telegram(text[:3900])
+    from common.telegram import chunks, send_telegram
+    for part in chunks(text):           # E12c: in parts, never cut at the cap
+        send_telegram(part)
     write_json(STATE, state)            # the log place moves only once sent
     return 0
 

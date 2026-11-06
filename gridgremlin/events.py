@@ -18,6 +18,44 @@ URGENT_REPEAT = 900.0        # an urgent line that recurs: said first, then
                              # cycle for 286 cycles, 2026-10-05)
 
 
+VITAL_KINDS = ('kill', 'stop')   # E12c: with an urgent line, trimmed last
+
+
+class _Line(str):
+    """A buffered phone line; `vital` marks a kill, a stop or an urgent one."""
+    vital = False
+
+
+def trimmed(lines, limit):
+    """E12c: the buffer as the payloads to send, each under `limit`. All of
+    it when it fits; else every vital line, then the newest others that
+    fit, in their order, with what was dropped said — and vital lines past
+    one message go in more than one, never cut."""
+    whole = '\n'.join(lines)
+    if len(whole) <= limit:
+        return [whole]
+    vital = [i for i, ln in enumerate(lines) if getattr(ln, 'vital', False)]
+    room = limit - 80 - sum(len(lines[i]) + 1 for i in vital)
+    keep = set(vital)
+    for i in range(len(lines) - 1, -1, -1):
+        if i in keep:
+            continue
+        if room - (len(lines[i]) + 1) < 0:
+            break
+        keep.add(i)
+        room -= len(lines[i]) + 1
+    dropped = len(lines) - len(keep)
+    out, cur = [], ''
+    for ln in [lines[i] for i in sorted(keep)] + (
+            [f'[{dropped} earlier line(s) dropped — see the log]'] if dropped else []):
+        ln = ln[:limit]
+        if cur and len(cur) + 1 + len(ln) > limit:
+            out.append(cur)
+            cur = ''
+        cur += ('\n' if cur else '') + ln
+    return out + ([cur] if cur else [])
+
+
 def stamped_print(line):
     """R23: the fleet's own log line, with its UTC time at the END — every
     reader keys on the line's start ('[ship] kill …'), so the start stays
@@ -100,7 +138,9 @@ class TelegramNotifier(Notifier):
             text = text.replace(f'{kind}: ', '', 1)
         prefix = f'{icon} ' if icon else ''
         label = kind if botid == kind else f'{kind} {botid}'   # phone too:
-        self._buffer.append(f'{prefix}{label}: {text}')        # no "fleet fleet"
+        line = _Line(f'{prefix}{label}: {text}')               # no "fleet fleet"
+        line.vital = kind in VITAL_KINDS or urgent             # E12c: trimmed last
+        self._buffer.append(line)
         # a kill page must not sit in the buffer until some later event
         # arrives (the audit's M6) — it flushes NOW, rate limit or not
         self._maybe_flush(force=(kind == 'kill'))
@@ -156,22 +196,10 @@ class TelegramNotifier(Notifier):
         now = self._clock()
         if not force and now - self._last_send < self.MIN_INTERVAL:
             return
-        payload = '\n'.join(self._buffer)
-        if len(payload) > self.HARD_LIMIT:
-            # the venue rejects oversize payloads outright — an unbounded
-            # buffer would then fail forever, silently losing every later
-            # page including kills. Send the NEWEST, say what was dropped.
-            keep, size = [], 0
-            for line in reversed(self._buffer):
-                if size + len(line) + 1 > self.HARD_LIMIT - 80:
-                    break
-                keep.append(line)
-                size += len(line) + 1
-            dropped = len(self._buffer) - len(keep)
-            payload = ('\n'.join(reversed(keep))
-                       + f'\n[{dropped} earlier line(s) dropped — see the log]')
+        payloads = trimmed(self._buffer, self.HARD_LIMIT)
         try:
-            self._transport(payload)
+            for payload in payloads:   # a part that fails resends from the first:
+                self._transport(payload)   # a vital line twice, never none
             self._buffer = []
             self._last_send = now
         except Exception:      # noqa: BLE001 — the audit of 2026-10-13: IncompleteRead is not an OSError
@@ -180,7 +208,7 @@ class TelegramNotifier(Notifier):
                 # page is the one line this channel exists for: it survives
                 # the drop and rides the next flush (audit 2026-08-07 H4)
                 self._buffer = [ln for ln in self._buffer
-                                if 'kill' in ln][-10:]
+                                if getattr(ln, 'vital', False) or 'kill' in ln][-10:]
             self._last_send = now   # and respect the interval before retrying
 
     def flush(self):

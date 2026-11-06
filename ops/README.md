@@ -280,9 +280,11 @@ python3 ops/promote.py <version>          # merged, and a day on play money
 python3 ops/promote.py <version> --hotfix "why it cannot wait"
 ```
 
-A promotion is refused unless the version is on the merged main and has run
-in the play-money checkout for a day (its reflog says when it arrived); a
-hotfix skips the day and writes its reason. Every move lands in the live
+A promotion is refused unless the version is on the merged main and a
+play-money fleet has run it for a day — by the fleets' snapshots, which name
+the version each run started from, so a deploy the fleets were never
+restarted on has not run (F19b); a hotfix skips the day and writes its
+reason. Every move lands in the live
 copy's `logs/promotions.log`. Nothing restarts: the live fleet takes the new
 version when its owner restarts it.
 

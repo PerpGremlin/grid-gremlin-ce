@@ -6,8 +6,9 @@ detached at one exact version, with its own .env, logs/ and fleet file. It
 moves only when the owner promotes a version, and only:
 
   - a version already on the merged main (nothing unreviewed reaches it);
-  - after that version has run in the main checkout for at least a day,
-    by git's own record of when the main checkout received it (its reflog);
+  - after a play-money fleet has run that version for at least a day, by
+    the fleets' own snapshots (F19b: each row names the version its run
+    started from — a deploy the fleets were never restarted on ran nothing);
   - or the same day as a hotfix, the reason written down.
 
 Every promotion is appended to <live>/logs/promotions.log. This moves the
@@ -20,13 +21,17 @@ restart, which the owner runs.
 
 The live copy defaults to <main checkout>-live beside it (GG_LIVE_DIR).
 """
+import json
 import os
+import re
 import subprocess
 import sys
 import time
 from pathlib import Path
 
 DAY_S = 24 * 3600
+ROW_T = re.compile(r'^\{"t": ([0-9.e+-]+), "code": (\{[^{}]*\})')   # a snapshot row's head
+ROW_TIERS = re.compile(r'"tiers": (\{[^{}]*\})')
 
 
 class Refused(Exception):
@@ -66,6 +71,61 @@ def first_seen(main, commit):
     return seen
 
 
+def snapshots(main):
+    """The play-money fleets' snapshot files: each fleet file in the main
+    checkout's configs/ names its watchdog, which names the file."""
+    out = []
+    for fp in sorted((Path(main) / 'configs').glob('fleet*.json')):
+        try:
+            wd = json.loads(fp.read_text()).get('watchdog')
+            snap = wd and json.loads((Path(main) / wd).read_text()).get('snapshot')
+        except (OSError, ValueError, AttributeError):
+            continue
+        if snap and (Path(main) / snap).exists():
+            out.append(Path(main) / snap)
+    return out
+
+
+def runs(paths):
+    """F19b: the fleets' runs, {(sha, since): last row's time} — every row
+    names the version its run started from; a run on mainnet, or on code
+    edited in place, is no play-money run of a version."""
+    out = {}
+    for p in paths:
+        with open(p, errors='replace') as f:
+            for line in f:
+                m = ROW_T.match(line)
+                if not m:
+                    continue
+                try:
+                    t, code = float(m.group(1)), json.loads(m.group(2))
+                except ValueError:
+                    continue
+                tiers = ROW_TIERS.search(line)
+                if (code.get('dirty') or not code.get('sha')
+                        or (tiers and 'mainnet' in json.loads(tiers.group(1)).values())):
+                    continue
+                k = (code['sha'], float(code.get('since') or t))
+                out[k] = max(out.get(k, t), t)
+    return out
+
+
+def ran_for(main, target, ran=None):
+    """F19b: the longest a play-money fleet ran `target`'s code — the same
+    tree, so a merge with no change to it counts — in seconds, or None.
+    `ran`: runs() already read."""
+    want = git(main, 'rev-parse', f'{target}^{{tree}}')
+    best = None
+    for (sha, since), last in (runs(snapshots(main)) if ran is None else ran).items():
+        try:
+            same = sha == target or git(main, 'rev-parse', f'{sha}^{{tree}}') == want
+        except Refused:                              # a version this clone never had
+            continue
+        if same and (best is None or last - since > best):
+            best = last - since
+    return best
+
+
 def plan(main, live, ref, hotfix=None, min_age_s=DAY_S, now=None):
     """Pure judgement, no move: -> (target, current, age_s) or Refused."""
     now = time.time() if now is None else now
@@ -77,13 +137,16 @@ def plan(main, live, ref, hotfix=None, min_age_s=DAY_S, now=None):
     current = resolve(live, 'HEAD')
     if target == current:
         raise Refused(f'the live copy is already on {target[:7]}')
-    seen = first_seen(main, target)
-    age = None if seen is None else now - seen
+    age = ran_for(main, target)
     if hotfix is None:
         if age is None:
-            raise Refused(f'{target[:7]} has never run in the play-money '
-                          'checkout — deploy it there first, or promote it '
-                          'as a hotfix with its reason')
+            deployed = first_seen(main, target)
+            raise Refused(f'{target[:7]} has never run on a play-money fleet'
+                          + ('' if deployed is None else
+                             f' (deployed {(now - deployed) / 3600:.1f} h ago, '
+                             'no fleet restarted on it)')
+                          + ' — restart a fleet on it there first, or promote '
+                          'it as a hotfix with its reason')
         if age < min_age_s:
             raise Refused(f'{target[:7]} has run on play money for '
                           f'{age / 3600:.1f} h of the {min_age_s / 3600:g} h '
@@ -118,11 +181,13 @@ def status(main, live, now=None):
     pending = git(main, 'log', '--format=%H %h %s', f'{current}..{merged}')
     if not pending:
         out.append('nothing waiting: the live copy is on the merged main')
+    ran = runs(snapshots(main))
     for line in pending.splitlines():
         sha, short, subject = line.split(' ', 2)
-        seen = first_seen(main, sha)
+        seen, age = first_seen(main, sha), ran_for(main, sha, ran)
         when = ('not yet deployed to play money' if seen is None
-                else f'on play money {(now - seen) / 3600:.1f} h')
+                else f'deployed {(now - seen) / 3600:.1f} h, no fleet run on it yet'
+                if age is None else f'run on play money {age / 3600:.1f} h')
         out.append(f'  waiting {short} {subject[:60]} — {when}')
     return '\n'.join(out)
 

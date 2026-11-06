@@ -62,9 +62,10 @@ def spec_F17_the_log_is_read_from_where_the_last_digest_stopped():
         assert counts['kills'] == 1                             # from the start
 
 
-def _demo_digest(entry, now):
+def _demo_digest(entry, now, collected=None, written=None, ledger=None):
     """The digest of one demo fleet whose last snapshot holds `entry` for
-    its one bot: (text, state)."""
+    its one bot: (text, state). `collected` the ledger's mark (ms), `written`
+    the archive's stamp (s), `ledger` the ledger file's raw text."""
     with tempfile.TemporaryDirectory() as d:
         old = os.getcwd()
         os.chdir(d)
@@ -84,12 +85,14 @@ def _demo_digest(entry, now):
                     'side': 'long', 'capital': 1000, 'leverage': 5,
                     'lower': 90, 'upper': 110, 'rungs': 5}]}))
             start = 20 * DAY
-            Path('logs/fills/demo.json').write_text(json.dumps({
-                'collected': {'bybit:linear:BTCUSDT': start + 1000},
+            Path('logs/fills/demo.json').write_text(ledger or json.dumps({
+                'collected': {'bybit:linear:BTCUSDT': start + 1000 if collected is None else collected},
                 'anchors': {'linBTCUSDTl': {'kind': 'clean', 'time_ms': 0}},
                 'fills': [_kf(start + 1, 'a'),
                           _kf(start + 2, 'b', 'sell', 112.0, fee=2.0)]}))
             Path('logs/daily/demo/1970-01-21.json').write_text(json.dumps({
+                **({'written_utc': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(written))}
+                   if written is not None else {}),
                 'readout': {'account': {'bybit': {
                                 'notional': 12_500.0, 'equity': 5000.0,
                                 'collateral': 5000.0}},
@@ -143,3 +146,34 @@ def spec_F17_a_fleet_that_cannot_be_read_does_not_cost_the_others():
         finally:
             os.chdir(old)
     assert 'unreadable' in text and state == {}
+
+
+def spec_F17b_stale_ledger_and_archive_figures_are_said_with_their_age():
+    """The fifth audit (2026-11-05): one market's ledger stuck for days read
+    "ledger 1 min ago" (the newest mark), an unreadable ledger read as a
+    zero day, and an old archive's figures as today's. Each now says its
+    age and is marked stale past two hours; fresh figures say nothing."""
+    now = 20 * DAY / 1000 + 3600
+    fresh, _ = _demo_digest({'alive': True, 'position': 0.0}, now, written=now - 120)
+    assert 'stale' not in fresh and 'health: 1/1 bots alive · ledger 60 min ago' in fresh, fresh
+    old, _ = _demo_digest({'alive': True, 'position': 0.0}, now, collected=(now - 3 * 86400) * 1000,
+                          written=now - 5 * 3600)
+    assert '· ⚠️ stale ledger: linear BTCUSDT 72.0 h old' in old, old
+    assert '⚠️ ledger stale: linear BTCUSDT 72.0 h old' in old
+    assert '⚠️ stale: the archive was written 5.0 h ago' in old
+    bad, _ = _demo_digest({'alive': True, 'position': 0.0}, now, ledger='{oops')
+    assert 'day unread — ⚠️ the kept ledger will not load' in bad and '⚠️ ledger unreadable' in bad
+    assert 'day +0.00' not in bad
+
+
+def spec_F17b_sabotage_a_digest_blind_to_age_is_caught():
+    import gridgremlin.digest as dg
+    real = dg.FIGURES_STALE_S
+    dg.FIGURES_STALE_S = float('inf')
+    try:
+        spec_F17b_stale_ledger_and_archive_figures_are_said_with_their_age()
+    except AssertionError:
+        return
+    finally:
+        dg.FIGURES_STALE_S = real
+    raise AssertionError('the sabotage was not caught')

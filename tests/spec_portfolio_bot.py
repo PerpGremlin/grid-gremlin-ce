@@ -233,10 +233,14 @@ def spec_H4_the_loss_limit_flattens_every_leg_together_and_tombstones():
 
 
 def spec_H4_a_leg_that_refuses_does_not_stop_the_others_and_is_named():
+    """H4d (X17's law, the audit of 2026-11-05): the refused leg is named,
+    the rest still go — and the row stays up, tombstoned, doing nothing but
+    the flatten each read until the refused leg closes; only then the kill
+    line. Before, it died on the first pass with the ETH short open."""
     venue, lines, clock = _venue(), [], Clock()
     venue.t_ms = int(clock.t * 1000)
-    bot, _ = _bot(venue, lines, row={'risk': {'max_loss': 1000, 'max_loss_since': '2026-01-01T00:00:00Z'}},
-                  clock=clock)
+    bot, tmp = _bot(venue, lines, row={'risk': {'max_loss': 1000, 'max_loss_since': '2026-01-01T00:00:00Z'}},
+                    clock=clock)
     bot.cycle()
     venue.positions['BTCUSD'] = {}
     venue.marks['BTCUSDT'] = venue.marks['BTCUSD'] = 57000.0
@@ -249,10 +253,89 @@ def spec_H4_a_leg_that_refuses_does_not_stop_the_others_and_is_named():
         return real(mt, symbol, *a, **k)
     venue.place_market = flaky
     clock.t += 61; venue.t_ms = int(clock.t * 1000)
-    bot.cycle()
-    assert not bot.alive and venue.coins.get('BTC', 0.0) < 1e-9             # the stack still went
+    out = bot.cycle()
+    assert venue.coins.get('BTC', 0.0) < 1e-9 and venue.coins.get('ETH', 0.0) < 1e-9   # the stack still went
+    assert bot.alive and out == {'stopping': bot.stopping['reason']}                     # up: a leg is open
+    assert Tombstones(tmp / 'tombstones.json').has('pfocarry')                           # dead on a restart
+    warn = [ln for ln in lines if 'stop NOT finished' in ln]
+    assert warn and 'NOT closed: hedge ETH: ETHUSD: venue says no' in warn[-1] and '(X17)' in warn[-1]
+    assert not any(' kill ' in ln for ln in lines)                                      # not said until true
+    # ETH falls and the short left open gains: the loss is under the limit now,
+    # and still the row does nothing but the flatten
+    venue.marks['ETHUSDT'] = venue.marks['ETHUSD'] = 2700.0
+    n = len(venue.orders)
+    for _ in range(2):
+        clock.t += DAY; venue.t_ms = int(clock.t * 1000)
+        bot.cycle()
+    assert bot._loss_now < 1000 and len(venue.orders) == n and bot.alive                 # no tick, no buy
+    assert sum('stop NOT finished' in ln for ln in lines) == 3                           # said every read
+    venue.place_market = real                                                            # the venue takes it
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    assert bot.cycle() == {'flattened': True} and not bot.alive
+    assert [(o[1], o[2]) for o in venue.orders[n:]] == [('ETHUSD', 'Buy')]
+    assert venue.positions.get('ETHUSD') in (None, {})
     kill = next(ln for ln in lines if ' kill ' in ln)
-    assert 'NOT closed: hedge ETH: ETHUSD: venue says no' in kill
+    assert 'every leg flattened together' in kill and 'loss 2,250.00' in kill
+    assert bot.cycle() is None
+
+
+def spec_H4d_a_close_whose_read_back_still_shows_it_gets_one_reads_look_before_another():
+    """X17's grace for the row: an accepted buy-back the venue has not yet
+    shown is not sent again on the next read — it is read again first; still
+    open a read later, it is sent again."""
+    venue, lines, clock = _venue(), [], Clock()
+    venue.t_ms = int(clock.t * 1000)
+    bot, _ = _bot(venue, lines, row={'risk': {'max_loss': 1000, 'max_loss_since': '2026-01-01T00:00:00Z'}},
+                  clock=clock)
+    bot.cycle()
+    venue.positions['BTCUSD'] = {}
+    venue.marks['BTCUSDT'] = venue.marks['BTCUSD'] = 57000.0
+    real, slow = venue.place_market, []
+
+    def lagging(mt, symbol, side, qty, *a, **k):
+        if symbol == 'ETHUSD' and side == 'Buy':
+            venue.orders.append((mt, symbol, side, float(qty), 0, True, k.get('link_id')))
+            slow.append(qty)                                  # taken, not yet shown
+            return {'orderId': 'slow'}
+        return real(mt, symbol, side, qty, *a, **k)
+    venue.place_market = lagging
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    bot.cycle()
+    assert len(slow) == 1 and bot.alive
+    assert 'hedge ETH 45000 still open after its close' in [ln for ln in lines if 'NOT finished' in ln][-1]
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    bot.cycle()
+    assert len(slow) == 1 and bot.alive                                                  # read again, not sent
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    bot.cycle()
+    assert len(slow) == 2                                                                # still open: sent again
+    venue.place_market = real
+    venue.positions['ETHUSD'] = {}                                                       # the venue catches up
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    bot.cycle()
+    assert not bot.alive and any('every leg flattened together' in ln for ln in lines)
+
+
+def spec_H4d_the_tombstone_goes_first_and_a_broken_disk_never_blocks_the_flatten():
+    venue, lines, clock = _venue(), [], Clock()
+    venue.t_ms = int(clock.t * 1000)
+    bot, _ = _bot(venue, lines, row={'risk': {'max_loss': 1000, 'max_loss_since': '2026-01-01T00:00:00Z'}},
+                  clock=clock)
+    bot.cycle()
+    venue.positions['BTCUSD'] = {}
+    venue.marks['BTCUSDT'] = venue.marks['BTCUSD'] = 57000.0
+    at = []
+
+    def broken(botid, reason):
+        at.append(len(venue.orders))
+        raise OSError('No space left on device')
+    bot.tombs.add = broken
+    n = len(venue.orders)
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    bot.cycle()
+    assert at == [n]                                                                     # before any order
+    assert any('tombstone write FAILED' in ln for ln in lines)
+    assert not bot.alive and venue.coins.get('BTC', 0.0) < 1e-9                         # the flatten went anyway
 
 
 def spec_H4_the_margin_floor_cuts_every_leg_by_a_quarter_spot_and_hedge_together_and_says_so_once():
@@ -264,8 +347,8 @@ def spec_H4_the_margin_floor_cuts_every_leg_by_a_quarter_spot_and_hedge_together
     clock.t += 61; venue.t_ms = int(clock.t * 1000)
     bot.cycle()
     cuts = [(o[1], o[2], o[3], o[5]) for o in venue.orders[4:]]
-    assert cuts == [('BTCUSDT', 'Sell', 0.1875, False), ('ETHUSDT', 'Sell', 3.75, False),
-                    ('BTCUSD', 'Buy', 11250.0, True), ('ETHUSD', 'Buy', 11250.0, True)]   # a quarter of each leg, together
+    assert cuts == [('BTCUSD', 'Buy', 11250.0, True), ('BTCUSDT', 'Sell', 0.1875, False),
+                    ('ETHUSD', 'Buy', 11250.0, True), ('ETHUSDT', 'Sell', 3.75, False)]   # a quarter of each leg, a pair at a time (H4c)
     assert bot.row['delevered'] == 1
     assert sum('under the floor' in ln for ln in lines) == 1
     clock.t += 61; venue.t_ms = int(clock.t * 1000)
@@ -878,7 +961,7 @@ def spec_H4_the_floors_cut_is_fitted_to_the_shortfall_not_a_flat_quarter():
     clock.t += 61; venue.t_ms = int(clock.t * 1000)
     bot.cycle()
     cuts = [(o[1], o[2], round(o[3], 6)) for o in venue.orders[4:]]
-    assert cuts == [('BTCUSDT', 'Sell', 0.15), ('ETHUSDT', 'Sell', 3.0), ('BTCUSD', 'Buy', 9000.0), ('ETHUSD', 'Buy', 9000.0)]
+    assert cuts == [('BTCUSD', 'Buy', 9000.0), ('BTCUSDT', 'Sell', 0.15), ('ETHUSD', 'Buy', 9000.0), ('ETHUSDT', 'Sell', 3.0)]
     assert any('every leg cut by 20%' in ln for ln in lines)
 
 
@@ -2027,3 +2110,166 @@ def spec_H4_a_failing_read_is_said_once_after_an_hour_and_its_end():
     venue.borrow_history = good
     bot._settle_interest(t + 7_260_000)
     assert sum('is read again (H4)' in ln for ln in lines) == 1
+
+
+# --- the audit of 2026-11-05: counting the row's own terms ------------------------
+
+def _read(clock, venue, bot):
+    clock.t += 61; venue.t_ms = int(clock.t * 1000)
+    return bot.cycle()
+
+
+def spec_H2b_a_read_refused_part_way_books_nothing_and_the_next_read_books_each_fill_once():
+    """The spot fills read, then the hedge's refused: booked as read, every
+    retry counted the spot fills again — 2.25 BTC against the true 0.75, and
+    hedged to match. Funding the same way."""
+    from gridgremlin.exchange.errors import VenueError
+    venue, lines, clock = _venue(), [], Clock()
+    venue.t_ms = int(clock.t * 1000)
+    venue.coins['BTC'] = 5.0                                  # the owner's own coins beside the row
+    bot, _ = _bot(venue, lines, clock=clock)
+    bot.cycle()
+    fills, funding, refused = venue.fills_history, venue.funding_history, []
+
+    def flaky(real, only=None):
+        def read(mt, symbol, *a):
+            if mt == 'inverse' and symbol in (only or (symbol,)) and len(refused) < 4:
+                refused.append(symbol)
+                raise VenueError('retCode 10006: too many visits', kind='rate_limit')
+            return real(mt, symbol, *a)
+        return read
+    venue.fills_history = flaky(fills)
+    for _ in range(2):
+        try:
+            _read(clock, venue, bot)
+            raise AssertionError('the refused read was not raised')
+        except VenueError:
+            pass
+    assert bot.row['coins'] == {} and bot.row['seen'] == []                     # nothing booked part way
+    venue.fills_history, venue.funding_history = fills, flaky(funding, only=('ETHUSD',))
+    venue.pay_funding('BTCUSD', 0.05); venue.coins['BTC'] += 0.05             # read, then ETHUSD's refused
+    for _ in range(2):
+        try:
+            _read(clock, venue, bot)
+        except VenueError:
+            pass
+    assert bot.row['funding_total'] == 0.0 and abs(bot.row['coins']['BTC'] - 0.75) < 1e-9   # whole or not at all
+    venue.funding_history = funding
+    _read(clock, venue, bot)
+    assert abs(bot.row['coins']['BTC'] - 0.80) < 1e-9                           # each once: never 2.25
+    assert abs(bot.row['coins']['ETH'] - 15.0) < 1e-9 and bot.row['funding_total'] == 3000.0
+    assert abs(venue.positions['BTCUSD'][0]['size'] - 48000.0) < 1e-6         # hedged to the true 0.80
+
+
+def spec_H2b_an_unlinked_close_of_a_usdt_hedge_joins_its_book_and_its_loss_is_counted():
+    """A margin row's USDT hedge liquidated (a fill with no link): its
+    book stayed open and its loss was read apart as the book's (the linear
+    trades' cash), so the row showed +7,500 on a hedged book whose true
+    figure was 0."""
+    venue, lines, clock = _venue(), [], Clock()
+    venue.t_ms = int(clock.t * 1000)
+    venue.coins['USDT'] = 100000.0
+    venue.log = []
+    venue.cash_log = lambda coin, since, now: [r for r in venue.log if since <= r['time_ms'] <= now]
+    legs = _legs()
+    legs['hedge']['ETH'] = {'market_type': 'linear', 'symbol': 'ETHUSDT', 'adapter': LIN['ETH']}
+    bot, _ = _bot(venue, lines, clock=clock, legs=legs,
+                  row={'capital': 100000, 'spot_borrow': True, 'margin': {'spot_leverage': 1.5},
+                       'assets': [{'coin': 'BTC', 'weight': 0.75}, {'coin': 'ETH', 'weight': 0.75}],
+                       'hedge': {'BTC': {'product': 'inverse'}, 'ETH': {'product': 'usdt'}},
+                       'risk': {'max_weight': 0.75, 'max_loss': 20000, 'max_loss_since': '2026-01-01T00:00:00Z'}})
+    bot.cycle(); _read(clock, venue, bot)
+    assert abs(bot._loss_now) < 1e-6
+    p = venue.positions['ETHUSDT'].pop(next(iter(venue.positions['ETHUSDT'])))
+    px = p['avg_entry'] * 1.10
+    venue.marks['ETHUSDT'] = venue.marks['ETHUSD'] = px
+    loss = (px - p['avg_entry']) * p['size']                                    # 7,500
+    venue.coins['USDT'] -= loss
+    venue.log.append({'id': 'liq', 'time_ms': venue.t_ms + 1000, 'symbol': 'ETHUSDT', 'category': 'linear',
+                      'type': 'TRADE', 'change': -loss})
+    venue.fills.append({'exec_id': 'liq', 'time_ms': venue.t_ms + 1000, 'symbol': 'ETHUSDT',
+                        'market_type': 'linear', 'side': 'buy', 'price': px, 'qty': p['size'], 'fee': 0.0,
+                        'link_id': '', 'venue_kind': 'liquidation'})
+    _read(clock, venue, bot)
+    assert abs(bot._loss_now) < 1.0, bot._loss_now                              # the spot's gain, the short's loss
+    book = bot.row['books']['hedge:ETH']
+    assert abs(book['realized'] + loss) < 1e-6
+    assert any('not placed by the row (liquidation) closed its short' in ln for ln in lines)
+    # an unlinked buy on a market where the row holds no short is not the row's
+    venue.fills.append({'exec_id': 'hand', 'time_ms': venue.t_ms + 1000, 'symbol': 'BTCUSDT',
+                        'market_type': 'spot', 'side': 'buy', 'price': 60000.0, 'qty': 1.0, 'fee': 0.0,
+                        'link_id': ''})
+    before = dict(bot.row['coins'])
+    _read(clock, venue, bot)
+    assert bot.row['coins']['BTC'] == before['BTC']                            # spot: the row's own fills alone
+
+
+def spec_H4c_a_refused_hedge_buy_back_under_the_floor_sells_none_of_its_coins_and_pages():
+    """Sold first, a refused buy-back left the short over coins sold away:
+    0.32 BTC under a 0.75 BTC short after three reads."""
+    from gridgremlin.exchange.errors import VenueError
+    venue, lines, clock = _venue(), [], Clock()
+    venue.t_ms = int(clock.t * 1000)
+    bot, _ = _bot(venue, lines, clock=clock)
+    bot.cycle()
+    venue.available_pct = 0.3                                                   # under the 40% floor
+    _refusing(venue, 'inverse', 'BTCUSD', 'Buy', VenueError('retCode 10006: too many visits', kind='rate_limit'))
+    n = len(venue.orders)
+    for _ in range(3):
+        _read(clock, venue, bot)
+    assert venue.coins['BTC'] == 0.75 and venue.positions['BTCUSD'][0]['size'] == 45000.0   # still a pair
+    assert not [o for o in venue.orders[n:] if o[1] == 'BTCUSDT']
+    eth = venue.positions['ETHUSD'][0]['size'] / 3000.0
+    assert abs(venue.coins['ETH'] - eth) < 0.01 and eth < 15.0                  # ETH cut, as a pair (to the contract)
+    pages = [ln for ln in lines if " margin " in ln and "BTC: the margin floor's hedge buy-back was refused" in ln]
+    assert len(pages) == 3 and 'none of its coins sold' in pages[0]
+
+
+def spec_H4b_a_margin_rows_parked_cash_is_counted_once_and_its_re_entry_keeps_the_rows_leverage():
+    """A 2× row's basis stop parked 50,000: the wallet's loan shrank by the
+    sale and the row read that as cash beside the parked 50,000 — its value
+    150,000 on 100,000, and its re-entry bought on both (3.0×)."""
+    venue, lines, clock = _venue(), [], Clock()
+    venue.coins['USDT'] = 100000.0
+    venue.t_ms = int(clock.t * 1000)
+    bot, _ = _bot(venue, lines, clock=clock,
+                  row={'capital': 100000, 'spot_borrow': True, 'margin': {'spot_leverage': 2.0},
+                       'assets': [{'coin': 'BTC', 'weight': 1.5}, {'coin': 'ETH', 'weight': 0.5}],
+                       'risk': {'max_weight': 1.5}})
+    bot.cycle(); _read(clock, venue, bot)
+    assert abs(bot.portfolio_view['leverage'] - 2.0) < 1e-3
+    venue.marks['ETHUSD'] = 3060.0                                              # 2% over spot: ETH unwinds
+    _read(clock, venue, bot); _read(clock, venue, bot)
+    v = bot.portfolio_view
+    assert abs(v['parked'] - 50000.0) < 1.0 and abs(v['value'] - 100000.0) < 1.0, v['value']
+    assert abs(bot.row['cash'] + 100000.0) < 1.0                                # the loan, the sale parked apart
+    venue.marks['ETHUSD'] = 3000.0
+    clock.t += DAY
+    _read(clock, venue, bot); _read(clock, venue, bot)
+    v = bot.portfolio_view
+    assert bot.row['parked'] == {} and abs(v['leverage'] - 2.0) < 0.02, v['leverage']   # never 3.0×
+    assert abs(venue.coins['USDT'] + 100000.0) < 100.0                          # the loan as it was
+
+
+def spec_H4d_sabotage_without_the_held_flatten_the_tombstoned_row_trades_on():
+    """The sabotage half: the row forgets its unfinished flatten, and the
+    same refusal leaves the ETH short open while the tombstoned row ticks
+    and buys again."""
+    from gridgremlin.exchange.errors import VenueError
+    venue, lines, clock = _venue(), [], Clock()
+    venue.t_ms = int(clock.t * 1000)
+    bot, tmp = _bot(venue, lines, row={'risk': {'max_loss': 1000, 'max_loss_since': '2026-01-01T00:00:00Z'}},
+                    clock=clock)
+    bot.cycle()
+    venue.positions['BTCUSD'] = {}
+    venue.marks['BTCUSDT'] = venue.marks['BTCUSD'] = 57000.0
+    _refusing(venue, 'inverse', 'ETHUSD', 'Buy', VenueError('ETHUSD: venue says no', kind='other'))
+    _read(clock, venue, bot)
+    bot.stopping = None                                                   # the guard, removed
+    venue.marks['ETHUSDT'] = venue.marks['ETHUSD'] = 2700.0
+    n = len(venue.orders)
+    clock.t += DAY
+    _read(clock, venue, bot)
+    assert Tombstones(tmp / 'tombstones.json').has('pfocarry')
+    assert venue.positions['ETHUSD'][0]['size'] == 45000.0                # the short left open
+    assert [o for o in venue.orders[n:] if o[0] == 'spot' and o[2] == 'Buy']   # and the row buying on

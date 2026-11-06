@@ -281,8 +281,10 @@ def main(argv):
                                cfg['re_alert_seconds'])
     for page in pages:                       # page BEFORE persisting: a failed
         print(f"[{cfg['tag']}] {page}", flush=True)   # page re-pages next tick
-    if pages:
-        send_telegram(f"[{cfg['tag']}] " + '\n'.join(pages))
+    if pages:                                # E12c: past the cap in parts, never
+        from common.telegram import chunks   # refused whole every tick
+        for part in chunks(f"[{cfg['tag']}] " + '\n'.join(pages)):
+            send_telegram(part)
     from common.files import write_json
     write_json(statep, {'_peak': peak, '_alerts': new_alerts}, indent=None)
     print(f"[{cfg['tag']}] {'BREACHED' if breaches else 'ok'} "

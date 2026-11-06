@@ -11,7 +11,8 @@ from .ladder import (SEED_RUNG, anchor_from_rung, fee_floor_for, grid_rungs,
                      sellable_base, slide_is_adverse, slide_offset, split,
                      stop_level_for)
 from .window import window
-from .bot_constants import FLAT_CONFIRMATIONS, HISTORY_WINDOW_DAYS, STOP_RUNG, VENUE_STOP
+from .bot_constants import (FLAT_CONFIRMATIONS, HISTORY_WINDOW_DAYS, RUNGS_LAG_SECONDS,
+                            STOP_RUNG, VENUE_STOP)
 
 
 # The round's own state (the 2026-10-08 audit): every field that belongs
@@ -700,12 +701,49 @@ class RoundMixin:
             f'best price {best:.10g}) — closed {abs(held):.10g} at market; '
             'the round ends (M21)')
 
+    def _confirm_round_flat(self):
+        """M29: a round ends only on a flat its own fills explain in full.
+        The venue's account of A closing fill (M14) is not an account of the
+        whole close: after a tranche filled, one blank position read found
+        that tranche's fill, judged it our exit, and ended the round with
+        the rest of its coins held and no exit (audit 2026-11-05). Fills
+        that still leave coins held wait RUNGS_LAG_SECONDS (G26's wait for
+        the fill list), nothing placed or cancelled; a read that shows the
+        position again ends the wait. Past it the round is held open, said
+        once, as M14 holds a close the venue never accounts for. Fills that
+        cannot say (unreadable, none offered, no base found) leave M14 to
+        judge as before. Returns None to go on, or the cycle's result."""
+        if self._round_flat_explained() is not False:
+            self._flat_wait_since, self._flat_wait_said = None, False
+            return None
+        now = self._now()
+        if self._flat_wait_since is None:
+            self._flat_wait_since = now
+            self.notify.event('warn', self.botid,
+                              'the position reads flat, but the round\'s own '
+                              'fills still hold coins — confirming before the '
+                              'round ends (M29)')
+        if now - self._flat_wait_since < RUNGS_LAG_SECONDS:
+            return {'confirming_close': 'the fills do not explain the flat '
+                                        'yet (M29)'}
+        if not self._flat_wait_said:
+            self._flat_wait_said = True
+            self.notify.event('warn', self.botid,
+                              'the position has read flat for '
+                              f'{RUNGS_LAG_SECONDS:g}s but the round\'s own '
+                              'fills still hold coins — holding this round '
+                              'open, not ending it; nothing placed or '
+                              'cancelled (M29)', urgent=True)
+        return {'round': 'unaccounted'}
+
     def _martingale_round(self, truth, held, basis):
         """M3/M5/M6. Returns a dict to end the cycle early, None to continue
         to the ladder plan."""
         cfg, adapter = self.cfg, self.adapter
         idx = adapter.position_idx(self._entry_side, False) or 0
         self.exits_view = None                   # U102: set below while a round holds
+        if held:
+            self._flat_wait_since, self._flat_wait_said = None, False   # M29
         if held == 0:
             # D37: a resting maker base is a round STARTING, not the
             # leftovers of one that finished — a restart mid-entry with
@@ -742,6 +780,9 @@ class RoundMixin:
                             'orders on a maybe (M14/E9, audit 2026-08-07)', urgent=True)
                     return {'round': 'unaccounted'}
                 self._close_streak = 0
+                wait = self._confirm_round_flat()                   # M29
+                if wait is not None:
+                    return wait
                 if how == VENUE_STOP and (cfg['stop'].get('action')
                                           == 'end_round'):
                     how = 'exit'      # X11: this stop ends rounds, not bots
@@ -749,6 +790,14 @@ class RoundMixin:
                     self._kill(truth, f'round ended by {how}, not by our exit '
                                       '— standing down (M14/D1)')
                     return {'round': how}
+            if completed and self._last_pos is None:
+                # M29 on a restart: resting rungs and a flat read are a round
+                # that ended while the process was down only if its fills say
+                # so — one blank first read counted as completed (killed, or
+                # its orders cancelled as cleanup)
+                wait = self._confirm_round_flat()
+                if wait is not None:
+                    return wait
             if completed:
                 if not cfg['repeat']:
                     self._kill(truth, 'round complete (TP hit), repeat off')

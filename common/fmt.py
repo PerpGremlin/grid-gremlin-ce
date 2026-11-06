@@ -22,6 +22,16 @@ def utc_stamp(now=None):
                          time.gmtime(time.time() if now is None else now))
 
 
+def utc_parse(stamp):
+    """utc_stamp read back: the moment in unix seconds, or None when the
+    text is not one."""
+    import calendar
+    try:
+        return calendar.timegm(time.strptime(stamp, '%Y-%m-%dT%H:%M:%SZ'))
+    except (TypeError, ValueError):
+        return None
+
+
 def num(v, nd=2):
     """1,234.50 — or a dash for nothing."""
     return '—' if v is None else f'{v:,.{nd}f}'

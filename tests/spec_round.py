@@ -1399,9 +1399,13 @@ def spec_M17_a_restart_that_fires_at_once_still_ends_a_round():
     link = f"{make_botid('linear', 'BTCUSDT', 'long')}-0-x"
     import time as _t
     now = int(_t.time() * 1000)
+    # the venue lists the step's close at market once it is made (M29: a
+    # round ends on a flat its fills explain in full)
     venue.fills_history = lambda mt, sym, a, b: _histfills(
         (now - 5000, 'buy', 60000.0, 0.016, 0.0, link),
-        (now - 3000, 'sell', 60600.0, 0.008, 0.0, link))
+        (now - 3000, 'sell', 60600.0, 0.008, 0.0, link),
+        *([] if venue.position else
+          [(now - 1000, 'sell', 60000.0, 0.008, 0.0, link)]))
     venue.position = {'positionIdx': 1, 'side': 'Buy', 'size': '0.008',
                       'avgPrice': '60000', 'leverage': '10',
                       'unrealisedPnl': '0'}

@@ -1,6 +1,7 @@
 """D65: the pinned live copy moves only by promotion — merged code, a day on
 play money, or a hotfix with its reason written down."""
 import importlib.util
+import json
 import os
 import subprocess
 import tempfile
@@ -50,6 +51,26 @@ def _world():
     return main, live, work, ship
 
 
+def _ran(main, sha, since, until, dirty=False, tiers=None):
+    """A play-money fleet's snapshot rows: a run started from `sha` at
+    `since`, a row an hour until `until` (F19b)."""
+    (main / 'configs').mkdir(exist_ok=True)
+    (main / 'logs').mkdir(exist_ok=True)
+    (main / 'configs' / 'wd.demo.json').write_text(json.dumps({'snapshot': 'logs/demo.snap.jsonl'}))
+    (main / 'configs' / 'fleet.demo.json').write_text(json.dumps({'watchdog': 'configs/wd.demo.json',
+                                                                  'bots': []}))
+    code = dict({'sha': sha, 'since': since}, **({'dirty': True} if dirty else {}))
+    t = since
+    with open(main / 'logs' / 'demo.snap.jsonl', 'a') as f:
+        while True:
+            t = min(t, until)
+            f.write(json.dumps({'t': t, 'code': code, 'equity': 1.0, 'mm_rate': 0.0,
+                                **({'tiers': tiers} if tiers else {}), 'bots': {}}) + '\n')
+            if t >= until:
+                break
+            t += 3600
+
+
 def _head(repo):
     return subprocess.run(['git', '-C', str(repo), 'rev-parse', 'HEAD'],
                           capture_output=True, text=True).stdout.strip()
@@ -67,10 +88,12 @@ def spec_D65_a_day_on_play_money_then_it_moves_and_is_logged():
     main, live, _, ship = _world()
     b = ship('B', T0 + 100)
     before = _head(live)
-    why = _refused(promote.promote, main, live, b, now=T0 + 100 + 3600)
-    assert 'h of the 24 h' in why and _head(live) == before
+    _ran(main, b, T0 + 200, T0 + 200 + 3600)
+    why = _refused(promote.promote, main, live, b, now=T0 + 200 + 3600)
+    assert '1.0 h of the 24 h' in why and _head(live) == before, why
+    _ran(main, b, T0 + 200, T0 + 200 + DAY)
     target, current, changes = promote.promote(main, live, b,
-                                               now=T0 + 100 + DAY + 1)
+                                               now=T0 + 200 + DAY + 1)
     assert target == b and _head(live) == b and current == before
     assert 'B' in changes
     log = (live / 'logs' / 'promotions.log').read_text()
@@ -104,11 +127,81 @@ def spec_D65_a_version_play_money_never_ran_waits_or_is_a_hotfix():
     _git(work, 'push', '-q', 'origin', 'main')
     _git(main, 'fetch', '-q', 'origin')               # fetched, never deployed
     why = _refused(promote.promote, main, live, 'origin/main', now=T0 + DAY * 5)
-    assert 'never run in the play-money checkout' in why
+    assert 'never run on a play-money fleet' in why and 'deployed' not in why, why
 
 
 def spec_D65_status_says_what_waits_and_for_how_long():
     main, live, _, ship = _world()
-    ship('F', T0 + 100)
+    f = ship('F', T0 + 100)
     out = promote.status(main, live, now=T0 + 100 + 7200)
-    assert 'waiting' in out and 'on play money 2.0 h' in out
+    assert 'waiting' in out and 'deployed 2.0 h, no fleet run on it yet' in out, out
+    _ran(main, f, T0 + 200, T0 + 200 + 7200)
+    out = promote.status(main, live, now=T0 + 200 + 7200)
+    assert 'run on play money 2.0 h' in out, out
+
+
+def spec_F19b_a_deploy_no_fleet_restarted_on_has_not_run():
+    """The fifth audit (2026-11-05): the 24 h was the main checkout's
+    reflog — when a deploy pulled it — while the fleets, never restarted,
+    went on running the old code. It is now what the fleets ran: each
+    snapshot row names the version its run started from."""
+    main, live, _, ship = _world()
+    a = _head(main)
+    g = ship('G', T0 + 100)
+    _ran(main, a, T0, T0 + 5 * DAY)                    # the fleet ran the old code all along
+    why = _refused(promote.promote, main, live, g, now=T0 + 5 * DAY)
+    assert 'never run on a play-money fleet (deployed 120.0 h ago, no fleet restarted on it)' in why, why
+    _ran(main, g, T0 + 5 * DAY, T0 + 6 * DAY, dirty=True)    # code edited in place: not this version
+    _ran(main, g, T0 + 6 * DAY, T0 + 7 * DAY, tiers={'bybit': 'mainnet'})   # not play money
+    assert 'never run' in _refused(promote.promote, main, live, g, now=T0 + 7 * DAY)
+    _ran(main, g, T0 + 7 * DAY, T0 + 8 * DAY)
+    assert promote.promote(main, live, g, now=T0 + 8 * DAY)[0] == g
+    log = (live / 'logs' / 'promotions.log').read_text()
+    assert 'ran on play money: 24.0 h' in log
+
+
+def spec_F19b_a_merge_that_changes_no_code_counts_its_trees_run():
+    main, live, work, ship = _world()
+    h = ship('H', T0 + 100)
+    _ran(main, h, T0 + 200, T0 + 200 + DAY)
+    _git(work, 'commit', '-q', '--allow-empty', '-m', 'docs', when=T0 + 300)
+    _git(work, 'push', '-q', 'origin', 'main')
+    _git(main, 'pull', '-q', 'origin', 'main', when=T0 + 300)
+    assert promote.promote(main, live, _head(main), now=T0 + 200 + DAY)[0] == _head(main)
+
+
+def spec_F19b_the_fleet_writes_the_version_it_started_from():
+    import inspect
+    from gridgremlin import main as m
+    class Git:
+        def __init__(self, out, code=0):
+            self.stdout, self.returncode = out, code
+    said = iter([Git('a' * 40 + '\n'), Git('')])
+    got = m.code_version(5.0, run=lambda *a, **k: next(said))
+    assert got == {'sha': 'a' * 40, 'since': 5.0}, got
+    said = iter([Git('a' * 40), Git(' M gridgremlin/bot.py\n')])
+    assert m.code_version(5.0, run=lambda *a, **k: next(said))['dirty'] is True
+    row = m.snapshot_row([], {'equity': 1.0, 'mm_rate': 0.0}, 9.0, code=got)
+    assert promote.ROW_T.match(json.dumps(row)), json.dumps(row)[:80]        # the head promote reads
+    assert 'code' not in m.snapshot_row([], {'equity': 1.0, 'mm_rate': 0.0}, 9.0)
+
+    assert m.code_version(5.0, run=lambda *a, **k: Git('', 128)) is None     # no git: unknown
+    src = inspect.getsource(m.run)
+    assert 'code = code_version(time.time())' in src and "for v, c in clients.items()}, code)" in src
+
+
+def spec_F19b_sabotage_the_reflog_age_again_is_caught():
+    """Sabotage: the age back to the reflog's — the deploy-only spec goes red."""
+    real = promote.ran_for
+
+    def reflog(main, target, ran=None):
+        seen = promote.first_seen(main, target)
+        return None if seen is None else T0 + 5 * DAY - seen
+    promote.ran_for = reflog
+    try:
+        spec_F19b_a_deploy_no_fleet_restarted_on_has_not_run()
+    except AssertionError:
+        return
+    finally:
+        promote.ran_for = real
+    raise AssertionError('the sabotage was not caught')

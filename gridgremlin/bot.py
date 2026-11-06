@@ -38,7 +38,10 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
     # _round_hwm_held (M25: the holding it last saw; a shrink asks the fills),
     # _spot_sell_cap/_sell_cap_said/_inverse_* (D169: re-read from the cash log),
     # _folded (D71: the slivers folded this round, said once), _trip_wait_since
-    # (G32: a flat the fills do not explain yet; a restart reads flat afresh). The round's own
+    # (G32: a flat the fills do not explain yet; a restart reads flat afresh),
+    # _flat_wait_since/_flat_wait_said (M29: the same for a DCA round's flat),
+    # _reach_ms/_reach_kept/_reach_hint (M31: an open round's base past the
+    # history window, sought again by a new process). The round's own
     # fields are declared once in bot_round.ROUND_SCOPED and reset together.
     # Everything else the bot knows
     # comes from the venue each cycle — except the two stated durable local
@@ -127,6 +130,11 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
         self._history_capped_warned = False
         self._flat_streak = 0          # E9: confirmations of 'flat'
         self._trip_wait_since = None   # G32: a flat our fills don't explain yet
+        self._flat_wait_since = None   # M29: a round's flat its fills don't explain
+        self._flat_wait_said = False   # ...said once, past the wait
+        self._reach_ms = None          # M31: an open round's base past the window
+        self._reach_kept = None        # (0: sought, none), and its kept fills
+        self._reach_hint = False       # M31: the wallet holds coins (spot)
         self._basis_cache = None       # G15: (held, basis) from fills
         self._rungs_cache = None       # G23: (held, [rung per lot]) from fills
         self._rungs_seen = None        # G26: (|held|, fill ids, newest ms) of

@@ -286,13 +286,40 @@ def note_bot_read(bot, err, now, notifier):
                        urgent=True)
 
 
-def snapshot_row(bots, wallet, now, tiers=None):
+CODE_PATHS = ('gridgremlin', 'common')   # F19b: what a fleet runs
+
+
+def code_version(now, run=None):
+    """F19b: the version this fleet started from, once at its start —
+    {sha, since[, dirty]} from the checkout its code is loaded from (dirty:
+    the code itself edited there), or None where no git answers. Read-only."""
+    import subprocess
+    run = run or subprocess.run
+    root = str(Path(__file__).resolve().parents[1])
+    try:
+        sha = run(['git', '-C', root, 'rev-parse', 'HEAD'], capture_output=True,
+                  text=True, timeout=10)
+        if sha.returncode:
+            return None
+        edited = run(['git', '-C', root, 'status', '--porcelain', '--untracked-files=no',
+                      '--', *CODE_PATHS], capture_output=True, text=True, timeout=10)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    out = {'sha': sha.stdout.strip(), 'since': now}
+    if edited.returncode or edited.stdout.strip():
+        out['dirty'] = True
+    return out
+
+
+def snapshot_row(bots, wallet, now, tiers=None, code=None):
     """F4/E3: derived from venue truth only; the DEAD are visible. F9: a
     dead bot no longer reads the venue, so its position is NOTHING — not
     its last belief (the 48-day run: a killed bot's frozen size paged a
     phantom breach every re-alert window for 48 days). D65: `tiers` is the
-    network each venue's client connected to, as the fleet itself holds it."""
-    return {'t': now, 'equity': wallet['equity'], 'mm_rate': wallet['mm_rate'],
+    network each venue's client connected to, as the fleet itself holds it.
+    F19b: `code` the version the fleet started from (code_version)."""
+    return {'t': now, **({'code': code} if code else {}),
+            'equity': wallet['equity'], 'mm_rate': wallet['mm_rate'],
             # U100: what the exchange says is free to trade (fleet_wallet)
             **({'available': wallet['available']} if wallet.get('available') is not None else {}),
             **({'tiers': dict(tiers)} if tiers else {}),
@@ -353,19 +380,37 @@ def cap_holds(was, why, wallet):
     """F15d (the review, 2026-10-11): an unread wallet is not a cleared cap.
     A cycle whose wallet read failed — or read no equity — keeps the last
     verdict until a read says otherwise (E9: unknown is never zero); one
-    failed read used to clear the cap and let every flat bot open."""
-    if was and not why and (wallet.get('unread') or wallet.get('equity') is None):
+    failed read used to clear the cap and let every flat bot open. F15e: so
+    does a cycle whose account figures (R19) went unread."""
+    if was and not why and (wallet.get('unread') or wallet.get('equity') is None
+                            or wallet.get('account_unread')):
         return was
     return why
 
 
-def cap_verdict(caps, mm_rate, bots, equity=None, im_rate=None):
+def account_now(venue, client):
+    """F15e: the account's leverage figures as R19 states them now — every
+    position's value over the venue's own margin balance (Bybit's
+    totalMarginBalance, Hyperliquid's account value) — the reads the
+    readout makes, nothing written. {'notional', 'equity'}."""
+    if venue == 'hyperliquid':
+        from .exchange.hyperliquid.truth import account_figures
+    else:
+        from .exchange.bybit.truth import account_figures
+    got = account_figures(client)
+    return {'notional': got.get('notional'), 'equity': got.get('equity')}
+
+
+def cap_verdict(caps, mm_rate, bots, equity=None, im_rate=None, account=None):
     """D56, pure: the reason the account is at its cap, or None. mm_rate is
     the venue's own; notional is every living bot's position at mark (the
     previous cycle's — a cap read one second late, never a guess). D85: the
     account's leverage is that notional over the venue's equity; its free
     margin is 1 − the venue's own initial-margin rate. An unknown reading
-    judges nothing on its leg."""
+    judges nothing on its leg. F15e: `account` is the account's own figures
+    (account_now) — the leverage the panel, `/risk` and the digest name —
+    and the leg judges the larger of the two, never a smaller number than
+    the one it states."""
     if not caps:
         return None
     notional = sum(getattr(b, 'notional_now', 0.0) or 0.0
@@ -376,10 +421,15 @@ def cap_verdict(caps, mm_rate, bots, equity=None, im_rate=None):
             and mm_rate >= caps['mm_rate_max']):
         return f"maintenance margin {mm_rate:.1%} >= {caps['mm_rate_max']:.1%}"
     lev_max = caps.get('effective_leverage_max')
-    if lev_max is not None and equity is not None:
-        if equity <= 0:                     # the review: zero was falsy and judged nothing
-            return f"account equity {equity:,.2f} — no room for leverage"
-        lev = notional / equity
+    acct = account or {}
+    figures = [(n, e) for n, e in ((notional, equity),
+                                   (acct.get('notional'), acct.get('equity')))
+               if n is not None and e is not None]
+    if lev_max is not None and figures:
+        for _, e in figures:
+            if e <= 0:                      # the review: zero was falsy and judged nothing
+                return f"account equity {e:,.2f} — no room for leverage"
+        lev = max(n / e for n, e in figures)
         if lev >= lev_max:
             return f"account leverage {lev:.2f}x >= {lev_max:g}x"
     free_min = caps.get('free_margin_min')
@@ -983,6 +1033,7 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
                                        allow_mainnet=allow_mainnet)
     notifier.startup = False         # D60: the start is said; now only what
                                      # needs the owner reaches the phone
+    code = code_version(time.time()) if snapshot else None    # F19b: what this run runs
     lock_tag = lock_tag_for(clients, fleet.get('account', 'default'))
     lock = acquire_fleet_lock(lock_path
                               or str(lockdir / f'{lock_tag}.lock'))
@@ -1051,8 +1102,19 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
                 if caps:                                         # D56
                     for v in wallets:
                         mine = [b for b in bots if b.cfg['venue'] == v]
+                        acct = None
+                        if caps.get('effective_leverage_max') is not None:
+                            try:                                 # F15e: the figure it names
+                                acct = account_now(v, clients[v])
+                            except Exception as e:               # noqa: BLE001
+                                wallets[v]['account_unread'] = True
+                                _vn(notifier, v).event(
+                                    'net', 'fleet',
+                                    f'account figures unread: {type(e).__name__}: {e} '
+                                    '— the leverage cap judges the bots alone (F15e)')
                         why = cap_verdict(caps, wallets[v]['mm_rate'], mine,
-                                          wallets[v].get('equity'), wallets[v].get('im_rate'))
+                                          wallets[v].get('equity'), wallets[v].get('im_rate'),
+                                          account=acct)
                         was = capped_by.get(v)
                         why = cap_holds(was, why, wallets[v])
                         if why and not was:
@@ -1100,7 +1162,7 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
                         print(f"cycle {n} {bot.botid}: {counts}", flush=True)
                 if snapshot and n % snapshot_every == 0:
                     row = snapshot_row(bots, wallet, time.time(),
-                                       {v: c.env for v, c in clients.items()})
+                                       {v: c.env for v, c in clients.items()}, code)
                     with open(snapshot, 'a') as f:
                         f.write(json.dumps(row) + '\n')
                     try:

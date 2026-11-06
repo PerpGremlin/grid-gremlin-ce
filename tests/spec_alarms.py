@@ -86,3 +86,71 @@ def spec_E12b_a_broken_reply_never_ends_the_fleet_or_the_watchdog():
     src = (Path(__file__).resolve().parents[1] / 'gridgremlin' / 'main.py').read_text()
     i = src.index('notifier.flush()')
     assert 'except Exception' in src[i:i + 200]                          # the loop's own guard
+
+
+def spec_E12c_a_trimmed_page_keeps_its_kill_stop_and_urgent_lines():
+    """The fifth audit (2026-11-05): past Telegram's cap the buffer kept its
+    newest lines, so an urgent stop line under a burst of others was
+    dropped. The low lines go first now: every kill, stop and urgent line
+    survives, the newest others fill the room, what was dropped is said."""
+    from gridgremlin.events import TelegramNotifier
+    sent = []
+    n = TelegramNotifier('t', 'c', transport=sent.append, clock=lambda: 0.0, sink=lambda ln: None)
+    n.startup = False
+    for i in range(200):
+        n.event('margin', f'a{i}', 'x' * 60)
+    n.event('warn', 'linETHUSDTl', 'stop closed the round', urgent=True)
+    n.event('stop', 'linSOLUSDTl', 'stop level crossed')
+    for i in range(200):
+        n.event('margin', f'b{i}', 'y' * 60)
+    n.close()
+    assert len(sent) == 1 and len(sent[0]) <= n.HARD_LIMIT, [len(p) for p in sent]
+    assert 'stop closed the round' in sent[0] and 'stop level crossed' not in sent[0]   # 'stop' is not phoned
+    assert 'margin b199:' in sent[0] and 'margin a0:' not in sent[0]
+    assert sent[0].endswith('earlier line(s) dropped — see the log]')
+
+
+def spec_E12c_vital_lines_past_one_message_go_in_parts():
+    from gridgremlin.events import _Line, trimmed
+    lines = []
+    for i in range(120):
+        ln = _Line(f'kill bot{i}: ' + 'k' * 60)
+        ln.vital = True
+        lines.append(ln)
+    lines += [_Line('info x: ' + 'z' * 60)] * 50
+    parts = trimmed(lines, 3900)
+    assert len(parts) == 3 and all(len(p) <= 3900 for p in parts), [len(p) for p in parts]
+    every = '\n'.join(parts)
+    assert all(f'kill bot{i}: ' in every for i in range(120)) and 'info x' not in every
+    assert trimmed(['a', 'b'], 3900) == ['a\nb']                         # under the cap: as it was
+
+
+def spec_E12c_the_digest_and_the_watchdog_send_in_parts_never_cut():
+    from common.telegram import chunks
+    text = '\n'.join(f'line {i} ' + 'w' * 80 for i in range(100))
+    parts = chunks(text)
+    assert len(parts) == 3 and '\n'.join(parts) == text
+    root = Path(__file__).resolve().parents[1] / 'gridgremlin'
+    dg, wd = (root / 'digest.py').read_text(), (root / 'watchdog.py').read_text()
+    assert '[:3900]' not in dg and 'for part in chunks(text):' in dg
+    assert "for part in chunks(f\"[{cfg['tag']}] \" + '\\n'.join(pages)):" in wd
+
+
+def spec_E12c_sabotage_a_trim_blind_to_vital_lines_is_caught():
+    """Sabotage: lines that can no longer be marked vital — the newest
+    others crowd the urgent stop out again, and the spec goes red."""
+    import gridgremlin.events as ev
+
+    class Blind(str):
+        vital = False
+
+        def __setattr__(self, k, v):
+            pass                                                         # nothing marks
+    real, ev._Line = ev._Line, Blind
+    try:
+        spec_E12c_a_trimmed_page_keeps_its_kill_stop_and_urgent_lines()
+    except AssertionError:
+        return
+    finally:
+        ev._Line = real
+    raise AssertionError('the sabotage was not caught')

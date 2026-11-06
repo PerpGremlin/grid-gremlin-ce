@@ -237,7 +237,64 @@ def spec_D85_the_account_leverage_cap_and_the_free_margin_floor():
     assert cap_verdict(both, None, bots, equity=100_000.0, im_rate=0.5) is None
     import inspect
     from gridgremlin import main
-    assert "wallets[v].get('equity'), wallets[v].get('im_rate'))" in inspect.getsource(main.run)   # the fleet passes both
+    assert "wallets[v].get('equity'), wallets[v].get('im_rate'),\n" in inspect.getsource(main.run)   # the fleet passes both
+
+
+def spec_F15e_the_leverage_cap_judges_the_figure_it_names():
+    """The fifth audit (2026-11-05): the cap said "account leverage" but
+    judged the living bots' notional over the whole equity — 1.5x where the
+    account box read 3.33x (a stopped bot still holding, a hand's position,
+    the margin balance under the equity). It judges the account's own
+    figure (R19) too, the larger of the two; an unread account keeps a held
+    cap; the fleet reads the figures only when the leg is set."""
+    from gridgremlin.main import account_now, cap_holds, cap_verdict
+
+    class B:
+        def __init__(self, n, alive=True):
+            self.notional_now, self.alive = n, alive
+    bots = [B(300_000.0), B(200_000.0, alive=False)]
+    caps = {'effective_leverage_max': 3.0}
+    assert cap_verdict(caps, 0.1, bots, equity=200_000.0) is None                 # the bots alone: 1.5x
+    acct = {'notional': 500_000.0, 'equity': 150_000.0}
+    assert cap_verdict(caps, 0.1, bots, equity=200_000.0, account=acct) == 'account leverage 3.33x >= 3x'
+    assert cap_verdict(caps, 0.1, bots, equity=None, account=acct) == 'account leverage 3.33x >= 3x'
+    assert cap_verdict(caps, 0.1, bots, equity=200_000.0,
+                       account={'notional': None, 'equity': None}) is None        # unknown: the bots'
+    assert cap_verdict(caps, 0.1, [B(700_000.0)], equity=200_000.0,
+                       account={'notional': 100_000.0, 'equity': 200_000.0}) == 'account leverage 3.50x >= 3x'
+    assert 'no room' in cap_verdict(caps, 0.1, bots, equity=200_000.0, account={'notional': 1.0, 'equity': 0.0})
+    held = 'account leverage 3.33x >= 3x'
+    assert cap_holds(held, None, {'equity': 9.0, 'mm_rate': 0.1, 'account_unread': True}) == held
+
+    class Bybit:                                       # the R19 reads, fixed answers
+        def get(self, path, params, signed=False):
+            rows = {'linear': [{'size': '1', 'positionValue': '500000'}]}.get(params['category'], [])
+            return {'list': rows if params.get('settleCoin', 'USDT') == 'USDT' else [],
+                    'nextPageCursor': ''}
+
+        def wallet_balance(self):
+            return {'list': [{'totalMarginBalance': '150000', 'totalEquity': '200000', 'coin': []}]}
+    assert account_now('bybit', Bybit()) == {'notional': 500_000.0, 'equity': 150_000.0}
+    import inspect
+    from gridgremlin import main
+    src = inspect.getsource(main.run)
+    assert "if caps.get('effective_leverage_max') is not None:" in src and 'account=acct)' in src
+
+
+def spec_F15e_sabotage_a_cap_blind_to_the_account_figure_is_caught():
+    from gridgremlin import main
+    real = main.cap_verdict
+
+    def blind(caps, mm_rate, bots, equity=None, im_rate=None, account=None):
+        return real(caps, mm_rate, bots, equity, im_rate)
+    main.cap_verdict = blind
+    try:
+        spec_F15e_the_leverage_cap_judges_the_figure_it_names()
+    except AssertionError:
+        return
+    finally:
+        main.cap_verdict = real
+    raise AssertionError('the sabotage was not caught')
 
 
 def spec_D70_the_holding_cap_holds_flat_bots_back_and_lets_holders_run():

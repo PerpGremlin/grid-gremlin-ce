@@ -17,7 +17,8 @@ from .window import window
 from .bot_constants import (CASH_LOG_OVERLAP_MS, FILL_FEE_SLACK, FROZEN_REMIND_SECONDS,
                             FROZEN_WHY_CHARS, FUNDING_HOURS_UTC, FUNDING_LAG_SECONDS,
                             FUNDING_WINDOW_SECONDS,
-                            HISTORY_WINDOW_DAYS, RUNGS_LAG_SECONDS, VENUE_STOP)
+                            HISTORY_WINDOW_DAYS, ROUND_REACH_DAYS, RUNGS_LAG_SECONDS,
+                            VENUE_STOP)
 
 FORWARD_MS = 3_600_000     # G26: reads only move forward, over the last hour
 
@@ -111,9 +112,140 @@ class BasisMixin:
         now_ms = int(self._now() * 1000)
         if since_ms is None:
             since_ms = now_ms - days * 86_400_000
-        fills = self._read_fills(since_ms, now_ms)
+            fills = (self._read_window(since_ms, now_ms)
+                     if days == HISTORY_WINDOW_DAYS
+                     else self._read_fills(since_ms, now_ms))
+        else:
+            fills = self._read_fills(since_ms, now_ms)
         return [f for f in fills
                 if rung_of(f['link_id'], self.botid) is not None]
+
+    def _round_base_ms(self, fills):
+        """M29/M31: when the newest round's base began — the oldest of the
+        newest run of our rung-0 entry fills (a base may fill in pieces),
+        or None when the fills hold no base of ours. The newest base is the
+        open round's: any older one belongs to a round before it."""
+        entry, exit_ = self._entry_side.lower(), self._exit_side.lower()
+        start = None
+        for f in sorted(fills, key=lambda f: f['time_ms'], reverse=True):
+            side = str(f.get('side', '')).lower()
+            r = rung_of(f.get('link_id'), self.botid)
+            if r is None and f.get('link_id'):
+                continue                      # another bot's fill on our symbol
+            if side == entry and r == 0:
+                start = f['time_ms']
+            elif start is not None and (side == exit_ or r is not None):
+                break                         # the round before this base
+        return start
+
+    def _round_net(self, fills, since_ms):
+        """M29/M31: what our fills since `since_ms` leave held — our entries
+        less every exit-side fill that is ours or carries no link (a hosted
+        TP, a liquidation, a hand's close) — and whether that is flat: half
+        a step, or on spot under the venue's minimum or the fee a buy pays
+        in the coin (the exit sells what the wallet got, not the gross)."""
+        entry, exit_ = self._entry_side.lower(), self._exit_side.lower()
+        bought = sold = 0.0
+        for f in fills:
+            if f['time_ms'] < since_ms:
+                continue
+            r = rung_of(f.get('link_id'), self.botid)
+            side = str(f.get('side', '')).lower()
+            if side == entry and r is not None:
+                bought += abs(f['qty'])
+            elif side == exit_ and (r is not None or not f.get('link_id')):
+                sold += abs(f['qty'])
+        net = bought - sold
+        slack = self.adapter.qty_step * 0.5
+        if self.cfg['market_type'] == 'spot':
+            slack = max(slack, self.adapter.min_qty, FILL_FEE_SLACK * bought)
+        return net, net <= slack
+
+    def _read_window(self, since_ms, now_ms):
+        """M31: the history window's fills, and before them the fills an open
+        DCA round older than the window still needs. A round older than the
+        window lost its base from it — the coins bought there fell out of
+        the spot holding (D58) and the basis (G15), and the round was bought
+        again (audit 2026-11-05). Where the window holds no base of ours and
+        there is a sign of a round (our own fills without their base, a
+        holding), the fills are sought back a window at a time to
+        ROUND_REACH_DAYS, once per process; a base whose round is still open
+        is read from on: its older fills are kept, and each read starts
+        where the kept ones end. A base inside the window needs nothing.
+        Nothing is persisted: a restart seeks again (E3)."""
+        if self.cfg.get('strategy') != 'martingale':
+            return self._read_fills(since_ms, now_ms)
+        kept = self._reach_kept if self._reach_ms else None
+        start = since_ms if kept is None else min(since_ms, kept[1] + 1)
+        fills = self._read_fills(start, now_ms)
+        if kept is not None:
+            moved = [f for f in fills if f['time_ms'] < since_ms]
+            kept = self._reach_kept = [kept[0], since_ms - 1, kept[2] + moved]
+            fills = [f for f in fills if f['time_ms'] >= since_ms]
+        if self._round_base_ms(fills) is not None:
+            self._reach_ms, self._reach_kept = None, None   # its base is here
+            return fills
+        if self._reach_ms is None:
+            ours = any(rung_of(f.get('link_id'), self.botid) is not None
+                       for f in fills)
+            if not (ours or self._reach_hint or self._last_pos):
+                return fills
+            self._reach_ms = self._seek_round_base(since_ms, fills)
+        if not self._reach_ms:
+            return fills
+        return [f for f in self._reach_kept[2]
+                if f['time_ms'] >= self._reach_ms] + fills
+
+    def _seek_round_base(self, window_ms, window_fills):
+        """M31: back from the window a window at a time, to ROUND_REACH_DAYS,
+        for the newest base of ours. Its round still open: its time, and its
+        older fills kept. Closed, or none found: 0 (asked again only when a
+        base enters the window and leaves it)."""
+        span = HISTORY_WINDOW_DAYS * 86_400_000
+        older, base, to = [], None, window_ms - 1
+        for _ in range(max(1, ROUND_REACH_DAYS // HISTORY_WINDOW_DAYS)):
+            older = self._read_fills(to - span + 1, to) + older
+            to -= span
+            base = self._round_base_ms(older)
+            if base is not None:
+                break
+        if base is None:
+            if any(rung_of(f.get('link_id'), self.botid) is not None
+                   for f in window_fills):
+                self.notify.event('warn', self.botid,
+                                  'the open round began more than '
+                                  f'{ROUND_REACH_DAYS} days ago: its base is '
+                                  'past the fills this bot reads (M31)')
+            return 0
+        net, flat = self._round_net(older + window_fills, base)
+        if flat:
+            return 0
+        self._reach_kept = [base, window_ms - 1,
+                            [f for f in older if f['time_ms'] >= base]]
+        age = (window_ms - base) / 86_400_000 + HISTORY_WINDOW_DAYS
+        self.notify.event('net', self.botid,
+                          f'the open round began {age:.0f} days ago, past the '
+                          'history window: its fills are read from its base '
+                          '(M31)')
+        return base
+
+    def _round_flat_explained(self):
+        """M29: does the venue's account explain the flat in full — the
+        round's fills since its base net to nothing? One exit fill of the
+        round (a tranche) is an account of a close, not of the WHOLE close:
+        a single blank position read after a partial exit read as the round's
+        end left the remaining coins with no exit. True, False, or None when
+        the fills cannot say (unreadable, no fills surface, no base found)."""
+        try:
+            fills = self._own_fills_all(days=HISTORY_WINDOW_DAYS)
+        except (VenueError, OSError):
+            return None
+        if not fills:
+            return None
+        base = self._round_base_ms(fills)
+        if base is None:
+            return None
+        return self._round_net(fills, base)[1]
 
     def _read_fills(self, since_ms, now_ms):
         """R1: one read of the symbol's fills. HL answers at most 2000
@@ -168,6 +300,7 @@ class BasisMixin:
         # rounding step — NEVER min_qty, which for small holdings let a
         # 17%-coverage sliver price the whole position (audit 2026-08-07)
         slack = want * 0.02 + self.adapter.qty_step
+        exact = self.adapter.qty_step * 0.5
         remaining, cost, deficit = want, 0.0, 0.0
         for f in sorted(fills, key=lambda f: f['time_ms'], reverse=True):
             qty = abs(f['qty'])
@@ -179,7 +312,12 @@ class BasisMixin:
             take = min(usable, remaining)
             cost += take * f['price']
             remaining -= take
-            if remaining <= slack:
+            if remaining <= exact:
+                # G15b: covered EXACTLY, as G33's walk — the slack is a whole
+                # holding of one step: the walk stopped at the first buy a
+                # newer sell had consumed, covered nothing, and the holding's
+                # exits were withheld (audit 2026-11-05). The slack judges
+                # only a walk that ran out of fills
                 break
         if remaining > slack:
             return None                     # account incomplete: never guess
@@ -766,7 +904,10 @@ class BasisMixin:
         if hist is None:
             return None       # the venue offers no account — unknowable
         now_ms = int(self._now() * 1000)
-        return self._read_fills(now_ms - days * 86_400_000, now_ms)
+        since = now_ms - days * 86_400_000
+        if days == HISTORY_WINDOW_DAYS:
+            return self._read_window(since, now_ms)
+        return self._read_fills(since, now_ms)
 
     def _round_fills(self):
         """M12/M13/R8: this bot's round history INCLUDING venue-created
@@ -835,6 +976,7 @@ class BasisMixin:
         # owned at `holding_since`, plus its own fills from that moment;
         # without one, the thirty-day walk of its fills (D58)
         anchor = self.cfg.get('holding_since_ms')
+        self._reach_hint = wallet_size >= self.adapter.min_qty      # M31
         try:
             fills = (self._own_fills(since_ms=anchor) if anchor
                      else self._own_fills())

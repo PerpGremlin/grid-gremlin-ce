@@ -22,3 +22,5 @@ FUNDING_HOURS_UTC = (0, 8, 16)         # D169: Bybit's inverse funding settles o
 FUNDING_WINDOW_SECONDS = 300.0         # D169: a move begun this soon after one is funding's
 FUNDING_LAG_SECONDS = 300.0            # D169: ...and waits this long for its log row (measured
                                        # 2026-11-05: the wallet at +5 s, the row at +91 s, +112 s)
+ROUND_REACH_DAYS = 365      # M31: how far back an open DCA round's base is sought,
+                            # past HISTORY_WINDOW_DAYS, once per process

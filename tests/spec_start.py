@@ -211,8 +211,12 @@ def spec_S6_the_reset_list_is_complete_and_documented():
                   '_rungs_asked',   # G23: a restart asks again
                   '_rungs_fail_since', '_rungs_fail_said', '_rungs_escalated',
                   '_rungs_fail_why', '_rungs_fail_reminded',   # G28
-                  '_session_rungs', '_session_since_ms'}   # D158:
+                  '_session_rungs', '_session_since_ms',   # D158:
                   # a restart starts a new session
+                  '_flat_wait_since', '_flat_wait_said',   # M29: a restart
+                  # reads the flat afresh
+                  '_reach_ms', '_reach_kept', '_reach_hint'}   # M31: a new
+                  # process seeks an open round's base again
     state = {k for k, v in vars(bot).items()
              if k.startswith('_') and not callable(v)
              and k not in ('_now', '_entry_side', '_exit_side', '_min_gap',

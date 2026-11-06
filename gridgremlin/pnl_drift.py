@@ -165,10 +165,14 @@ def realised_by_fill(counted, botid, cfg, fleet):
 
 
 def straddling(rows, exits, frm, end):
-    """F40: the orders not wholly inside [frm, end] — a closing order whose
-    fills there do not add up to the size its closed P&L row closed (some
-    fell before the window, or after it: a resting exit filled in part), or
-    whose row lies outside it. Left out of both sides, never an alarm."""
+    """F40: the orders not wholly inside [frm, end] — a closing order with
+    fills there that do not add up to the size its closed P&L row closed
+    (some fell before the window, or after it: a resting exit filled in
+    part), or whose row lies outside it. Left out of both sides and named
+    (F40b). A row with no fill of the bot's in the window is not one of
+    them: nothing of ours explains it, so it stays on the venue's side —
+    a close the ledger never saw (a liquidation, a fill it lost) is a
+    disagreement, never a row quietly left out (the fifth audit)."""
     filled, closed = {}, {}
     for f in exits:
         if frm <= f['time_ms'] <= end and f.get('order_id'):
@@ -176,9 +180,9 @@ def straddling(rows, exits, frm, end):
     for r in rows:
         if r.get('order_id'):
             closed[r['order_id']] = closed.get(r['order_id'], 0.0) + r['qty']
-    return {o for o in set(filled) | set(closed)
-            if abs(filled.get(o, 0.0) - closed.get(o, 0.0))
-            > 1e-9 * max(1.0, filled.get(o, 0.0), closed.get(o, 0.0))}
+    return {o for o in filled
+            if abs(filled[o] - closed.get(o, 0.0))
+            > 1e-9 * max(1.0, filled[o], closed.get(o, 0.0))}
 
 
 def check_realised(record, cfg, botid, fleet, start_ms, end_ms, unowned, venue_rows,
@@ -224,7 +228,7 @@ def check_realised(record, cfg, botid, fleet, start_ms, end_ms, unowned, venue_r
     tol = REAL_ABS[unit] + REAL_REL * closed_value
     return {'ours': ours, 'venue': venue, 'tol': tol, 'from_ms': frm, 'rows': len(kept_rows),
             'fees': sum(f['fee'] for f in counted if frm <= f['time_ms'] <= end_ms),
-            'straddling': len(dropped),
+            'straddling': len(dropped), 'straddling_ids': sorted(dropped),
             'residue': sum(r['stated'] for r in kept_rows) - venue,      # what closedPnl holds besides
             'off': abs(ours - venue) > tol}, None
 
@@ -445,13 +449,21 @@ def check_fleet(fleet, kept, now_ms, clients, days=LOOKBACK_DAYS, portfolio_rows
                 entry['failed'] = f'its identity could not be worked ({type(e).__name__}: {e})'
         for b, entry in everyone.items():
             report['bots'][b] = entry
-    for b, row in (portfolio_rows or {}).items():
-        cfg = next((c for c in fleet['bots'] if c.get('strategy') == 'portfolio'
-                    and f"pfo{c.get('name')}" == b), None)
-        if cfg is not None:
-            shorts = {(c['market_type'], c['symbol']) for c in rows if c['side'] == 'short'}
-            report['bots'][b] = check_portfolio(cfg, b, row, now_ms, clients, days,
-                                                report['unread'], shorts)
+    for cfg in fleet['bots']:
+        if cfg.get('strategy') != 'portfolio':
+            continue
+        b = f"pfo{cfg.get('name')}"
+        row = (portfolio_rows or {}).get(b)
+        if row is None:                  # F40b: a row never compared is said
+            report['bots'][b] = {'kind': 'portfolio', 'market': 'portfolio',
+                                 'note': 'the row has no state yet: nothing of it was compared'}
+            continue
+        to = row.get('fills_to_ms')
+        if to is None or now_ms - to > BEHIND_MS:
+            report['behind'].append({'market': f'portfolio {b}', 'mark': to})
+        shorts = {(c['market_type'], c['symbol']) for c in rows if c['side'] == 'short'}
+        report['bots'][b] = check_portfolio(cfg, b, row, now_ms, clients, days,
+                                            report['unread'], shorts)
     return report
 
 
@@ -498,6 +510,8 @@ def check_portfolio(cfg, botid, row, now_ms, clients, days, unread, others=()):
         held = [f['time_ms'] for f in theirs if _key(f) in seen]
         judged = [f for f in theirs if held and f['time_ms'] >= min(held)]
     entry['missing'] = [_key(f) for f in judged if _key(f) not in seen]
+    if len(judged) < len(theirs):               # F40b: what it could not judge is said
+        entry['unjudged'] = len(theirs) - len(judged)
     since = row.get('since_ms')
     if since is None or since < now_ms - PORTFOLIO_DAYS * DAY_MS:
         entry['realised_note'] = ('its books count from its anchor, before the '
@@ -582,6 +596,43 @@ def problems(report, now=None):
     return out
 
 
+def skipped(report):
+    """F40b: what one fleet's report did not compare, each a short phrase
+    naming the row and why — a realised or an identity not compared, an
+    order left out across the window, fills a row could not judge, a row
+    never reached. A report with any is never said to agree, though
+    nothing in it is off."""
+    out = []
+    for b, e in sorted((report.get('bots') or {}).items()):
+        said = [e['note']] if e.get('note') else []
+        r = e.get('realised')
+        if r is None and e.get('realised_note'):
+            said.append(f"realised not compared ({e['realised_note']})")
+        elif r is not None and r.get('straddling'):
+            n, ids = r['straddling'], r.get('straddling_ids') or []
+            said.append(f"{n} order{'s' if n > 1 else ''} across the window left out of "
+                        'realised' + (f' ({_ids(ids)})' if ids else ''))
+        if e.get('identity') is None and e.get('identity_note'):
+            said.append(f"identity not checked ({e['identity_note']})")
+        if e.get('unjudged'):
+            said.append(f"{e['unjudged']} fill{'s' if e['unjudged'] > 1 else ''} older than "
+                        'the ids its row remembers, not judged')
+        if said:
+            out.append(f'{b} ' + ' · '.join(said))
+    return out
+
+
+def verdict(report, now=None):
+    """The one line `run` prints for a fleet: what is off, then what was
+    not compared — "agrees" only when every row was compared and agreed."""
+    said, skips = problems(report, now), skipped(report)
+    if skips:
+        said.append(('' if said else 'agrees on what it compared — ')
+                    + 'not compared: ' + ' · '.join(skips))
+    return ' · '.join(said) or (f"agrees — {len(report['bots'])} bots over "
+                                f"{report.get('days', LOOKBACK_DAYS):g} days")
+
+
 def reports(root=ROOT):
     return sorted(Path(root).glob('*.json'))
 
@@ -597,7 +648,10 @@ def digest_lines(root=None, now=None, tags=None):
         if tags is not None and p.stem not in tags:
             continue
         try:
-            said = problems(json.loads(p.read_text()), now)
+            r = json.loads(p.read_text())
+            said, skips = problems(r, now), skipped(r)
+            if skips:                                             # F40b: never silent agreement
+                said.append('not compared: ' + ' · '.join(skips))
         except Exception as e:                                    # noqa: BLE001
             said = [f'unreadable — {type(e).__name__}: {e}']
         if said:
@@ -632,7 +686,8 @@ def details(report):
                        + time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(r['from_ms'] / 1000)))
             out.append(f"    venue's closedPnl + fees − gross (the fees/funding residue): "
                        f"{r.get('residue', 0.0):+.8f} · orders across the window left out: "
-                       f"{r.get('straddling', 0)}")
+                       f"{r.get('straddling', 0)}"
+                       + (f" ({', '.join(r['straddling_ids'])})" if r.get('straddling_ids') else ''))
         elif e.get('realised_note'):
             out.append(f"    realised not compared: {e['realised_note']}")
         for key, bk in (e.get('books') or {}).items():
@@ -747,14 +802,12 @@ def main(argv):
         from common.env import load_env
         load_env()
         for path, report in run(fleets, root, days=days):
-            said = problems(report)
-            print(f'{path.stem}: ' + (' · '.join(said) if said else
-                                      f"agrees — {len(report['bots'])} bots over {days:g} days"))
+            print(f'{path.stem}: {verdict(report)}')
         return 0                       # a drift is reported, never a failed unit
     if cmd == 'show':
         now = time.time()
         lines = digest_lines(root, now)
-        print('\n'.join(lines) if lines else 'every fleet agrees with its venue')
+        print('\n'.join(lines) if lines else 'every fleet agrees with its venue, every row compared')
         for p in reports(root):
             try:
                 r = json.loads(p.read_text())

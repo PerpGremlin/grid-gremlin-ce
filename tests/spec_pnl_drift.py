@@ -693,3 +693,98 @@ def spec_F39_a_fleet_the_digest_no_longer_names_is_left_alone():
         Path(d, 'old.json').write_text(json.dumps({'t': NOW / 1000 - 30 * 86400, 'bots': {}}))
         assert pd.digest_lines(d, NOW / 1000, tags={'demo'}) == []
         assert pd.digest_lines(d, NOW / 1000)                                   # show still sees it
+
+
+# --- the fifth audit, 2026-11-05: nothing skipped is agreement ---------------------
+
+def spec_F40c_a_closed_pnl_row_with_no_fill_of_ours_stays_on_the_venues_side():
+    """A losing close the ledger never saw (a liquidation, a lost fill):
+    the venue's row has no fill of the bot's in the window. Left out of
+    both sides, it vanished and the fleet "agreed"; now it is the
+    disagreement it is."""
+    cfgs, kept, venue, closed = _agreeing()
+    row = {'orderId': 'mystery', 'createdTime': str(T0 + 6 * HOUR), 'side': 'Sell', 'closedSize': '3.0',
+           'closedPnl': '-5000', 'openFee': '0', 'closeFee': '0', 'cumEntryValue': '300',
+           'cumExitValue': '0'}
+    r = _run(cfgs, kept, Bybit(venue, closed + [row]))
+    e = r['bots'][_bot(cfgs[0])]['realised']
+    assert e['straddling'] == 0 and e['off'] and abs(e['venue'] - (-0.5 - 300.0)) < 1e-9, e
+    assert _said(r) == ['linBTCUSDTl realised -0.50 vs venue -300.50'], _said(r)
+    assert not pd.verdict(r, NOW / 1000).startswith('agrees')
+
+
+def spec_F40c_sabotage_dropping_a_row_with_no_fill_is_caught():
+    """Sabotage: straddling() leaving out the rows with no fill again —
+    the spec above goes red."""
+    real = pd.straddling
+
+    def old(rows, exits, frm, end):
+        return real(rows, exits, frm, end) | {r['order_id'] for r in rows if r.get('order_id')
+                                              and not any(f.get('order_id') == r['order_id'] for f in exits)}
+    pd.straddling = old
+    try:
+        spec_F40c_a_closed_pnl_row_with_no_fill_of_ours_stays_on_the_venues_side()
+    except AssertionError:
+        return
+    finally:
+        pd.straddling = real
+    raise AssertionError('the sabotage was not caught')
+
+
+def spec_F40b_a_row_not_compared_is_named_and_never_agrees():
+    """A fill no bot owns leaves realised uncompared: nothing is off, but
+    the verdict, `run`'s line and the digest's name the row and why —
+    never "agrees"."""
+    cfgs, kept, venue, closed = _agreeing()
+    hand = dict(kept['fills'][0], exec_id='hand', link_id='', side='buy', time_ms=T0 + 30 * 60_000)
+    kept['fills'].append(hand)
+    venue.append(dict(hand))
+    r = _run(cfgs, kept, Bybit(venue, closed))
+    assert _said(r) == []
+    skips = pd.skipped(r)
+    assert len(skips) == 1 and skips[0].startswith(
+        'linBTCUSDTl realised not compared (1 fill on BTCUSDT belong to no bot of this fleet)'), skips
+    v = pd.verdict(r, NOW / 1000)
+    assert v.startswith('agrees on what it compared — not compared: linBTCUSDTl realised not compared'), v
+    with tempfile.TemporaryDirectory() as d:
+        Path(d, 'demo.json').write_text(json.dumps(r))
+        lines = pd.digest_lines(d, NOW / 1000)
+        assert len(lines) == 1 and 'not compared: linBTCUSDTl realised not compared' in lines[0], lines
+    cfgs, kept, venue, closed = _agreeing()                     # every row compared: agrees
+    assert pd.verdict(_run(cfgs, kept, Bybit(venue, closed)), NOW / 1000).startswith('agrees — 1 bots')
+
+
+def spec_F40b_an_order_left_out_across_the_window_is_named():
+    cfgs, kept, venue, closed = _agreeing()
+    part = dict(_ledger_fill(cfgs[0], 9, T0 + 6 * HOUR, 'sell', 9, 99.0, 0.5, 0.01), order_id='rest')
+    kept['fills'].append(part)
+    venue.append(dict(part))
+    row = {'orderId': 'rest', 'createdTime': str(T0 + 6 * HOUR), 'side': 'Sell', 'closedSize': '1.0',
+           'closedPnl': '5', 'openFee': '0', 'closeFee': '0', 'cumEntryValue': '90', 'cumExitValue': '99'}
+    r = _run(cfgs, kept, Bybit(venue, closed + [row]))
+    assert _said(r) == []
+    assert 'linBTCUSDTl 1 order across the window left out of realised (rest)' in pd.skipped(r)[0], pd.skipped(r)
+
+
+def spec_F40b_a_portfolio_row_never_compared_is_said():
+    """A portfolio row with no state was absent from the report; one whose
+    fills stopped days ago judged nothing — both said now."""
+    r = pd.check_fleet({'bots': [_carry_row()]}, {'fills': []}, NOW, {'bybit': Bybit([], [])},
+                       portfolio_rows={})
+    assert pd.skipped(r) == ['pfocarry the row has no state yet: nothing of it was compared'], pd.skipped(r)
+    state = {'pfocarry': {'since_ms': NOW - 3 * DAY, 'fills_to_ms': NOW - 8 * DAY, 'seen': [], 'books': {}}}
+    r = pd.check_fleet({'bots': [_carry_row()]}, {'fills': []}, NOW, {'bybit': Bybit([], [])},
+                       portfolio_rows=state)
+    assert 'ledger collected portfolio pfocarry only to 1970-02-02 00:00 UTC' in _said(r), _said(r)
+
+
+def spec_F40b_sabotage_a_verdict_blind_to_skips_is_caught():
+    real = pd.skipped
+    pd.skipped = lambda report: []
+    try:
+        spec_F40b_a_row_not_compared_is_named_and_never_agrees()
+    except AssertionError:
+        return
+    finally:
+        pd.skipped = real
+    raise AssertionError('the sabotage was not caught')

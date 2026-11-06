@@ -94,6 +94,13 @@ eventually pin (T1).
   send and the data-status fetch take any failure (http.client's
   IncompleteRead is not an OSError) as a failed send or an unread status,
   and the fleet's per-cycle flush is guarded again. *(the audit, 2026-10-13)*
+- **E12c** A page trimmed for length keeps what needs the owner. Past
+  Telegram's cap the engine's coalesced page keeps every kill, stop and
+  urgent line, then the newest others that fit, in their order, and says
+  how many were dropped; vital lines past one message go in more than one.
+  The digest and the watchdog's pages go in parts, split on line ends,
+  never cut at the cap. *(the fifth audit, 2026-11-05: the newest lines
+  crowded an urgent stop line out; the digest was cut at 3,900 characters)*
 - **E13** The fleet-down and watchdog-failing pages write their 30-minute
   stamp only after Telegram took the page (`curl -f`): a failed send fails
   the unit and leaves the next tick free to page. *(the audit: the stamp was
@@ -201,6 +208,11 @@ eventually pin (T1).
   split ref and exits rest at the very price the inventory was bought at: the grid
   churns at zero spread and pays fees both ways. `assumed_avg_entry` wins when set.
   *(measured live 2026-08-06: 17 LTC round trips, every buy and sell at one price)*
+- **G15b** G15's walk covers the holding exactly (to half a step), as G33's: the
+  slack of 2% and a step judges only a walk that ran out of fills. Stopping at
+  the slack, a one-step holding stopped at the first buy a newer sell had
+  consumed, covered nothing, had no basis, and its exit was withheld.
+  `spec_G15b_*`. *(audit 2026-11-05)*
 - **G30** (D169) A long spot row sharing its coin with an inverse market on the
   account (a grid, a DCA, a trade or a Portfolio Bot's leg) reads the wallet as
   it would be without that market: the wallet less the inverse rows of the coin's
@@ -770,6 +782,30 @@ eventually pin (T1).
   of #593: so did the mark passing the sliver's price; its re-review: a
   restart after a two-lot base's t1 sold read t1 as a sliver and dropped
   the breakeven step on HL)*
+- **M29** A round ends only on a flat its own fills explain in full: the
+  round's fills since its base (the newest run of rung-0 entries) net to
+  nothing — our entries less every exit-side fill that is ours or carries no
+  link; half a step, or on spot the venue's minimum or a buy's fee in the
+  coin. M14's account of A closing fill is not an account of the whole
+  close. Fills that leave coins held wait `RUNGS_LAG_SECONDS`, nothing placed
+  or cancelled, until a read shows the position again; past the wait the
+  round is held open, said once and urgently, as M14 holds a close never
+  accounted for. Fills that cannot say leave M14 to judge as before.
+  A restart (no last position) whose first read is flat while our rungs rest is
+  confirmed the same way before it counts as a round that ended while down.
+  `spec_M29_*`, with sabotage. *(audit 2026-11-05: one empty position read
+  after tranche 1 filled ended the round — repeat off, the bot stood down
+  with half its coins and no exit; repeat on, it bought a new base on them)*
+- **M31** An open DCA round keeps its fills past the history window. Where the
+  thirty-day window holds no base of ours and there is a sign of a round (our
+  fills without their base, a spot wallet holding the coin, a holding last
+  read), the fills are sought back a window at a time to `ROUND_REACH_DAYS`
+  (365), once per process; a base whose round is still open is read from on,
+  its older fills kept in memory and each read starting where they end.
+  Nothing is persisted (E3): a restart seeks again. A round older than the
+  reach is said once. `spec_M31_*`, with sabotage. *(audit 2026-11-05: a spot
+  round 34 days old lost its base's coins from the holding and its exit; at
+  54 days a restart read it as flat and bought a new base on them)*
 
 ## S — start states
 
@@ -1267,6 +1303,17 @@ eventually pin (T1).
   failed, or read no equity, keeps the last cap verdict until a read says
   otherwise (E9); and an account equity at or below zero is capped, never
   skipped as falsy. *(the review, 2026-10-11)*
+- **F15e** The leverage cap judges the figure it names. With
+  `effective_leverage_max` set, each cycle the fleet also reads the
+  account's own leverage figures as R19 states them now (every position's
+  value over the venue's margin balance — the panel's, `/risk`'s and the
+  digest's "account leverage"), and the leg judges the larger of that and
+  F15c's living bots' notional over equity: never a smaller number than
+  the one its reason states. Figures that went unread are logged, the leg
+  judges the bots' figure alone, and a held cap stays held (F15d).
+  Without the leg nothing more is read. *(the fifth audit, 2026-11-05: a
+  stopped bot still holding, a hand's position and the margin balance
+  under the equity read 1.5x to the cap where the account box read 3.33x)*
 - **F14** The watchdog's memory survives a torn write. Its state is written
   atomically (temp, fsync, rename, fsync the directory); an unreadable state
   file starts the memory again and pages once saying so — the cost is a
@@ -1330,6 +1377,15 @@ eventually pin (T1).
   ledger's last runs). The ledger is collected first so the day is whole. The
   place moves only once the message is sent; one fleet's trouble costs no
   other. *(owner, 2026-10-05: "give me the daily digest before asia start")*
+- **F17b** Stale figures are said as stale. The ledger is topped up hourly
+  and again minutes before the digest, the archive two minutes before it:
+  a fleet market the ledger never collected, or collected over two hours
+  ago, is named with its age on the day line and in health ("⚠️ stale
+  ledger"), and health's ledger age is the oldest market's, never the
+  newest's; an archive written over two hours ago marks its open and kept
+  figures stale with its age; a ledger that will not load is "day unread",
+  never a zero day. The drift report's own age is F39's. *(the fifth audit,
+  2026-11-05: a market stuck three days read "ledger 1 min ago")*
 - **F18** The owner can read the box from the phone (D61). A long-polling
   service answers `/help /status /pnl [bot] /today /positions /orders [bot]
   /grids /rounds /risk /alerts [n] /log <bot> [n]` — a bot named in part,
@@ -1345,11 +1401,21 @@ eventually pin (T1).
   systemctl. *(owner, 2026-10-05: "the reading suggestion is really good")*
 - **F19** Real money runs from a pinned copy that moves only by promotion
   (D65): `ops/promote.py` moves the live worktree to a version that is on the
-  merged main and has run in the play-money checkout for a day by that
-  checkout's own reflog — or the same day as a hotfix with its reason written
-  down. A version never deployed to play money waits or is a hotfix; an
-  unmerged one never moves it. Every move is appended to the live copy's
-  `logs/promotions.log`; nothing is restarted.
+  merged main and has run on a play-money fleet for a day (F19b) — or the
+  same day as a hotfix with its reason written down. A version no fleet ran
+  waits or is a hotfix; an unmerged one never moves it. Every move is
+  appended to the live copy's `logs/promotions.log`; nothing is restarted.
+- **F19b** The day on play money is what the fleets ran, not what was
+  deployed. A fleet writes, in every snapshot row, the version its run
+  started from (`code`: the checkout's HEAD at its start, and `dirty` when
+  the code itself was edited there); `promote.py` reads the play-money
+  fleets' snapshot files (each fleet file in the main checkout's `configs/`,
+  by its watchdog) and counts the longest run of the target's tree — a
+  merge that changes no file counts its parent's run — from the run's
+  start to its last row. A dirty run or one on mainnet counts nothing.
+  `--status` says deployed-but-not-run apart from run. *(the fifth audit,
+  2026-11-05: the reflog said when a deploy pulled a version, while the
+  fleets, not restarted, ran the old one)*
 - **F20** A Telegram message carries its heading in bold: every sender builds
   its request through one function (`tg.payload`), which marks a line's label
   — up to its first ': ', or the whole line when it has none — bold under
@@ -1552,6 +1618,23 @@ eventually pin (T1).
   since its opening balance (then from that flat). A portfolio row's perp
   books, gross since its anchor, against the closing buys of each leg,
   when the anchor is within 90 days and no other row shorts the market.
+- **F40b** Nothing skipped is agreement. Every row the check did not
+  compare is named with why — a realised not compared (each reason F40
+  lists), an identity not checked (F41's), an order left out across the
+  window (by order id), fills a full `seen` list could not judge, a
+  portfolio row with no state yet — and a fleet with any is never said to
+  agree: `run` prints "agrees on what it compared — not compared: …", the
+  digest carries them on the fleet's drift line, `show` lists the order
+  ids. A portfolio row whose fills stopped over two hours ago is said as
+  behind, as a market is. *(the fifth audit, 2026-11-05: a hand's fill, a
+  row never compared and an order left out each still read "agrees")*
+- **F40c** A closed-P&L row with no fill of the bot's in the window is not
+  an order across the window: nothing of ours explains it, so it stays on
+  the venue's side — a close the ledger never saw (a liquidation, a lost
+  fill) is a disagreement. Only an order with fills in the window that do
+  not add up to its row, or with no row, is left out (F40). *(the fifth
+  audit, 2026-11-05: a losing row with no fill was left out of both sides
+  and the fleet agreed)*
 - **F41** U113's identity holds on each grid's real book (D156, proposed):
   the trips' gross less the average-cost realised equals what the open
   lots cost beyond the book's average, times the position (in the coin
@@ -3381,8 +3464,8 @@ that pins it (T1).
   a capital raise, an adopted holding at the day's price, a new cash pot
   — so the total counts only what the book made; `max_loss_since` is
   the stated moment the loss counts from). At `max_loss` every leg goes together in one cycle —
-  shorts bought back reduce-only, the stack sold, as market orders — then
-  the tombstone (X7) and the page; a leg that refuses is named and the
+  the tombstone first (X7), then shorts bought back reduce-only, the stack
+  sold, as market orders, and the page once every leg is closed (H4d); a leg that refuses is named and the
   rest still go, since a hedged book cut on one side is a directional bet
   taken at the worst moment. The owner's flatten
   (`gridgremlin.portfolio_flatten <fleet> <name> [--reset]`, the fleet
@@ -3394,7 +3477,7 @@ that pins it (T1).
   the share that restores the floor plus a 5-point buffer (the shortfall
   over the initial margin the account uses; 3% at least, a quarter at
   most; a quarter when the venue states no margin) — each long's coins
-  sold and its hedge bought back together, an outright short bought back
+  sold and its hedge bought back together, as a pair (H4c), an outright short bought back
   by the same share — so the book stays neutral while the loan is
   repaid; said once an hour. The rest of that read plans from the cut
   book, never from the old one plus the cut's proceeds *(an outside
@@ -3427,6 +3510,41 @@ that pins it (T1).
   — and the rest held; it re-enters from its parked cash when the basis is
   back under half the stop, as a pair (H16). The funding rule's stand-down lifts a hedge
   and keeps the stack (H3).
+- **H2b** A read is booked whole or not at all. Every market's fills, and
+  then every market's funding, are read before any is booked; a read
+  refused part way books nothing and moves no watermark, so the next read
+  takes the same span once. A buy with no link on a short leg's market (a
+  liquidation, an auto-deleverage, a close by hand on the venue's page)
+  closes the row's short and joins its book, said, so its realised is
+  counted — the cash log's linear trades are kept apart as the book's, and
+  a close the book never saw hid its loss; where the row holds no short it
+  is not the row's. *(the audit of 2026-11-05: a refusal part way counted
+  the spot fills again at every retry, 2.25 BTC against the true 0.75 and
+  hedged to match; a USDT hedge liquidated read +7,500 on a hedged book
+  whose true figure was 0)*
+- **H4b** Parked cash is counted once. A basis stop's parked quote sits in
+  the wallet's quote and is taken out of it before the row's cash is read
+  from it, so a levered row's loan is not read as repaid by a sale it
+  parked, and its re-entry buys at the row's own leverage. *(the audit of
+  2026-11-05: a 2× row read 150,000 on 100,000 while parked and re-entered
+  at 3.0×)*
+- **H4c** The floor's cut goes a pair at a time, its hedge first: a coin's
+  coins sold are the share its hedge's buy-back confirmed; a refused
+  buy-back sells none of its coins and pages, asked again at the next read;
+  a refused sale pages and the rest still go. A coin the row does not hedge
+  is cut alone. *(the audit of 2026-11-05: the coins sold first, a refused
+  buy-back left the short standing over coins sold away, grown every read)*
+- **H4d** The row's flatten finishes, or keeps trying (X17's law for the
+  row). The tombstone is written first (a broken disk is said, urgent, and
+  never blocks the flatten); the row stands down only once every leg reads
+  closed. A refused or unanswered leg, or a close whose read-back still
+  shows it, keeps the row up doing nothing but the flatten each read —
+  never its tick, whatever the loss does since — paged urgent with what is
+  NOT closed and what is still open (F16); an accepted close whose
+  read-back still shows its leg gets one read's look before another order.
+  The sale's proceeds are the row's cash (H14). The kill line comes when it
+  is true. *(the audit of 2026-11-05: a refused leg left the row dead with
+  the leg open, never asked again)*
 - **H8** An inverse hedge is counted in its own coin. A short of N $1
   contracts opened at E has a constant coin exposure of N / E; its open P&L,
   N (1/mark − 1/E), accrues in the coin. So the coins the planner weighs and

@@ -44,6 +44,26 @@ def payload(chat_id, text, every_line=False):
             'parse_mode': 'HTML'}
 
 
+LIMIT = 3900                            # Telegram refuses > 4096
+
+
+def chunks(text, limit=LIMIT):
+    """Telegram's cap, split on line ends (E12c: a long message goes in
+    parts, never cut)."""
+    out, cur = [], ''
+    for line in text.splitlines():
+        while len(line) > limit:
+            out.append(line[:limit])
+            line = line[limit:]
+        if len(cur) + len(line) + 1 > limit:
+            out.append(cur)
+            cur = ''
+        cur += ('\n' if cur else '') + line
+    if cur:
+        out.append(cur)
+    return out or ['(empty)']
+
+
 def send_telegram(text):
     """Direct page — a sender is its own process; a send failure RAISES so
     state is never persisted over an undelivered page (it re-pages next tick,
