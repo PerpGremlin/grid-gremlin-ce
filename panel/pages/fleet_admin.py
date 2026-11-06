@@ -59,6 +59,11 @@ class FleetAdminPages:
                     + f'<p class="dim"><a href="/edit?fleet={fi}&amp;bot={qarg(botid)}&amp;mode=remove">remove</a> '
                     'is here.</p>')
         if mode == 'remove':
+            why = self._remove_refusal(fi, botid)          # audit 2026-11-06
+            if why:
+                from ..html_bits import refusal_box
+                return (f'<h1>remove {html.escape(botid)}</h1>' + refusal_box('not removable', why)
+                        + f'<p><a href="/retire?fleet={fi}&amp;bot={qarg(botid)}">its stop page</a></p>')
             return (f'<h1>remove {html.escape(botid)}</h1><p class="dim">the bot and its '
                     'watchdog line leave together; the remaining fleet must '
                     'still validate. The running fleet is untouched until '

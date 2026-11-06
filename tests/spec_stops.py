@@ -885,3 +885,197 @@ def spec_X15_on_hyperliquid_the_close_command_has_no_way_to_mainnet():
     assert 'HLVenueClient(allow_mainnet=False)' in src
     hl = src[src.index("if cfg['venue'] == 'hyperliquid':"):src.index('from .exchange.bybit.client import WriteClient')]
     assert 'refuse_mainnet(client, False, False)' in hl
+
+
+# --- X17: a stop finishes, or keeps trying -----------------------------------
+# The audit of 2026-11-05: a flatten the venue refused once (rate limit) left
+# the bot dead and the position open with nothing managing it; a refused
+# cancel left entries resting under a dead bot whose kill said nothing rests;
+# a socket error mid-stop left the bot tombstoned yet trading on.
+
+def _tombed(venue, lines, **over):
+    import tempfile
+    from pathlib import Path as _P
+    from gridgremlin.tombstones import Tombstones
+    bot = _bot(venue, lines, **over)
+    bot.tombs = Tombstones(_P(tempfile.mkdtemp()) / 'tombs.json')
+    return bot
+
+
+def _refusing(n, what='place_market'):
+    """A FakeVenue class whose `what` is refused (a rate limit) n times."""
+    from gridgremlin.exchange.errors import VenueError
+
+    class Refusing(FakeVenue):
+        tries = 0
+
+    def refused(self, *a, **kw):
+        self.tries += 1
+        if self.tries <= n:
+            raise VenueError('bybit /v5/order: retCode 10006: too many visits',
+                             kind='rate_limit')
+        return getattr(FakeVenue, what)(self, *a, **kw)
+    setattr(Refusing, what, refused)
+    return Refusing
+
+
+def spec_X17_a_refused_flatten_keeps_the_bot_up_and_retries_until_flat():
+    venue, lines = _refusing(3)(mark=48000.0), []
+    _holding(venue)
+    bot = _tombed(venue, lines, stop={'watch': 'mark_price', 'level': 49000.0})
+    bot.cycle()
+    assert bot.alive and venue.position is not None    # refused: still up
+    assert bot.tombs.has(bot.botid)                    # X7: durable first
+    assert not any(' kill ' in ln for ln in lines)     # no stand-down said
+    said = [ln for ln in lines if 'stop NOT finished' in ln]
+    assert said and 'STILL OPEN' in said[0] and 'REFUSED' in said[0]
+    venue.mark = 60000.0                               # back above the level:
+    for _ in range(2):                                 # the stop is not undone
+        assert bot.cycle() == {'stopping': 'mark_price 49000'}
+    assert venue.tries == 3 and venue.orders == []     # a retry each cycle,
+    bot.cycle()                                        # and nothing else
+    assert venue.tries == 4 and venue.position is None
+    assert not bot.alive
+    kill = next(ln for ln in lines if ' kill ' in ln)
+    assert 'flattened 0.021' in kill and 'position flat' in kill
+    assert bot.cycle() is None                         # dead bots stay dead
+
+
+def spec_X17_sabotage_without_the_retry_the_position_is_left_open():
+    """The sabotage half: with the retry taken out (the bot forgets the
+    unfinished stop), the same refusal leaves the position open and the
+    bot back to trading above the level."""
+    venue, lines = _refusing(1)(mark=48000.0), []
+    _holding(venue)
+    bot = _tombed(venue, lines, stop={'watch': 'mark_price', 'level': 49000.0})
+    bot.cycle()
+    bot.stopping = None                                # the guard, removed
+    venue.mark = 60000.0
+    bot.cycle()
+    assert venue.position is not None and venue.orders   # trading on, unstopped
+
+
+def spec_X17_an_accepted_flatten_read_back_open_waits_a_cycle_not_a_second_order():
+    """A venue whose read-back lags the fill: the order was accepted, so the
+    next cycle only looks, and sells again only if the position is still
+    there a cycle later (reduce-only guards a perp's size, never its floor
+    core, and a spot wallet has no reduce-only at all)."""
+    class Lagging(FakeVenue):
+        stale, lag = None, 0
+
+        def place_market(self, *a, **kw):
+            self.stale, self.lag = dict(self.position), 2   # two reads behind
+            super().place_market(*a, **kw)
+
+        def position_list(self, category, symbol):
+            if self.lag:
+                self.lag -= 1
+                return {'list': [self.stale]}
+            return super().position_list(category, symbol)
+    venue, lines = Lagging(mark=57000.0), []
+    _holding(venue, size='0.035')
+    bot = _tombed(venue, lines, min_position_base=0.014,
+                  stop={'watch': 'mark_price', 'level': 58000})
+    bot.cycle()
+    assert bot.alive and len(venue.market_links) == 1
+    bot.cycle()                                        # still reads 0.035,
+    assert len(venue.market_links) == 1                # yet no second sale
+    assert not bot.alive
+    assert abs(float(venue.position['size']) - 0.014) < 1e-9   # X6 kept
+    assert 'floor core 0.014 REMAINS' in next(ln for ln in lines if ' kill ' in ln)
+
+
+def spec_X17_a_refused_cancel_is_retried_and_the_words_say_what_rests():
+    venue, lines = FakeVenue(mark=61000.0), []
+    _holding(venue)
+    bot = _tombed(venue, lines, stop={'watch': 'mark_price', 'level': 58000})
+    bot.cycle()
+    resting = len(venue.orders)
+    assert resting
+    venue.__class__ = _refusing(resting + 2, 'cancel_order')
+    venue.mark = 57000.0
+    bot.cycle()
+    assert venue.position is None                      # flattened, but
+    assert bot.alive and len(venue.orders) == resting  # every cancel refused
+    said = next(ln for ln in lines if 'stop NOT finished' in ln)
+    assert f'{resting} owned orders STILL REST' in said
+    assert 'nothing owned rests' not in said
+    assert not any(' kill ' in ln for ln in lines)
+    bot.cycle()                                        # two more refusals,
+    assert bot.alive and venue.orders                  # the rest cancelled
+    bot.cycle()
+    assert not bot.alive and venue.orders == []
+    kill = next(ln for ln in lines if ' kill ' in ln)
+    assert f'cancelled {resting} owned orders; nothing owned rests' in kill
+
+
+def spec_X17_sabotage_an_order_the_venue_calls_gone_is_gone():
+    """The other half: the venue saying an order is already gone IS gone —
+    the stop ends at once; only a refusal keeps it trying."""
+    from gridgremlin.exchange.errors import VenueError
+
+    class Gone(FakeVenue):
+        def cancel_order(self, category, symbol, order_id):
+            super().cancel_order(category, symbol, order_id)
+            raise VenueError('retCode 110001: order not exists', kind='gone')
+    venue, lines = Gone(mark=61000.0), []
+    _holding(venue)
+    bot = _tombed(venue, lines, stop={'watch': 'mark_price', 'level': 58000})
+    bot.cycle()
+    venue.mark = 57000.0
+    bot.cycle()
+    assert not bot.alive and venue.orders == []
+
+
+def spec_X17_a_socket_error_mid_stop_never_trades_on():
+    """A cancel that times out (a raw OSError) and one that raises anything
+    else: the bot never stands tombstoned yet trading — the next cycle does
+    the stop's work, never the ladder's."""
+    for exc in (TimeoutError('timed out'), RuntimeError('a defect')):
+        class Raising(FakeVenue):
+            def cancel_order(self, *a, **kw):
+                raise exc
+        venue, lines = Raising(mark=61000.0), []
+        _holding(venue)
+        bot = _tombed(venue, lines, stop={'watch': 'mark_price', 'level': 58000})
+        bot.cycle()
+        resting = len(venue.orders)
+        venue.mark = 57000.0
+        try:
+            bot.cycle()
+        except RuntimeError:
+            assert isinstance(exc, RuntimeError)       # the loop's M3 catches it
+        assert bot.tombs.has(bot.botid) and bot.stopping
+        venue.__class__ = FakeVenue                    # the venue answers again
+        venue.mark = 61000.0                           # above the level, too
+        placed = venue._oid
+        bot.cycle()
+        assert venue._oid == placed                    # nothing placed
+        assert not bot.alive and venue.orders == [] and venue.position is None
+        kill = next(ln for ln in lines if ' kill ' in ln)
+        assert f'cancelled {resting} owned orders; nothing owned rests' in kill
+
+
+def spec_X17_a_kill_whose_cancel_is_refused_stays_up_until_nothing_rests():
+    """D1's other stand-down (the position closed by an outside hand): its
+    cancels are retried the same way, and it says what still rests."""
+    venue, lines = FakeVenue(), []
+    bot = _tombed(venue, lines)
+    bot.cycle()
+    buy = next(o for o in venue.orders if o['side'] == 'Buy')
+    venue.fill(buy['order_id'], buy['price'])
+    bot.cycle()                                        # holding now
+    venue.position = None                              # closed by hand
+    resting = None
+    for _ in range(3):                                 # E9: confirmed
+        if bot.stopping is None:
+            resting = len(venue.orders)
+            venue.__class__ = _refusing(resting, 'cancel_order')
+        bot.cycle()
+    assert bot.alive and bot.stopping and venue.orders
+    said = next(ln for ln in lines if 'stop NOT finished' in ln)
+    assert 'owned orders STILL REST' in said
+    while bot.alive:
+        assert bot.cycle() in ({'stopping': bot.stopping['reason']}, None)
+    assert venue.orders == []
+    assert 'nothing owned rests' in next(ln for ln in lines if ' kill ' in ln)

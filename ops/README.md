@@ -19,10 +19,11 @@ What runs, from the inside out:
    alarm for itself (`watchdog-failed`).
 3. **The watchdog** on a timer — liveness by *output*: snapshot staleness,
    margin ratio, the equity floor and drawdown, and per-bot bounds where a row
-   opts in (D32). It pages and never acts (D39). Exit 1 = breached and paged =
-   unit success (`SuccessExitStatus=1`); only a crash or an undelivered page
-   fails the unit. Each fleet's watchdog takes its own minute slot (`*:4/5`,
-   `*:1/5`, …) so ticks never queue behind each other on a small box.
+   opts in (D32). It pages and never acts (D39). Exit 3 = breached and paged =
+   unit success (`SuccessExitStatus=3`); a crash (Python exits 1) or an
+   undelivered page fails the unit. Each fleet's watchdog takes its own minute slot (`*:4/5`,
+   `*:1/5`, …) so ticks never queue behind each other on a small box. A fleet
+   unit `Wants=` its watchdog timer, so starting the fleet starts its watch.
 4. **Log rotation and retention** (`ops/logrotate.conf`, hourly, F11/F26) —
    fleet logs at 100 MB, five kept, compressed, `copytruncate` because the
    writer is never restarted for it. Snapshot files are not rotated: the
@@ -55,9 +56,10 @@ What runs, from the inside out:
     `market-report.timer`. Read-only, keyless; only the tilted portfolio
     row acts on it (its regime word, H3).
 11. **The dead-man's switch** (F24/D74) — every completed watchdog run ends
-    with one GET to `DEADMAN_URL` (an outside uptime check such as
-    healthchecks.io, expecting a ping every 5 minutes with a 10-minute
-    grace). The check's own alarm — email, Telegram — is what says the box
+    with one GET to its fleet's own `DEADMAN_URL_<FLEET>` (an outside
+    uptime check such as healthchecks.io, expecting a ping every 5 minutes
+    with a 10-minute grace; F24c: a shared `DEADMAN_URL` is only the
+    fallback, said on every run). The check's own alarm — email, Telegram — is what says the box
     is dead, which nothing on the box can. The watchdog also pages when the
     disk passes 85% (`disk_used_max`, F25).
 12. **The pull backup** (F27/D74) — on the workstation, not the box:
@@ -226,10 +228,15 @@ read that folder. Render `hygiene.service` with `{{HYGIENE_SOURCE}}` set to
 `ops/logrotate.conf.template` takes the same `{{REPO_DIR}}`; save it as
 `ops/logrotate.conf` (gitignored, box-local like the rendered units).
 
-**The dead-man's switch** (F24): make a check on an uptime service (period
-5 min, grace 10 min, alerting to your email and Telegram), then on the box
-append `DEADMAN_URL=<its ping URL>` to `.env`. The next watchdog run pings
-it; silence it by removing the line.
+**The dead-man's switch** (F24, F24c): make one check per fleet on an uptime
+service (period 5 min, grace 10 min, alerting to your email and Telegram),
+then on the box append `DEADMAN_URL_<FLEET>=<its ping URL>` to `.env` for
+each (`<FLEET>` the unit's `{{FLEET}}` in capitals: `DEADMAN_URL_DEMO`,
+`DEADMAN_URL_HL`, …). The next watchdog run pings it; silence it by removing
+the line. One shared `DEADMAN_URL` still pings, from every fleet without its
+own line, and each such run says so: one fleet's pings would hide another's
+death. A watchdog unit rendered before F24c names no fleet and pings the
+shared line only — re-render it, then `systemctl --user daemon-reload`.
 
 **The market data's freshness** (F32): with a separate data server whose
 site publishes `status.json`, append `DATA_STATUS_URL=<its address>` to

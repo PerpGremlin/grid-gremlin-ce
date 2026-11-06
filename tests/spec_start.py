@@ -166,7 +166,8 @@ def spec_S6_the_reset_list_is_complete_and_documented():
                   '_anchor', '_round',
                   '_scale', '_cool_until',   # M12/M13: reset AND venue-recomputed
                   '_unplaceable_warned', '_history_capped_warned',
-                  '_flat_streak', '_round_hwm', '_basis_cache', '_rungs_cache',
+                  '_flat_streak', '_trip_wait_since',   # E9/G32: flat clocks
+                  '_round_hwm', '_basis_cache', '_rungs_cache',
                   '_round_hwm_basis',   # M22: the average the gauge belongs to
                   '_round_hwm_held',    # M25: the holding it last saw
                   '_close_streak', '_defer_cycles',   # M14/G15: lag counters

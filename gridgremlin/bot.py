@@ -37,7 +37,8 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
     # _round_hwm_basis (M22: the average the round's gauge belongs to),
     # _round_hwm_held (M25: the holding it last saw; a shrink asks the fills),
     # _spot_sell_cap/_sell_cap_said/_inverse_* (D169: re-read from the cash log),
-    # _folded (D71: the slivers folded this round, said once). The round's own
+    # _folded (D71: the slivers folded this round, said once), _trip_wait_since
+    # (G32: a flat the fills do not explain yet; a restart reads flat afresh). The round's own
     # fields are declared once in bot_round.ROUND_SCOPED and reset together.
     # Everything else the bot knows
     # comes from the venue each cycle — except the two stated durable local
@@ -88,6 +89,7 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
         self._min_gap = (min_gap(grid_rungs(cfg, adapter, self.offset))
                          if cfg['strategy'] == 'grid' else 0.0)   # M8: no lattice
         self.alive = True
+        self.stopping = None           # X17: a fired stop not yet finished
         self._spot_seen = None         # D58: (wallet, own net) last cycle
         self._spot_lag_since = None    # D58: since when the fill list lagged
         self.wallet_coin = None        # D169: a spot row's coin (the build's)
@@ -124,6 +126,7 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
         self._unplaceable_warned = False
         self._history_capped_warned = False
         self._flat_streak = 0          # E9: confirmations of 'flat'
+        self._trip_wait_since = None   # G32: a flat our fills don't explain yet
         self._basis_cache = None       # G15: (held, basis) from fills
         self._rungs_cache = None       # G23: (held, [rung per lot]) from fills
         self._rungs_seen = None        # G26: (|held|, fill ids, newest ms) of
@@ -368,6 +371,10 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
         defer_exits = (basis is None and bool(held)
                        and not self.adapter.reports_avg_entry)
 
+        if self.stopping:               # X17: an unfinished stop is all it does
+            if spot_lag:                # D58: never sell into an own fill in flight
+                return {'lagging': 'own fill in flight (D58)'}
+            return self._finish_stop(truth, held)
         reason = self._stop_confirmed(                  # X1: before everything
             self._stop_hit(truth, equity), now, truth)
         if reason:
@@ -439,12 +446,25 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
                 # replace, and an outside flatten hiding behind that
                 # coincidence re-entered as a benign trip (audit
                 # 2026-08-07 MED). One fills question closes the blind
-                # side; None (lag) passes as a trip — the next flat
-                # without vanished links gets the full confirm path.
+                # side. G32: None (the fill list lags the wallet) is held,
+                # not passed as a trip — a reduce-only exit dies with a
+                # hand's close as it does with a fill, and a trip taken
+                # there re-entered on the next dip (audit 2026-11-05).
                 how = self._how_round_ended()
                 if how in ('liquidation', 'an outside close', VENUE_STOP):
                     self._kill(truth, f'position closed by {how} (D1)')
                     return None
+                if how is None:
+                    if self._trip_wait_since is None:
+                        self._trip_wait_since = now
+                    if now - self._trip_wait_since < RUNGS_LAG_SECONDS:
+                        return {'confirming_flat': 'no account of the '
+                                'closing fill yet (G32)'}
+                    self._kill(truth, 'position closed by an unaccounted hand '
+                               '— the venue gave no account of the closing '
+                               f'fill after {RUNGS_LAG_SECONDS:g}s (D1, G32)')
+                    return None
+                self._trip_wait_since = None
             if not (self._exit_links_last - links_now):      # no exit of ours
                 # E9: a venue that answers an EMPTY position list (under load,
                 # or on an account-type mismatch) is indistinguishable from
@@ -486,6 +506,7 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
         if held:
             self._flat_streak = 0
             self._close_streak = 0
+            self._trip_wait_since = None
         else:
             self._basis_cache = None   # a cached cost describes a holding
             self._rungs_cache = None

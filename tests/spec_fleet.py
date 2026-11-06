@@ -1,7 +1,11 @@
 # Specs for SPEC F1-F6 — coverage both ways, the lock, snapshots incl. the
 # dead, the mainnet absence, the watchdog's own validator and transitions.
 
+import json
+import os
+import sys
 import tempfile
+from pathlib import Path
 
 from gridgremlin.config import ConfigError
 from gridgremlin.main import (acquire_fleet_lock, check_watchdog_coverage,
@@ -313,6 +317,78 @@ def spec_F24_the_watchdog_pings_the_deadman_after_every_completed_run():
     assert pinged == ['https://hc.example/p/2']              # pinged after the run; none without the URL
 
 
+def _two_fleets_ping(deadman_url, env):
+    """What the demo and hl watchdogs ping, each under its own unit's GG_FLEET."""
+    return [deadman_url(dict(env, GG_FLEET=f))[0] for f in ('demo', 'hl')]
+
+
+def spec_F24c_each_fleet_pings_its_own_deadman_and_a_shared_line_still_works():
+    """The audit, 2026-11-06: several fleets on one DEADMAN_URL, so one
+    fleet's pings kept the shared check quiet while another's watchdog was
+    gone. Each pings DEADMAN_URL_<FLEET>; an old .env keeps pinging, said."""
+    import gridgremlin.watchdog as wd
+    own = {'DEADMAN_URL_DEMO': 'https://hc.example/demo', 'DEADMAN_URL_HL': 'https://hc.example/hl',
+           'DEADMAN_URL': 'https://hc.example/shared'}
+    assert _two_fleets_ping(wd.deadman_url, own) == ['https://hc.example/demo', 'https://hc.example/hl']
+    assert wd.deadman_url(dict(own, GG_FLEET='demo'))[1] is None
+    assert wd.deadman_url({'GG_FLEET': 'hl-testnet', 'DEADMAN_URL_HL_TESTNET': 'u'}) == ('u', None)
+    url, said = wd.deadman_url({'GG_FLEET': 'demo', 'DEADMAN_URL': 'https://hc.example/shared'})
+    assert url == 'https://hc.example/shared' and 'DEADMAN_URL_DEMO is not set' in said
+    url, said = wd.deadman_url({'DEADMAN_URL': 'https://hc.example/shared'})          # an old unit
+    assert url == 'https://hc.example/shared' and 're-render' in said
+    assert wd.deadman_url({'GG_FLEET': 'demo'}) == (None, 'dead-man: off — DEADMAN_URL_DEMO is not set')
+    assert wd.deadman_url({}) == (None, None)
+    unit = (Path(__file__).resolve().parents[1] / 'ops' / 'systemd' / 'watchdog.service.template').read_text()
+    assert 'Environment=GG_FLEET={{FLEET}}' in unit.splitlines()
+
+
+def spec_F24c_sabotage_one_shared_line_and_two_fleets_ping_the_same_check():
+    import gridgremlin.watchdog as wd
+    own = {'DEADMAN_URL_DEMO': 'https://hc.example/demo', 'DEADMAN_URL_HL': 'https://hc.example/hl',
+           'DEADMAN_URL': 'https://hc.example/shared'}
+    shared_only = lambda env: (env.get('DEADMAN_URL'), None)              # noqa: E731  the guard removed
+    pinged = _two_fleets_ping(shared_only, own)
+    assert pinged[0] == pinged[1]                                         # the spec above would be red
+    assert _two_fleets_ping(wd.deadman_url, own)[0] != _two_fleets_ping(wd.deadman_url, own)[1]
+
+
+def _watchdog_exit(cfg_text, stub=''):
+    """The watchdog run as its unit runs it: python3 -m, in a child; the exit code."""
+    import subprocess
+    import tempfile
+    root = Path(__file__).resolve().parents[1]
+    d = Path(tempfile.mkdtemp())
+    (d / 'wd.json').write_text(cfg_text.replace('@D', str(d)))
+    code = (f'import sys; sys.path.insert(0, {str(root)!r}); import gridgremlin.watchdog as w; '
+            'w.load_env = lambda: None; w.disk_used = lambda p: 0.5; ' + stub
+            + f'sys.exit(w.main([{str(d / "wd.json")!r}]))')
+    env = {k: v for k, v in os.environ.items() if not k.startswith(('TELEGRAM_', 'DEADMAN_URL', 'GG_FLEET'))}
+    return subprocess.run([sys.executable, '-c', code], cwd=root, env=env, capture_output=True,
+                          text=True, timeout=60).returncode
+
+
+def spec_F24d_a_watchdog_crash_fails_its_unit_and_a_paged_breach_does_not():
+    """The audit, 2026-11-06: SuccessExitStatus=1 made a crash — Python's
+    exit 1 — a success, so the watchdog's own OnFailure could never fire.
+    A breach paged exits 3, the unit's one success besides 0."""
+    import gridgremlin.watchdog as wd
+    unit = (Path(__file__).resolve().parents[1] / 'ops' / 'systemd' / 'watchdog.service.template').read_text()
+    ok = [ln.split('=', 1)[1].split() for ln in unit.splitlines() if ln.startswith('SuccessExitStatus=')]
+    assert ok == [[str(wd.BREACHED_EXIT)]] and wd.BREACHED_EXIT not in (0, 1, 2)
+    cfg = json.dumps(dict(WD, snapshot='@D/none.jsonl', state='@D/st.json', positions={}))
+    assert _watchdog_exit(cfg, 'w.send_telegram = lambda t: None; ') == wd.BREACHED_EXIT   # no snapshot: breached, paged
+    crashed = (_watchdog_exit('{'),                                                     # a torn config
+               _watchdog_exit(cfg, 'w.send_telegram = lambda t: 1 / 0; '))              # an undelivered page
+    assert all(c != 0 and str(c) not in ok[0] for c in crashed), crashed
+
+
+def spec_F24d_sabotage_with_a_breach_on_exit_1_a_crash_reads_as_success():
+    cfg = json.dumps(dict(WD, snapshot='@D/none.jsonl', state='@D/st.json', positions={}))
+    sabotaged_success = {0, 1}                                            # SuccessExitStatus=1, as it was
+    crashed = _watchdog_exit(cfg, 'w.send_telegram = lambda t: 1 / 0; ')
+    assert crashed in sabotaged_success                                   # the unit would call it fine
+
+
 def spec_F25_a_filling_disk_is_a_breach_on_by_default():
     """2.3 GB of one archived log on a box with 9 GB free and no alarm
     (2026-10-08). The volume the snapshot lives on, 85% unless the config
@@ -535,6 +611,111 @@ def spec_F16_review_a_bot_cycle_that_keeps_raising_is_paged_once_it_persists():
     assert 'TruthError' not in phone and 'missing avgPrice' not in phone
     assert 'bug' in phone and 'KeyError' in phone
     assert any('[log] net weather' in ln for ln in lines)
+
+
+def _unread_fleet(cycles, fail_from, fail_to=None, poll=20.0):
+    """F42: one bot whose own cycles raise (a venue refusal) from cycle
+    `fail_from` up to `fail_to`, on a clock the loop's sleep moves."""
+    import json
+    import tempfile
+    import types
+    from pathlib import Path
+    from gridgremlin import main as m
+    from gridgremlin.events import TelegramNotifier
+    from gridgremlin.exchange.errors import VenueError
+    clock = {'t': 1_800_000_000.0}
+
+    class Wallet:
+        env = 'demo'
+
+        def read_wallet(self):
+            return {'equity': 1000.0, 'mm_rate': 0.01}
+
+    class Bot:
+        alive = True
+        cfg = {'venue': 'bybit'}
+        botid = 'linBTCUSDTl'
+        _last_pos = 0.021
+        n = 0
+
+        def cycle(self, equity=None):
+            self.n += 1
+            if self.n >= fail_from and (fail_to is None or self.n < fail_to):
+                raise VenueError('bybit /v5/position/list: retCode 10005: '
+                                 'Permission denied')
+            return None
+
+    sent, lines, bot = [], [], Bot()
+    snap = Path(tempfile.mkdtemp()) / 'snap.jsonl'
+    saved = (m.build_fleet, m.make_notifier, m.load_env, m.acquire_fleet_lock,
+             m.check_snapshot_watched, m.time)
+    m.build_fleet = lambda p, notif, **kw: ({'notify_orders': False,
+                                             'poll_seconds': poll},
+                                            {'bybit': Wallet()}, [bot])
+    m.make_notifier = lambda: TelegramNotifier(
+        't', 'c', transport=sent.append, sink=lines.append,
+        clock=lambda: clock['t'])
+    m.load_env = lambda: None
+    m.acquire_fleet_lock = lambda path: open('/dev/null')
+    m.check_snapshot_watched = lambda *a: None
+    m.time = types.SimpleNamespace(time=lambda: clock['t'],
+                                   sleep=lambda s: clock.__setitem__('t', clock['t'] + s))
+    try:
+        m.run('ignored', cycles=cycles, snapshot=str(snap), snapshot_every=1)
+    finally:
+        (m.build_fleet, m.make_notifier, m.load_env, m.acquire_fleet_lock,
+         m.check_snapshot_watched, m.time) = saved
+    rows = [json.loads(ln) for ln in snap.read_text().splitlines()]
+    return '\n'.join(sent), rows, clock['t']
+
+
+def spec_F42_a_bot_whose_own_reads_keep_failing_pages_and_reads_stale():
+    """The audit of 2026-11-05: a bot whose position read was refused every
+    cycle checked nothing, its stop included, for 2,000 cycles; its lost
+    cycles were weather (the log's), the snapshot stayed fresh, and the
+    phone heard nothing. Past 3 cycles and a minute it pages, urgent, said
+    again every 15 minutes while it lasts (F16); the snapshot carries when
+    it last read, and the watchdog reads that bot as stale."""
+    from gridgremlin.watchdog import evaluate
+    phone, rows, now = _unread_fleet(cycles=120, fail_from=2)   # 40 minutes
+    pages = [ln for ln in phone.split('\n') if 'NOTHING is checked' in ln]
+    assert 1 < len(pages) <= 4, phone                  # said, then every 15 min
+    assert 'VenueError' in pages[0] and 'its stop included' in pages[0]
+    assert 'Permission denied' not in phone            # the shape, not the weather
+    last = rows[-1]['bots']['linBTCUSDTl']
+    assert last['unread_since'] == rows[0]['t']        # its last good read
+    wd = {'staleness_seconds': 1000, 'mm_rate_max': 0.5, 'equity_min': 100,
+          'positions': {}}
+    got = evaluate(wd, rows[-1], now, 1000.0, rows[-40:-1])
+    assert set(got) == {'unread:linBTCUSDTl'}, got     # the row is fresh; the bot is not
+    assert 'its stop is unchecked' in got['unread:linBTCUSDTl']
+    young = next(r for r in rows if r['t'] - rows[0]['t'] < 600 and
+                 'unread_since' in r['bots']['linBTCUSDTl'])
+    assert evaluate(wd, young, young['t'], 1000.0) == {}   # inside the staleness
+
+
+def spec_F42_a_blip_stays_the_logs_and_a_read_again_is_said():
+    """The other half: two lost cycles (under the 3 and the minute) never
+    reach the phone or the snapshot; a long loss that ends is said ended,
+    and the mark leaves the snapshot."""
+    phone, rows, _ = _unread_fleet(cycles=10, fail_from=3, fail_to=5)
+    assert phone == '' and not any('unread_since' in r['bots']['linBTCUSDTl']
+                                   for r in rows[5:])
+    phone, rows, _ = _unread_fleet(cycles=20, fail_from=2, fail_to=12)
+    assert 'NOTHING is checked' in phone and 'reading again after 10' in phone
+    assert 'unread_since' not in rows[-1]['bots']['linBTCUSDTl']
+
+
+def spec_F42_sabotage_without_the_mark_the_watchdog_sees_nothing():
+    """The sabotage half: the same snapshot with the mark taken out is a
+    fresh, healthy row — the silence the audit found."""
+    from gridgremlin.watchdog import evaluate
+    _, rows, now = _unread_fleet(cycles=120, fail_from=2)
+    row = rows[-1]
+    row['bots']['linBTCUSDTl'].pop('unread_since')
+    wd = {'staleness_seconds': 1000, 'mm_rate_max': 0.5, 'equity_min': 100,
+          'positions': {}}
+    assert evaluate(wd, row, now, 1000.0, rows[-40:-1]) == {}
 
 
 def spec_F5_no_repo_fleet_file_ever_carries_the_mainnet_flag():

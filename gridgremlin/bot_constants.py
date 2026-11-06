@@ -18,3 +18,7 @@ VENUE_STOP = 'the venue-held stop'    # X12: how a round ended (M14)
 STOP_RUNG = 99    # X11: the link rung of a stop that ends the ROUND — no
 CASH_LOG_OVERLAP_MS = 10 * 60 * 1000   # D169: the cash log is re-read this far back
 FILL_FEE_SLACK = 0.005                 # D169: a fill's fee in the coin, at most, of its size
+FUNDING_HOURS_UTC = (0, 8, 16)         # D169: Bybit's inverse funding settles on these hours
+FUNDING_WINDOW_SECONDS = 300.0         # D169: a move begun this soon after one is funding's
+FUNDING_LAG_SECONDS = 300.0            # D169: ...and waits this long for its log row (measured
+                                       # 2026-11-05: the wallet at +5 s, the row at +91 s, +112 s)

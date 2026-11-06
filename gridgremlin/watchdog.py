@@ -123,6 +123,14 @@ def evaluate(cfg, row, now, peak, recent=(), disk_used=None):
         dd = (peak - equity) / peak
         if dd > dd_max:
             breaches['drawdown'] = f'{dd:.1%} below the peak'
+    for botid, bot in (row.get('bots') or {}).items():
+        # F42: a fresh row about a bot that has not read its venue is as
+        # stale, for that bot, as an old row is for the fleet
+        since = bot.get('unread_since') if bot.get('alive', True) else None
+        if since is not None and now - since > cfg['staleness_seconds']:
+            breaches[f'unread:{botid}'] = (f'{botid} has not read its venue for '
+                                           f'{now - since:.0f}s — its stop is '
+                                           'unchecked')
     for botid, lim in cfg['positions'].items():
         bot = row['bots'].get(botid)
         if bot is None:
@@ -185,6 +193,39 @@ def ping_deadman(url, get=None):
     except Exception as e:                                   # noqa: BLE001
         print(f'deadman ping failed: {type(e).__name__}: {e}', flush=True)
         return False
+
+
+# Exit 3 = breaches found AND paged: the unit's SuccessExitStatus. Never 1:
+# Python exits 1 on an uncaught exception, so a breach read as 1 made every
+# crash a "success" and the watchdog's own OnFailure page could never fire
+# (the audit, 2026-11-06).
+BREACHED_EXIT = 3
+
+
+def deadman_url(env):
+    """F24c: (the URL this run pings, what to say about it or None). Each
+    fleet pings its own check, `DEADMAN_URL_<FLEET>` (the unit's GG_FLEET,
+    upper case): fleets sharing one `DEADMAN_URL` hide each other's death —
+    one fleet's pings keep the shared check quiet while another's watchdog
+    is gone. The shared line still pings, so an old `.env` keeps working,
+    and every run says what to set."""
+    import re
+    shared = env.get('DEADMAN_URL') or None
+    fleet = (env.get('GG_FLEET') or '').strip()
+    if not fleet:
+        return shared, (None if not shared else
+                        'dead-man: the unit names no fleet (GG_FLEET) — re-render it so this '
+                        "fleet pings its own DEADMAN_URL_<FLEET>; the shared DEADMAN_URL "
+                        "hides one fleet's death behind another's pings")
+    name = 'DEADMAN_URL_' + re.sub(r'[^A-Z0-9]', '_', fleet.upper())
+    own = env.get(name) or None
+    if own:
+        return own, None
+    if shared:
+        return shared, (f'dead-man: {name} is not set — pinging the shared DEADMAN_URL, '
+                        "where another fleet's pings hide this one's death; set "
+                        f'{name} to its own check')
+    return None, f'dead-man: off — {name} is not set'
 
 
 def main(argv):
@@ -251,11 +292,15 @@ def main(argv):
         # it is fine — no ping, so the dead-man's own alert says so
         print(f"[{cfg['tag']}] no Telegram credentials — pages reach nobody; "
               'the dead-man is NOT pinged', flush=True)
-    elif not os.environ.get('DEADMAN_URL'):
-        print(f"[{cfg['tag']}] dead-man: off — DEADMAN_URL is not set", flush=True)
     else:
-        ping_deadman(os.environ.get('DEADMAN_URL'))  # F24: the run completed
-    return 1 if breaches else 0
+        url, said = deadman_url(os.environ)             # F24c: this fleet's own
+        if said:
+            print(f"[{cfg['tag']}] {said}", flush=True)
+        elif not url:
+            print(f"[{cfg['tag']}] dead-man: off — DEADMAN_URL is not set", flush=True)
+        if url:
+            ping_deadman(url)                           # F24: the run completed
+    return BREACHED_EXIT if breaches else 0
 
 
 if __name__ == '__main__':

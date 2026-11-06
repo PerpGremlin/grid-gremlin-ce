@@ -215,6 +215,35 @@ eventually pin (T1).
   restart reads the same window. A row sharing nothing reads nothing more, and the
   log is read only when the wallet moved. A short spot row is outside this.
   `spec_D169_*`, with sabotage. *(owner, 2026-11-03: "2")*
+  *(2026-11-06: a move begun within 300 s after a funding hour (00:00, 08:00,
+  16:00 UTC) waits 300 s, not G26's 60, before it is said. Measured 2026-11-05:
+  Bybit's inverse funding moved the wallet at +5 s and listed its SETTLEMENT row
+  at +91 s and +112 s, so the 60 s wait rang the phone, urgent, at every funding.
+  Outside that window the wait stays 60 s.)*
+- **G31** A held block is never priced at or below zero. A fixed lattice extended
+  past its lower end reaches 0 and below; the block search (`fitted_block`) skips
+  any count whose block reaches there, and a block the average pins there is no
+  block. No lot was bought at such a price, and its lot (notional / price) raised
+  ZeroDivisionError every cycle: a bot with no exit. `spec_G31_*`, with sabotage.
+  *(audit 2026-11-05: lots older than the 30-day window, after a restart)*
+- **G32** A grid's flat whose closing fill the venue has not listed yet is held,
+  not a trip. A reduce-only exit dies with a hand's close as it does with a fill,
+  so a vanished exit link proves nothing; the fills question (M14) answering None
+  holds the bot for up to `RUNGS_LAG_SECONDS`, nothing placed, until the fills say
+  how it closed (an exit: a trip; a liquidation, a hand, the venue's stop: D1).
+  Past the wait it is an unaccounted hand, D1, as E9/M14's slow path ends.
+  `spec_G32_*`, with sabotage. *(audit 2026-11-05: a fill list 3 s behind, and a
+  hand-closed bot lived and bought the next dip)*
+- **G33** G23's walk covers the holding exactly (to half a step), never to the
+  caller's slack of 2% and a step: where a lot is one step (1,000 USDT over 9 BTC
+  rungs on Bybit) that slack is a whole lot, the walk stopped before it, named
+  nothing, and the held rung was bought again. `spec_G33_*`. *(audit 2026-11-05)*
+- **G34** A lot whose entry fill is not at its link's rung (the range was edited
+  under a holding, a cold key, then a restart) is re-named by its own price: the
+  nearest rung whose exit clears its cost and G6's fee floor (a short's mirrored).
+  A lot bought at its own rung keeps it. So an exit for a held lot never rests
+  below its cost: on main a 70k lot's exit was re-placed at 68k. `spec_G34_*`,
+  with sabotage. *(audit 2026-11-05)*
 - **G16** A grid whose rung gap cannot clear the venue's own round-trip fee loses on
   every completed trip by construction — the build asks the venue what it charges and
   says so, before a single order rests. *(the spot fee lesson, 2026-08-06)*
@@ -1123,6 +1152,18 @@ eventually pin (T1).
   order and never rests, so the engine has nothing to adopt or replace;
   its fill reads to the engine as the bot's own exit (M14), never an
   outside hand. *(the backlog, 2026-10-27)*
+- **X15h** A row with something on the exchange is never removed (the
+  audit, 2026-11-06: the edit page's **remove** took a running Mainnet bot
+  out of its file, and the next restart left its orders and position
+  unmanaged). Every remove door — the edit page, the review and write
+  behind it, the stop page's — refuses, on any network and naming why, a
+  bot the engine's last snapshot names as holding a position, with orders
+  resting, or running; a stood-down bot (its stop chose what it left) or
+  one the snapshot does not name may leave. A missing snapshot entry is
+  said as unknown, no snapshot — never "has not started" — and its stop
+  page offers the steps as well as removal. On Mainnet the bot's code is
+  typed a second time for a removal, and for a close when the snapshot
+  gives no size to type.
 - **X16** A bot removed leaves nothing under its name. A bot's name is its
   coin, side and kind, so a new bot of the same name read every fact the
   old one left. One helper (`gridgremlin.forget.forget_bot`) forgets them
@@ -1134,6 +1175,21 @@ eventually pin (T1).
   create and the orphans' clear. A live trade's row stays (its position
   is open). A new kind of state must join the list (the spec walks them).
   *(the review of 2026-10-27)*
+- **X17** A stop finishes, or keeps trying. Once a stop or kill has fired
+  (its tombstone written first, X7), the bot stands down only when the
+  position reads flat (to its floor, X6; untouched for X13 and D145's
+  hold) and none of its orders rests. A refused or unanswered flatten, a
+  refused or timed-out cancel, or anything raised mid-stop keeps the bot
+  up, doing only the stop's work each cycle — never its ladder, whatever
+  the price does — and paging urgent what is still open and still rests
+  (F16: every 15 minutes while it lasts); the kill line comes when it is
+  true. An accepted flatten whose read-back still shows the position gets
+  one cycle's look before another order, so a slow read never sells
+  twice. An order the venue calls gone is gone. A spot wallet with no
+  more of the coin ends the stop with what it says. A restart meanwhile
+  builds dead (X7, D98). *(the audit of 2026-11-05: a rate-limited
+  flatten left the bot dead and the position open; a refused cancel left
+  entries resting under a kill that said nothing rests)*
 - **F1** Every fleet names a watchdog config, and its account guards (staleness,
   mm_rate, equity floor, drawdown) cover every bot. A per-bot position bound is
   opt-in (D32): present, it is checked; absent, the bot has no limit of its own. A
@@ -1338,6 +1394,24 @@ eventually pin (T1).
   so in its run; with no `DEADMAN_URL` it says the switch is off. *(the
   audit: a fresh live copy's `.env` without them would have looked healthy
   from outside)*
+- **F24c** Each fleet its own dead-man (the audit, 2026-11-06: several
+  fleets on one `DEADMAN_URL`, so one fleet's pings hid another's death).
+  The watchdog unit names its fleet (`GG_FLEET={{FLEET}}`) and the run
+  pings `DEADMAN_URL_<FLEET>` (capitals, anything else `_`). Without that
+  line a shared `DEADMAN_URL` still pings — an old `.env` keeps working —
+  and the run says which line to set; a unit that names no fleet pings
+  the shared line and says to re-render; neither line, the switch is off
+  and the run names the fleet's line.
+- **F24d** A watchdog crash fails its unit (the audit, 2026-11-06): a
+  breach found and paged exits 3, the unit's one `SuccessExitStatus`;
+  Python's own exit 1 on a traceback (a torn config, an undelivered page)
+  is never a success, so `OnFailure` pages that the fleet is unwatched.
+- **F24e** A fleet never starts unwatched (the audit, 2026-11-06: a
+  fleet's watchdog timer sat inactive for two weeks while it ran): every
+  fleet unit, play money and real, `Wants=` its own
+  `grid-gremlin3-<fleet>-watchdog.timer`, so starting the fleet starts the
+  timer; stopping the fleet leaves the timer, whose staleness page says
+  the fleet is down.
 - **F25** A filling disk is a breach (D74). The watchdog judges the used
   fraction of the volume its snapshot lives on against `disk_used_max`, 85%
   unless the config says otherwise, before it reads the snapshot at all; an
@@ -1496,6 +1570,16 @@ eventually pin (T1).
   counts same-rung exits (said, not a failure) and names the first exit
   whose pairing cost differs from the walk's consumed cost, by fill id and
   time.)*
+- **F42** A bot that cannot read is heard. A bot's own cycle that raises
+  checks nothing for it, its stop included, while the fleet runs on and
+  the snapshot stays fresh. Past 3 lost cycles in a row AND a minute since
+  its last read, the phone hears it, urgent (F16: then every 15 minutes
+  with its count), and each snapshot row carries `unread_since`, its last
+  good read; the watchdog judges that time as it judges the row's own
+  (`staleness_seconds`) and pages `unread:<bot>`. A read again clears the
+  mark and, if the phone had heard, is said. Two lost cycles are the
+  log's. *(the audit of 2026-11-05: 2,000 cycles unread, the stop
+  unchecked, 0 pages)*
 - **F28** The runbook (`docs/RUNBOOK.md`, D75) names what exists: every unit
   the templates in `ops/systemd/` render (by its `grid-gremlin3-` or `gg-`
   name), every timer, every phone command the phone answers, the close tool,
@@ -3004,6 +3088,8 @@ eventually pin (T1).
 - **U97** Removing a bot says what it still holds (audit 2026-10-16): the
   remove page shows the size the engine's last snapshot gives, and that
   removing the row closes nothing — no bot manages it after the restart.
+  *(2026-11-06, X15h: a bot the snapshot shows holding is refused removal,
+  its size said in the refusal.)*
 - **U98** The exchange box says its window: each bot as its card counts it,
   mostly since it was last flat — not the equity line's window (audit
   2026-10-16).

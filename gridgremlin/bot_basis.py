@@ -1,6 +1,7 @@
 """The bot's book (SPEC R2, G15, M12-M15, M24, D58): what the venue's fills say
 it holds and at what cost — the fills it owns, the basis, the rungs held, how a
 round ended, the spot wallet's attribution. A mixin of Bot; every attribute is Bot's."""
+import math
 import time
 from decimal import Decimal
 
@@ -8,15 +9,27 @@ from .apply import diff, make_botid, make_link, pair_amends, rung_of
 from .config import CANDLE_SECONDS, hosts_position_stop
 from .exchange.errors import VenueError, may_have_landed
 from .ladder import (SEED_RUNG, anchor_from_rung, fee_floor_for, grid_rungs,
-                     guard_band, lot, min_gap, plan_grid, plan_martingale,
+                     guard_band, lattice_index, lattice_price, lot, min_gap,
+                     plan_grid, plan_martingale,
                      sellable_base, slide_is_adverse, slide_offset, split,
                      stop_level_for)
 from .window import window
 from .bot_constants import (CASH_LOG_OVERLAP_MS, FILL_FEE_SLACK, FROZEN_REMIND_SECONDS,
-                            FROZEN_WHY_CHARS,
+                            FROZEN_WHY_CHARS, FUNDING_HOURS_UTC, FUNDING_LAG_SECONDS,
+                            FUNDING_WINDOW_SECONDS,
                             HISTORY_WINDOW_DAYS, RUNGS_LAG_SECONDS, VENUE_STOP)
 
 FORWARD_MS = 3_600_000     # G26: reads only move forward, over the last hour
+
+
+def _inverse_wait(since):
+    """D169: how long a wallet move the cash log has not listed waits. Begun
+    within FUNDING_WINDOW_SECONDS after a funding hour it is the funding's,
+    whose log row lists past G26's 60 s: it waits FUNDING_LAG_SECONDS."""
+    t = since % 86_400
+    if any(0 <= t - h * 3600 < FUNDING_WINDOW_SECONDS for h in FUNDING_HOURS_UTC):
+        return FUNDING_LAG_SECONDS
+    return RUNGS_LAG_SECONDS
 
 
 class BasisMixin:
@@ -501,13 +514,13 @@ class BasisMixin:
                 lot['qty'] += abs(f['qty'])
                 lot['time_ms'] = f['time_ms']     # the lot completes here
                 continue
-            lot = {'time_ms': f['time_ms'], 'qty': abs(f['qty']),
-                   'entry': str(f.get('side', '')).lower() == entry,
-                   'rung': rung_of(link, self.botid)}
+            bought = str(f.get('side', '')).lower() == entry
+            rung = rung_of(link, self.botid)
+            lot = {'time_ms': f['time_ms'], 'qty': abs(f['qty']), 'entry': bought,
+                   'rung': self._lot_rung(rung, f.get('price')) if bought else rung}
             if link:
                 orders[link] = lot
             merged.append(lot)
-        slack = want * 0.02 + self.adapter.qty_step
         flat = self.adapter.qty_step * 0.5
         remaining, deficit, pos, lots = want, 0.0, want, []
         for lot in sorted(merged, key=lambda x: x['time_ms'], reverse=True):
@@ -531,9 +544,39 @@ class BasisMixin:
                     # a whole lot, and that lot's full-size exit sold the
                     # next lot up, whose rung bought straight back (2026-11-02)
                     lots.append(lot['rung'])
-            if remaining <= slack or pos <= flat:
-                break                         # covered, or the last flat
+            if remaining <= flat or pos <= flat:
+                # covered, or the last flat. G33: covered EXACTLY — the
+                # caller's slack (2% and a step) is a whole lot where a lot
+                # is one step: the walk stopped before the lot, named
+                # nothing, and its rung bought again while held (audit
+                # 2026-11-05: a 1,000 USDT BTC grid's lots are one step)
+                break
         return lots, remaining
+
+    def _lot_rung(self, rung, price):
+        """G34: the rung a lot's exit pairs from. Its link names a rung of the
+        lattice it was bought on; a range edited since (a cold key, then a
+        restart) prices that rung elsewhere, and its exit one rung beyond it
+        rested under the lot's cost (audit 2026-11-05: a 70k lot's exit at
+        68k). A lot whose fill is not at its link's rung is re-named by its
+        own price: the nearest rung whose exit clears its cost and G6's fee
+        floor (a short's mirrored)."""
+        if rung is None or rung == SEED_RUNG or not price:
+            return rung
+        cfg = self.cfg
+        if abs(self.adapter.round_price(lattice_price(cfg, rung)) - price) \
+                <= self.adapter.price_tick * 0.5:
+            return rung                   # bought at its own rung
+        pct = fee_floor_for(cfg.get('market_type'))
+        if self._entry_side == 'Buy':
+            j = math.ceil(lattice_index(cfg, price * (1.0 + pct)) - 1e-9) - 1
+            while lattice_price(cfg, j + 1) < price * (1.0 + pct):
+                j += 1
+        else:
+            j = math.floor(lattice_index(cfg, price * (1.0 - pct)) + 1e-9) + 1
+            while lattice_price(cfg, j - 1) > price * (1.0 - pct):
+                j -= 1
+        return j
 
     def _fills_behind(self, fills, since_ms, now_ms):
         """G26, reads only move forward: an own fill an earlier read listed
@@ -888,12 +931,13 @@ class BasisMixin:
         if abs(moved) > max(step, FILL_FEE_SLACK * abs(own - prev[1])):
             if self._spot_lag_since is None:
                 self._spot_lag_since = now
-            if now - self._spot_lag_since < RUNGS_LAG_SECONDS:
+            wait = _inverse_wait(self._spot_lag_since)
+            if now - self._spot_lag_since < wait:
                 return prev[3], True         # judged against the same base
             self.notify.event('warn', self.botid,
                               f'the wallet moved {moved:+.10g} that neither our '
                               f'own fills nor the cash log explain after '
-                              f'{RUNGS_LAG_SECONDS:g}s — an outside hand; trading '
+                              f'{wait:g}s — an outside hand; trading '
                               'on from what is there (D169)', urgent=True)
         self._spot_seen = seen
         self._spot_lag_since = None

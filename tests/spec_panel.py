@@ -2538,7 +2538,7 @@ def spec_U97_removing_a_bot_says_what_it_still_holds():
         assert 'still holds a position' not in _call(base, door)
         (d / 's').write_text(_json.dumps({'t': 0, 'bots': {botid: {'position': 0.25}}}) + '\n')
         page = _call(base, door)             # the door; the review shows the same box
-        assert 'it still holds a position</b> — 0.25' in page and 'does not close it' in page
+        assert 'holds 0.25, as the engine' in page and 'nothing managing it' in page   # X15h: refused, said
     finally:
         close()
 

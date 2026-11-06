@@ -3,7 +3,8 @@ stand down keeping the position, stand down closing everything — and its
 removal from the fleet inside it. The panel holds no keys: it writes the
 request, and the running fleet's bot acts on it under its own links (the
 road a trade's close takes, L7). A mixin the Handler inherits."""
-from ..html_bits import accepts, confirm_dialog, typed_inline, confirmed, full_name, refusal_box, to_type, typed_name
+from ..html_bits import (accepts, confirm_dialog, typed_inline, confirmed, full_name, named,
+                         refusal_box, to_type, typed_name)
 from panel.chart import _f
 from pathlib import Path
 import html
@@ -71,6 +72,33 @@ class RetirePages:
             pass
         return req, dead, seen
 
+    def _remove_refusal(self, fi, botid):
+        """Why a row may not leave its fleet file, or None — every remove
+        door asks it, on any network (audit 2026-11-06: the edit page's
+        remove took a running bot out). A bot the last snapshot names as
+        running, holding a position or resting orders keeps its row: removed,
+        the next restart leaves those on the exchange with nothing managing
+        them. A stood-down bot (its stop chose what it left, D145), or one
+        the snapshot does not name, may leave."""
+        _req, dead, seen = self._retire_state(fi, botid)
+        if dead:
+            return None
+        held = self._snapshot_held(fi, botid)
+        if held:
+            return (f'{botid} holds {held:.10g}, as the engine\'s last snapshot says — close it '
+                    'first (stop, and close the position): a removed row leaves the '
+                    'position on the exchange with nothing managing it')
+        resting = ((seen.get('orders') or {}).get('resting') or {}) if isinstance(seen, dict) else {}
+        if isinstance(resting, dict) and any(isinstance(n, (int, float)) and n > 0
+                                             for n in resting.values()):
+            return (f'{botid} has orders resting, as the engine\'s last snapshot says — '
+                    'stop it first: a removed row leaves them on the exchange with '
+                    'nothing managing them')
+        if isinstance(seen, dict) and seen.get('alive') is not False and not dead:
+            return (f'{botid} is still running — stop it first: a removed row leaves its '
+                    'orders and position on the exchange with nothing managing them')
+        return None
+
     def _retire_page(self):
         if not self.units and not self.supervise:
             return self._deny(404, 'control is not armed on this panel (--units or --supervise)')
@@ -87,13 +115,32 @@ class RetirePages:
         top = (f'<h1>stop {said} <span class="dim">{b}</span></h1><p class="say">'
                + (f'It holds <b>{held:.10g}</b>, as the engine\'s last snapshot says. ' if held else
                   'The engine\'s last snapshot shows it holding nothing. ' if seen else
-                  'The engine has not reported this bot — it has not started. ')
+                  # audit 2026-11-06: no entry is not "never started" — the
+                  # first minute after a restart reads the same
+                  'Unknown, no snapshot: the engine\'s last snapshot does not name this bot — '
+                  'it has not started, or has not reported since its account started. ')
                + '</p>')
         hidden = ('<input type="hidden" name="gg" value="1">'
                   f'<input type="hidden" name="fleet" value="{fi}">'
                   f'<input type="hidden" name="bot" value="{b}">')
-        if dead or not seen:
-            # stood down, or never started: nothing runs, the row may leave
+        again = (f'<br><span class="neg">real money</span> — type its code, <code>{b}</code>, a '
+                 'second time: <input name="again" size="22" autocomplete="off"> ' if real else '')
+        remove_form = (
+            '<form method="post" action="/retire">' + hidden
+            + '<input type="hidden" name="do" value="remove">'
+            + typed_inline(f'type {to_type(botid, row, real)} to take it off the account: '
+                           '<input name="confirm" size="22" autocomplete="off"> ' + again)
+            + confirm_dialog(                                   # D159: the pop-up
+                f'Take the bot {full_name(row) or botid} off {self._account(min(fi, len(self.fleets) - 1))}: '
+                'its row and watchdog line leave the files.',
+                to_type(botid, row, real), accepts(botid, row, real), 'remove',
+                [('again', f'<b>real money</b>: type its code (<code>{b}</code>) a second time', None)]
+                if real else [], danger=True)
+            + '<button class="danger">remove</button></form>'
+            '<p class="dim">the bot and its watchdog line leave the account\'s files together; a '
+            'backup is kept beside each.</p>')
+        if dead:
+            # stood down: nothing runs, the row may leave
             said = ('<p>It has stood down' + (f' ({html.escape(str(req["action"]))}, asked by '
                                               f'{html.escape(str(req["by"]))} at {html.escape(str(req["t"]))})'
                                               if req else '') + '.</p>') if dead else ''
@@ -101,18 +148,7 @@ class RetirePages:
                 said += (f'<p class="neg">its position of {held:.10g} is still open — '
                          f'<a href="/close?fleet={fi}&amp;bot={b}">close position</a> '
                          'closes it; removing the row first leaves it with no door here.</p>')
-            return self._page(
-                top + said + '<form method="post" action="/retire">' + hidden
-                + '<input type="hidden" name="do" value="remove">'
-                + typed_inline(f'type {to_type(botid, row, real)} to take it off the account: '
-                               '<input name="confirm" size="22" autocomplete="off"> ')
-                + confirm_dialog(                                   # D159: the pop-up
-                    f'Take the bot {full_name(row) or botid} off {self._account(min(fi, len(self.fleets) - 1))}: '
-                    'its row and watchdog line leave the files.',
-                    to_type(botid, row, real), accepts(botid, row, real), 'remove', danger=True)
-                + '<button class="danger">remove</button></form>'
-                '<p class="dim">the bot and its watchdog line leave the account\'s files together; a '
-                'backup is kept beside each.</p>')
+            return self._page(top + said + remove_form)
         if req and req.get('action') in ('hold', 'close'):
             return self._page(
                 top + f'<p>Stop asked by {html.escape(str(req["by"]))} at {html.escape(str(req["t"]))}: '
@@ -139,13 +175,20 @@ class RetirePages:
             + typed_inline(
                 f'type {to_type(botid, row, real)}: <input name="confirm" size="22" autocomplete="off"> '
                 + ('<br><span class="neg">real money</span> — to close everything, type the size a second '
-                   'time: <input name="size" size="14" placeholder="the size above"> ' if real and held else ''))
+                   'time: <input name="size" size="14" placeholder="the size above"> ' if real and held else
+                   # audit 2026-11-06: no size said is no reason to skip the second typing
+                   f'<br><span class="neg">real money</span> — the snapshot gives no size; to close '
+                   f'everything, type its code, <code>{b}</code>, a second time: '
+                   '<input name="size" size="22" autocomplete="off"> ' if real else ''))
             + confirm_dialog(                                       # D159: the pop-up
                 f'Stop the bot {full_name(row) or botid} on {self._account(min(fi, len(self.fleets) - 1))}, '
                 'as chosen above.', to_type(botid, row, real), accepts(botid, row, real), 'stop it',
                 [('size', f'<b>real money</b>, to close everything: type the size (<code>{held:.10g}</code>) '
-                  'a second time', None)] if real and held else [], danger=True)
-            + '<button class="danger">stop it</button></form>')
+                  'a second time', None)] if real and held else
+                [('size', f'<b>real money</b>, to close everything: the snapshot gives no size — type '
+                  f'its code (<code>{b}</code>) a second time', None)] if real else [], danger=True)
+            + '<button class="danger">stop it</button></form>'
+            + ('' if seen else remove_form))
 
     def _retire_act(self, form):
         if not self.units and not self.supervise:
@@ -174,9 +217,20 @@ class RetirePages:
             return self._page(f'<h1>{b}: ' + ('resumed' if done else 'was not paused') + '</h1>'
                               '<p>the running fleet lifts the pause within a cycle.</p>' + back)
         if do == 'remove':
+            why = self._remove_refusal(fi, botid)
+            if why:
+                return self._page(refusal_box('not removed', why))
+            if real and not named(form.get('again'), botid):
+                return self._page(refusal_box('not removed', f'on real money its code, {botid}, is '
+                                                             'typed a second time'))
             return self._retire_remove(fi, botid, back)
         held = self._snapshot_held(fi, botid)
-        if do == 'close' and held and self._mainnet(f, row.get('venue', 'bybit')):
+        if do == 'close' and real and not held:
+            # audit 2026-11-06: a snapshot that gives no size still asks twice
+            if not named(form.get('size'), botid):
+                return self._page(refusal_box('not retired', 'on real money the snapshot gives no '
+                                                             f'size: type its code, {botid}, a second time'))
+        elif do == 'close' and real:
             typed = _f(str(form.get('size', '')).replace(',', ''))
             if typed is None or abs(typed - held) > 1e-9 * max(1.0, held):
                 return self._page(refusal_box('not retired', 'on real money the size is typed a '
@@ -216,10 +270,9 @@ class RetirePages:
         starts clean)."""
         from panel.create import atomic_write, dump_config, public_adapter, remove_proposal, validate_whole
         req, dead, seen = self._retire_state(fi, botid)
-        if seen and not dead:
-            return self._page(refusal_box('not removed', f'{botid} is still running — retire it first: '
-                                                         'a removed row leaves its orders and position '
-                                                         'on the exchange with nothing managing them'))
+        why = self._remove_refusal(fi, botid)
+        if why:
+            return self._page(refusal_box('not removed', why))
         f = Path(self.fleets[min(fi, len(self.fleets) - 1)])
         try:
             fleet_raw = json.loads(f.read_text())

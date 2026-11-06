@@ -304,3 +304,42 @@ def spec_F31_the_box_edits_come_home_and_the_panel_names_them():
     Handler._drift = (0.0, '')
 
 
+def _render(text, fleet):
+    """A template filled as ops/README's install fills it, for the names."""
+    return text.replace('{{FLEET}}', fleet)
+
+
+def _unwatched(unit_text, fleet):
+    """F24e: why a rendered fleet unit could start without its watchdog
+    timer — [] when its [Unit] Wants= the timer the watchdog renders to."""
+    timer = f'grid-gremlin3-{fleet}-watchdog.timer'     # ops/README: watchdog.timer -> this name
+    unit = unit_text.split('[Service]', 1)[0]
+    wants = [w for ln in unit.splitlines() if ln.startswith('Wants=') for w in ln[6:].split()]
+    return [] if timer in wants else [f'{fleet}: its unit does not want {timer}']
+
+
+def spec_F24e_starting_a_fleet_starts_its_watchdog_timer():
+    """The audit, 2026-11-06: a fleet ran two weeks with its watchdog timer
+    inactive and nobody told. Every fleet unit, play money and real, pulls
+    its own watchdog timer when it starts."""
+    root = ROOT / 'ops' / 'systemd'
+    timer = (root / 'watchdog.timer.template').read_text()
+    assert '[Install]' in timer and 'WantedBy=timers.target' in timer   # a timer that can start
+    units = [t for t in sorted(root.glob('fleet*.service.template')) if 'failed' not in t.name]
+    assert root / 'fleet.service.template' in units        # the real-money one: the private tree's
+    for t in units:
+        for fleet in ('demo', 'hl', 'carry'):
+            assert _unwatched(_render(t.read_text(), fleet), fleet) == [], t.name
+    runbook = (ROOT / 'docs' / 'RUNBOOK.md').read_text()   # the edition's stands in its place (F28)
+    assert "starts the fleet's watchdog timer with it" in runbook      # start and stop say it
+    assert 'stops its `grid-gremlin3-<fleet>-watchdog.timer` too' in runbook
+
+
+def spec_F24e_sabotage_a_fleet_unit_without_the_line_is_named():
+    text = (ROOT / 'ops' / 'systemd' / 'fleet.service.template').read_text()
+    cut = '\n'.join(ln for ln in text.splitlines() if 'watchdog.timer' not in ln)   # the guard removed
+    assert _unwatched(_render(cut, 'demo'), 'demo') == ['demo: its unit does not want grid-gremlin3-demo-watchdog.timer']
+    wrong = text.replace('grid-gremlin3-{{FLEET}}-watchdog.timer', 'grid-gremlin3-other-watchdog.timer')
+    assert _unwatched(_render(wrong, 'demo'), 'demo')                   # another fleet's timer is no watch
+
+

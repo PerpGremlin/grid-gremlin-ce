@@ -228,6 +228,13 @@ def _off_ref(cfg, block, split_ref):
             or lattice_price(cfg, block[1]) < split_ref)
 
 
+def _priced(cfg, block):
+    """G31: every rung of the block is priced above zero. A fixed lattice
+    extended past its lower end reaches 0 and below; no lot was bought
+    there, and its lot (notional / price) is not a number."""
+    return min(lattice_price(cfg, block[0]), lattice_price(cfg, block[1])) > 0
+
+
 def fitted_block(cfg, adapter, sellable, basis, n_ref, split_ref, offset=0):
     """G23 (the review, 2026-10-28): (n, block) for the lots the average
     pins. Counted in lots at the ref (n_ref), a block bought away from it
@@ -238,19 +245,25 @@ def fitted_block(cfg, adapter, sellable, basis, n_ref, split_ref, offset=0):
     folds any remainder), kept only if that block is wholly off too. A
     block across the ref (a seed, a fresh fill) keeps n_ref."""
     block = held_block(cfg, n_ref, basis)
-    if not block or not _off_ref(cfg, block, split_ref):
+    if not block:
+        return n_ref, block
+    priced = _priced(cfg, block)     # G31: no lot was bought at a price <= 0
+    if priced and not _off_ref(cfg, block, split_ref):
         return n_ref, block
     want = adapter.to_steps(sellable)
     best = None
     for n in range(1, 4 * n_ref + 5):
         alt = held_block(cfg, n, basis)
+        if not _priced(cfg, alt):
+            continue                 # G31: past a fixed lattice's zero
         got = sum(adapter.to_steps(own_lot(cfg, adapter, j, offset))
                   for j in range(alt[0], alt[1] + 1))
         key = (abs(got - want), n != n_ref, n)        # a tie keeps n_ref
         if best is None or key < best[0]:
             best = (key, n, alt)
-    _, n, alt = best
-    return (n, alt) if _off_ref(cfg, alt, split_ref) else (n_ref, block)
+    if best and _off_ref(cfg, best[2], split_ref):
+        return best[1], best[2]
+    return n_ref, (block if priced else None)
 
 
 def rung_floor(cfg, adapter, side, split_ref, held_rungs):

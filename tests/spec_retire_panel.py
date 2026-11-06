@@ -158,7 +158,7 @@ def spec_X15e_the_card_offers_retire_and_the_retire_page_holds_every_step():
         assert 'It holds <b>0.5</b>' in page
         assert 'not retired' in _call(base, '/retire', {'fleet': '0', 'bot': 'linETHUSDTl',
                                                         'do': 'pause', 'confirm': 'yes'})
-        assert 'still running' in _call(base, '/retire', {'fleet': '0', 'bot': 'linETHUSDTl',
+        assert 'holds 0.5, as the engine' in _call(base, '/retire', {'fleet': '0', 'bot': 'linETHUSDTl',
                                                           'do': 'remove', 'confirm': 'linETHUSDTl'})
         assert 'linETHUSDTl: paused' in _call(base, '/retire', {'fleet': '0', 'bot': 'linETHUSDTl',
                                                                  'do': 'pause', 'confirm': 'linETHUSDTl'})
@@ -362,3 +362,142 @@ def spec_U104b_a_halted_portfolio_card_says_stopped_and_its_last_seen_book():
         assert 'not known here' in unseen and 'holding nothing' not in unseen
         assert 'restart' not in unseen
     assert 'its fleet is stopped' in card(0, 'pfocarry', None, dict(c, stopped='inactive'), belief)
+
+
+# --- X15h: a row with something on the exchange is never removed ------------
+
+def _two_bots(d):
+    """The served fleet with a second row: a fleet is never emptied."""
+    fleet = json.loads((d / 'f.json').read_text())
+    fleet['bots'].append(dict(fleet['bots'][0], side='short'))
+    (d / 'f.json').write_text(json.dumps(fleet))
+
+
+def _sides(d):
+    return [b['side'] for b in json.loads((d / 'f.json').read_text())['bots']]
+
+
+def _remove_doors(base, d, bid, again=None):
+    """Every way the panel takes a row out, tried in turn: (the edit page's
+    remove, the review it posts to, the write of a proposal reviewed before
+    the bot held anything, the stop page's remove)."""
+    from spec_start_stop import _call, _proposal
+    snap = (d / 's').read_text()
+    (d / 's').write_text(json.dumps({'t': 0, 'bots': {}}) + '\n')      # reviewed while not named
+    reviewed = _proposal(_call(base, '/create', {'fleet': '0', 'mode': 'remove', 'orig': bid}))
+    (d / 's').write_text(snap)
+    extra = {'again': again} if again else {}
+    return (_call(base, f'/edit?fleet=0&bot={bid}&mode=remove'),
+            _call(base, '/create', {'fleet': '0', 'mode': 'remove', 'orig': bid}),
+            _call(base, '/apply', dict({'fleet': '0', 'proposal': reviewed, 'confirm': bid}, **extra)),
+            _call(base, '/retire', dict({'fleet': '0', 'bot': bid, 'do': 'remove', 'confirm': bid}, **extra)))
+
+
+def spec_X15h_a_running_or_holding_bot_keeps_its_row_at_every_remove_door():
+    """The audit, 2026-11-06: the edit page's remove took a running Mainnet
+    bot out of its file; the next restart left its orders and position on
+    the exchange with nothing managing them. Every door refuses, on every
+    network, naming why."""
+    from spec_start_stop import _Systemctl, _mainnet, _served
+    import panel.routes as ps
+    bid = 'linETHUSDTl'
+    for real in (False, True):
+        for seen, why in (({'alive': True, 'position': 0.5}, 'holds 0.5'),
+                          ({'alive': True, 'position': 0.0, 'orders': {'resting': {'buys': 2, 'sells': 0}}}, 'orders resting'),
+                          ({'alive': True, 'position': 0.0, 'orders': {'resting': {'buys': 0, 'sells': 0}}},
+                           'still running')):
+            base, d, close = _served()
+            try:
+                _two_bots(d)
+                if real:
+                    _mainnet(d)
+                ps.Handler._cache.clear()
+                (d / 's').write_text(json.dumps({'t': 0, 'bots': {bid: seen}}) + '\n')
+                with _Systemctl('active'):
+                    pages = _remove_doors(base, d, bid, again=bid if real else None)
+                for page in pages:
+                    assert why in page, (real, why, page[:600])
+                assert 'run the gates' not in pages[0]
+                assert _sides(d) == ['long', 'short'], (real, why)
+            finally:
+                close()
+
+
+def spec_X15h_a_stood_down_or_unnamed_bot_still_leaves_and_mainnet_types_its_code_twice():
+    from spec_start_stop import _Systemctl, _call, _mainnet, _served
+    import panel.routes as ps
+    bid = 'linETHUSDTl'
+    base, d, close = _served()
+    try:
+        _two_bots(d)
+        (d / 's').write_text(json.dumps({'t': 0, 'bots': {}}) + '\n')
+        page = _call(base, f'/retire?fleet=0&bot={bid}')
+        assert 'Unknown, no snapshot' in page and 'has not started' in page
+        assert 'value="close"' in page and 'value="remove"' in page        # the steps, and removal
+        _mainnet(d)
+        ps.Handler._cache.clear()
+        with _Systemctl('active'):
+            from spec_start_stop import _proposal
+            review = _call(base, '/create', {'fleet': '0', 'mode': 'remove', 'orig': bid})
+            assert 'name="again"' in review and 'data-into="again"' in review
+            assert 'typed a second time' in _call(base, '/apply', {'fleet': '0', 'confirm': bid,
+                                                                   'proposal': _proposal(review)})
+            assert 'typed a second time' in _call(base, '/retire', {'fleet': '0', 'bot': bid,
+                                                                    'do': 'remove', 'confirm': bid})
+            assert _sides(d) == ['long', 'short']
+            assert 'retired and removed' in _call(base, '/retire', {'fleet': '0', 'bot': bid, 'do': 'remove',
+                                                                    'confirm': bid, 'again': bid})
+        assert _sides(d) == ['short']
+    finally:
+        close()
+    base, d, close = _served()
+    try:
+        _two_bots(d)
+        (d / 's').write_text(json.dumps({'t': 0, 'bots': {bid: {'alive': True, 'position': 0.5}}}) + '\n')
+        Tombstones(str(d / 'logs' / 'tombstones-f.json')).add(bid, 'retired by owner (D145)')
+        with _Systemctl('active'):                    # stood down: its stop chose what it left
+            assert 'retired and removed' in _call(base, '/retire', {'fleet': '0', 'bot': bid,
+                                                                    'do': 'remove', 'confirm': bid})
+        assert _sides(d) == ['short']
+    finally:
+        close()
+
+
+def spec_X15h_on_mainnet_a_close_with_no_size_said_still_asks_twice():
+    from spec_start_stop import _Systemctl, _call, _mainnet, _served
+    import panel.routes as ps
+    from gridgremlin.retire import load_requests, requests_path
+    bid = 'linETHUSDTl'
+    base, d, close = _served()
+    try:
+        _mainnet(d)
+        ps.Handler._cache.clear()
+        (d / 's').write_text(json.dumps({'t': 0, 'bots': {bid: {'alive': True}}}) + '\n')
+        with _Systemctl('active'):
+            assert 'the snapshot gives no size' in _call(base, f'/retire?fleet=0&bot={bid}')
+            form = {'fleet': '0', 'bot': bid, 'do': 'close', 'confirm': bid}
+            assert 'not retired' in _call(base, '/retire', form)
+            assert load_requests(requests_path(str(d / 'f.json'))) == {}
+            assert 'stop asked' in _call(base, '/retire', dict(form, size=bid))
+    finally:
+        close()
+
+
+def spec_X15h_sabotage_without_the_refusal_the_edit_pages_remove_takes_a_holding_bot_out():
+    from spec_start_stop import _Systemctl, _served
+    from panel.pages.retire import RetirePages
+    import panel.routes as ps
+    bid = 'linETHUSDTl'
+    saved = RetirePages._remove_refusal
+    base, d, close = _served()
+    try:
+        RetirePages._remove_refusal = lambda self, fi, botid: None      # the guard removed
+        _two_bots(d)
+        ps.Handler._cache.clear()
+        (d / 's').write_text(json.dumps({'t': 0, 'bots': {bid: {'alive': True, 'position': 0.5}}}) + '\n')
+        with _Systemctl('active'):
+            pages = _remove_doors(base, d, bid)
+        assert 'written' in pages[2] and _sides(d) == ['short']         # the spec above would be red
+    finally:
+        RetirePages._remove_refusal = saved
+        close()

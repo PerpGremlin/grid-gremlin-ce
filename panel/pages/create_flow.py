@@ -1,7 +1,7 @@
 """Setting up and editing a bot (U19): the setup page, the review with its chart, what-if and fit, the create and apply flow. Moved out of routes.py whole (D91 step 3): a mixin
 the Handler inherits."""
 from ..forms import next_step_html, other_half_html, other_side_html, rehearse_bot_form, unit_for_fleet
-from ..html_bits import (accepts, confirm_dialog, confirmed, full_name, qarg, refusal_box, tidy,
+from ..html_bits import (accepts, confirm_dialog, confirmed, full_name, named, qarg, refusal_box, tidy,
                          to_type, typed_inline, typed_name)
 from gridgremlin.apply import row_botid
 from panel.chart import _f
@@ -40,6 +40,12 @@ class CreateFlowPages:
             return self._page(refusal_box(
                 'not applied', 'the file changed since you reviewed it — '
                 'review again'))
+        if mode == 'remove':
+            # audit 2026-11-06: a running or holding bot keeps its row, at
+            # the review and at the write (RetirePages._remove_refusal)
+            why = self._remove_refusal(fi, str(proposal.get('orig', '')))
+            if why:
+                return self._page(refusal_box('not removed', why))
         try:
             from panel.create import edit_proposal, remove_proposal
             if mode == 'remove':
@@ -97,6 +103,9 @@ class CreateFlowPages:
             again = retype_refusal(jumps, form)
             if again:
                 return self._page(refusal_box('not applied', again))
+            if mode == 'remove' and real and not named(form.get('again'), botid):
+                return self._page(refusal_box('not applied', f'on Mainnet a removal takes its code, '
+                                                             f'{botid}, typed a second time'))
             if not confirmed(form.get('confirm'), botid, named_row, mainnet=real):
                 said = None if real else typed_name(named_row)
                 return self._page(refusal_box(
@@ -236,13 +245,18 @@ class CreateFlowPages:
                 f'<input name="confirm" size="22" autocomplete="off"> '
                 + ''.join(f'<br><b class="neg">Mainnet:</b> type the new {k} '
                           f'(<code>{n:g}</code>) again: <input name="retype_{k}" '
-                          'size="12">' for k, _, n in jumps))
+                          'size="12">' for k, _, n in jumps)
+                + (f'<br><b class="neg">Mainnet:</b> type its code (<code>{html.escape(botid)}</code>) '
+                   'again: <input name="again" size="22" autocomplete="off">'
+                   if mode == 'remove' and real else ''))
             + confirm_dialog(                                    # D159: the pop-up
                 {'create': 'Create', 'edit': 'Change', 'remove': 'Remove'}[mode]
                 + f' the bot {full_name(named_row) or botid} on {self._account(min(fi, len(self.fleets) - 1))}.',
                 to_type(botid, named_row, real), accepts(botid, named_row, real), verb,
                 [(f'retype_{k}', f'<b>Mainnet:</b> type the new {k} (<code>{n:g}</code>) again',
-                  n) for k, _, n in jumps], danger=mode == 'remove')
+                  n) for k, _, n in jumps]
+                + ([('again', f'<b>Mainnet:</b> type its code (<code>{html.escape(botid)}</code>) again',
+                     None)] if mode == 'remove' and real else []), danger=mode == 'remove')
             + f'<button>{verb}</button></form>'
             '<p class="dim">this writes the account\'s file. A running bot '
             'takes changed terms within seconds; a new bot waits until it is '

@@ -31,7 +31,7 @@ does) and `docs/SPEC.md` (why it is pinned that way).
 | unit | what | if it stops |
 |---|---|---|
 | `grid-gremlin3-demo`, `grid-gremlin3-hl` | the fleets (one per fleet file) | `Restart=always`; an `OnFailure` page after repeated failure |
-| `grid-gremlin3-<fleet>-watchdog.timer` | every 5 min: staleness, margin, equity, drawdown, disk; pings the dead-man | its own `-failed` page; the dead-man alarms outside |
+| `grid-gremlin3-<fleet>-watchdog.timer` | every 5 min: staleness, margin, equity, drawdown, disk; pings the fleet's own dead-man (`DEADMAN_URL_<FLEET>` in `.env`, F24c); starting the fleet starts it | its own `-failed` page (a crash fails the unit; a breach paged does not); the dead-man alarms outside |
 | `gg-panel` | the panel | restart it; nothing trades through it |
 | `grid-gremlin3-phone` | the Telegram reading commands | restart it; nothing else depends on it |
 | `grid-gremlin3-fills.timer` | hourly: the kept ledger | the panel's kept history goes stale |
@@ -72,11 +72,13 @@ Stopping a fleet **leaves its orders and positions on the exchange**; a
 restart adopts them by identity (I1). To go flat: **close position** on
 each holding card (the panel runs `gridgremlin.close`), then cancel what
 still rests on the exchange's own page. The timers, panel and phone can
-keep running; `systemctl --user stop '*.timer'` silences the lot.
+keep running; `systemctl --user stop '*.timer'` silences the lot; a fleet
+stopped for good stops its `grid-gremlin3-<fleet>-watchdog.timer` too, or its staleness pages.
 
 ## How to start again
 
-`systemctl --user start grid-gremlin3-<fleet>`; watch one cycle on the
+`systemctl --user start grid-gremlin3-<fleet>` starts the fleet's watchdog timer with it
+(`Wants=`, F24e); watch one cycle on the
 panel (the strip, then the cards); `/status` on the phone. A fleet that
 will not start says why in its first lines (`journalctl -u … -n 50`): a
 refused row is set aside by name, the rest run.

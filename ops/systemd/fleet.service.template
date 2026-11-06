@@ -2,6 +2,10 @@
 Description=Grid Gremlin v3 — {{DESC}}
 After=network-online.target
 Wants=network-online.target
+# a fleet never runs unwatched (the audit, 2026-11-06: one fleet's watchdog
+# timer sat inactive for two weeks): starting the fleet starts its watchdog
+# timer; stopping the fleet leaves the timer, whose staleness page says so
+Wants=grid-gremlin3-{{FLEET}}-watchdog.timer
 OnFailure=grid-gremlin3-{{FLEET}}-failed.service
 # Patient-retry fleets (a venue that 502s for hours, e.g. a testnet) set
 # StartLimitIntervalSec=0 — the unit never gives up; the watchdog's staleness

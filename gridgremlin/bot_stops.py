@@ -17,27 +17,75 @@ from .bot_constants import STOP_RUNG
 class StopsMixin:
     def _kill(self, truth, reason):
         """D1/S7: cancel every owned order, stand down, never restart. X4:
-        the event states what still rests. X7: tombstone FIRST."""
-        if self.tombs:
-            try:
-                self.tombs.add(self.botid, reason)
-            except OSError as e:
-                self.notify.event('warn', self.botid,
-                                  f'tombstone write FAILED ({e}) — killing '
-                                  'anyway; this bot may revive on restart', urgent=True)
-        n = 0
-        for o in truth['orders']:
-            if rung_of(o['link_id'], self.botid) is not None:
-                try:
-                    self.client.cancel_order(self.cfg['market_type'],
-                                             self.cfg['symbol'], o['order_id'])
-                    n += 1
-                except VenueError:
-                    pass
+        the event states what still rests. X7: tombstone FIRST. X17: a
+        cancel the venue refused keeps the bot up, retrying, until nothing
+        owned rests."""
+        if self.stopping is None:
+            self._tombstone(reason, 'killing')
+            self.stopping = {'kind': 'kill', 'reason': reason, 'kw': {},
+                             'qty': 0.0, 'cancelled': 0, 'submitted': False}
+        n, left = self._cancel_owned(truth)
+        self.stopping['cancelled'] += n
+        if left:
+            self._not_finished(f'{reason}; cancelled '
+                               f"{self.stopping['cancelled']} owned orders, "
+                               f'{left} owned orders STILL REST (cancel refused)')
+            return
         self.alive = False
         self.notify.event('kill', self.botid,
-                          f'{reason} — cancelled {n} owned orders; nothing '
-                          'owned rests; position flat')
+                          f"{reason} — cancelled {self.stopping['cancelled']} "
+                          'owned orders; nothing owned rests; position flat')
+
+    def _tombstone(self, reason, doing):
+        """X7: durable BEFORE anything is sold or cancelled. A broken disk
+        never blocks the stop itself (M3)."""
+        if not self.tombs:
+            return
+        try:
+            self.tombs.add(self.botid, reason)
+        except OSError as e:
+            self.notify.event('warn', self.botid,
+                              f'tombstone write FAILED ({e}) — {doing} '
+                              'anyway; this bot may revive on restart', urgent=True)
+
+    def _cancel_owned(self, truth):
+        """X5: cancel every owned order in the paginated truth. Returns
+        (cancelled, still resting): a refusal or a socket error leaves the
+        order resting, never assumed gone (X17); one the venue no longer
+        has is gone."""
+        n = left = 0
+        for o in truth['orders']:
+            if rung_of(o['link_id'], self.botid) is None:
+                continue
+            try:
+                self.client.cancel_order(self.cfg['market_type'],
+                                         self.cfg['symbol'], o['order_id'])
+                n += 1
+            except VenueError as e:
+                if e.kind != 'gone':
+                    left += 1
+            except OSError:
+                left += 1
+        return n, left
+
+    def _not_finished(self, said):
+        """X17: the stop could not finish this cycle. The bot stays up (its
+        tombstone already written), doing nothing but the stop's own work
+        each cycle until it can; the phone hears it now and, while it
+        lasts, every 15 minutes (F16)."""
+        self.notify.event('warn', self.botid,
+                          f'stop NOT finished: {said} — the bot stays up and '
+                          'retries every cycle until it is (X17)', urgent=True)
+
+    def _finish_stop(self, truth, held):
+        """X17: a stop that has not finished is all the bot does: the same
+        stop again, on this cycle's truth."""
+        st = self.stopping
+        if st['kind'] == 'kill':
+            self._kill(truth, st['reason'])
+        else:
+            self._execute_stop(truth, held, st['reason'], **st['kw'])
+        return {'stopping': st['reason']} if self.alive else None
 
     def _stop_hit(self, truth, equity):
         """X2: the rule names what it watches. Absence is never a breach."""
@@ -340,30 +388,44 @@ class StopsMixin:
         states what still rests. X5: owned orders only, from paginated truth.
         D145: `keep` sells nothing (retire, keeping the position); `whole`
         sells the floor core too (retire, closing everything) — never spot,
-        whose wallet may hold the operator's own coins."""
+        whose wallet may hold the operator's own coins. X17: the bot stands
+        down only once the position reads flat (to its floor) and nothing
+        owned rests; until then it stays up and does this again each cycle."""
         cfg, adapter = self.cfg, self.adapter
-        if self.tombs:                 # X7: durable BEFORE the flatten — a
-            try:                       # crash mid-stop stays dead
-                self.tombs.add(self.botid, reason)
-            except OSError as e:       # a broken disk must never block the
-                self.notify.event('warn', self.botid,   # flatten itself (M3)
-                                  f'tombstone write FAILED ({e}) — stopping '
-                                  'anyway; this bot may revive on restart', urgent=True)
         leave = keep or (not flatten and (cfg.get('stop') or {}).get('action')
                          == 'leave_position')  # X14 always closes
         qty = (0.0 if leave else                             # X13: by choice
                abs(held or 0.0) if whole and cfg['market_type'] != 'spot'
                else self._flatten_scope(held))
-        if qty > 0:
+        if self.stopping is None:
+            self._tombstone(reason, 'stopping')   # X7: durable BEFORE the
+            # flatten (a crash mid-stop stays dead); X17: the stop is held
+            # before any write, so a raise mid-stop never trades on
+            self.stopping = {'kind': 'stop', 'reason': reason,
+                             'kw': {'flatten': flatten, 'keep': keep,
+                                    'whole': whole},
+                             'qty': qty, 'cancelled': 0, 'submitted': False}
+        st = self.stopping
+        self._last_pos = held          # X17: the snapshot shows what it reads
+        sell = self._wallet_capped(qty) if qty > 0 else 0.0
+        refused = None
+        if sell > 0 and st['submitted']:
+            # X17: the last order was accepted, yet its read-back still
+            # showed the position open: one cycle's grace for the venue to
+            # catch up before another, so a slow read never sells twice
+            st['submitted'] = False
+        elif sell > 0:
             self._gen += 1
             try:
                 self.client.place_market(
                     cfg['market_type'], cfg['symbol'], self._exit_side,
-                    adapter.fmt_qty(self._wallet_capped(qty)),
+                    adapter.fmt_qty(self._wallet_capped(sell)),
                     adapter.position_idx(self._exit_side, True) or 0,
                     reduce_only=True, link_id=self._make_link(0),
                     borrow=self._borrow)
+                st['submitted'] = True
             except (VenueError, OSError) as e:      # raw OSError too (M2)
+                refused = e
                 self.notify.event('warn', self.botid, f'flatten: {e}', urgent=True)
         floor = abs(held) - qty
         try:                           # X4 honestly: re-read, never assume the
@@ -374,6 +436,10 @@ class StopsMixin:
             left = (after['positions'].get(idx_now) or {}).get('size', 0.0)
         except Exception:                                    # noqa: BLE001
             left = None
+        # D169: a spot wallet that holds no more of the coin has nothing
+        # left to sell; what it says is said, and the stop ends
+        done = (leave or (left is not None and left <= floor + 1e-12)
+                or (qty > 0 and sell <= 0))
         if leave:
             residue = (f'position {abs(held):.10g} LEFT OPEN '
                        + ('as its retirement asked (D145)' if keep else
@@ -385,28 +451,29 @@ class StopsMixin:
         elif left is None:
             residue = f'flatten SUBMITTED for {qty:.10g}; venue unreadable to confirm'
         elif left > floor + 1e-12:
-            residue = (f'position {left:.10g} STILL OPEN (flatten partial?) — '
-                       'look at the venue')
+            residue = (f'position {left:.10g} STILL OPEN '
+                       + (f'(flatten REFUSED: {refused})' if refused else
+                          '(flatten partial?)') + ' — look at the venue')
         elif floor > 1e-12:
             residue = f'floor core {floor:.10g} REMAINS, unprotected'
         else:
             residue = 'position flat'
-        n = 0
-        for o in truth['orders']:
-            if rung_of(o['link_id'], self.botid) is not None:
-                try:
-                    self.client.cancel_order(cfg['market_type'], cfg['symbol'],
-                                             o['order_id'])
-                    n += 1
-                except VenueError:
-                    pass
+        n, resting = self._cancel_owned(truth)
+        st['cancelled'] += n
+        if resting or not done:
+            self._not_finished(
+                f'stop fired ({reason}): {residue}; cancelled '
+                f"{st['cancelled']} owned orders, "
+                + (f'{resting} owned orders STILL REST (cancel refused)'
+                   if resting else 'nothing owned rests'))
+            return
         self.alive = False
         self.notify.event('kill', self.botid,
                           f'stop fired ({reason}): '
                           + ('nothing sold; ' if leave else
-                             f'flattened {qty:.10g} at market; ')
-                          + f'cancelled {n} owned orders; nothing owned '
-                          f'rests; {residue}')
+                             f"flattened {st['qty']:.10g} at market; ")
+                          + f"cancelled {st['cancelled']} owned orders; "
+                          f'nothing owned rests; {residue}')
 
     def _maintain_server_stop(self, truth, held):
         """X3: the venue holds the stop, sized to the grid's inventory —

@@ -5,9 +5,12 @@
 # venue holds one market, so this pair runs on the fake spot venue.
 
 import time
+from contextlib import contextmanager
 
+import gridgremlin.bot_basis as bot_basis
 from gridgremlin.adapters import SpotAdapter
 from gridgremlin.bot import RUNGS_LAG_SECONDS, Bot
+from gridgremlin.bot_constants import FUNDING_LAG_SECONDS, FUNDING_WINDOW_SECONDS
 from gridgremlin.events import Notifier
 from gridgremlin.exchange.errors import VenueError
 from gridgremlin.main import mark_shared_coins
@@ -64,6 +67,21 @@ def _holding(bot, venue, fills=3):
 
 def _orders(venue):
     return sorted((o['side'], o['price'], o['qty']) for o in venue.orders)
+
+
+FUNDING_HOUR = 1_794_240_000      # 16:00 UTC: one of Bybit's inverse funding hours
+
+
+@contextmanager
+def _clock_at(t):
+    """Every clock (the bot's, the fake wallet's stamps) pinned at t and moved by
+    hand: a wait judged by the hour must not depend on when the suite runs."""
+    real, now = time.time, [t]
+    time.time = lambda: now[0]
+    try:
+        yield now
+    finally:
+        time.time = real
 
 
 def spec_D169_a_fee_and_funding_never_move_the_row():
@@ -155,6 +173,11 @@ def spec_D169_a_move_nothing_explains_is_said_once_past_the_wait():
     """Coins gone that no market listed: a hand. Frozen for G26's wait, said once
     and urgent, then taken as they stand. SABOTAGE: never give up and the row
     stays frozen; say it each read and the phone rings."""
+    with _clock_at(FUNDING_HOUR + 2 * 3600):      # no funding near: G26's wait
+        _a_move_nothing_explains()
+
+
+def _a_move_nothing_explains():
     bot, venue, lines, later = _pair()
     _holding(bot, venue)
     venue.base -= 3.0
@@ -312,3 +335,64 @@ def spec_D169_only_an_inverse_markets_rows_are_kept_apart():
                       'symbol': 'ADAUSDC', 'category': 'spot', 'type': 'TRADE', 'change': -50.0})
     held, _ = bot._spot_beside_inverse(50.0, 100.0, bot.adapter.qty_step, None)
     assert held == 50.0
+
+
+def _funding_move(after, wait, listed_at=None):
+    """The wallet moves `after` seconds past a funding hour, its log row a while
+    behind; `wait` seconds on, how often has an outside hand been said?"""
+    with _clock_at(FUNDING_HOUR + after) as now:
+        bot, venue, lines, _ = _pair()
+        _holding(bot, venue)
+        held = bot._last_pos
+        venue.inverse_moves(-3.0, listed=False, kind='SETTLEMENT')
+        assert bot.cycle() == {'lagging': 'own fill in flight (D58)'}
+        if listed_at is not None:
+            now[0] += listed_at
+            bot.cycle()
+            venue.list_move(-3.0, kind='SETTLEMENT')
+            now[0] += wait - listed_at
+        else:
+            now[0] += wait
+        bot.cycle()
+        bot.cycle()
+        return bot._last_pos == held, sum('outside hand' in ln for ln in lines)
+
+
+def spec_D169_a_funding_move_waits_for_its_late_log_row():
+    """Measured 2026-11-05: the inverse funding moved the wallet 5 s past the
+    hour and its SETTLEMENT row listed at +91 s and +112 s, so G26's 60 s rang the
+    phone at every funding. A move begun within FUNDING_WINDOW_SECONDS of a
+    funding hour waits FUNDING_LAG_SECONDS: at +112 s it is still frozen, nothing
+    said, and its row explains it when it lists. SABOTAGE below."""
+    kept, said = _funding_move(after=5, wait=150, listed_at=112)
+    assert kept and said == 0
+
+
+def spec_D169_an_unlisted_funding_move_is_said_once_past_the_longer_wait():
+    """The longer wait still ends: no row by FUNDING_LAG_SECONDS and it is an
+    outside hand, said once, as G26's wait says it."""
+    _, said = _funding_move(after=5, wait=FUNDING_LAG_SECONDS - 10)
+    assert said == 0
+    _, said = _funding_move(after=5, wait=FUNDING_LAG_SECONDS + 1)
+    assert said == 1
+
+
+def spec_D169_away_from_a_funding_hour_the_wait_stays_G26s():
+    """Two hours from any funding, or just past the window, a move nobody listed
+    is said past 60 s, as before: the longer wait is the funding's only."""
+    _, said = _funding_move(after=2 * 3600, wait=RUNGS_LAG_SECONDS + 1)
+    assert said == 1
+    _, said = _funding_move(after=FUNDING_WINDOW_SECONDS + 1, wait=RUNGS_LAG_SECONDS + 1)
+    assert said == 1
+
+
+def spec_D169_sabotage_the_funding_wait_at_G26s_rings_at_every_funding():
+    """The sabotage half: the wait at G26's 60 s everywhere, and the measured
+    +112 s row is said as an outside hand, urgent, at every funding."""
+    real = bot_basis._inverse_wait
+    bot_basis._inverse_wait = lambda since: RUNGS_LAG_SECONDS
+    try:
+        _, said = _funding_move(after=5, wait=150, listed_at=112)
+    finally:
+        bot_basis._inverse_wait = real
+    assert said == 1

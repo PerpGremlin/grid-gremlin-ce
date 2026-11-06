@@ -253,6 +253,39 @@ def fleet_wallet(wallets):
             'available': sum(free) if free and None not in free else None}
 
 
+READS_LOST_CYCLES = 3     # F42: a bot's own cycles lost in a row, and for...
+READS_LOST_SECONDS = 60.0  # ...at least this long, before the phone hears it
+
+
+def note_bot_read(bot, err, now, notifier):
+    """F42: a bot whose own cycle keeps failing checks nothing — its stop
+    included — while the fleet around it runs and the snapshot stays fresh.
+    `err` is this cycle's exception, None when the cycle read. Past
+    READS_LOST_CYCLES in a row and READS_LOST_SECONDS since its last read,
+    the phone hears it, urgent (F16: then every 15 minutes while it lasts),
+    and the snapshot carries `unread_since` for the watchdog (F42); a read
+    again ends it, said to the phone when the phone had heard."""
+    if err is None:
+        if getattr(bot, 'reads_paged', False):
+            notifier.event('warn', bot.botid,
+                           f'reading again after {bot.reads_lost} lost '
+                           'cycles — its stop is checked again (F42)',
+                           urgent=True)
+        bot.read_t, bot.reads_lost, bot.reads_paged = now, 0, False
+        return
+    if getattr(bot, 'read_t', None) is None:
+        bot.read_t = now                   # never read: unread from now
+    bot.reads_lost = getattr(bot, 'reads_lost', 0) + 1
+    if (bot.reads_lost >= READS_LOST_CYCLES
+            and now - bot.read_t >= READS_LOST_SECONDS):
+        bot.reads_paged = True
+        notifier.event('warn', bot.botid,
+                       f'its own reads have failed {bot.reads_lost} cycles '
+                       f'in a row ({type(err).__name__}) — NOTHING is checked '
+                       'for it, its stop included, until they read again (F42)',
+                       urgent=True)
+
+
 def snapshot_row(bots, wallet, now, tiers=None):
     """F4/E3: derived from venue truth only; the DEAD are visible. F9: a
     dead bot no longer reads the venue, so its position is NOTHING — not
@@ -276,6 +309,14 @@ def snapshot_row(bots, wallet, now, tiers=None):
                                             'result': b._loss_now}}
                                   if b.alive and getattr(b, '_loss_now', None)
                                   is not None else {}),
+                               # X17: a fired stop still being finished
+                               **({'stopping': b.stopping['reason']}
+                                  if b.alive and getattr(b, 'stopping', None)
+                                  else {}),
+                               # F42: its own reads failing, last read when
+                               **({'unread_since': b.read_t}
+                                  if b.alive and getattr(b, 'reads_lost', 0)
+                                  else {}),
                                # D145: paused by retire, since when
                                **({'paused': b.paused.get('t')}
                                   if b.alive and getattr(b, 'paused', None)
@@ -1052,7 +1093,9 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
                         kind = 'net' if isinstance(e, NETWORK_ERRORS) else 'warn'
                         notifier.event(kind, bot.botid,
                                        f'cycle lost: {type(e).__name__}: {e}')
+                        note_bot_read(bot, e, time.time(), notifier)    # F42
                         continue
+                    note_bot_read(bot, None, time.time(), notifier)
                     if counts is not None:
                         print(f"cycle {n} {bot.botid}: {counts}", flush=True)
                 if snapshot and n % snapshot_every == 0:
