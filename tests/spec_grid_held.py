@@ -284,3 +284,42 @@ def spec_G34_sabotage_the_links_rung_trusted_sells_under_cost():
     exit rests at 68k, under its 70k cost."""
     venue = _relattice(lot_rung=lambda rung, price: rung)
     assert _sells(venue) == [68000.0]
+
+
+# --- G25c: a held lot keeps its own size when capital changes ------------------
+
+def _capital_change(new_capital):
+    """Three lots bought at the live grid's terms, the capital changed the
+    way the live reload does it (F12), then a rise sells them all."""
+    ad = LinearAdapter({'symbol': 'BTCUSDT', 'qty_step': 0.00001, 'price_tick': 1.0,
+                        'min_qty': 0.00001, 'min_notional': 10.0, 'settle_coin': 'USDT'})
+    row = {'market_type': 'linear', 'symbol': 'BTCUSDT', 'side': 'long', 'capital': 410.0,
+           'leverage': 10, 'lower': 66000.0, 'upper': 87000.0, 'rungs': 21, 'spacing_type': 'fixed'}
+    venue = BarVenue(ad, 'long', 0.00015, 0.00045)
+    venue.advance(75600.0, T0)
+    bot, lines, cycle = _run(validate_config(dict(row)), ad, venue)
+    cycle(3)
+    _move(venue, 73000.0, cycle, 8)
+    bought = sorted((f['price'], f['qty']) for f in venue.fills)
+    held = venue.held
+    bot.cfg = validate_config(dict(row, capital=new_capital))
+    cycle(5)
+    book = {o['price']: float(o['qty']) for o in venue.orders if o['side'] == 'Sell'}
+    _move(venue, 76600.0, cycle, 8)
+    sold = sum(f['qty'] for f in venue.fills if f['side'] == 'sell')
+    return bought, held, book, sold, venue
+
+
+def spec_G25c_a_held_lot_keeps_its_own_size_when_capital_changes():
+    """A lot's exit sells what its own fills bought, whatever the row's
+    capital says now: a raise grows the resting buys and every later lot,
+    never a lot already held, and a cut shrinks none either. Re-sized at
+    the new capital, a raise sold the top lot short and left coin no exit
+    held, and a cut would have sold one lot into the next (2026-11-10, the
+    replay of the live grid's terms). Sabotage: own_lot in place of the
+    fills' size leaves the raise's round trip short."""
+    for cap in (451.0, 370.0):
+        bought, held, book, sold, venue = _capital_change(cap)
+        assert len(bought) == 3, bought
+        assert sorted(book.values()) == sorted(q for _, q in bought), (cap, book, bought)
+        assert abs(sold - held) < 1e-9 and venue.held < 1e-9, (cap, sold, held, venue.held)

@@ -462,6 +462,13 @@ eventually pin (T1).
   venue order is the proof (E3). G8 still covers the whole sellable: a remainder folds
   onto the furthest exit. *(D36: "i want it to be exited where it was intended to be
   exited"; JOURNAL 2026-09-28)*
+- **G25c** A held lot keeps its own size until its exit sells it: its exit
+  is sized by what its own fills bought and still hold (the walk that names
+  its rung, G23), never by the row's capital now. A capital change (F12,
+  hot) resizes the resting entries and every later lot, and no lot already
+  held; nothing is bought for it. `spec_G25c_*`, with sabotage. *(2026-11-10,
+  the replay of the live grid's terms: a raise re-sized held lots at the new
+  capital, sold the top one short and left coin no exit held)*
 - **G26** The fills must account for the change before exits are re-paired. The
   venue's position moves at once; its fill list follows seconds later. Since the
   last derivation that added up, the NEW own fills must net to the change in the

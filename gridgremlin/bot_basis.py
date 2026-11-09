@@ -456,7 +456,7 @@ class BasisMixin:
             # escalation), but it is never cached and never a baseline: the
             # next read is checked against the last list that held
             return rungs
-        self._rungs_cache = (held, key, rungs)
+        self._rungs_cache = (held, key, rungs, dict(self._walk_qty))   # G25c: and what each holds
         self._rungs_seen = (
             want, frozenset(self._fill_id(f) for f in fills),
             max((f['time_ms'] for f in fills), default=0))
@@ -470,6 +470,18 @@ class BasisMixin:
         self._rungs_lag_said = False      # this account is the new baseline
         self._rungs_escalated = escalated   # D158: past it, the list held
         return rungs
+
+    def _held_qty(self, held_rungs):
+        """G25c: what each held lot's own fills bought and still hold, by
+        rung — from the walk that named the rungs (the cache's when they are
+        the cached ones). A rung the walk did not size (D158's as-seen list)
+        is absent, and the plan sizes it as before (own_lot)."""
+        if held_rungs is None:
+            return None
+        cached = self._rungs_cache
+        if cached and len(cached) > 3 and cached[2] == held_rungs:
+            return cached[3]
+        return {r: q for r, q in getattr(self, '_walk_qty', {}).items() if r in held_rungs}
 
     def _settle_awaited(self, now, links):
         """G23: an own order that left the book unasked is settled when a
@@ -678,6 +690,7 @@ class BasisMixin:
             merged.append(lot)
         flat = self.adapter.qty_step * 0.5
         remaining, deficit, pos, lots = want, 0.0, want, []
+        self._walk_qty = {}               # G25c: rung -> what of its own fill is held
         for lot in sorted(merged, key=lambda x: x['time_ms'], reverse=True):
             qty = lot['qty']
             if not lot['entry']:
@@ -699,6 +712,7 @@ class BasisMixin:
                     # a whole lot, and that lot's full-size exit sold the
                     # next lot up, whose rung bought straight back (2026-11-02)
                     lots.append(lot['rung'])
+                    self._walk_qty[lot['rung']] = self._walk_qty.get(lot['rung'], 0.0) + take
             if remaining <= flat or pos <= flat:
                 # covered, or the last flat. G33: covered EXACTLY — the
                 # caller's slack (2% and a step) is a whole lot where a lot

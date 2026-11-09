@@ -634,7 +634,8 @@ class Bot(StopsMixin, BasisMixin, RoundMixin, ReconcileMixin):
             lagging = self._rungs_frozen(now)                     # G26
             desired = plan_grid(cfg, adapter, ref, held, basis, bid, ask,
                                 resting_exits, offset=self.offset,
-                                held_rungs=held_rungs)
+                                held_rungs=held_rungs,
+                                held_qty=self._held_qty(held_rungs))   # G25c
         desired = self._exits_to_wallet(desired)                   # D169
         if self.capped or self.paused:
             # D145: a paused bot likewise. D56: the account is at its cap — no order that ADDS exposure
