@@ -129,7 +129,7 @@ eventually pin (T1).
   live fleet's own pages wore the venue's 🟢🟢 alone, as the testnet's do)*
   The daily digest, sent by its own path, marks every part when a fleet it
   digests says JSON `"allow_mainnet": true` (F7b's switch), the mark
-  counted in the split. *(2026-11-10: its dry run on the live copy had none)*
+  counted in the split. *(2026-11-10: a mainnet digest's dry run had none)*
 - **E13** The fleet-down and watchdog-failing pages write their 30-minute
   stamp only after Telegram took the page (`curl -f`): a failed send fails
   the unit and leaves the next tick free to page. *(the audit: the stamp was
@@ -1377,7 +1377,7 @@ eventually pin (T1).
   its charts' candles, its rehearsals' replay) go to its fleets' network, from their
   switch (`network_of`), never testnet by default nor an env guess; the panel never
   names the switch (D65). A panel over both networks refuses those reads in words.
-  *Spec: `spec_live_panel.py`, with sabotage. (2026-11-10: the live panel's setup
+  *Spec: `spec_live_panel.py`, with sabotage. (2026-11-10: a mainnet panel's setup
   priced off testnet's BTC, some 0.6% from mainnet's.)*
 
 - **F8** The preflight (D27, optional): `probe` places ONE unfillable post-only
@@ -2526,6 +2526,15 @@ eventually pin (T1).
   account tabs (the public page) the seven-column strip needs about 1,076 px, so from
   the phone layout up to 70em it scrolls inside itself, and on a phone the account
   line wraps. Found measuring the site: the page scrolled 308 px at 768 and 7 at 390.
+- **U193** (2026-11-10) Slate, the site's dark (terminalgremlin's LOOKS['slate']), is
+  the panel's eighth theme and the default: its hex exactly (page, bars, cards, rows,
+  text, dim, line, edge, a sea-green accent that is the gain, a coral loss), every word
+  AA on page, cards and rows; words in Source Serif 4 and figures, tables, menus and
+  buttons in IBM Plex Mono, both OFL and served by the panel itself (`/fonts.css`, the
+  named files only, licences beside them), never inside the stylesheet, so an export
+  carries no outside source and falls back to Charter and Menlo; square corners but a
+  small button's, box headings mono capitals, chart gridlines dashed. A browser that
+  kept a choice keeps it. *(owner, 2026-11-10: "lets adopt the slate theme")*
 - **U191** (2026-11-03) A position's price chart has four windows, one shown at a
   time: 1 h, 4 h, 24 h and 7 d, opening on the day. Every line is the fleet's own
   snapshot marks, about one every 76 s, so an hour is about 47 points and not

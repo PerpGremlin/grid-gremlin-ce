@@ -21,8 +21,8 @@ from panel.chart import _f
 # carries no script; each other is a class t-<name> on <html>, its tokens
 # overridden at the stylesheet's end. A new visitor gets DEFAULT_THEME; a
 # browser that kept a name since renamed is moved once (RENAMED_THEMES).
-THEMES = ('classic', 'dark', 'black', 'light', 'broker', 'mt5', 'win95')
-DEFAULT_THEME = 'dark'
+THEMES = ('classic', 'slate', 'dark', 'black', 'light', 'broker', 'mt5', 'win95')
+DEFAULT_THEME = 'slate'     # U193 (owner, 2026-11-10): the site's slate, "our new darkmode"
 RENAMED_THEMES = {'dark': 'classic', 'metatrader': 'mt5'}
 
 
@@ -351,6 +351,27 @@ panels still a step above the page, every word still AA */
 :root.t-black{--bg:#07080a;--fg:#e6e6e6;--dim:#9aa0a6;--line:#1a1d22;--edge:#262a31;
 --pos:#3fb97a;--neg:#f2645c;--accent:#6f9fd8;--accent-soft:#6f9fd824;
 --calm:#5fb0c4;--wild:#e0a050;--s3:#b496e8;--raise:#101216;--bw:1px;color-scheme:dark}
+/* U193 (owner, 2026-11-10: "lets adopt the slate theme"): the site's slate
+dark (terminalgremlin's LOOKS['slate']) — blue-grey layers, the bars and side
+column a step up, cards a half step, a sea-green accent that is also the
+gain, a coral loss; words in Source Serif 4, every figure, table, menu and
+button in IBM Plex Mono (both OFL, served by the panel, /fonts.css; the
+export and a font that will not load fall back to Charter / Menlo); square
+corners but a small button's; box headings mono capitals; gridlines dashed */
+:root.t-slate{--bg:#15191e;--fg:#e3e6e8;--dim:#959ea8;--line:#2c333b;--edge:#3d4650;
+--pos:#6fc4b0;--neg:#e8857a;--accent:#6fc4b0;--accent-soft:#6fc4b026;
+--calm:#86c9d6;--wild:#efaa70;--s3:#bca1ea;--raise:#181d22;--bw:1px;
+--bar:#1a1f25;--row:#20262d;--serif:"Source Serif 4",Charter,Georgia,serif;
+--mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;color-scheme:dark}
+:root.t-slate body{font:14px/1.5 var(--serif);font-variant-numeric:tabular-nums}
+:root.t-slate :is(table,td,th,nav,button,input,select,textarea,code,pre,.num,.big,.hero,.fin,label.lab,b.on,.meta,.pos,.neg){font-family:var(--mono);font-variant-numeric:tabular-nums}
+:root.t-slate :is(h2,h3,h4){font-family:var(--mono);text-transform:uppercase;letter-spacing:.07em}
+:root.t-slate :is(.hero,nav.side){background:var(--bar)}
+:root.t-slate tr:hover>td{background:var(--row)}
+:root.t-slate *{border-radius:0}:root.t-slate button{border-radius:4px}
+:root.t-slate :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+:root.t-slate a[href]:hover{color:var(--accent)}
+:root.t-slate svg line[stroke="var(--line)"]{stroke-dasharray:2 3}
 :root.t-dark body,:root.t-black body,:root.t-broker body{font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;font-variant-numeric:tabular-nums}
 :root.t-dark .card:hover,:root.t-black .card:hover{border-color:var(--dim)}
 /* U112 (2026-11-01): broker — inspired by retail broker platforms (no one
@@ -390,3 +411,20 @@ faces and colours, the sizes every theme shares (U112b) */
 /* U112: both square, every corner */
 :root.t-win95 *,:root.t-mt5 *{border-radius:0!important}
 """
+
+
+# U193: slate's faces, served by the panel itself (no CDN; both SIL OFL 1.1,
+# their licences beside them in panel/fonts/). Kept out of CSS: the export
+# and the public page carry no outside source (check() refuses `url(`), so
+# only a live page asks for them, through THEME_JS; without them slate
+# falls back to Charter and Menlo.
+FONT_FILES = ('sourceserif4.woff2', 'sourceserif4-italic.woff2', 'plexmono-400.woff2', 'plexmono-600.woff2')
+FONTS_CSS = (
+    '@font-face{font-family:"Source Serif 4";src:url(/fonts/sourceserif4.woff2) format("woff2");'
+    'font-weight:400 600;font-style:normal;font-display:swap}'
+    '@font-face{font-family:"Source Serif 4";src:url(/fonts/sourceserif4-italic.woff2) format("woff2");'
+    'font-weight:400;font-style:italic;font-display:swap}'
+    '@font-face{font-family:"IBM Plex Mono";src:url(/fonts/plexmono-400.woff2) format("woff2");'
+    'font-weight:400;font-style:normal;font-display:swap}'
+    '@font-face{font-family:"IBM Plex Mono";src:url(/fonts/plexmono-600.woff2) format("woff2");'
+    'font-weight:600;font-style:normal;font-display:swap}')

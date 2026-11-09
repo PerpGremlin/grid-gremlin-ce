@@ -222,7 +222,7 @@ def atomic_write(path, text):
 HL_NETWORK = 'testnet'      # D177: set by the server from the fleets it shows
 MIXED = ('this panel shows Hyperliquid fleets on both networks, so its forms '
          'cannot know which prices to read: set up the bot from the panel of '
-         'its own network (D174: real money has a panel of its own)')
+         'its own network')
 
 
 def set_hl_network(fleet_paths):

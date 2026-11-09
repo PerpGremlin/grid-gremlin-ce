@@ -2653,8 +2653,8 @@ def spec_U112_every_theme_overrides_every_colour_classic_sets():
     Each theme is classic's colour tokens overridden, every one of them (a
     token left out would leak the green look into it), and a class on <html>."""
     from panel.css import CSS, DEFAULT_THEME, THEMES
-    assert THEMES == ('classic', 'dark', 'black', 'light', 'broker', 'mt5', 'win95')
-    assert DEFAULT_THEME == 'dark' and DEFAULT_THEME in THEMES
+    assert THEMES == ('classic', 'slate', 'dark', 'black', 'light', 'broker', 'mt5', 'win95')
+    assert DEFAULT_THEME == 'slate' and DEFAULT_THEME in THEMES          # U193
     colours = {k for k, v in _theme_block(CSS, 'classic').items() if v.startswith('#')}
     assert {'--bg', '--fg', '--pos', '--neg', '--accent', '--line', '--edge', '--raise'} <= colours
     for name in THEMES[1:]:
@@ -2806,11 +2806,11 @@ def spec_U112_the_button_cycles_every_theme_before_the_page_paints():
     from panel.css import THEMES
     from panel.server import KEEP_JS, render
     from panel.reference import THEME_JS
-    assert 'var T=["classic","dark","black","light","broker","mt5","win95"]' in THEME_JS
+    assert 'var T=["classic","slate","dark","black","light","broker","mt5","win95"]' in THEME_JS
     assert 'var T=' + json.dumps(list(THEMES)).replace(' ', '') in THEME_JS
     assert "t=T[(T.indexOf(t)+1)%T.length]" in THEME_JS                 # the next, wrapping to the first
     assert "classList.toggle('t-'+n,n===t&&n!==T[0])" in THEME_JS       # classic is :root, no class
-    assert "D='dark'" in THEME_JS and 'if(T.indexOf(t)<0)t=D;' in THEME_JS
+    assert "D='slate'" in THEME_JS and 'if(T.indexOf(t)<0)t=D;' in THEME_JS
     assert "'theme: '+t" in THEME_JS
     assert "localStorage.getItem('gg-theme')" in THEME_JS and "sessionStorage.getItem('gg-light')" in THEME_JS
     assert 'Storage' not in re.sub(r'try\{[^{}]*\}catch\(e\)\{\}', '', THEME_JS)
@@ -2938,3 +2938,56 @@ def spec_U189_no_APR_until_something_has_closed():
     assert 'APR' not in line and 'Runtime 2 h' in line and '/day' in line
     for closed in ({'rounds': 1}, {'trips': 2}, {'gap_trips': 1}):
         assert 'APR</span>' in run_rate(dict(open_, **closed), c, 25000.0), closed
+
+
+def spec_U193_slate_is_the_sites_dark_and_every_word_passes_AA():
+    """The owner, 2026-11-10: "lets adopt the slate theme" — the site's slate
+    (terminalgremlin LOOKS['slate']), the new default. Its tokens are the
+    site's hex; text, dim, gain, loss and accent are AA on the page and the
+    cards, and a button's words on the accent; the faces are served by the
+    panel (the named files only, licences beside them), never inside CSS
+    (the export carries no outside source). SABOTAGE: dim at the line's
+    grey fails AA; a font path the request builds is refused."""
+    import io
+    def lum(h):
+        h = h.lstrip('#')
+        c = [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+        c = [x / 12.92 if x <= 0.03928 else ((x + 0.055) / 1.055) ** 2.4 for x in c]
+        return .2126 * c[0] + .7152 * c[1] + .0722 * c[2]
+
+    def ratio(a, b):
+        hi, lo = sorted((lum(a), lum(b)), reverse=True)
+        return (hi + .05) / (lo + .05)
+    from pathlib import Path
+    from panel.css import CSS, FONT_FILES, FONTS_CSS
+    from panel.reference import THEME_JS
+    sl = _theme_block(CSS, 'slate')
+    assert {k: sl[k] for k in ('--bg', '--bar', '--raise', '--row', '--fg', '--dim', '--line', '--edge',
+                               '--accent', '--pos', '--neg')} == {
+        '--bg': '#15191e', '--bar': '#1a1f25', '--raise': '#181d22', '--row': '#20262d', '--fg': '#e3e6e8',
+        '--dim': '#959ea8', '--line': '#2c333b', '--edge': '#3d4650', '--accent': '#6fc4b0',
+        '--pos': '#6fc4b0', '--neg': '#e8857a'}
+    for bg in (sl['--bg'], sl['--raise'], sl['--row']):
+        for k in ('--fg', '--dim', '--pos', '--neg', '--accent'):
+            assert ratio(sl[k], bg) >= 4.5, (k, bg, round(ratio(sl[k], bg), 2))
+    assert ratio(sl['--bg'], sl['--accent']) >= 4.5
+    assert ratio(sl['--line'], sl['--bg']) < 4.5                       # sabotage: the guard can fail
+    assert 'Source Serif 4' in sl['--serif'] and 'IBM Plex Mono' in sl['--mono']
+    assert 'url(' not in CSS and '@font-face' in FONTS_CSS
+    here = Path(__file__).resolve().parents[1] / 'panel' / 'fonts'
+    for f in FONT_FILES:
+        assert (here / f).read_bytes()[:4] == b'wOF2', f
+        assert f'/fonts/{f}' in FONTS_CSS
+    assert (here / 'LICENSE-Source-Serif-4.txt').exists() and (here / 'LICENSE-IBM-Plex-Mono.txt').exists()
+    assert "f.href='/fonts.css'" in THEME_JS
+    from panel.routes import Handler
+    for path, code in (('/fonts/plexmono-400.woff2', 200), ('/fonts.css', 200),
+                       ('/fonts/../server.py', 404), ('/fonts/LICENSE-IBM-Plex-Mono.txt', 404)):
+        h = Handler.__new__(Handler)
+        h.path, h.wfile, sent = path, io.BytesIO(), []
+        h.send_response = sent.append
+        h.send_header = lambda k, v: None
+        h.end_headers = lambda: None
+        h._deny = lambda c, why: sent.append(c)
+        h._font()
+        assert sent[0] == code, (path, sent)

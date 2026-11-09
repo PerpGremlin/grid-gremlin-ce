@@ -321,7 +321,9 @@ window.ggTheme=function(step){if(step){t=T[(T.indexOf(t)+1)%T.length];
   try{localStorage.setItem('gg-theme',t);}catch(e){}}
  T.forEach(function(n){r.classList.toggle('t-'+n,n===t&&n!==T[0]);});
  document.querySelectorAll('[data-theme]').forEach(function(b){b.textContent='theme: '+t;});};
-ggTheme(0);})();</script>""")
+ggTheme(0);
+var f=document.createElement('link');f.rel='stylesheet';f.href='/fonts.css';document.head.appendChild(f);
+})();</script>""")
 
 
 # V12: the live page reloads whole, so what the reader opened would shut and

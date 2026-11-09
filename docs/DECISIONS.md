@@ -1700,14 +1700,14 @@ stands unless the owner corrects it.
   money (D66).
 
 
-- **D177 — A real-money fleet's readers read it (2026-11-10).** The live panel said
-  "no fills" over a bot that had filled: its report, a read, met D25's launch half, which
-  only the fleet's own start types, and every exchange figure came back unread. The
-  owner, offered the fix: *"this might need a faster promotion, as the live bot is
-  currently live."* A reader of a fleet whose file says `"allow_mainnet": true` (the
+- **D177 — Reading a real-money fleet is not trading it (2026-11-10).** A mainnet
+  fleet's panel showed "no fills" over a bot that had filled: its report, a read, met
+  D25's launch half, which only the fleet's own start types, and every exchange figure
+  came back unread. A reader of a fleet whose file says `"allow_mainnet": true` (the
   report the panel shows, the kept ledger, the drift check) reads mainnet on that switch
-  alone: by the account's public address, no key, no write (F7b). Trading is unchanged:
-  both halves. It reaches the live copy as a hotfix, the reason written down (D65).
+  alone: by the account's public address, no key, no write (F7b); a panel's forms,
+  charts and rehearsals price on its fleets' network the same way (F7c). Trading is
+  unchanged: both halves. The owner had it promoted as a hotfix (D65).
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

@@ -94,6 +94,23 @@ class Handler(RehearsePages, CarryFlowPages, CreateFlowPages, FleetAdminPages, C
         page = _FORM_SLOT.sub(f'name="gg" value="{form_token(self.token)}"', page)
         self.wfile.write(page.encode())
 
+    def _font(self):
+        """U193: slate's faces and their @font-face sheet — the named files
+        only, from panel/fonts/, never a path the request builds."""
+        from .css import FONT_FILES, FONTS_CSS
+        if self.path == '/fonts.css':
+            body, kind = FONTS_CSS.encode(), 'text/css; charset=utf-8'
+        else:
+            name = self.path[len('/fonts/'):]
+            if name not in FONT_FILES:
+                return self._deny(404, 'no such font')
+            body, kind = (Path(__file__).resolve().parent / 'fonts' / name).read_bytes(), 'font/woff2'
+        self.send_response(200)
+        self.send_header('Content-Type', kind)
+        self.send_header('Cache-Control', 'max-age=86400')
+        self.end_headers()
+        self.wfile.write(body)
+
     _locks = {}               # U47: one readout per fleet at a time
 
     def _mainnet(self, fleet_p, venue):
@@ -335,6 +352,8 @@ class Handler(RehearsePages, CarryFlowPages, CreateFlowPages, FleetAdminPages, C
                 '<p class="dim">equity floor: the watchdog pages if account '
                 'equity falls below this. Margin rate 0.5 = alarm at 50% '
                 'of maintenance margin.</p>')
+        if self.path == '/fonts.css' or self.path.startswith('/fonts/'):
+            return self._font()                                      # U193
         if self.path == '/key':
             return self._page(KEY)
         if self.path.split('?')[0] == '/new':                       # D161: new bot, no script
