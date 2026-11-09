@@ -121,6 +121,12 @@ eventually pin (T1).
   The digest and the watchdog's pages go in parts, split on line ends,
   never cut at the cap. *(the fifth audit, 2026-11-05: the newest lines
   crowded an urgent stop line out; the digest was cut at 3,900 characters)*
+- **E12d** A real-money fleet's every phone message opens with `🔴 MAINNET`
+  on its own first line (what a lock screen shows), counted inside the
+  trim; a paper fleet's never does, and the log never carries it. Before
+  the build it follows D25's two halves, after it the network the clients
+  reached. `spec_D175_*`, with sabotage. *(D175, 2026-11-09: the first
+  live fleet's own pages wore the venue's 🟢🟢 alone, as the testnet's do)*
 - **E13** The fleet-down and watchdog-failing pages write their 30-minute
   stamp only after Telegram took the page (`curl -f`): a failed send fails
   the unit and leaves the next tick free to page. *(the audit: the stamp was
@@ -1628,6 +1634,12 @@ eventually pin (T1).
   it refuses a path outside `configs/` and a tree with config edits of its
   own. *(Measured 2026-10-12: `git pull --ff-only` refuses even an edit
   identical to what arrives, so drift blocked every deploy.)*
+- **F31b** A real-money fleet's files (`configs/*.live.json`, in the pinned
+  live copy beside its `.env`, D64) are ignored by git: the panel never asks
+  for them to be taken into the repository and the take never sees them.
+  The notice shows no decision code (U117). `spec_F31b_*`, with sabotage.
+  *(2026-11-09: the live panel's first page asked for the live fleet file
+  to be taken home, "(D94)" and all)*
 - **F32** The market data still arriving. The data server's site publishes
   a public status file — when it last wrote its pages, the newest row of
   each kind — and one fleet's watchdog (the calendar's: `data_stale_seconds`,

@@ -1680,6 +1680,24 @@ stands unless the owner corrects it.
   From the map, a few facts go to D170's board as candidates, shown and not counted, in the
   conditions gate. The first look at the bands against real liquidations stays as it was
   fixed; testing a new rule is a new study and a separate word.
+- **D173 — The market's totals, hourly, on the data server (2026-11-09).** TradingView's
+  TOTAL, TOTAL2 and TOTAL3 showed a rise of trillions over five days that our own coins'
+  caps (D104) did not; TradingView sells no stream of them. The owner: *"yes, hourly and
+  maybe a 6 hourly. as long as we can keep doing it for our low cost method."* So: one
+  keyless read of CoinGecko's public global endpoint an hour (720 a month on the free
+  tier), TOTAL as read and TOTAL2 and TOTAL3 from BTC's and ETH's shares, kept forever at
+  the data folder's top; the six-hour series is the reader's (every sixth row). A bad
+  tick (a fifth of the market off the last six hours) is refused, never written. Not
+  TradingView's coin set: the lines move together and differ by a few percent. No
+  history: CoinGecko's is paid. datagremlin PR #23.
+
+- **D175 — A real-money fleet's phone messages say so (2026-11-09).** At the first live
+  start the fleet's own pages opened "🟢🟢 Hyperliquid", the venue's colours, exactly as
+  the testnet fleet's do; only the watchdog's tag said real money. Offered a mark, the
+  owner: *"yeah, do the mainnet change."* Every phone message from a fleet on a mainnet
+  network opens with `🔴 MAINNET` on its own line (E12d); paper fleets' are unchanged,
+  and the log stays plain. The live fleet takes it at a restart after a day on play
+  money (D66).
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

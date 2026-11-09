@@ -138,6 +138,7 @@ class TelegramNotifier(Notifier):
         self._clock = clock or __import__('time').time
         self._buffer = []
         self._last_send = 0.0
+        self.network_mark = ''       # D175: '🔴 MAINNET' heads a real-money fleet's every message
         self.startup = True          # D60: the fleet's start reaches the phone
         self._seen = {}              # D60: (botid, shape) -> [times]
         self._said = {}              # D60: (botid, shape) -> last escalation
@@ -250,7 +251,10 @@ class TelegramNotifier(Notifier):
         now = self._clock()
         if not force and now - self._last_send < self.MIN_INTERVAL:
             return
-        payloads = trimmed(self._buffer, self.HARD_LIMIT)
+        mark = self.network_mark
+        payloads = trimmed(self._buffer, self.HARD_LIMIT - (len(mark) + 1 if mark else 0))
+        if mark:                     # D175: the first line, so a lock screen shows it
+            payloads = [f'{mark}\n{p}' for p in payloads]
         try:
             for payload in payloads:   # a part that fails resends from the first:
                 self._transport(payload)   # a vital line twice, never none

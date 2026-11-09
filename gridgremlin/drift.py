@@ -38,4 +38,4 @@ def notice(rows):
     names = ', '.join(html.escape(p.split('/')[-1]) for _, p in rows[:6]) + (' …' if len(rows) > 6 else '')
     return (f'{len(rows)} config file{"s" if len(rows) != 1 else ""} edited here and not in git yet '
             f'({names}). Take them into the repository before the next config change there: '
-            f'<code>python3 ops/take_box_configs.py</code> on the workstation (D94).')
+            f'<code>python3 ops/take_box_configs.py</code> on the workstation.')   # U117: no code on a page

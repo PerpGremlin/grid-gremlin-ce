@@ -343,3 +343,28 @@ def spec_F24e_sabotage_a_fleet_unit_without_the_line_is_named():
     assert _unwatched(_render(wrong, 'demo'), 'demo')                   # another fleet's timer is no watch
 
 
+def spec_F31b_a_real_money_fleets_files_are_never_named_nor_taken():
+    """The live copy holds its fleet and watchdog files untracked, beside
+    its .env (D64). Git ignores them (configs/*.live.json), so the panel
+    never asks for them to be taken into the repository and the take never
+    sees them; a paper file beside them still is. The notice carries no
+    decision code (U117: it showed "(D94)" on the live panel, 2026-11-09).
+    Sabotage: without the ignore line, the live files are named."""
+    import shutil
+    import subprocess
+    import tempfile
+    from gridgremlin.drift import edited_here, notice
+    assert 'configs/*.live.json' in (ROOT / '.gitignore').read_text().splitlines()
+    d = Path(tempfile.mkdtemp())
+    try:
+        subprocess.run(['git', 'init', '-q', str(d)], check=True)
+        shutil.copy(ROOT / '.gitignore', d / '.gitignore')
+        (d / 'configs').mkdir()
+        for name in ('fleet.live.json', 'watchdog.live.json', 'fleet.paper.json'):
+            (d / 'configs' / name).write_text('{}\n')
+        assert edited_here(d) == [('??', 'configs/fleet.paper.json')]
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+    import re
+    assert not re.search(r'\b[A-Z]\d+\b', notice([('??', 'configs/fleet.paper.json')]))
+

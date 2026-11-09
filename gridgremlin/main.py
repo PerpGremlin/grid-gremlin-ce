@@ -996,6 +996,20 @@ def _project_margin(clients, cfgs, notifier):
                        f'IM {(im + extra_im) / equity:.1%}')
 
 
+MAINNET_MARK = '🔴 MAINNET'
+
+
+def network_mark(fleet, allow_mainnet, clients=None):
+    """D175: what heads a fleet's every phone message. Real money says so
+    from the first message: before the build, from D25's two halves (the
+    file's switch and the launch's flag); after it, from the networks the
+    clients actually reached. Paper says nothing."""
+    if clients is not None:
+        return MAINNET_MARK if any(getattr(c, 'env', None) == 'mainnet'
+                                   for c in clients.values()) else ''
+    return MAINNET_MARK if fleet.get('allow_mainnet') is True and allow_mainnet else ''
+
+
 def make_notifier():
     token = os.environ.get('TELEGRAM_BOT_TOKEN')
     chat = os.environ.get('TELEGRAM_CHAT_ID')
@@ -1027,6 +1041,11 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
         snapshot=None, snapshot_every=60, lock_path=None, allow_mainnet=False):
     load_env()
     notifier = make_notifier()
+    try:                             # D175: before the build's first message
+        notifier.network_mark = network_mark(json.loads(Path(fleet_path).read_text()),
+                                             allow_mainnet)
+    except (OSError, ValueError, AttributeError):
+        pass                         # an unreadable file is build_fleet's to refuse
     # L1: build_fleet issues account writes (hedge mode, leverage, tiers) —
     # a second launch must die BEFORE those, so a coarse per-file lock comes
     # first; the per-account lock follows once the venues are known
@@ -1043,6 +1062,7 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
     check_snapshot_watched(fleet_path, snapshot)                 # F1b: before any write
     fleet, clients, bots = build_fleet(fleet_path, notifier,
                                        allow_mainnet=allow_mainnet)
+    notifier.network_mark = network_mark(fleet, allow_mainnet, clients)   # D175: as reached
     notifier.startup = False         # D60: the start is said; now only what
                                      # needs the owner reaches the phone
     code = code_version(time.time()) if snapshot else None    # F19b: what this run runs
