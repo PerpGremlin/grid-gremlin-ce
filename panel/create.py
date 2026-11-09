@@ -219,14 +219,44 @@ def atomic_write(path, text):
         raise
 
 
+HL_NETWORK = 'testnet'      # D177: set by the server from the fleets it shows
+MIXED = ('this panel shows Hyperliquid fleets on both networks, so its forms '
+         'cannot know which prices to read: set up the bot from the panel of '
+         'its own network (D174: real money has a panel of its own)')
+
+
+def set_hl_network(fleet_paths):
+    """D177: the network the panel's PUBLIC Hyperliquid reads go to (prices,
+    markets, candles — no key, no address), from its fleets' own switch
+    (network_of); never an env guess. A panel over both is 'mixed', and
+    every such read is refused in words rather than priced off the other."""
+    import json as _json
+    from gridgremlin.exchange.hyperliquid.client import network_of
+    global HL_NETWORK
+    nets = set()
+    for f in fleet_paths:
+        try:
+            raw = _json.loads(Path(f).read_text())
+        except (OSError, ValueError):
+            continue
+        if any((b or {}).get('venue') == 'hyperliquid' for b in raw.get('bots') or []) \
+                or raw.get('venue') == 'hyperliquid':
+            nets.add(network_of(raw))
+    HL_NETWORK = 'mixed' if len(nets) > 1 else (nets.pop() if nets else 'testnet')
+    return HL_NETWORK
+
+
+def hl_network():
+    if HL_NETWORK == 'mixed':
+        raise ConfigError(MIXED)
+    return HL_NETWORK
+
+
 def _hl_public(symbol):
-    """HL's public universe: (instrument entry, mark). No key, no address.
-    The panel process carries no environment (it holds no keys), so the
-    venue's environment is named here: HL is testnet-only by the owner's
-    directive, and D25's mainnet gate stays shut. If HL mainnet is ever
-    opened, this takes the fleet's own flag — never an env guess."""
-    from gridgremlin.exchange.hyperliquid.client import InfoClient
-    meta, ctxs = InfoClient(env='testnet').meta_and_ctxs()
+    """HL's public universe: (instrument entry, mark). No key, no address,
+    on the panel's network (D177: the fleets' own switch, never an env)."""
+    from gridgremlin.exchange.hyperliquid.client import public_info
+    meta, ctxs = public_info(hl_network()).meta_and_ctxs()
     names = [e['name'] for e in meta['universe']]
     if symbol not in names:
         from gridgremlin.apply import not_listed
@@ -257,8 +287,8 @@ def public_symbols(venue, max_age=3600.0):
         return hit[1]
     try:
         if venue == 'hyperliquid':
-            from gridgremlin.exchange.hyperliquid.client import InfoClient
-            meta, _ = InfoClient(env='testnet').meta_and_ctxs()
+            from gridgremlin.exchange.hyperliquid.client import public_info
+            meta, _ = public_info(hl_network()).meta_and_ctxs()
             out = sorted(e['name'] for e in meta['universe'])
         else:
             import json as _json
@@ -361,8 +391,9 @@ def public_bars(cfg, days=30, bar_minutes=240):
     end = int(time.time() * 1000)
     start = end - days * 86_400_000
     from ggdata.candles import candles                           # D91: one candle fetcher
-    return candles(cfg.get('venue') or 'bybit', cfg['market_type'], cfg['symbol'], bar_minutes,
-                   start, end, network='testnet')
+    venue = cfg.get('venue') or 'bybit'
+    return candles(venue, cfg['market_type'], cfg['symbol'], bar_minutes, start, end,
+                   network=hl_network() if venue == 'hyperliquid' else 'testnet')
 
 
 def order_minimum_problem(vbot, adapter, m0):

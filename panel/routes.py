@@ -33,6 +33,13 @@ from .pages.lever import LeverPages
 from .pages.retire import RetirePages
 from .pages.manage import ManagePages
 
+
+def _hl_net():
+    """D177: the network a rehearsal of this panel's HL bots replays."""
+    from . import create
+    return create.HL_NETWORK
+
+
 CACHE_TTL_S = 30.0       # the readout reads the venues; 10 s fed the rate limit
 
 # P6: every answer the panel gives — page, fragment, refusal, redirect — is
@@ -565,7 +572,8 @@ class Handler(RehearsePages, CarryFlowPages, CreateFlowPages, FleetAdminPages, C
                  'gridgremlin.backtest_cli', '--draft', '--days',
                  f"{job['days']:g}"]
                 + (['--windows'] if job['optimize'] else [])    # T9
-                + (['--account', json.dumps(job['account'])] if job.get('account') else []))   # T11
+                + (['--account', json.dumps(job['account'])] if job.get('account') else [])   # T11
+                + ['--hl-network', _hl_net()])                                                  # D177
         try:
             proc = subprocess.Popen(args, stdin=subprocess.PIPE,
                                     stdout=subprocess.PIPE,

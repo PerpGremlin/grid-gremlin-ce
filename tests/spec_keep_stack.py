@@ -356,7 +356,7 @@ def spec_U138_the_account_lines_are_the_readouts_own_numbers():
         assert got.count('not read') == 3, got
     hl = account_lines({'generated_ms': int(time.time() * 1000),
                         'account': {'hyperliquid': {'tier': 'testnet', 'available': 50.0}}})
-    assert 'balances: <span class="dim">not read' in hl and '50.00 USDT' in hl
+    assert 'balances: <span class="dim">not read' in hl and '50.00 USDC' in hl      # U138c
 
 
 def spec_U138b_a_balance_is_worth_its_balance_and_dust_folds():

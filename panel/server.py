@@ -69,6 +69,8 @@ def main(argv):
         Handler.token = secrets.token_urlsafe(16)
     Handler.fleets = tuple(a for a in argv if a.endswith('.json'))
     Handler.labels = tuple(fleet_label(f) for f in Handler.fleets)
+    from .create import set_hl_network
+    set_hl_network(Handler.fleets)                  # D177: its forms' prices, its fleets' network
     if not Handler.fleets:
         print('usage: python3 -m panel.server <fleet.json>... '
               '[--hours N] [--port P] [--token-file F] [--units a,b]')

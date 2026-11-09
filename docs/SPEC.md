@@ -1373,6 +1373,12 @@ eventually pin (T1).
   mainnet's read endpoint on that switch alone, set from each fleet it reads and never
   left from the last; the trading client never takes it and still needs both halves.
   *Spec: `spec_mainnet_reads.py`, the trading half with a sabotage spec.*
+- **F7c** (D177) A panel's public Hyperliquid reads (its forms' prices and markets,
+  its charts' candles, its rehearsals' replay) go to its fleets' network, from their
+  switch (`network_of`), never testnet by default nor an env guess; the panel never
+  names the switch (D65). A panel over both networks refuses those reads in words.
+  *Spec: `spec_live_panel.py`, with sabotage. (2026-11-10: the live panel's setup
+  priced off testnet's BTC, some 0.6% from mainnet's.)*
 
 - **F8** The preflight (D27, optional): `probe` places ONE unfillable post-only
   rehearsal order per bot at build and cancels it — the whole placement path
@@ -2805,6 +2811,10 @@ eventually pin (T1).
   it), so the balance's worth is the balance at the price that equity implies,
   and the open P&L is a line of its own, per coin. Coins worth under 1 USDT
   that owe nothing fold into one count.
+- **U138c** (2026-11-10) Hyperliquid's account box says its one coin: USDC,
+  its balance (the collateral less the positions' open P&L) and that open
+  P&L apart, no loans; each venue's available money in its own coin (USDC
+  on Hyperliquid). "What changed" then records its balance like Bybit's.
 - **U139** (D161, 2026-11-01) One click back to the overview: the column's
   first entry, **overview**, and the grid-gremlin name above it each go to
   the front page with no right-half pick, the arrangement kept; on the

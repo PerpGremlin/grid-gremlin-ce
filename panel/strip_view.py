@@ -124,7 +124,8 @@ def account_lines(contract, now=None):
             debt = ' · '.join(f'{esc(c)} {d:,.8g}' + (f' (+ {i:,.8g} interest)' if i else '')
                               for c, d, i in owed if d > 0) or 'none'
         avail = (fig or {}).get('available')
-        avail = 'not read' if avail is None else f'{avail:,.2f} USDT'
+        coin = 'USDC' if venue == 'hyperliquid' else 'USDT'          # U138c: the venue's own
+        avail = 'not read' if avail is None else f'{avail:,.2f} {coin}'
         out.append(f'<div class="parts acctlines"><b>{name}</b> '
                    f'<div>balances: <span class="dim">{bal}</span></div>'
                    + (f'<div>open P&amp;L on its perps: <span class="dim">{opl}</span></div>' if opl else '') +

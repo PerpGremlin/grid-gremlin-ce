@@ -68,12 +68,19 @@ def account_figures(client):
     state = client.clearinghouse_state()
     summary = state.get('marginSummary', {})
     wallet = read_wallet(client)
+    positions = account_positions(state)               # D162: from the same read
+    upl = sum(p['upnl'] or 0.0 for p in positions)
+    # U138c: the one coin HL settles in, as U138's other wallets are said —
+    # the balance (the collateral less the positions' open P&L, so balance
+    # plus open P&L is the collateral) and that open P&L apart; no loans here
     return {'notional': _f(summary.get('totalNtlPos'), 0.0),
             'equity': _f(summary.get('accountValue')),
             'collateral': wallet['equity'],
             'source': 'hyperliquid',
-            'available': wallet.get('available'),      # U138: no coin-by-coin wallet here
-            'positions': account_positions(state)}     # D162: from the same read
+            'available': wallet.get('available'),
+            'wallet': {'USDC': {'balance': wallet['equity'] - upl, 'usd': None,
+                                'borrow': 0.0, 'interest': 0.0, 'upl': upl}},
+            'positions': positions}
 
 
 def account_positions(state):

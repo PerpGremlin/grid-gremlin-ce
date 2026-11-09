@@ -242,7 +242,7 @@ def draft_guards(draft):
     return None
 
 
-def bars_and_adapter(cfg, bar_minutes, days):
+def bars_and_adapter(cfg, bar_minutes, days, network='testnet'):
     """Composition glue, by venue (A6): the market's own adapter from public
     data and its candles over the window. Raises LookupError for a market
     the venue does not list, OSError when it cannot be reached, ValueError
@@ -250,12 +250,17 @@ def bars_and_adapter(cfg, bar_minutes, days):
     now = int(time.time() * 1000)
     since = now - int(days * 86_400_000)
     if cfg.get('venue') == 'hyperliquid':
+        if network not in ('testnet', 'mainnet'):         # D177: a panel over both
+            raise ValueError('this panel shows Hyperliquid fleets on both networks, so a '
+                             'rehearsal cannot know whose prices to replay: rehearse from '
+                             'the panel of its own network')
         from .exchange.hyperliquid.adapters import HLPerpAdapter
         from ggdata.candles import candles                       # D91: one candle fetcher
         from .exchange.hyperliquid.klines import fetch_instrument
         from .exchange.hyperliquid.truth import parse_instrument
-        adapter = HLPerpAdapter(parse_instrument(fetch_instrument(cfg['symbol'])))
-        return candles('hyperliquid', 'linear', cfg['symbol'], bar_minutes, since, now, network='testnet'), adapter
+        adapter = HLPerpAdapter(parse_instrument(fetch_instrument(cfg['symbol'], env=network)))
+        return candles('hyperliquid', 'linear', cfg['symbol'], bar_minutes, since, now,
+                       network=network), adapter                  # D177: the fleet's own
     from ggdata.candles import candles
     from .exchange.bybit.klines import fetch_instrument
     from .exchange.bybit.truth import parse_instrument
@@ -288,7 +293,7 @@ def mark_bars_for(cfg, bars, bar_minutes, fetch=None):
 
 
 def run_draft(raw, days, bar_minutes, fee, optimize=False, progress=None,
-              windows=False, account=None):
+              windows=False, account=None, network='testnet'):
     """--draft: validate a config that exists nowhere yet, fetch real
     bars, rehearse. Returns a dict; 'refused' carries the engine's own
     refusal text verbatim. With `optimize` (T8) the grid's rung count is
@@ -316,7 +321,7 @@ def run_draft(raw, days, bar_minutes, fee, optimize=False, progress=None,
     if progress:
         progress('fetching candles', 0.02)                 # U26
     try:
-        bars, adapter = bars_and_adapter(draft, bar_minutes, days)
+        bars, adapter = bars_and_adapter(draft, bar_minutes, days, network)
     except (LookupError, ValueError) as e:
         return {'refused': str(e)}
     except OSError as e:
@@ -389,6 +394,10 @@ def main(argv):
     funding = float(opt('--funding', '0'))
     account = opt('--account', None)                # T11: {equity, mm, label}
     account = json.loads(account) if account else None
+    network = opt('--hl-network', None)             # D177: the panel's fleet's
+    if network not in (None, 'testnet', 'mainnet', 'mixed'):
+        print(f'--hl-network: testnet, mainnet or mixed, not {network!r}')
+        return 2
     if as_draft:
         # the options were parsed (and removed) above — asking opt() again
         # returned the DEFAULTS, so every draft ran 7 days whatever was
@@ -398,7 +407,7 @@ def main(argv):
                   flush=True)
         out = run_draft(sys.stdin.read(), days, bar_minutes, fee,
                         optimize=optimize, progress=say, windows=windows,
-                        account=account)
+                        account=account, network=network or 'testnet')
         print(json.dumps(out))
         return 0 if 'refused' not in out else 1
     if len(argv) != 1 or not botid:
@@ -436,7 +445,8 @@ def main(argv):
             return 2
         bar_minutes = MARTINGALE_BAR_MINUTES       # T7
     try:
-        bars, adapter = bars_and_adapter(cfg, bar_minutes, days)
+        from .exchange.hyperliquid.client import network_of
+        bars, adapter = bars_and_adapter(cfg, bar_minutes, days, network or network_of(raw_fleet))
     except (LookupError, ValueError) as e:
         print(f'{botid}: {e}')
         return 2

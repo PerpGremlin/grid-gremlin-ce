@@ -39,6 +39,20 @@ def permit_mainnet_reads(fleet):
     return _MAINNET_READS
 
 
+def network_of(fleet):
+    """D177: the HL network a fleet's PUBLIC reads go to (prices, markets,
+    candles: no address, no key) — mainnet when its file says the switch,
+    JSON true (D25b), else testnet, the paper fleets' own."""
+    return 'mainnet' if (fleet or {}).get('allow_mainnet') is True else 'testnet'
+
+
+def public_info(network):
+    """A reader of `network`'s PUBLIC universe (meta, marks, candles): no
+    address, no key — what the panel's forms price by (D177). The panel
+    never names the switch (D65); the network it got from network_of does."""
+    return InfoClient(env=network, address='', allow_mainnet=network == 'mainnet')
+
+
 class InfoClient:
     def __init__(self, env=None, address=None, transport=None,
                  allow_mainnet=None):

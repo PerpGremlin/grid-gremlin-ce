@@ -773,7 +773,7 @@ def spec_U5_the_hl_lookup_names_testnet_and_needs_no_environment():
         cfg = {'venue': 'hyperliquid', 'market_type': 'linear',
                'symbol': 'BTC'}
         assert pc.public_mark(cfg) == 85000.0
-        assert seen == {'env': 'testnet', 'kw': {}}     # no mainnet flag
+        assert seen['env'] == 'testnet' and not seen['kw'].get('allow_mainnet')   # no mainnet flag (D177: False, said)
         assert type(pc.public_adapter(cfg)).__name__ == 'HLPerpAdapter'
         try:
             pc.public_mark(dict(cfg, symbol='NOPE'))
