@@ -361,6 +361,18 @@ def build(fleet_paths, now=None, **roots):
     return '\n\n'.join(parts), dict(state, **places)
 
 
+def marked_parts(text, fleet_paths, chunks, limit):
+    """E12d (D175): a digest of a real-money fleet, one whose file says JSON
+    `"allow_mainnet": true` (D25b, the switch its readers read by, D177),
+    opens every part with the mark on its own line, counted in the split."""
+    from .main import MAINNET_MARK
+    real = any(json.loads(Path(f).read_text()).get('allow_mainnet') is True
+               for f in fleet_paths)
+    if not real:
+        return chunks(text, limit)
+    return [f'{MAINNET_MARK}\n{p}' for p in chunks(text, limit - len(MAINNET_MARK) - 1)]
+
+
 def main(argv):
     dry = '--dry' in argv
     argv = [a for a in argv if a != '--dry']
@@ -371,9 +383,12 @@ def main(argv):
     text, state = build(argv)
     print(text)
     if dry:
+        from common.telegram import LIMIT, chunks
+        if marked_parts(text, argv, chunks, LIMIT)[0].startswith('🔴'):
+            print('(sent with each part opening 🔴 MAINNET)')
         return 0
-    from common.telegram import chunks, send_telegram
-    for part in chunks(text):           # E12c: in parts, never cut at the cap
+    from common.telegram import LIMIT, chunks, send_telegram
+    for part in marked_parts(text, argv, chunks, LIMIT):   # E12c, E12d
         send_telegram(part)
     write_json(STATE, state)            # the log place moves only once sent
     return 0

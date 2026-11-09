@@ -132,7 +132,8 @@ def spec_E12c_the_digest_and_the_watchdog_send_in_parts_never_cut():
     assert len(parts) == 3 and '\n'.join(parts) == text
     root = Path(__file__).resolve().parents[1] / 'gridgremlin'
     dg, wd = (root / 'digest.py').read_text(), (root / 'watchdog.py').read_text()
-    assert '[:3900]' not in dg and 'for part in chunks(text):' in dg
+    assert '[:3900]' not in dg and 'for part in marked_parts(text, argv, chunks, LIMIT):' in dg
+    assert 'return chunks(text, limit)' in dg      # E12d marks the parts, chunks still splits them
     assert "for part in chunks(f\"[{cfg['tag']}] \" + '\\n'.join(pages)):" in wd
 
 

@@ -127,6 +127,9 @@ eventually pin (T1).
   the build it follows D25's two halves, after it the network the clients
   reached. `spec_D175_*`, with sabotage. *(D175, 2026-11-09: the first
   live fleet's own pages wore the venue's 🟢🟢 alone, as the testnet's do)*
+  The daily digest, sent by its own path, marks every part when a fleet it
+  digests says JSON `"allow_mainnet": true` (F7b's switch), the mark
+  counted in the split. *(2026-11-10: its dry run on the live copy had none)*
 - **E13** The fleet-down and watchdog-failing pages write their 30-minute
   stamp only after Telegram took the page (`curl -f`): a failed send fails
   the unit and leaves the next tick free to page. *(the audit: the stamp was

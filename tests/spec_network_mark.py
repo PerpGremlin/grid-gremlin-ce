@@ -71,3 +71,30 @@ def spec_D175_the_fleet_sets_the_mark_before_its_first_message_and_after_the_bui
     build = body.index('build_fleet(fleet_path, notifier')
     after = body.index('notifier.network_mark = network_mark(fleet, allow_mainnet, clients)')
     assert before < build < after
+
+
+def spec_D175_a_real_money_fleets_digest_opens_every_part_with_the_mark():
+    """The digest sends by its own path, not the fleet's notifier: a fleet
+    file saying JSON true marks every part, the mark counted in the split
+    (each part under the cap); a paper fleet's, or a string 'true', never.
+    Sabotage: marking only the first part leaves the second unmarked."""
+    import json
+    import tempfile
+    from common.telegram import LIMIT, chunks
+    from gridgremlin.digest import marked_parts
+    text = '\n'.join('x' * 60 for _ in range(150))           # two parts
+    with tempfile.TemporaryDirectory() as d:
+        def fleet(name, **kw):
+            p = Path(d) / name
+            p.write_text(json.dumps(dict(kw, bots=[])))
+            return str(p)
+        live, paper, wrong = fleet('a.json', allow_mainnet=True), fleet('b.json'), \
+            fleet('c.json', allow_mainnet='true')
+        parts = marked_parts(text, [paper, live], chunks, LIMIT)
+        assert len(parts) >= 2 and all(p.startswith('🔴 MAINNET\n') and len(p) <= LIMIT
+                                       for p in parts)
+        assert '\n'.join(p.split('\n', 1)[1] for p in parts) == text
+        for f in (paper, wrong):
+            assert not any('MAINNET' in p for p in marked_parts(text, [f], chunks, LIMIT))
+    src = (Path(__file__).resolve().parents[1] / 'gridgremlin' / 'digest.py').read_text()
+    assert 'for part in marked_parts(text, argv, chunks, LIMIT)' in src
