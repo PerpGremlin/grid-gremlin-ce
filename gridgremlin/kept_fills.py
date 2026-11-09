@@ -254,6 +254,8 @@ def keep(fleet_path, root='logs/fills', now_ms=None, clients=None,
     fleet = with_trades(fleet_path, fleet)          # L5: a trade is a bot to every reader
     from .exchange.env import select_account
     select_account(fleet['account'])                  # H5
+    from .exchange.hyperliquid.client import permit_mainnet_reads
+    permit_mainnet_reads(fleet)                       # D177: reads only
     venues = {c['venue'] for c in market_rows(fleet)}
     if clients is None:
         clients = {}

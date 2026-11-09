@@ -1280,6 +1280,8 @@ def main(argv):
     fleet = validate_fleet(json.loads(Path(argv[0]).read_text()))
     from .trades import with_trades
     fleet = with_trades(argv[0], fleet)          # L5: a trade is a bot to every reader
+    from .exchange.hyperliquid.client import permit_mainnet_reads
+    permit_mainnet_reads(fleet)                  # D177: a real-money fleet's own figures
     from .exchange.env import select_account
     if fleet['bots'] or not (fleet.get('agent') or {}).get('paper'):
         select_account(fleet['account'])              # H5 — a paper agent with no rows

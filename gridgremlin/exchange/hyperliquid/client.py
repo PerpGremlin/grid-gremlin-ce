@@ -23,18 +23,36 @@ def detect_env():
     return 'mainnet'
 
 
+# D177: a reader of a real-money fleet — the report the panel shows, the kept
+# ledger, the drift check — reaches mainnet on the fleet file's own switch
+# alone: these reads go to /info by the account's public address, no key, no
+# write. Set per fleet read (never left from the last one); trading never
+# takes it — ExchangeClient states its own D25 answer, both halves.
+_MAINNET_READS = False
+
+
+def permit_mainnet_reads(fleet):
+    """The fleet file's real-money switch (JSON true, D25b) opens reads, and
+    only reads, of mainnet for this process until the next fleet's says."""
+    global _MAINNET_READS
+    _MAINNET_READS = (fleet or {}).get('allow_mainnet') is True
+    return _MAINNET_READS
+
+
 class InfoClient:
     def __init__(self, env=None, address=None, transport=None,
-                 allow_mainnet=False):
+                 allow_mainnet=None):
         self.env = env or detect_env()
         from ...edition import real_money_refused
         if self.env == 'mainnet' and real_money_refused():
             raise VenueError(real_money_refused())        # D68
+        if allow_mainnet is None:
+            allow_mainnet = _MAINNET_READS                # D177: a reader's
         if self.env == 'mainnet' and not allow_mainnet:
-            raise VenueError('HL mainnet is double-safetied (D25): it needs '
-                             '\'"allow_mainnet": true\' in the fleet file AND '
-                             '--allow-mainnet on the launch — a bare env flag '
-                             'is never enough')
+            raise VenueError('HL mainnet is double-safetied (D25): reading it needs '
+                             '\'"allow_mainnet": true\' in the fleet file; trading '
+                             'it, that AND --allow-mainnet on the launch — a bare '
+                             'env flag is never enough')
         self.base = BASE_URLS[self.env]
         self.address = address or os.environ.get('HL_ACCOUNT_ADDRESS', '')
         self._transport = transport or self._http

@@ -1365,6 +1365,12 @@ eventually pin (T1).
   is the armour — a cloned repo cannot reach real money by accident. *(supersedes
   F5's "no mainnet path"; F5's demo-fleet clause stands)*
 
+- **F7b** (D177) Reading is not trading: a reader of a fleet whose file says JSON
+  `"allow_mainnet": true` (the report, the kept ledger, the drift check) reaches HL
+  mainnet's read endpoint on that switch alone, set from each fleet it reads and never
+  left from the last; the trading client never takes it and still needs both halves.
+  *Spec: `spec_mainnet_reads.py`, the trading half with a sabotage spec.*
+
 - **F8** The preflight (D27, optional): `probe` places ONE unfillable post-only
   rehearsal order per bot at build and cancels it — the whole placement path
   (auth, permissions, collateral, lot rules, the preconditions nobody published)

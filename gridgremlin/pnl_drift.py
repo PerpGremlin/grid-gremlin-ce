@@ -722,7 +722,8 @@ def _clients(fleet):
         from .exchange.bybit.client import Client
         out['bybit'] = Client()
     if 'hyperliquid' in venues:
-        from .exchange.hyperliquid.client import InfoClient
+        from .exchange.hyperliquid.client import InfoClient, permit_mainnet_reads
+        permit_mainnet_reads(fleet)                   # D177
         out['hl'] = InfoClient()
     return out
 
