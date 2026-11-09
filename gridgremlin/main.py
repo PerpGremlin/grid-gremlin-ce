@@ -124,13 +124,13 @@ def portfolio_legs(cfg, client):
 
 def collateral_coin(cfg, spec):
     """The coin a row needs switched on as collateral at build, or None:
-    margin spot's (D24), and an inverse DCA's, margined in its coin, which the
-    unified account refuses (110101) until it is, as a Portfolio Bot's leg
-    (D165)."""
+    margin spot's (D24), and an inverse row's, DCA (D165) or grid (D176),
+    margined in its coin, which the unified account refuses (110101) until
+    it is, as a Portfolio Bot's leg."""
     if cfg['market_type'] == 'spot' and cfg.get('spot_borrow'):
         return spec['base_coin']
-    if cfg['market_type'] == 'inverse' and cfg['strategy'] == 'martingale':
-        return spec['settle_coin']
+    if cfg['market_type'] == 'inverse':
+        return spec['settle_coin']                 # D176: a grid as a DCA (D165)
     return None
 
 

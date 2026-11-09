@@ -83,8 +83,17 @@ def backtest(cfg, adapter, bars, fee_rate=BYBIT_MAKER, funding_rate_hourly=0.0,
         return (sign * adapter.pnl_to_usd(adapter.realised_pnl(basis, price, held), price)
                 if basis and held else 0.0)
 
+    # T10b: a coin-margined row's investment is coins, bought at the run's
+    # first price: worth what the coin is worth now, not a fixed dollar sum
+    # (a short's collateral rises with the rally that costs it)
+    first_px = float(bars[0]['o']) if bars else None
+    coin_margined = adapter.market_type == 'inverse' and first_px
+
+    def collateral_at(price):
+        return capital * price / first_px if coin_margined else capital
+
     def equity_at(price):
-        return capital + realized - fees - funding_paid() + unreal_at(price)
+        return collateral_at(price) + realized - fees - funding_paid() + unreal_at(price)
 
     def funding_paid():
         return funding_total[0]

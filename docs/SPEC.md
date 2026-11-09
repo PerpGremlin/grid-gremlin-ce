@@ -4475,6 +4475,13 @@ that pins it (T1).
   row on its capital alone would first have met its maintenance margin
   (Bybit's base tier, 0.5%) at a bar's worst price: a risk line, never a
   refusal or a stop.
+- **T10b** A coin-margined row's investment is coins, bought at the
+  run's first price: its collateral is worth what the coin is worth at each
+  price, so a short's rises with the rally that costs it and a long's falls
+  with the drop. The line is pinned against the closed form on both sides.
+  `spec_T10b_*`, with sabotage. *(2026-11-10: counted as fixed dollars, a
+  1x inverse short grid read as liquidated at 2.7x the price, and a long's
+  line sat too far away)*
 - **T11** The rehearsal projects the account's MMR, the exchange's own
   liquidation gauge (maintenance margin over equity; Bybit liquidates at
   100%): from the account's latest snapshot — the venue's default account,

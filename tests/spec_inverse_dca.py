@@ -184,7 +184,7 @@ def spec_M27_its_coin_is_switched_on_as_collateral_at_build():
     spec = {'settle_coin': 'BTC', 'base_coin': 'BTC'}
     assert collateral_coin(_cfg(), spec) == 'BTC'
     assert collateral_coin(_cfg(market_type='linear', symbol='BTCUSDT'), spec) is None
-    assert collateral_coin({'market_type': 'inverse', 'strategy': 'grid'}, spec) is None
+    assert collateral_coin({'market_type': 'inverse', 'strategy': 'grid'}, spec) == 'BTC'   # D176
     assert collateral_coin({'market_type': 'spot', 'strategy': 'martingale',
                             'spot_borrow': True}, spec) == 'BTC'
 
@@ -217,3 +217,41 @@ def spec_M28_an_inverse_rows_leverage_is_set_on_the_venue():
     set_inverse_leverage(_cfg(leverage=10), Venue(refuse=True), note)
     assert any('leverage not set to 10x' in ln for ln in lines)
     assert 'set_inverse_leverage(cfg, client,' in inspect.getsource(build_market_bot)
+
+
+def spec_T10b_a_coin_margined_grid_s_liquidation_counts_its_collateral_in_the_coin():
+    """An inverse grid's investment is coins, bought at today's price, worth
+    what the coin is worth at each price: a short's collateral rises with the
+    rally that costs it, a long's falls with the drop. Counted as fixed
+    dollars, a 1x short read as liquidated at 2.7x the price (it never is)
+    and a long's line sat too far away. Each estimate is pinned against the
+    closed form, maintenance included. Sabotage: fixed-dollar collateral
+    fails both sides."""
+    from gridgremlin.adapters import InverseAdapter
+    from gridgremlin.config import validate_config
+    from panel.consequence import MM_RATE, liquidation
+    inv = InverseAdapter({'symbol': 'BTCUSD', 'qty_step': 1, 'price_tick': 0.5, 'min_qty': 1,
+                          'min_notional': 1, 'settle_coin': 'BTC'})
+    mark = 75000.0
+
+    def row(side, lev, lower, upper):
+        return validate_config({'market_type': 'inverse', 'symbol': 'BTCUSD', 'side': side,
+                                'capital': 300.0, 'leverage': lev, 'lower': lower,
+                                'upper': upper, 'rungs': 21, 'spacing_type': 'fixed'})
+    assert liquidation(row('short', 1, 70000.0, 90000.0), inv, mark)['price'] is None
+    for side, lev, lo, hi in (('short', 2, 70000.0, 90000.0), ('short', 3, 70000.0, 90000.0),
+                              ('long', 3, 60000.0, 80000.0)):
+        r = liquidation(row(side, lev, lo, hi), inv, mark)
+        n = r['held']                                   # contracts held at the line, $1 each
+        cfg = row(side, lev, lo, hi)
+        prices = [lo + (hi - lo) * i / 20 for i in range(21)]
+        held = [p for p in prices if (p > mark if side == 'short' else p < mark)]
+        avg = len(held) / sum(1.0 / p for p in held)    # equal contracts: the harmonic mean
+        coins = cfg['capital'] / mark
+        # equity in coins at P: coins + n*(1/P - 1/avg) for a short,
+        # coins + n*(1/avg - 1/P) for a long; the line is where it meets MM*n/P
+        if side == 'short':
+            want = n * (1.0 - MM_RATE) / (n / avg - coins)
+        else:
+            want = n * (1.0 + MM_RATE) / (coins + n / avg)
+        assert abs(r['price'] / want - 1.0) < 0.02, (side, lev, r['price'], want)

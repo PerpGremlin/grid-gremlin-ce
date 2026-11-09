@@ -1699,6 +1699,7 @@ stands unless the owner corrects it.
   and the log stays plain. The live fleet takes it at a restart after a day on play
   money (D66).
 
+
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
 inline above.*
