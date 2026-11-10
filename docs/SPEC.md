@@ -469,7 +469,11 @@ eventually pin (T1).
   is sized by what its own fills bought and still hold (the walk that names
   its rung, G23), never by the row's capital now. A capital change (F12,
   hot) resizes the resting entries and every later lot, and no lot already
-  held; nothing is bought for it. `spec_G25c_*`, with sabotage. *(2026-11-10,
+  held; nothing is bought for it. An entry filled in part is sold at the
+  part it bought, its residue riding the next exit up: no exit is larger
+  than what was bought below it (Hyperliquid testnet 11-06 → 11-08, before
+  G25c: a whole lot's exit over a part-fill sold higher lots under cost).
+  `spec_G25c_*`, with sabotage. *(2026-11-10,
   the replay of the live grid's terms: a raise re-sized held lots at the new
   capital, sold the top one short and left coin no exit held)*
 - **G26** The fills must account for the change before exits are re-paired. The

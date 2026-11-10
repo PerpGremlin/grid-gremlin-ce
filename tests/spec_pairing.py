@@ -1823,6 +1823,35 @@ def spec_D166_a_residue_never_gets_a_full_lots_exit():
     assert round(sum(o['qty'] for o in sells), 6) == round(held, 6)
 
 
+def spec_G25c_a_partly_filled_entry_sells_only_what_it_bought():
+    """Measured on Hyperliquid testnet (BTC grid, 11-06 → 11-08): a rung's
+    exit sold 0.00306 of 0.00329, the rung below bought again only 0.00044,
+    and the exit placed over it was a whole lot, 0.00329 — it filled two days
+    later and sold coin bought a rung and two higher, under cost (twice,
+    about 4 USDC). G25c (11-10) sizes a lot's exit by its own fills; this is
+    that shape: no sell is larger than what was bought below it, and the
+    residue rides the next exit up. SABOTAGE: held_qty=None (own_lot, the
+    old sizing) puts the whole lot at rung 14 -> red."""
+    from gridgremlin.ladder import plan_grid
+    clock, fills = _Clock(), []
+    bot = _reader(fills, clock)
+    b = bot.botid
+    for side, price, qty, link in (('Buy', 64000.0, 0.007, f'{b}-14-a'),
+                                   ('Buy', 63000.0, 0.007, f'{b}-13-b'),
+                                   ('Sell', 64000.0, 0.006, f'{b}-14-c'),
+                                   ('Buy', 63000.0, 0.002, f'{b}-13-d')):
+        clock.t += 60.0
+        fills.append(_fill_row(fills, clock, side, price, qty, link))
+    held = 0.010
+    rungs = bot._held_rungs(held)
+    assert rungs == [13, 14] and bot._held_qty(rungs) == {13: 0.002, 14: 0.007}
+    orders = plan_grid(_cfg(), ADAPTER, 63500.0, held_base=held, basis=63700.0,
+                       held_rungs=rungs, held_qty=bot._held_qty(rungs))
+    sells = sorted((o['price'], o['qty']) for o in orders if o['side'] == 'Sell')
+    assert sells == [(64000.0, 0.002), (65000.0, 0.008)], sells
+    assert round(sum(q for _, q in sells), 6) == held
+
+
 def spec_D166_a_partly_filled_exit_keeps_its_remainder_resting():
     """Past half filled, the lot is a residue, but its exit's remainder rests:
     it stays, sized to itself, and is not cancelled to sell elsewhere.
