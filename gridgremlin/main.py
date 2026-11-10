@@ -786,7 +786,7 @@ def build_fleet(fleet_path, notifier, allow_mainnet=False):
     # a row that does not validate is named and set aside (D52's shape)
     from .trades import TradeError, load_trades
     try:
-        trade_rows, trade_refused = load_trades(state_path(fleet_path, fleet, 'trades'))
+        trade_rows, trade_refused = load_trades(state_path(fleet_path, fleet, 'trades'), fleet.get('venue'))
     except TradeError as e:
         raise ConfigError(str(e)) from e
     for i, why in trade_refused:
@@ -1088,7 +1088,7 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
         trade_watch = TradeWatch(
             state_path(fleet_path, fleet, 'trades'), bots, fleet.get('_identities', []),
             lambda cfg: build_live_trade(cfg, fleet, clients, bots, notifier),
-            notifier, clients)
+            notifier, clients, fleet.get('venue'))
         from .retire import RetireWatch, requests_path
         retire_watch = RetireWatch(requests_path(fleet_path), bots, notifier)   # D145
         while cycles is None or n < cycles:

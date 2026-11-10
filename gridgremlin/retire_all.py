@@ -137,7 +137,7 @@ def retire_fleet(fleet_path, dry=False, sell=False, clear=False):
         return {'refused': 'the fleet is running on this file — stop it first: '
                            'its running bots would place their orders back'}
     # D81: the fleet's open trades are bots of it too, retired with it
-    trades, trade_refused = load_trades(state_path(str(fleet_path), fleet, 'trades'))
+    trades, trade_refused = load_trades(state_path(str(fleet_path), fleet, 'trades'), fleet.get('venue'))
     trades = [dict(t, account=fleet['account']) for t in trades]
     refused = ([f'{where} ({label}): {why}' for where, label, why in fleet.get('refused', ())]
                + [f'trades[{i}]: {why}' for i, why in trade_refused])

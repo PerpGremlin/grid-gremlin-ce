@@ -1909,6 +1909,12 @@ eventually pin (T1).
   once per readout — its grid, DCA and trade rows' venues and each Portfolio
   Bot's. A fleet of portfolio rows alone had read none (its balances "not
   read", nothing recorded by D162).
+- **R19c** (2026-11-10) *Now* is the account's positions over its whole
+  collateral, the base its MMR and *if every order filled* use. On a unified
+  Hyperliquid account the exchange's account value is only the USDC held as
+  perp margin (on it the headline read about twice the real figure); that
+  figure stays beside it, named as Hyperliquid's own. Bybit, whose margin
+  balance is its collateral, reads as before. Supersedes R19's *now*.
 - **R16** An unlinked fill on a bot's exit side is booked to that bot, whoever
   created it: a modify the venue rebuilt without the link, a hand close, a
   venue close without a label. I2 makes it unambiguous — one bot per (market,
@@ -3375,6 +3381,11 @@ eventually pin (T1).
   leverage it states. The
   fleet file watch (F12) leaves trades alone. At a start, the trades file's
   rows join the build like any row; a malformed file refuses the build.
+- **L1b** (2026-11-10) A trade row naming no venue is its fleet's, on writing
+  (the panel, the CLI) and on every read (the engine's start and watch, the
+  readout, retire all); one naming another venue than its fleet's is refused
+  at the door (U106). Rows were read as Bybit's, so a Hyperliquid fleet's
+  engine refused every trade its panel wrote.
 - **L2** A trade is a one-round DCA row with no safety orders: its base
   order is the whole trade (capital x leverage unless stated), repeat is
   off, a DCA bot's ladder keys are refused by name, and its exit is still
@@ -3413,6 +3424,9 @@ eventually pin (T1).
 - **L6b** A running trade is never cleared: the clear is refused, its row
   and its close trade kept. Cleared, nothing would own its position after
   the next restart. *(independent audit 2026-10-16)*
+- **L6c** (2026-11-10) On an account of Hyperliquid's the trade form's market box
+  starts empty with HL's own kind of name (BTC, ETH), not Bybit's BTCUSDT, and
+  its investment and review say USDC.
 - **L7** A running trade is closed by its own bot, never from outside: a
   close request (`{t, by, reason}`) rides in the trade's record in the
   trades file; the fleet hands it to the trade's bot — at once when the

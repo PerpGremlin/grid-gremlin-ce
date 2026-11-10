@@ -20,20 +20,23 @@ class TradePages:
         """L6: the form, then every fleet's open trades."""
         from gridgremlin.trades import TradeError, _botid, load_trades
         from panel.trade_page import open_trades_html, trade_form
-        listed = []
+        listed, venues = [], []
         for fi, lb in enumerate(self.labels):
             try:
                 _f0, _fl, _rows, path = self._trades_of(fi)
-                trades, _ = load_trades(path)
+                venues.append(_fl.get('venue'))
+                trades, _ = load_trades(path, _fl.get('venue'))
             except (TradeError, OSError, ValueError, KeyError):
                 trades = []
+                if len(venues) <= fi:
+                    venues.append(None)
             listed.append((fi, lb, [(_botid(t), t) for t in trades]))
         # D157: the second typing is asked on Mainnet only, so its box shows
         # only when an account here may reach Mainnet (the gate is unchanged)
         real = any(self._mainnet(f, v) for f in self.fleets for v in ('bybit', 'hyperliquid'))
         each = {fi for fi, f in enumerate(self.fleets)
                 if any(self._mainnet(f, v) for v in ('bybit', 'hyperliquid'))}
-        return trade_form(self.labels, msg, typed, mainnet=real) + open_trades_html(listed, each)
+        return trade_form(self.labels, msg, typed, mainnet=real, venues=venues) + open_trades_html(listed, each)
 
     def _listed(self, fi, symbol):
         """U83: a trade names a market the venue lists — letters and digits,
@@ -91,6 +94,8 @@ class TradePages:
             if form.get('maker'):
                 opts['maker'] = True
             row = build_row(form.get('side', ''), form.get('symbol', ''), opts)
+            if _fleet.get('venue') and 'venue' not in row:           # L1b: the account's venue
+                row['venue'] = _fleet['venue']
             self._listed(fi, row['symbol'])                     # U83
             if self._mainnet(f, row.get('venue', 'bybit')):              # D64: a trade is a bot (L5)
                 from panel.create import retype_refusal
@@ -108,12 +113,12 @@ class TradePages:
                 botid = _botid(cfg)
                 if botid in {make_botid(c['market_type'], c['symbol'], c['side'])
                              for c in rows if c.get('strategy') != 'portfolio'} | \
-                        {_botid(t) for t in load_trades(path)[0]}:
+                        {_botid(t) for t in load_trades(path, _fleet.get('venue'))[0]}:
                     raise TradeError(f'{botid}: this account already has a bot or a trade on '
                                      f'{cfg["symbol"]} {cfg["side"]} — one position per side of a '
                                      'market per account')
                 return self._page(trade_review(cfg, fi, self.labels[min(fi, len(self.labels) - 1)], form))
-            botid = add_trade(path, rows, row)
+            botid = add_trade(path, rows, row, _fleet.get('venue'))
         except (ConfigError, TradeError, ValueError, OSError) as e:
             return self._page(self._trade_html(refusal_box('trade refused', e), form))
         type(self)._cache.pop(self.fleets[min(fi, len(self.fleets) - 1)], None)   # the next readout shows it

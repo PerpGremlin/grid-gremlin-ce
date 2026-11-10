@@ -454,3 +454,51 @@ def spec_X15d_closing_a_live_trade_on_real_money_asks_its_size_twice():
     finally:
         Handler.units = saved
         close()
+
+
+def spec_L1b_a_trade_naming_no_venue_is_its_fleets():
+    """The live Hyperliquid panel's trades were written naming no venue,
+    read as Bybit's by default, and so refused by the running engine ("a
+    trade on bybit, which this fleet does not trade"; owner 2026-11-10:
+    "the single trade option in new bots is broken"). Now a row naming
+    none is its fleet's, on writing and on every read; a row naming
+    another venue than its fleet's is refused at the door (U106).
+    Sabotage: the watch read without the fleet's venue refuses again."""
+    d = Path(tempfile.mkdtemp())
+    path = d / 'trades-live.json'
+    sol = {'symbol': 'SOL', 'side': 'long', 'capital': 40.0, 'leverage': 10,
+           'take_profit_avg_pct': 0.05}
+    assert add_trade(path, [], dict(sol), 'hyperliquid') == 'linSOLl'
+    assert json.loads(path.read_text())[0]['venue'] == 'hyperliquid'
+    assert 'one venue' in _refused(add_trade, path, [], dict(sol, symbol='ETH', venue='bybit'), 'hyperliquid')
+    path.write_text(json.dumps([dict(sol)]))                    # a row written before the fix
+    assert load_trades(path, 'hyperliquid')[0][0]['venue'] == 'hyperliquid'
+    assert load_trades(path)[0][0]['venue'] == 'bybit'          # no fleet named: the old default
+
+    class B:
+        alive, botid = True, 'linSOLl'
+    lines = []
+    w = TradeWatch(path, [], [], lambda cfg: (B(), ('linear', cfg['symbol'], 1)),
+                   Notifier(sink=lines.append), {'hyperliquid': object()}, 'hyperliquid')
+    assert w.apply() == {'linSOLl': 'built'}
+    old = TradeWatch(path, [], [], lambda cfg: (B(), ('linear', cfg['symbol'], 1)),
+                     Notifier(sink=lines.append), {'hyperliquid': object()})
+    assert old.apply() == {'linSOLl': 'refused'}               # the bug, as it was
+    main = (Path(__file__).resolve().parents[1] / 'gridgremlin' / 'main.py').read_text()
+    assert "load_trades(state_path(fleet_path, fleet, 'trades'), fleet.get('venue'))" in main
+    assert "notifier, clients, fleet.get('venue'))" in main
+
+
+def spec_L6c_the_hl_trade_form_names_hls_markets_and_its_coin():
+    """The form's market box was filled with BTCUSDT, which Hyperliquid
+    lists no such market as, and its money said "quote". On an account
+    of Hyperliquid's the box starts empty with HL's own kind of name, the
+    investment and the review say USDC; Bybit's form is unchanged."""
+    from panel.trade_page import trade_form, trade_line
+    hl = trade_form(['Hyperliquid MAINNET'], mainnet=True, venues=['hyperliquid'])
+    assert 'value="BTCUSDT"' not in hl and 'placeholder="ETH"' in hl and 'the margin, in USDC' in hl
+    by = trade_form(['demo'], venues=['bybit'])
+    assert 'value="BTCUSDT"' in by and 'the margin, in the quote coin' in by
+    cfg = validate_trade({'symbol': 'AVAX', 'side': 'long', 'capital': 40.0, 'leverage': 10,
+                          'take_profit_avg_pct': 0.05}, venue='hyperliquid')
+    assert trade_line(cfg).startswith('Long AVAX, 40 USDC at 10x')

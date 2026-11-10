@@ -25,16 +25,26 @@ def _contract():
                             'collateral': 1_100.9}}}
 
 
-def spec_R19_now_is_the_exchange_own_figure():
-    """Hyperliquid's own ratio — its total position value over its account
-    value (2.66x, 2026-10-06) — not a figure of ours; on Bybit, which states
-    none, its own position values over its margin balance."""
+def spec_R19c_now_is_over_the_whole_collateral():
+    """R19c (owner 2026-11-10): now is the account's positions over its
+    whole collateral, the base the MMR and the if-filled line use. On a
+    unified Hyperliquid account the exchange's account value is only the
+    USDC held as perp margin (the headline said about twice the
+    account's real leverage); that figure stays beside it, named as Hyperliquid's own. On
+    Bybit, whose margin balance is its collateral, nothing changes.
+    Sabotage: now over the account value again reads 2.66x here."""
     lev = account_leverage(_contract())
-    assert abs(lev['hyperliquid']['now'] - 1_604.18 / 603.16) < 1e-9
-    assert lev['bybit']['now'] == 3.0
+    assert abs(lev['hyperliquid']['now'] - 1_604.18 / 1_100.9) < 1e-9
+    assert abs(lev['hyperliquid']['venue_now'] - 1_604.18 / 603.16) < 1e-9
+    assert lev['bybit']['now'] == lev['bybit']['venue_now'] == 3.0
+    now, _ = leverage_lines(_contract())['bybit']
+    assert now == 'account leverage 3.00x (120k in positions on 40k)'
     gone = _contract()
-    gone['account']['bybit'] = dict(gone['account']['bybit'], equity=None)
+    gone['account']['bybit'] = dict(gone['account']['bybit'], equity=None, collateral=None)
     assert account_leverage(gone)['bybit']['now'] is None   # unknown, not zero
+    half = _contract()
+    half['account']['hyperliquid'] = dict(half['account']['hyperliquid'], collateral=None)
+    assert abs(account_leverage(half)['hyperliquid']['now'] - 1_604.18 / 603.16) < 1e-9
 
 
 def spec_R19_if_every_order_filled_is_said_per_direction():
@@ -55,7 +65,8 @@ def spec_R19_if_every_order_filled_is_said_per_direction():
     assert abs(h['fall'] - (1_604.18 + 900.0) / 1_100.9) < 1e-9
     assert abs(h['rise'] - 1_604.18 / 1_100.9) < 1e-9    # no HL short here
     now, filled = leverage_lines(_contract())['hyperliquid']
-    assert now == 'account leverage 2.66x (1,604 in positions on 603)'
+    assert now == ("account leverage 1.46x (1,604 in positions on 1,101 collateral; "
+                   "Hyperliquid's own figure 2.66x, on the 603 it holds as perp margin)")
     assert filled == ('if every order filled: 2.27x on a fall (2,504), '
                       '1.46x on a rise (1,604), on 1,101 collateral')
     assert '1 bots unsized' in leverage_lines(_contract())['bybit'][1]

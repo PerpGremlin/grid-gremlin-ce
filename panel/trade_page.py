@@ -5,11 +5,18 @@ same `gridgremlin.trades` the command line and the agent's door use."""
 import html
 
 
-def trade_form(labels, msg='', typed=None, mainnet=False):
+def trade_form(labels, msg='', typed=None, mainnet=False, venues=None):
     """The form, refilled with what was typed when a trade is refused.
     `mainnet`: an account here may reach Mainnet, where the investment is
-    typed twice (D64); off it the second box is not shown (D157)."""
+    typed twice (D64); off it the second box is not shown (D157).
+    `venues`: each account's venue — L6c: on Hyperliquid the market box is
+    not filled with Bybit's BTCUSDT, which HL lists no such market as (the
+    live panel refused its own default, owner 2026-11-10), and the money
+    is said in USDC."""
     t = typed or {}
+    vs = [v for v in (venues or []) if v]
+    hl = bool(vs) and all(v == 'hyperliquid' for v in vs)
+    coin = 'USDC' if hl else 'the quote coin'
 
     def v(k, d=''):
         return html.escape(str(t.get(k, d)), quote=True)
@@ -28,9 +35,13 @@ def trade_form(labels, msg='', typed=None, mainnet=False):
             + row('side', '<select name="side">'
                   f'<option{" selected" if side == "long" else ""}>long</option>'
                   f'<option{" selected" if side == "short" else ""}>short</option></select>')
-            + row('market', f'<input name="symbol" value="{v("symbol", "BTCUSDT")}" size="14">', 'a perp like BTCUSDT')
+            + (row('market', f'<input name="symbol" value="{v("symbol")}" size="14" placeholder="ETH">',
+                   'the coin alone, as Hyperliquid names its perps: BTC, ETH, SOL')
+               if hl else
+               row('market', f'<input name="symbol" value="{v("symbol", "BTCUSDT")}" size="14">',
+                   'a perp like BTCUSDT (on Hyperliquid, the coin alone: BTC)'))
             + row('investment', f'<input name="capital" value="{v("capital")}" size="10">',
-                  'the margin, in the quote coin')
+                  f'the margin, in {coin}')
             + (row('investment, again', f'<input name="retype_capital" value="" size="10">',
                    'on Mainnet only: type it a second time') if mainnet else '')
             + row('leverage', f'<input name="leverage" value="{v("leverage", "1")}" size="6">', unit='x')
@@ -84,7 +95,7 @@ def trade_line(cfg):
     plain words: "Long BTCUSDT, 100 USDT at 5x, take profit +2%, stop −1%,
     at market." From the validated row, so it says what the fleet opens."""
     from gridgremlin.report import money_units
-    quote = money_units(None, cfg.get('market_type', 'linear'), cfg['symbol'])['quote']
+    quote = money_units(cfg.get('venue'), cfg.get('market_type', 'linear'), cfg['symbol'])['quote']
     parts = [f"{cfg['side'].capitalize()} {cfg['symbol']}, {cfg['capital']:,.10g} {quote} "
              f"at {cfg.get('leverage') or 1:g}x",
              f"take profit +{(cfg.get('take_profit_avg_pct') or 0) * 100:g}%"]

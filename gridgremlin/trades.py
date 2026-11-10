@@ -44,11 +44,16 @@ def _read(path):
 META = ('opened', 'by', 'reason', 'confidence', 'close')   # the trade's own record, not the bot's terms
 
 
-def validate_trade(row, where='trade'):
+def validate_trade(row, where='trade', venue=None):
     """A trade row through the bot validator, marked a trade (D81); its
-    record (when it opened, who opened it, why) rides beside the terms."""
+    record (when it opened, who opened it, why) rides beside the terms.
+    L1b: a row that names no venue is its fleet's (`venue`, the fleet
+    file's own) — it was Bybit's by default, so a Hyperliquid fleet's
+    engine refused every trade its panel wrote (owner 2026-11-10)."""
     if not isinstance(row, dict):
         raise ConfigError(f'{where}: a trade is an object')
+    if venue and 'venue' not in row:
+        row = dict(row, venue=venue)
     if row.get('strategy', 'martingale') != 'martingale':
         raise ConfigError(f"{where}: a trade is a one-round DCA row — strategy 'martingale' (D81)")
     terms = {k: v for k, v in row.items() if k not in META}
@@ -57,13 +62,14 @@ def validate_trade(row, where='trade'):
     return cfg
 
 
-def load_trades(path):
+def load_trades(path, venue=None):
     """The trades file's rows, each validated; a row that does not validate
-    is named and set aside, the rest stand (D52's shape)."""
+    is named and set aside, the rest stand (D52's shape). `venue`: the
+    fleet's, for a row that names none (L1b)."""
     out, refused = [], []
     for i, row in enumerate(_read(path)):
         try:
-            out.append(validate_trade(row, f'trades[{i}]'))
+            out.append(validate_trade(row, f'trades[{i}]', venue))
         except ConfigError as e:
             refused.append((i, str(e)))
     return out, refused
@@ -73,11 +79,18 @@ def _botid(cfg):
     return make_botid(cfg['market_type'], cfg['symbol'], cfg['side'])
 
 
-def add_trade(path, fleet_cfg_rows, row):
+def add_trade(path, fleet_cfg_rows, row, venue=None):
     """Validate a new trade against the fleet's rows and the trades already
     open, then append it under the file's lock. A market and side another
     row holds is refused: the venue keeps one position per side of a
-    market per account, so two rows there would be one position (I2)."""
+    market per account, so two rows there would be one position (I2).
+    L1b: the row is written naming its fleet's venue; a row naming another
+    is refused (U106: a fleet file trades one venue)."""
+    if venue:
+        if row.get('venue', venue) != venue:
+            raise TradeError(f"a trade on {row['venue']} in a fleet that trades {venue} — "
+                             'a fleet file trades one venue (U106)')
+        row = dict(row, venue=venue)
     cfg = validate_trade(row)
     botid = _botid(cfg)
     taken = {make_botid(c['market_type'], c['symbol'], c['side'])
@@ -166,12 +179,13 @@ class TradeWatch:
     returns (bot, identity); a trade on a venue the fleet has no client for,
     or an identity the fleet already holds, is refused by name."""
 
-    def __init__(self, path, bots, identities, build, notifier, clients):
+    def __init__(self, path, bots, identities, build, notifier, clients, venue=None):
         self.path, self.bots, self.identities = Path(path), bots, identities
+        self.venue = venue                              # L1b: the fleet's, for a row naming none
         self.build, self.notifier, self.clients = build, notifier, clients
         self.mtime = self._mtime()
         try:                                    # L7: a request made before a restart stands
-            self._hand_over_closes(load_trades(self.path)[0])
+            self._hand_over_closes(load_trades(self.path, self.venue)[0])
         except TradeError:
             pass
 
@@ -202,7 +216,7 @@ class TradeWatch:
 
     def apply(self):
         try:
-            rows, refused = load_trades(self.path)
+            rows, refused = load_trades(self.path, self.venue)
         except TradeError as e:
             self.notifier.event('warn', 'fleet', f'{e} (L1)', urgent=True)
             return {}
@@ -250,7 +264,7 @@ def with_trades(fleet_path, fleet):
     trades file that cannot be read adds nothing and is said once by the
     engine, which refuses to build beside it (L1)."""
     try:
-        trades, _ = load_trades(state_path(fleet_path, fleet, 'trades'))
+        trades, _ = load_trades(state_path(fleet_path, fleet, 'trades'), fleet.get('venue'))
     except TradeError:
         return fleet
     have = {make_botid(c['market_type'], c['symbol'], c['side'])

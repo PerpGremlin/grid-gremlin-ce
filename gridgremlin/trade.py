@@ -80,7 +80,7 @@ def main(argv):
         path = trades_path(fleet_path, raw)
         if verb == 'open' and len(argv) >= 4:
             row = build_row(argv[2], argv[3], _opts(argv[4:]))
-            botid = add_trade(path, rows, row)
+            botid = add_trade(path, rows, row, fleet.get('venue'))
             print(f'{botid}: queued in {path} — the running fleet opens it within a cycle')
             return 0
         if verb == 'list':

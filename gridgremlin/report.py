@@ -924,7 +924,14 @@ def account_leverage(contract):
                    pos * v['mark'] if v.get('mark') is not None else 0.0)
             rest['s' if b.endswith('s') else 'l'] += max(0.0, most - now)
         eq, coll = fig.get('equity'), fig.get('collateral')
-        row = {'now': fig['notional'] / eq if eq and eq > 0 else None,
+        # R19c (owner 2026-11-10): now is over the whole collateral, as the
+        # MMR and the if-filled line are — a unified HL account's account
+        # value is only the USDC held as perp margin (on it the headline read
+        # twice the account's real leverage); the exchange's own figure stays
+        # beside it as venue_now
+        base = coll if coll and coll > 0 else eq
+        row = {'now': fig['notional'] / base if base and base > 0 else None,
+               'venue_now': fig['notional'] / eq if eq and eq > 0 else None,
                'notional': fig['notional'], 'equity': eq,
                'collateral': coll, 'unsized': unsized}
         for way, side in (('fall', 'l'), ('rise', 's')):
@@ -938,13 +945,22 @@ def account_leverage(contract):
 from common.fmt import big as _big  # noqa: E402  (C10)
 
 
+VENUE_WORD = {'hyperliquid': 'Hyperliquid', 'bybit': 'Bybit'}
+
+
 def leverage_lines(contract):
     """R19: the one wording every surface uses — {venue: (now, filled)}."""
     out = {}
     for venue, a in account_leverage(contract).items():
+        base = a['collateral'] if a['collateral'] and a['collateral'] > 0 else a['equity']
+        apart = (a['venue_now'] is not None and a['equity'] and base
+                 and abs(base - a['equity']) > 0.01 * base)
         now = ('account leverage —' if a['now'] is None else
                f"account leverage {a['now']:.2f}x ({_big(a['notional'])} in "
-               f"positions on {_big(a['equity'])})")
+               f"positions on {_big(base)}"
+               + (f" collateral; {VENUE_WORD.get(venue, venue)}'s own figure "
+                  f"{a['venue_now']:.2f}x, on the {_big(a['equity'])} it holds as perp margin)"
+                  if apart else ')'))
         filled = ('if every order filled —' if a['fall'] is None else
                   f"if every order filled: {a['fall']:.2f}x on a fall "
                   f"({_big(a['fall_notional'])}), {a['rise']:.2f}x on a rise "
