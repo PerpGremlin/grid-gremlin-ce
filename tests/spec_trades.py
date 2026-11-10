@@ -502,3 +502,44 @@ def spec_L6c_the_hl_trade_form_names_hls_markets_and_its_coin():
     cfg = validate_trade({'symbol': 'AVAX', 'side': 'long', 'capital': 40.0, 'leverage': 10,
                           'take_profit_avg_pct': 0.05}, venue='hyperliquid')
     assert trade_line(cfg).startswith('Long AVAX, 40 USDC at 10x')
+
+
+def spec_L6d_a_trade_on_a_position_held_by_hand_is_refused():
+    """The live account held ETH and SOL longs opened by hand; a trade there
+    would have joined that position and taken it as its own. On Hyperliquid
+    (one position per coin) either side is refused, on Bybit the same side
+    only; a bot's own position is left to I2; on Mainnet an unread account
+    is refused, off it passed. Sabotage: the check skipped lets ETH through."""
+    from panel.pages.trade import TradePages
+
+    class P(TradePages):
+        fleets = ('f.json',)
+
+        def __init__(self, contract):
+            self.c = contract
+
+        def _contract(self, f):
+            return self.c
+
+    def acct(venue, *pos, bots=()):
+        return {'bots': {b: {} for b in bots}, 'terms': {},
+                'account': {venue: {'positions': [dict(zip(('market', 'symbol', 'side', 'size'), p))
+                                                  for p in pos]}}}
+
+    def cfg(venue, symbol, side):
+        return validate_trade({'symbol': symbol, 'side': side, 'capital': 40.0, 'leverage': 10,
+                               'take_profit_avg_pct': 0.05}, venue=venue)
+    hl = P(acct('hyperliquid', ('linear', 'ETH', 'long', 1.0), ('linear', 'BTC', 'long', 0.005), bots=['linBTCl']))
+    for side in ('long', 'short'):
+        why = _refused(hl._hand_clash, 0, cfg('hyperliquid', 'ETH', side), True)
+        assert 'opened by hand' in why and 'one position per coin' in why
+    hl._hand_clash(0, cfg('hyperliquid', 'AVAX', 'long'), True)          # nothing held there
+    hl._hand_clash(0, cfg('hyperliquid', 'BTC', 'short'), True)          # the grid's own: I2's to refuse
+    by = P(acct('bybit', ('linear', 'SOLUSDT', 'short', 3.0)))
+    assert 'opened by hand' in _refused(by._hand_clash, 0, cfg('bybit', 'SOLUSDT', 'short'), False)
+    by._hand_clash(0, cfg('bybit', 'SOLUSDT', 'long'), False)            # Bybit's other side
+    unread = P({'bots': {}, 'account': {}})
+    assert 'not read yet' in _refused(unread._hand_clash, 0, cfg('hyperliquid', 'ETH', 'long'), True)
+    unread._hand_clash(0, cfg('bybit', 'ETH', 'long'), False)
+    src = (Path(__file__).resolve().parents[1] / 'panel' / 'pages' / 'trade.py').read_text()
+    assert src.count('self._hand_clash(') == 2                            # the review and the open

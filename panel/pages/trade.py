@@ -52,6 +52,41 @@ class TradePages:
             raise TradeError(not_listed(symbol, 'the exchange lists no such market '
                                                 'for this account — pick one from the list'))
 
+    def _hand_clash(self, fi, cfg, mainnet):
+        """L6d (owner 2026-11-10, after opening ETH and SOL by hand on the
+        live account): a trade on a market the account already holds by
+        hand, no bot running it, is refused — it would join that position
+        and take it as its own. On Hyperliquid one position per coin, so
+        either side clashes; on Bybit's two-sided books the same side only.
+        A bot's or trade's own position is I2's to refuse. On Mainnet an
+        account whose positions are not read is refused too: ask more,
+        never less."""
+        from gridgremlin.apply import make_botid
+        from gridgremlin.trades import TradeError
+        f = self.fleets[min(fi, len(self.fleets) - 1)]
+        data = self._contract(f)
+        fig = ((data or {}).get('account') or {}).get(cfg['venue'])
+        positions = (fig or {}).get('positions')
+        if positions is None:
+            if mainnet:
+                raise TradeError('the account\'s positions are not read yet, so a position held by hand '
+                                 'there cannot be ruled out — try again in a moment')
+            return
+        ours = set((data or {}).get('bots') or {}) | set((data or {}).get('terms') or {})
+        one = cfg['venue'] == 'hyperliquid'
+        for pos in positions:
+            if pos.get('symbol') != cfg['symbol'] or pos.get('market', 'linear') != cfg['market_type']:
+                continue
+            if make_botid(cfg['market_type'], cfg['symbol'], pos.get('side', '')) in ours:
+                continue
+            if one or pos.get('side') == cfg['side']:
+                raise TradeError(
+                    f"{cfg['symbol']}: the account holds a {pos.get('side')} of {pos.get('size'):g} that no bot "
+                    'runs (opened by hand) — '
+                    + ('Hyperliquid keeps one position per coin, so ' if one else '')
+                    + 'a trade here would join it and take it as its own. Close it, or set its exits '
+                      'with manage on its row, first')
+
     def _trade_typed(self, fi, path, typed):
         """D157: the trade a clear box names — its code, or off Mainnet its
         plain name ("SOLUSDT short trade"); what was typed when neither."""
@@ -117,7 +152,10 @@ class TradePages:
                     raise TradeError(f'{botid}: this account already has a bot or a trade on '
                                      f'{cfg["symbol"]} {cfg["side"]} — one position per side of a '
                                      'market per account')
+                self._hand_clash(fi, cfg, self._mainnet(f, cfg['venue']))      # L6d
                 return self._page(trade_review(cfg, fi, self.labels[min(fi, len(self.labels) - 1)], form))
+            from gridgremlin.trades import validate_trade as _vt
+            self._hand_clash(fi, _vt(row, venue=_fleet.get('venue')), self._mainnet(f, row.get('venue', 'bybit')))   # L6d
             botid = add_trade(path, rows, row, _fleet.get('venue'))
         except (ConfigError, TradeError, ValueError, OSError) as e:
             return self._page(self._trade_html(refusal_box('trade refused', e), form))

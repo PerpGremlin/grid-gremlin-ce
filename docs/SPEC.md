@@ -3427,6 +3427,11 @@ eventually pin (T1).
 - **L6c** (2026-11-10) On an account of Hyperliquid's the trade form's market box
   starts empty with HL's own kind of name (BTC, ETH), not Bybit's BTCUSDT, and
   its investment and review say USDC.
+- **L6d** (2026-11-10) A trade on a market the account holds by hand (a position no
+  bot or trade runs) is refused at the review and at the open: it would join that
+  position and take it as its own. Hyperliquid keeps one position per coin, so
+  either side clashes there; on Bybit's two-sided books the same side only. On
+  Mainnet an account whose positions are not read is refused too.
 - **L7** A running trade is closed by its own bot, never from outside: a
   close request (`{t, by, reason}`) rides in the trade's record in the
   trades file; the fleet hands it to the trade's bot — at once when the

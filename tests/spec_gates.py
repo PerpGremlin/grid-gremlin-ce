@@ -36,6 +36,12 @@ def spec_U79_a_trade_on_mainnet_asks_for_its_capital_twice():
     try:
         fleet = json.loads((d / 'f.json').read_text())
         (d / 'f.json').write_text(json.dumps(dict(fleet, allow_mainnet=True)))
+        import time
+        from panel.server import Handler
+        # L6d: on Mainnet the account's positions are read before a trade —
+        # here an account holding nothing by hand
+        Handler._cache[str(d / 'f.json')] = (time.time() + 3600, {'bots': {}, 'terms': {},
+                                                                 'account': {'bybit': {'positions': []}}})
         form = {'action': 'open', 'fleet': '0', 'side': 'long', 'symbol': 'btcusdt',
                 'capital': '200', 'leverage': '3', 'tp': '0.6'}
         refused = _call(base, '/trade', form)
@@ -49,6 +55,7 @@ def spec_U79_a_trade_on_mainnet_asks_for_its_capital_twice():
         ok = _call(base, '/trade', dict(form, retype_capital='200', go='1'))
         assert 'linBTCUSDTl: queued' in ok
     finally:
+        Handler._cache.pop(str(d / 'f.json'), None)
         close()
 
 
