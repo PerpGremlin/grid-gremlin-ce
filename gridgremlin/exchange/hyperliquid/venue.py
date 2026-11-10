@@ -125,6 +125,33 @@ class HLVenueClient(ExchangeClient):
             raise VenueError(f'market: {oid}', kind='other')
         return {'status': status, 'oid': oid}
 
+    TRIGGER_SLIP = 0.10          # D181: a market trigger fills up to 10% past its trigger
+
+    def place_exit(self, market_type, symbol, side, qty, trigger_px, kind):
+        """D181: a reduce-only trigger order — `kind` 'tp' or 'sl', `side`
+        the closing side ('Sell' closes a long), `qty` and `trigger_px`
+        adapter-formatted strings. Filled at market once the mark crosses,
+        bounded 10% past the trigger (HL's own front end bounds the same
+        way). Returns the oid."""
+        asset, _ = self._entry(symbol)
+        adapter = self._adapter(symbol)
+        px = float(trigger_px) * (1 - self.TRIGGER_SLIP if side == 'Sell' else 1 + self.TRIGGER_SLIP)
+        got = super().place_trigger(asset, side, qty, adapter.fmt_price(px), trigger_px, kind)
+        return str(got['oid'])
+
+    def trigger_orders(self, symbol):
+        """D181: the trigger orders resting on a coin, {oid: {kind, side,
+        qty, trigger}} — what the managed trade set, found by its oids."""
+        out = {}
+        for o in self.open_orders(symbol) or []:
+            if o.get('coin') != symbol or not o.get('isTrigger'):
+                continue
+            out[str(o.get('oid'))] = {'side': 'Buy' if o.get('side') == 'B' else 'Sell',
+                                      'qty': float(o.get('origSz') or o.get('sz') or 0),
+                                      'trigger': float(o.get('triggerPx') or 0),
+                                      'type': o.get('orderType')}
+        return out
+
     def set_trading_stop(self, *a, **kw):
         raise VenueError('HL cannot host a position-level TP/SL — trigger '
                          'orders are a later phase', kind='other')

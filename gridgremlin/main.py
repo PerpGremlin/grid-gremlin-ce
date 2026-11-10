@@ -1091,6 +1091,9 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
             notifier, clients, fleet.get('venue'))
         from .retire import RetireWatch, requests_path
         retire_watch = RetireWatch(requests_path(fleet_path), bots, notifier)   # D145
+        from .managed import ManagedWatch                         # L15 (D181)
+        managed_watch = ManagedWatch(fleet_path, clients, notifier,
+                                     allow_mainnet=bool(allow_mainnet and fleet.get('allow_mainnet') is True))
         while cycles is None or n < cycles:
             try:
                 try:
@@ -1118,6 +1121,11 @@ def run(fleet_path, cycles=None, poll_seconds=None, ship_orders=None,
                 except Exception as e:                       # noqa: BLE001
                     notifier.event('warn', 'fleet',
                                    f'trade watch: {type(e).__name__}: {e} — running on (L1)')
+                try:
+                    managed_watch.poll()
+                except Exception as e:                       # noqa: BLE001
+                    notifier.event('warn', 'fleet',
+                                   f'managed watch: {type(e).__name__}: {e} — running on (D181)')
                 wallets = {}
                 for v, c in clients.items():                          # E8
                     try:

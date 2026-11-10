@@ -11,13 +11,20 @@
 # bots on that side hold (`uncovered`). By I2 a bot owns its side's whole
 # position (its holding is the venue's, read every cycle), so on a side any
 # bot of the account runs nothing is uncovered and nothing is sent; the
-# part is a whole side no bot runs. Perpetuals only (linear and inverse);
-# Demo and Testnet only: Mainnet is refused whatever the fleet file says.
+# part is a whole side no bot runs. Perpetuals only (linear and inverse).
 # The orders carry no bot's link (I1): no bot counts, amends or cancels them.
 # Prints one JSON object; a refusal is {"refused": "..."}.
+#
+# D181: the command is Demo and Testnet only, as D164 had it. Where the
+# account's fleet runs, the panel writes a REQUEST into the trade's record
+# (`ask`) and the running fleet carries it out (`ManagedWatch`) with its own
+# clients — no second signer beside it (X15b), and on Mainnet the only way:
+# the fleet's start typed both halves (D25). The answer is written back
+# into the record for the panel to read.
 import json
 import re
 import sys
+import time
 from pathlib import Path
 
 from common.files import write_json
@@ -36,6 +43,12 @@ class ManagedError(Exception):
 def managed_path(fleet_path):
     """Beside the fleet's other logs: logs/managed-<fleet>.json."""
     return logs_dir(fleet_path) / f'managed-{fleet_tag(fleet_path)}.json'
+
+
+def answers_path(fleet_path):
+    """D181: the running fleet's answers to the panel's requests, one per
+    trade, beside the records: logs/managed-answers-<fleet>.json."""
+    return logs_dir(fleet_path) / f'managed-answers-{fleet_tag(fleet_path)}.json'
 
 
 def key_of(venue, market, symbol, side):
@@ -155,9 +168,13 @@ def _held(client, adapter, market, symbol, side):
     return abs(pos.get('size') or 0.0), truth['mark'], pos.get('avg_entry')
 
 
-def _refuse_mainnet(client):
-    """D164: Demo and Testnet only — refused flatly on Mainnet, where no
-    switch of the fleet file or flag of a launch opens it."""
+def _refuse_mainnet(client, allow_mainnet=False):
+    """D164: the command is Demo and Testnet only — refused flatly on
+    Mainnet, where no switch of the fleet file or flag of its own opens it.
+    D181: a running fleet whose start passed both halves (D25) carries out
+    a request with its own clients, and says so here."""
+    if allow_mainnet and getattr(client, 'env', None) == 'mainnet':
+        return
     if getattr(client, 'env', 'mainnet') not in ('demo', 'testnet'):
         raise ManagedError('a managed trade is Demo or Testnet only (D164) — this key reaches '
                            f'{getattr(client, "env", "an unknown network")}; nothing was sent')
@@ -173,16 +190,16 @@ def _ours(client, market, symbol, idx):
                  or 'StopLoss' in (o.get('stopOrderType') or ''))}
 
 
-def set_exits(path, key, record, client, adapter, run, tp=None, sl=None):
+def set_exits(path, key, record, client, adapter, run, tp=None, sl=None, allow_mainnet=False):
     """L11: the take profit and the stop, on the venue, for the uncovered
-    part only (re-read now): the exits set before by this trade are
-    cancelled first (never two at once), then the new ones set, each sized
-    to the uncovered part. Both None turns the exits off."""
+    part only (re-read now), each sized to the uncovered part. Bybit: the
+    exits set before by this trade are cancelled first (never two at once),
+    then the venue's own set. Hyperliquid (L14): its trigger orders, the
+    new placed BEFORE the old are cancelled — never a bare position; both
+    reduce-only, so for a moment two stops can only close it once. Both
+    None turns the exits off."""
     venue, market, symbol, side = parse_key(key)
-    _refuse_mainnet(client)
-    if venue != 'bybit':
-        raise ManagedError('Hyperliquid: the engine sets no take profit or stop on that venue '
-                           'yet (trigger orders are a later phase) — close part or all instead')
+    _refuse_mainnet(client, allow_mainnet)
     size, mark, avg = _held(client, adapter, market, symbol, side)
     if not current(record, {'size': size, 'entry': avg}):
         raise ManagedError(f'{symbol} {side}: the position is not the one adopted (closed, or its '
@@ -195,6 +212,9 @@ def set_exits(path, key, record, client, adapter, run, tp=None, sl=None):
     qty = adapter.fmt_qty(free)
     if float(qty) <= 0:
         raise ManagedError(f'{free:.10g} rounds to nothing at the venue\'s step; nothing was sent')
+    if venue == 'hyperliquid':
+        placed = _hl_exits(client, adapter, symbol, side, qty, tp, sl, record.get('orders') or [])
+        return _exits_kept(path, key, record, tp, sl, qty, placed, size, free, mark)
     idx = adapter.position_idx('Buy' if side == 'long' else 'Sell', False) or 0
     from .exchange.errors import VenueError
     for oid in record.get('orders') or []:
@@ -212,6 +232,10 @@ def set_exits(path, key, record, client, adapter, run, tp=None, sl=None):
             tp_size=qty if tp is not None else None,
             sl_size=qty if sl is not None else None)
     placed = sorted(_ours(client, market, symbol, idx) - before)
+    return _exits_kept(path, key, record, tp, sl, qty, placed, size, free, mark)
+
+
+def _exits_kept(path, key, record, tp, sl, qty, placed, size, free, mark):
     with locked(path):
         got = load(path)
         rec = dict(got.get(key) or record, tp=tp, sl=sl, sized=float(qty), orders=placed,
@@ -222,12 +246,44 @@ def set_exits(path, key, record, client, adapter, run, tp=None, sl=None):
             'mark': mark}
 
 
-def close_part(path, key, record, client, adapter, run, qty=None):
+def _hl_exits(client, adapter, symbol, side, qty, tp, sl, old):
+    """L14: Hyperliquid's exits are its trigger orders, placed first and
+    the trade's old ones cancelled after: a stop is never lifted before its
+    replacement rests. A placement refused part-way cancels what it placed
+    and leaves the old standing (the refusal said, nothing half-done). The
+    oids placed are returned for the record."""
+    from .exchange.errors import VenueError
+    close_side = 'Sell' if side == 'long' else 'Buy'
+    placed, name = [], None
+    try:
+        for kind, px, name in (('sl', sl, 'stop'), ('tp', tp, 'take profit')):
+            if px is not None:
+                placed.append(client.place_exit('linear', symbol, close_side, qty,
+                                                adapter.fmt_price(px), kind))
+    except VenueError as e:
+        for oid in placed:
+            try:
+                client.cancel_order('linear', symbol, oid)
+            except VenueError:
+                pass
+        raise ManagedError(f'the exchange refused the {name}: {e} — the exits set before '
+                           'still stand; nothing new rests') from e
+    for oid in old:
+        try:
+            client.cancel_order('linear', symbol, oid)
+        except VenueError as e:
+            if e.kind != 'gone':
+                raise ManagedError(f'the new exits rest, but an old one ({oid}) did not cancel: {e} — '
+                                   'cancel it on the exchange') from e
+    return [str(x) for x in placed]
+
+
+def close_part(path, key, record, client, adapter, run, qty=None, allow_mainnet=False):
     """L12: one reduce-only market order for part or all of the uncovered
     part (re-read now), never more: a size above it is refused, nothing
     sent. All closed, the trade's record and its exits go."""
     venue, market, symbol, side = parse_key(key)
-    _refuse_mainnet(client)
+    _refuse_mainnet(client, allow_mainnet)
     size, mark, avg = _held(client, adapter, market, symbol, side)
     if not current(record, {'size': size, 'entry': avg}):
         raise ManagedError(f'{symbol} {side}: the position is not the one adopted (closed, or its '
@@ -268,6 +324,132 @@ def command(fleet_path, action, key, tp=None, sl=None, qty=None):
         if v is not None:
             out += [flag, f'{float(v):.10g}']
     return out
+
+
+ASK_ACTIONS = ('exits', 'close')
+ASK_STALE_S = 600           # an ask no fleet took in ten minutes is not carried out late
+
+
+def ask(path, key, action, by='owner', tp=None, sl=None, qty=None, now=None):
+    """L15 (D181): a request for the running fleet — one at a time per
+    trade, answered in the record (`answer`, the same id). Returns its id.
+    Places nothing itself: the panel holds no key."""
+    import os
+    if action not in ASK_ACTIONS:
+        raise ManagedError(f'{action}: a request sets exits or closes')
+    now = time.time() if now is None else now
+    with locked(path):
+        got = load(path)
+        rec = got.get(key)
+        if rec is None:
+            raise ManagedError(f'{key}: not a managed trade of this account — adopt it first')
+        pending = rec.get('ask')
+        if pending and now - float(pending.get('t') or 0) < ASK_STALE_S:
+            raise ManagedError('a request for this trade is still waiting for the fleet — '
+                               'read its answer on the trade\'s page first')
+        rid = f'{int(now * 1000)}-{os.urandom(4).hex()}'
+        rec['ask'] = {'id': rid, 'action': action, 'by': str(by), 't': now,
+                      'tp': tp, 'sl': sl, 'qty': qty}
+        got[key] = rec
+        write_json(path, got)
+    return rid
+
+
+def answer_of(fleet_path, key, rid):
+    """The fleet's answer to request `rid`, or None while it waits."""
+    a = load(answers_path(fleet_path)).get(key) or {}
+    return a if a.get('id') == rid else None
+
+
+def adapter_of(client, venue, market, symbol):
+    """The instrument's adapter, read from the client the fleet holds."""
+    if venue == 'hyperliquid':
+        return client._adapter(symbol)
+    from .adapters import adapter_for
+    from .exchange.bybit.truth import parse_instrument
+    return adapter_for(market, parse_instrument(market, client.instruments_info(market, symbol)))
+
+
+class ManagedWatch:
+    """L15 (D181): inside the running fleet. Notices the managed file
+    changing (one stat a cycle), carries out each waiting request with the
+    fleet's own client for its venue, and writes the answer back — a
+    refusal in words, never a crash of the fleet. `allow_mainnet` is the
+    fleet's start's: both halves typed (D25), else Mainnet is refused here
+    as in the command. A request older than ASK_STALE_S is answered
+    refused, never carried out late. Each write is said (the phone's
+    'fleet' line), refusals as warnings."""
+
+    def __init__(self, fleet_path, clients, notifier, allow_mainnet=False, clock=time.time,
+                 run_of=None):
+        self.fleet_path, self.clients, self.notifier = fleet_path, clients, notifier
+        self.allow_mainnet, self.clock = bool(allow_mainnet), clock
+        self.run_of = run_of or account_run
+        self.path = managed_path(fleet_path)
+        self.mtime = False
+
+    def poll(self):
+        try:
+            m = self.path.stat().st_mtime
+        except OSError:
+            m = None
+        if m == self.mtime:
+            return
+        self.mtime = m
+        if m is None:
+            return
+        done = load(answers_path(self.fleet_path))
+        for key, rec in load(self.path).items():
+            a = rec.get('ask')
+            if a and (done.get(key) or {}).get('id') != a.get('id'):
+                self._carry(key, rec, a)
+        try:
+            self.mtime = self.path.stat().st_mtime        # our own answers are not news
+        except OSError:
+            self.mtime = None
+
+    def _carry(self, key, rec, a):
+        now = self.clock()
+        try:
+            venue, market, symbol, side = parse_key(key)
+            if a.get('action') not in ASK_ACTIONS:
+                raise ManagedError(f'{a.get("action")}: not a request this fleet carries out')
+            if now - float(a.get('t') or 0) > ASK_STALE_S:
+                raise ManagedError('the request waited past ten minutes — not carried out late; '
+                                   'ask again if it still stands')
+            client = self.clients.get(venue)
+            if client is None:
+                raise ManagedError(f'this fleet does not trade {venue}')
+            adapter = adapter_of(client, venue, market, symbol)
+            run = self.run_of(self.fleet_path)
+            if a['action'] == 'exits':
+                out = set_exits(self.path, key, rec, client, adapter, run, a.get('tp'), a.get('sl'),
+                                allow_mainnet=self.allow_mainnet)
+                said = (f'{symbol} {side}: exits set by {a.get("by")} — take profit '
+                        f'{_or_none(a.get("tp"))}, stop {_or_none(a.get("sl"))}, for {out["sized"]:.10g} (D181)')
+            else:
+                out = close_part(self.path, key, rec, client, adapter, run, a.get('qty'),
+                                 allow_mainnet=self.allow_mainnet)
+                said = (f'{symbol} {side}: closed {out["closed"]:.10g} at market by {a.get("by")}, '
+                        f'{out["left"]:.10g} left (D181)')
+            self.notifier.event('fleet', 'managed', said)
+        except Exception as e:                               # noqa: BLE001
+            out = {'refused': str(e) if isinstance(e, ManagedError) else f'{type(e).__name__}: {e}'}
+            self.notifier.event('warn', 'managed', f'{key}: request not carried out — {out["refused"]} (D181)')
+        ap = answers_path(self.fleet_path)
+        with locked(ap):
+            done = load(ap)
+            done[key] = dict(out, id=a.get('id'), t=now, action=a.get('action'))
+            write_json(ap, done)
+        with locked(self.path):
+            got = load(self.path)
+            if key in got and (got[key].get('ask') or {}).get('id') == a.get('id'):
+                got[key].pop('ask', None)                    # closed whole, the record went already
+                write_json(self.path, got)
+
+
+def _or_none(x):
+    return 'none' if x is None else f'{float(x):.10g}'
 
 
 def account_run(fleet_path):

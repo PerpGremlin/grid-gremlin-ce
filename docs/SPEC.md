@@ -2541,6 +2541,13 @@ eventually pin (T1).
   carries no outside source and falls back to Charter and Menlo; square corners but a
   small button's, box headings mono capitals, chart gridlines dashed. A browser that
   kept a choice keeps it. *(owner, 2026-11-10: "lets adopt the slate theme")*
+- **U195** (D181, 2026-11-10) The trade manager on a Mainnet account: adopting is
+  typed with the code only (D157); setting exits and closing go only through the
+  running fleet (L15), each price or size typed a second time (D64), a close's size
+  always typed. With its fleet stopped the page and the post say so and nothing
+  runs. The page says who carries a write out, the request waiting, and the
+  fleet's last answer; a post the fleet has not answered in 20 s says "asked",
+  never done.
 - **U194** (2026-11-10) Control names what it takes: its prompt and pop-up list each
   account by its name where D157 reads one, else its unit name (its file name on a
   laptop). An account that may reach Mainnet is named by its unit, and its account
@@ -3472,16 +3479,31 @@ eventually pin (T1).
   the stop behind it, else refused. The exits this trade set before are
   cancelled first (never another's), then each new one is set on the venue
   at the mark, sized to the uncovered part; an empty box sets none.
-  Hyperliquid sets none (close only).
+  Hyperliquid's are L14's.
 - **L12** (D164) Close: `… close <key> [--qty Q]` re-reads the venue and
   sends one reduce-only market order, unlinked (I1: no bot counts it), for
   Q or, without it, all of the uncovered part — never more (refused, and
   the panel says so before running it). All closed, the record and its
   exits go. On Hyperliquid only while its fleet is stopped (X15b).
-- **L13** (D164) Demo and Testnet only: the command refuses a key that
-  reaches Mainnet whatever the fleet file says, and takes no
-  `--allow-mainnet`; the panel refuses an account that may reach Mainnet
-  before it reads anything.
+- **L13** (D164) The command is Demo and Testnet only: it refuses a key
+  that reaches Mainnet whatever the fleet file says, and takes no
+  `--allow-mainnet`. A Mainnet account is written only by its running
+  fleet (L15, D181).
+- **L14** (D181, 2026-11-10) Hyperliquid's exits are its own trigger
+  orders: stop market or take profit market, reduce-only, on the closing
+  side, triggered at the mark and bounded 10% past the trigger, sized to
+  the uncovered part. Moving them places the new **before** the trade's
+  old are cancelled, so the position is never bare; a placement refused
+  part-way cancels what it placed and leaves the old standing, the record
+  unchanged. Bots never read trigger orders (V5).
+- **L15** (D181) Where the account's fleet runs, a write is a request:
+  the panel writes it into the trade's record (one at a time), the fleet's
+  watch carries it out each cycle with the fleet's own client — no second
+  signer (X15b) — and writes the answer to
+  `logs/managed-answers-<fleet>.json`. Mainnet only where the fleet's start
+  passed both halves (D25); a request older than ten minutes is refused,
+  never carried out late; each write is said on the phone, a refusal as a
+  warning; a request that fails never stops the fleet.
 ## J — the agent (D80)
 
 - **J1** The agent's one door is a forced command behind a restricted ssh

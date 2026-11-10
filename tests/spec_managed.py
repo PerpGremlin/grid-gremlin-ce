@@ -1,4 +1,5 @@
-"""D164 — managed trades (L9–L13, U179–U180): a perpetual position no bot
+"""D164 — managed trades (L9–L15, U179–U180, U195; D181 for Hyperliquid's
+exits and the running fleet's requests): a perpetual position no bot
 covers, adopted and managed from the panel. Fake venues throughout: no
 spec here reaches an exchange. Made-up figures."""
 import json
@@ -198,14 +199,81 @@ def spec_L11_an_exit_on_the_wrong_side_of_the_mark_or_a_moved_position_is_refuse
             assert venue.stops == []
 
 
-def spec_L11_hyperliquid_sets_no_exits():
+class _HLVenue(_Venue):
+    """Hyperliquid's side of a managed trade: trigger orders, no
+    position-level stop. `log` keeps the order of writes."""
+
+    def __init__(self, positions, mark=2990.0, env='testnet', refuse=()):
+        super().__init__(positions, mark, env)
+        self.triggers, self.log, self.refuse = {}, [], set(refuse)
+
+    def place_exit(self, market_type, symbol, side, qty, trigger_px, kind):
+        if kind in self.refuse:
+            raise VenueError(f'{kind}: Order has invalid price', kind='other')
+        self.n += 1
+        oid = f'h{self.n}'
+        self.triggers[oid] = {'side': side, 'qty': qty, 'trigger': trigger_px, 'kind': kind}
+        self.log.append(('place', kind, oid))
+        return oid
+
+    def cancel_order(self, category, symbol, order_id):
+        self.log.append(('cancel', order_id))
+        if self.triggers.pop(order_id, None) is None:
+            raise VenueError('never placed', kind='gone')
+
+    def set_trading_stop(self, *a, **kw):
+        raise AssertionError('Hyperliquid has no position-level stop')
+
+
+HL_KEY = 'hyperliquid:linear:ETH:short'
+
+
+def _hl_adopted(d):
+    from gridgremlin.managed import adopt
+    path = Path(d) / 'managed-x.json'
+    adopt(path, 'hyperliquid', dict(POS, symbol='ETH'), NOBODY)
+    return path, json.loads(path.read_text())[HL_KEY]
+
+
+def spec_L14_hyperliquid_exits_are_trigger_orders_placed_before_the_old_go():
+    """D181: on Hyperliquid the stop and take profit are its own trigger
+    orders on the closing side, sized to the uncovered part; moving them
+    places the new pair BEFORE the old is cancelled, so the position is
+    never bare. Sabotage: cancel-first (D164's Bybit order) puts a cancel
+    ahead of the first placement -> red."""
+    from gridgremlin.managed import set_exits
+    with tempfile.TemporaryDirectory() as d:
+        path, rec = _hl_adopted(d)
+        venue = _HLVenue(_short())
+        set_exits(path, HL_KEY, rec, venue, ADAPTER, NOBODY, tp=2800.0, sl=3150.0)
+        assert {(t['kind'], t['side'], t['qty'], t['trigger']) for t in venue.triggers.values()} == \
+            {('sl', 'Buy', '2', '3150'), ('tp', 'Buy', '2', '2800')}
+        rec = json.loads(path.read_text())[HL_KEY]
+        assert sorted(rec['orders']) == ['h1', 'h2'] and rec['sl'] == 3150.0
+        venue.log.clear()
+        set_exits(path, HL_KEY, rec, venue, ADAPTER, NOBODY, sl=3100.0)          # moved, take profit off
+        assert venue.log == [('place', 'sl', 'h3'), ('cancel', 'h1'), ('cancel', 'h2')], venue.log
+        assert list(venue.triggers) == ['h3'] and json.loads(path.read_text())[HL_KEY]['orders'] == ['h3']
+
+
+def spec_L14_a_refused_placement_leaves_the_old_exits_standing():
+    """The exchange refuses the take profit after the stop rested: the new
+    stop is cancelled, the old pair stands, the record is unchanged, and
+    the refusal says so."""
     from gridgremlin.managed import ManagedError, set_exits
-    try:
-        set_exits('/nonexistent', 'hyperliquid:linear:ETH:short', {}, _Venue({}, env='testnet'),
-                  ADAPTER, NOBODY, tp=1.0)
-        raise AssertionError('set')
-    except ManagedError as e:
-        assert 'Hyperliquid' in str(e)
+    with tempfile.TemporaryDirectory() as d:
+        path, rec = _hl_adopted(d)
+        venue = _HLVenue(_short())
+        set_exits(path, HL_KEY, rec, venue, ADAPTER, NOBODY, tp=2800.0, sl=3150.0)
+        rec = json.loads(path.read_text())[HL_KEY]
+        venue.refuse = {'tp'}
+        try:
+            set_exits(path, HL_KEY, rec, venue, ADAPTER, NOBODY, tp=2700.0, sl=3100.0)
+            raise AssertionError('a half-set pair was kept')
+        except ManagedError as e:
+            assert 'refused the take profit' in str(e) and 'still stand' in str(e), e
+        assert sorted(venue.triggers) == ['h1', 'h2']
+        assert json.loads(path.read_text())[HL_KEY] == rec
 
 
 # --- L12: a close of part or all, never more than the uncovered part ----------
@@ -275,19 +343,134 @@ def spec_L13_mainnet_is_refused_whatever_the_fleet_file_says():
     assert main(['f.json', 'close', KEY, '--allow-mainnet']) == 2         # no flag opens it
 
 
-def spec_L13_the_panel_refuses_an_account_that_may_reach_mainnet():
-    from panel.routes import Handler
+class _Notes:
+    def __init__(self):
+        self.said = []
+
+    def event(self, kind, botid, text, icon='', urgent=False):
+        self.said.append((kind, botid, text))
+
+
+def _fleet_dir(d):
+    f = Path(d) / 'configs' / 'fleet.x.json'
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(json.dumps({'bots': []}))
+    return f
+
+
+def spec_L15_the_running_fleet_carries_out_a_request_with_its_own_client():
+    """D181: the panel writes a request into the trade's record; the
+    fleet's watch carries it out with the fleet's own client and writes
+    the answer; Mainnet only where the fleet's start passed both halves;
+    one request at a time; one older than ten minutes is refused, never
+    carried out late; each write is said. Sabotage: the watch's
+    allow_mainnet ignored (True always) reaches Mainnet on a start without
+    both halves -> red."""
+    from gridgremlin.managed import (ASK_STALE_S, ManagedError, ManagedWatch, adopt, answer_of, ask,
+                                     managed_path)
     with tempfile.TemporaryDirectory() as d:
-        f = Path(d) / 'fleet.x.json'
-        f.write_text(json.dumps({'allow_mainnet': True, 'bots': []}))
-        h = Handler.__new__(Handler)
-        h.fleets, h.labels = (str(f),), ('x',)
-        shown = []
-        h._page = shown.append
-        h._contract = lambda fleet: (_ for _ in ()).throw(AssertionError('read past the gate'))
+        f = _fleet_dir(d)
+        path = managed_path(f)
+        adopt(path, 'bybit', POS, NOBODY)
+        venue, notes = _Venue(_short(), env='mainnet'), _Notes()
+        watch = ManagedWatch(f, {'bybit': venue}, notes, allow_mainnet=False, run_of=lambda fp: NOBODY)
+        watch.adapter = ADAPTER
+        import gridgremlin.managed as m
+        saved = m.adapter_of
+        m.adapter_of = lambda client, venue_, market, symbol: ADAPTER
+        try:
+            rid = ask(path, KEY, 'exits', tp=2800.0, sl=3150.0)
+            try:
+                ask(path, KEY, 'close')
+                raise AssertionError('two requests at once')
+            except ManagedError as e:
+                assert 'still waiting' in str(e)
+            watch.poll()
+            got = answer_of(f, KEY, rid)
+            assert 'Demo or Testnet only' in got['refused'] and venue.stops == []     # no both halves
+            assert notes.said[-1][0] == 'warn' and 'ask' not in json.loads(path.read_text())[KEY]
+            watch = ManagedWatch(f, {'bybit': venue}, notes, allow_mainnet=True, run_of=lambda fp: NOBODY)
+            rid = ask(path, KEY, 'exits', tp=2800.0, sl=3150.0)
+            watch.poll()
+            got = answer_of(f, KEY, rid)
+            assert got.get('sized') == 2.0 and venue.stops[-1]['sl'] == '3150', got
+            assert notes.said[-1][0] == 'fleet' and 'exits set by owner' in notes.said[-1][2]
+            watch.poll()                                                         # nothing new: nothing sent
+            assert len(venue.stops) == 1
+            rid = ask(path, KEY, 'close', qty=0.5, now=time.time() - ASK_STALE_S - 1)
+            watch.poll()
+            assert 'not carried out late' in answer_of(f, KEY, rid)['refused'] and venue.orders == []
+            rid = ask(path, KEY, 'close', qty=0.5)
+            watch.poll()
+            assert answer_of(f, KEY, rid)['left'] == 1.5 and venue.orders == [('Buy', '0.5', 2, True, None)]
+        finally:
+            m.adapter_of = saved
+
+
+def spec_L15_the_fleet_polls_the_watch_with_its_starts_own_switch():
+    src = (Path(__file__).resolve().parents[1] / 'gridgremlin' / 'main.py').read_text()
+    assert "allow_mainnet=bool(allow_mainnet and fleet.get('allow_mainnet') is True)" in src
+    assert src.index('managed_watch.poll()') > src.index('trade_watch.poll()')
+
+
+def _real_handler(d, route):
+    h, f, shown, runs = _handler(d, fleet={'allow_mainnet': True, 'bots': []})
+    h._contract = lambda fleet: dict(_contract(), account={'bybit': {'tier': 'mainnet', 'positions': [POS]}})
+    h._manage_route = lambda fleet, venue: route
+    return h, f, shown, runs
+
+
+def spec_U195_a_mainnet_trade_is_typed_as_a_mainnet_bot_and_written_by_its_fleet():
+    """D181: on Mainnet the manager adopts (a record, the code typed — the
+    full name refused, D157), and sets exits or closes only through the
+    running fleet: each number typed twice (D64), the size never left to
+    mean all; a stopped Mainnet fleet's page and post say so and nothing
+    runs; the command is never run on Mainnet."""
+    import panel.pages.manage as pm
+    from gridgremlin.managed import ManagedWatch, managed_path
+    with tempfile.TemporaryDirectory() as d:
+        h, f, shown, runs = _real_handler(d, None)
+        h._manage_post({'fleet': '0', 'key': KEY, 'action': 'adopt',
+                        'confirm': 'ETHUSDT Perpetual Futures Trade short'})
+        assert 'on Mainnet the code only' in shown[-1] and not managed_path(f).exists()
         h._manage_post({'fleet': '0', 'key': KEY, 'action': 'adopt', 'confirm': 'linETHUSDTs'})
-        assert 'Demo or Testnet only' in shown[-1]
-        assert not (Path(d) / 'logs').exists()
+        assert 'No order was placed' in shown[-1]
+        h.path = f'/manage?fleet=0&key={KEY}'
+        h._manage_page()
+        assert 'fleet is stopped' in shown[-1] and 'set exits' not in shown[-1]
+        h._manage_post({'fleet': '0', 'key': KEY, 'action': 'exits', 'sl': '3150', 'retype_sl': '3150',
+                        'confirm': 'linETHUSDTs'})
+        assert 'fleet is stopped' in shown[-1] and runs == []
+        h._manage_route = lambda fleet, venue: 'fleet'
+        h._manage_page()
+        assert 'retype_sl' in shown[-1] and 'its own signer' in shown[-1]
+        for form, said in (({'sl': '3150'}, 'typed twice'),
+                           ({'sl': '3150', 'retype_sl': '3105'}, 'typed twice'),
+                           ({'action': 'close'}, 'never left to mean all')):
+            h._manage_post(dict({'fleet': '0', 'key': KEY, 'action': 'exits', 'confirm': 'linETHUSDTs'}, **form))
+            assert said in shown[-1], shown[-1]
+        assert 'ask' not in json.loads(managed_path(f).read_text())[KEY] and runs == []
+        saved = pm.ASK_WAIT_S
+        pm.ASK_WAIT_S = 0
+        try:
+            h._manage_post({'fleet': '0', 'key': KEY, 'action': 'exits', 'sl': '3,150', 'retype_sl': '3150',
+                            'tp': '', 'retype_tp': '', 'confirm': 'linETHUSDTs'})
+        finally:
+            pm.ASK_WAIT_S = saved
+        assert 'asked' in shown[-1] and 'Nothing is done until' in shown[-1] and runs == []
+        a = json.loads(managed_path(f).read_text())[KEY]['ask']
+        assert (a['action'], a['sl'], a['tp']) == ('exits', 3150.0, None)
+        import gridgremlin.managed as m
+        saved = m.adapter_of
+        m.adapter_of = lambda client, venue_, market, symbol: ADAPTER
+        try:
+            venue = _Venue(_short(), env='mainnet')
+            ManagedWatch(f, {'bybit': venue}, _Notes(), allow_mainnet=True, run_of=lambda fp: NOBODY).poll()
+        finally:
+            m.adapter_of = saved
+        assert venue.stops[-1]['sl'] == '3150'
+        h._manage_page()
+        assert 'last answer' in shown[-1] and 'done' in shown[-1]
 
 
 # --- the account's own bots, across its fleet files ----------------------------

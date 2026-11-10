@@ -1708,6 +1708,32 @@ stands unless the owner corrects it.
   alone: by the account's public address, no key, no write (F7b); a panel's forms,
   charts and rehearsals price on its fleets' network the same way (F7c). Trading is
   unchanged: both halves. The owner had it promoted as a hotfix (D65).
+- **D181 — A position held by hand is managed from the panel, from a stop up
+  to a strategy (2026-11-10).** The owner: "managing a position should be
+  everything from placing a stop to designing an elaborate bot/strategy
+  around it"; "what if i wanted to do it through the application only".
+  D164's manager widens in three steps, each rehearsed on Testnet before it
+  reaches a real account, each its own PR:
+  **1. Exits, Mainnet included.** Set or move a take profit and a stop,
+  close part or all, on Bybit and Hyperliquid. Where the account's fleet is
+  running, the panel writes a **request** beside the managed record and the
+  **running fleet carries it out** with its own clients — no second signer
+  beside it (X15b), and on Mainnet the only way: the fleet's start typed
+  both halves (D25), and the panel never holds a key. A stopped fleet's
+  account is served by the command as before, Demo and Testnet only.
+  Hyperliquid's exits are its own trigger orders: stop market, reduce-only,
+  triggered at the mark, sized to the uncovered part; a new pair is placed
+  **before** the old is cancelled, so the position is never bare. A
+  Mainnet write is typed as a Mainnet bot is (D64, D157): the code, and
+  each price or size a second time. Still only the uncovered part (L10);
+  still never a stop or order the trade did not set.
+  **2. A bot over the position**: the new-bot form filled from it (coin,
+  side, entry, size), a range suggested from the measured movement, and
+  before the start: whether the entry sits in the range (S5), what the bot
+  would buy at the range's end, what becomes of the hand-set stop, and a
+  rehearsal over the position. The bot takes the position as its own (I2).
+  **3. Strategies around a position** (a scale-out ladder, a trailing
+  stop, a hedge, a stepped buy-in): each its own decision when asked for.
 
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded

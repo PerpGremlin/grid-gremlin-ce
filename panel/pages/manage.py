@@ -31,16 +31,15 @@ class ManagePages:
 
     def _managed_ctx(self, fi, key):
         """The trade a key names on account `fi`: its position as the readout
-        holds it (fresh), its record, and its uncovered part. Refuses Mainnet,
-        a stale readout, a position the account does not hold."""
+        holds it (fresh), its record, and its uncovered part. Refuses a
+        stale readout, a position the account does not hold. D181: Mainnet
+        is read here as any account; its writes go only through its running
+        fleet (_manage_post)."""
         from gridgremlin.managed import (ManagedError, account_run, bot_shares, load, managed_path,
                                          parse_key, uncovered)
         from panel.strip_view import READOUT_STALE_S
         f = self.fleets[min(max(fi, 0), len(self.fleets) - 1)]
         venue, market, symbol, side = parse_key(key)
-        if self._mainnet(f, venue):
-            raise ManagedError('a managed trade is Demo or Testnet only (D164): this account may '
-                               'reach Mainnet, where nothing here acts')
         contract = self._contract(f)
         gen = contract.get('generated_ms')
         if gen is None or time.time() - gen / 1000.0 > READOUT_STALE_S:
@@ -77,15 +76,46 @@ class ManagePages:
             return {'refused': 'the trade command answered something unreadable — look at the '
                                'exchange directly'}
 
-    def _manage_form(self, fi, key, action, row, botid, what, button, inner, danger=False):
+    def _manage_form(self, fi, key, action, row, botid, what, button, inner, danger=False, real=False):
+        """D159's typed form; on Mainnet (D181, as D157/D64 have a Mainnet
+        bot) the code only, and each number typed a second time in `inner`."""
         return ('<form method="post" action="/manage"><input type="hidden" name="gg" value="1">'
                 f'<input type="hidden" name="fleet" value="{fi}">'
                 f'<input type="hidden" name="key" value="{esc(key)}">'
                 f'<input type="hidden" name="action" value="{action}">{inner}'
-                + typed_inline(f'type {to_type(botid, row)} to confirm: '
+                + typed_inline(f'type {to_type(botid, row, mainnet=real)} to confirm: '
                                '<input name="confirm" size="22" autocomplete="off"> ')
-                + confirm_dialog(what, to_type(botid, row), accepts(botid, row), button, danger=danger)
+                + confirm_dialog(what, to_type(botid, row, mainnet=real), accepts(botid, row, mainnet=real),
+                                 button, danger=danger)
                 + f'<button{" class=\"danger\"" if danger else ""}>{esc(button)}</button></form>')
+
+    def _manage_route(self, f, venue):
+        """D181: who carries out a write — 'fleet' where the account's
+        fleet runs (its own signer; Mainnet's only way), 'command' on a
+        stopped Demo or Testnet fleet, None on a stopped Mainnet one."""
+        from gridgremlin.main import fleet_running
+        try:
+            raw = json.loads(Path(f).read_text())
+            account = raw.get('account') or 'default'
+        except (OSError, ValueError, AttributeError):
+            account = 'default'
+        if fleet_running(f, {venue}, account):
+            return 'fleet'
+        return None if self._mainnet(f, venue) else 'command'
+
+    def _ask_fleet(self, f, key, action, wait_s=None, **nums):
+        """L15: the request written, its answer awaited a little (the fleet
+        polls each cycle); still waiting is said, never read as done."""
+        from gridgremlin.managed import answer_of, ask, managed_path
+        rid = ask(managed_path(f), key, action, by='panel', **nums)
+        end = time.time() + (ASK_WAIT_S if wait_s is None else wait_s)
+        while True:
+            got = answer_of(f, key, rid)
+            if got is not None:
+                return got
+            if time.time() >= end:
+                return {'waiting': rid}
+            time.sleep(0.5)
 
     def _manage_page(self):
         """D164 (U156): one managed trade, the market named fully."""
@@ -118,36 +148,71 @@ class ManagePages:
                 'Only the part no bot covers is ever managed.</p>'
                 + self._manage_form(fi, key, 'adopt', row, botid,
                                     f'Manage {symbol} {side} on {acct} as a trade. No order is placed.',
-                                    'manage it', '')
+                                    'manage it', '', real=self._mainnet(_f0, venue))
                 + '<p><a href="/">back, change nothing</a></p>')
         armed = bool(self.units or self.supervise)
+        real = self._mainnet(_f0, venue)
+        route = self._manage_route(_f0, venue)
+        again = (lambda name: f' again <input name="retype_{name}" size="12" autocomplete="off">'
+                 if real else '')
+        how = ('the fleet running this account carries it out with its own signer'
+               if route == 'fleet' else 'the engine\'s command, the fleet being stopped')
         exits = self._manage_form(
             fi, key, 'exits', row, botid,
             f'Set the take profit and stop of {symbol} {side} on {acct}, for the '
-            f'{free:.10g} no bot covers. A box left empty sets no such exit; any set before is replaced.',
+            f'{free:.10g} no bot covers. A box left empty sets no such exit; any this trade set before '
+            'is replaced' + (', the new placed before the old is cancelled.' if venue == 'hyperliquid' else '.'),
             'set exits',
-            f'<p>take profit <input name="tp" size="12" value="{esc(_blank(rec.get("tp")))}"> '
-            f'stop <input name="sl" size="12" value="{esc(_blank(rec.get("sl")))}"> '
-            '<span class="dim">prices; on the exchange as a take profit and a stop sized to the '
-            'uncovered part, triggered at the mark</span></p>')
+            f'<p>take profit <input name="tp" size="12" value="{esc(_blank(rec.get("tp")))}">{again("tp")} '
+            f'· stop <input name="sl" size="12" value="{esc(_blank(rec.get("sl")))}">{again("sl")} '
+            '<span class="dim">prices; on the exchange as a take profit and a stop market sized to '
+            'the uncovered part, reduce-only, triggered at the mark</span></p>', real=real)
         close = self._manage_form(
             fi, key, 'close', row, botid,
             f'Close part or all of {symbol} {side} on {acct} at market: one reduce-only order, '
             f'never more than the {free:.10g} no bot covers. It cannot be undone.',
             'close at market',
-            f'<p>size <input name="qty" size="12" placeholder="{free:.10g}"> '
-            '<span class="dim">empty closes all of the uncovered part</span></p>', danger=True)
+            f'<p>size <input name="qty" size="12" placeholder="{free:.10g}">{again("qty")} '
+            + ('<span class="dim">on Mainnet the size is typed, twice</span></p>' if real else
+               '<span class="dim">empty closes all of the uncovered part</span></p>'),
+            danger=True, real=real)
+        if not armed:
+            writes = ('<p class="dim">control is not armed on this panel (--units or --supervise): '
+                      'setting exits and closing reach the exchange and need it.</p>')
+        elif route is None:
+            writes = ('<p class="dim">this Mainnet account\'s fleet is stopped: on Mainnet only its '
+                      'running fleet sets exits or closes (D181) — start it, or act on the exchange.</p>')
+        else:
+            writes = f'<p class="dim">a write here: {how}.</p>' + exits + close
         return self._page(
             head + f'<p class="say">managed since {esc(rec.get("adopted") or "—")} · take profit '
             f'<b>{_q(rec.get("tp"))}</b> · stop <b>{_q(rec.get("sl"))}</b></p>'
-            + (exits + close if armed else
-               '<p class="dim">control is not armed on this panel (--units or --supervise): '
-               'setting exits and closing reach the exchange and need it.</p>')
+            + self._ask_lines(_f0, key, rec) + writes
             + '<p><a href="/">back to your bots</a></p>')
+
+    def _ask_lines(self, f, key, rec):
+        """The request waiting for the fleet, and the fleet's last answer."""
+        from gridgremlin.managed import answers_path, load
+        out = ''
+        a = rec.get('ask')
+        if a:
+            out += (f'<p class="say">a request to {esc(a.get("action"))} is waiting for the fleet '
+                    f'(asked {time.strftime("%H:%M:%S", time.gmtime(float(a.get("t") or 0)))} UTC)</p>')
+        try:
+            last = load(answers_path(f)).get(key)
+        except Exception:                                   # noqa: BLE001
+            last = None
+        if last:
+            when = time.strftime('%Y-%m-%d %H:%M:%S', time.gmtime(float(last.get('t') or 0)))
+            said = (f'refused: {last["refused"]}' if 'refused' in last else 'done')
+            out += f'<p class="dim">the fleet\'s last answer ({esc(when)} UTC): {esc(said)}</p>'
+        return out
 
     def _manage_post(self, form):
         """D164: adopt (a record only), set the exits, or close part or all —
-        each typed through the pop-up, each refused on Mainnet."""
+        each typed through the pop-up. D181: where the fleet runs, its own
+        process carries the write out (Mainnet's only way, typed as a
+        Mainnet bot is); a stopped Demo or Testnet fleet, the command."""
         from gridgremlin.apply import make_botid
         from gridgremlin.managed import ManagedError, adopt, managed_path
         fi, key, act = int(_f(form.get('fleet')) or 0), form.get('key', ''), form.get('action', '')
@@ -156,8 +221,10 @@ class ManagePages:
         try:
             f, (venue, market, symbol, side), pos, rec, run, free = self._managed_ctx(fi, key)
             row, botid = trade_row(market, symbol, side), make_botid(market, symbol, side)
-            if not confirmed(form.get('confirm'), botid, row):
-                raise ManagedError(f'type {row["symbol"]} Perpetual Futures Trade {side}, or its code '
+            real = self._mainnet(f, venue)
+            if not confirmed(form.get('confirm'), botid, row, mainnet=real):
+                raise ManagedError(f'type its code {botid} exactly — on Mainnet the code only (D157)' if real else
+                                   f'type {row["symbol"]} Perpetual Futures Trade {side}, or its code '
                                    f'{botid}, exactly — a click is not a decision')
             if act == 'adopt':
                 adopt(managed_path(f), venue, pos, run)            # L9: no order, no exit
@@ -168,17 +235,33 @@ class ManagePages:
                                   'its page</a> · <a href="/">back to your bots</a></p>')
             if not self.units and not self.supervise:
                 return self._deny(404, 'control is not armed on this panel')
+            route = self._manage_route(f, venue)
+            if route is None:
+                raise ManagedError('on Mainnet only the running fleet sets exits or closes (D181), and '
+                                   'this account\'s fleet is stopped — start it, or act on the exchange')
             if act == 'exits':
-                tp, sl = _price(form.get('tp')), _price(form.get('sl'))
-                got = self._run_managed(fi, 'exits', key, tp=tp, sl=sl)
+                nums = {'tp': _price(form.get('tp')), 'sl': _price(form.get('sl'))}
             else:
-                qty = _price(form.get('qty'))
-                if qty is not None and qty > free * (1 + 1e-9):              # L12: said here first
-                    raise ManagedError(f'{qty:.10g} is more than the {free:.10g} no bot covers — '
+                nums = {'qty': _price(form.get('qty'))}
+                if real and nums['qty'] is None:
+                    raise ManagedError('on Mainnet the size to close is typed, never left to mean all')
+                if nums['qty'] is not None and nums['qty'] > free * (1 + 1e-9):   # L12: said here first
+                    raise ManagedError(f'{nums["qty"]:.10g} is more than the {free:.10g} no bot covers — '
                                        'a trade closes only its own part')
-                got = self._run_managed(fi, 'close', key, qty=qty)
+            if real:
+                _retyped(nums, form)                                    # D64: each number twice
+            if route == 'fleet':
+                got = self._ask_fleet(f, key, act, **nums)
+            else:
+                got = self._run_managed(fi, act, key, **nums)
         except ManagedError as e:
             return self._page(refusal_box('not done', e))
+        page = f'/manage?fleet={fi}&amp;key={urllib.parse.quote(key)}'
+        if 'waiting' in got:
+            return self._page(f'<h1>{esc(symbol)} {esc(side)}: asked</h1><p class="say">The fleet has '
+                              'not answered yet — it carries the request out at its next cycle. Nothing '
+                              'is done until its answer shows on the trade\'s page.</p>'
+                              f'<p><a href="{page}">its page</a> · <a href="/">back to your bots</a></p>')
         if 'refused' in got:
             return self._page(refusal_box('not done', got['refused']))
         type(self)._cache.pop(f, None)
@@ -192,6 +275,21 @@ class ManagePages:
                           + (f'<p class="say">{left:.10g} is still open.</p>' if left > 0 else
                              '<p class="say">the exchange shows no position on this side now.</p>')
                           + '<p><a href="/">back to your bots</a></p>')
+
+
+ASK_WAIT_S = 20              # the fleet polls each cycle (2 s on HL): an answer is near
+
+
+def _retyped(nums, form):
+    """D64 on Mainnet: each number typed a second time, and an empty box
+    left empty in both."""
+    from gridgremlin.managed import ManagedError
+    for k, v in nums.items():
+        again = _price(form.get(f'retype_{k}'))
+        if (v is None) != (again is None) or (v is not None and abs(v - again) > 1e-9 * max(1.0, abs(v))):
+            name = {'tp': 'take profit', 'sl': 'stop', 'qty': 'size'}[k]
+            raise ManagedError(f'{name}: type it a second time, the same — on Mainnet each number is '
+                               'typed twice (D64)' + ('' if v is not None else '; left empty, leave both empty'))
 
 
 def _blank(x):

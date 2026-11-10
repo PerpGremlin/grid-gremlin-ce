@@ -154,6 +154,25 @@ class ExchangeClient(InfoClient):
                           kind=_kind_from_text(oid))
         return {'status': status, 'oid': oid}
 
+    def place_trigger(self, asset, side, qty, limit_px, trigger_px, tpsl):
+        """D181: one reduce-only trigger order — HL's own take profit
+        ('tp') or stop ('sl'), triggered at the mark, filled at market up
+        to `limit_px` (the slippage bound). The wire mirrors the SDK's
+        order_type_to_wire: isMarket, triggerPx, tpsl, in that order (the
+        hash is of the msgpack, so the order of keys is the signature).
+        Returns ('resting'|'filled', oid) or raises with HL's words."""
+        if tpsl not in ('tp', 'sl'):
+            raise ValueError(f'{tpsl!r}: a trigger is a take profit (tp) or a stop (sl)')
+        if not all(isinstance(x, str) for x in (qty, limit_px, trigger_px)):
+            raise TypeError('qty/prices must be adapter-formatted STRINGS')
+        order = {'a': int(asset), 'b': side == 'Buy', 'p': limit_px, 's': qty, 'r': True,
+                 't': {'trigger': {'isMarket': True, 'triggerPx': trigger_px, 'tpsl': tpsl}}}
+        action = {'type': 'order', 'orders': [order], 'grouping': 'na'}
+        status, oid = self._statuses(self._post_action(action), 1)[0]
+        if status == 'error':
+            raise HLError(200, f'trigger rejected: {oid}', kind=_kind_from_text(oid))
+        return {'status': status, 'oid': oid}
+
     def cancel_order(self, asset, order_id=None, order_link_id=None):
         """Cancel by oid, or by our cloid (the link_id) — link takes priority to
         mirror the Bybit client's identity-first cancels."""
