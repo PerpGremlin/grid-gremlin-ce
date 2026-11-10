@@ -2535,6 +2535,10 @@ eventually pin (T1).
   carries no outside source and falls back to Charter and Menlo; square corners but a
   small button's, box headings mono capitals, chart gridlines dashed. A browser that
   kept a choice keeps it. *(owner, 2026-11-10: "lets adopt the slate theme")*
+- **U194** (2026-11-10) Control names what it takes: its prompt and pop-up list each
+  account by its name where D157 reads one, else its unit name (its file name on a
+  laptop). An account that may reach Mainnet is named by its unit, and its account
+  name typed is refused in words naming the unit; nothing runs until the unit is typed.
 - **U191** (2026-11-03) A position's price chart has four windows, one shown at a
   time: 1 h, 4 h, 24 h and 7 d, opening on the day. Every line is the fleet's own
   snapshot marks, about one every 76 s, so an hour is about 47 points and not

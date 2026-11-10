@@ -34,7 +34,7 @@ class ControlPages:
                             f'<span class="{cls}">{st}'
                             + (f' (pid {pid})' if pid else '')
                             + f'</span> <span class="dim">file {html.escape(Path(f).name)}</span></p>')
-            names = ', '.join(self._account(fi) for fi in range(len(self.fleets)))
+            names = self._confirm_names(supervise=True)
             return self._page(f"""<h1>control <span class="dim">— start and stop each
 account's bots, on this computer; never the exchange</span></h1>
 <div class="fsec">{''.join(rows)}
@@ -43,7 +43,7 @@ account's bots, on this computer; never the exchange</span></h1>
 <select name="action"><option value="start">start</option><option value="stop">stop —
 its bots park, positions stay open</option>
 <option value="restart">restart — loads new and removed bots</option></select>
-{typed_inline(f"type the account's name to confirm ({html.escape(names)}) — its file name works too: "
+{typed_inline(f"type to confirm: <b>{html.escape(names)}</b> — an account's file name works too: "
               '<input name="confirm" size="22" autocomplete="off">')}{self._unit_dialog(names, supervise=True)}<button>do it</button></form></div>
 <p class="dim">the engine runs on its own: closing the panel does
 nothing to it. Stop parks the bots and never closes a position. Nothing
@@ -75,7 +75,7 @@ restarts by itself.</p>
             word = 'running' if state == 'active' else 'stopped'
             rows.append(f'<p>{name}: <span class="{cls}" title="{html.escape(state, quote=True)}">'
                         f'{word}</span>{waits}</p>')
-        names = ', '.join(self._account(fi) for fi in range(len(self.fleets)))
+        names = self._confirm_names()
         return self._page(f"""<h1>control <span class="dim">— start and stop each
 account's bots, on this computer; never the exchange</span></h1>
 <div class="fsec">{''.join(rows)}
@@ -84,7 +84,7 @@ account's bots, on this computer; never the exchange</span></h1>
 <select name="action"><option value="restart">restart — loads new and removed bots</option>
 <option value="stop">stop — its bots park, positions stay open</option>
 <option value="start">start</option></select>
-{typed_inline(f"type the account's name to confirm ({html.escape(names)}) — or its unit name; several go "
+{typed_inline(f"type to confirm: <b>{html.escape(names)}</b> — an account's name or its unit name; several go "
               "separated by commas. An account that may reach Mainnet takes its unit name only: "
               '<input name="confirm" size="44" autocomplete="off">')}{self._unit_dialog(names)}
 <button>do it</button></form></div>
@@ -105,6 +105,21 @@ restart loads every written change.</p>
             return str(self.labels[fi])
         return Path(self.fleets[fi]).name
 
+    def _confirm_names(self, supervise=False):
+        """U194: what control's prompt names is what it takes — an account's
+        name where _account_typed reads one, else its unit name (its file
+        name on a laptop). The live panel asked for "Hyperliquid MAINNET",
+        which D157 refuses on Mainnet, so no restart could be typed."""
+        out = []
+        for fi, f in enumerate(self.fleets):
+            if self._account_typed(self._account(fi)) == fi:
+                out.append(self._account(fi))
+            elif supervise:
+                out.append(Path(f).name)
+            else:
+                out.append(unit_for_fleet(f, self.units) or Path(f).name)
+        return ', '.join(dict.fromkeys(out))
+
     def _unit_dialog(self, names, supervise=False):
         """D159: control's pop-up — what it takes is what _control_act
         takes: an account's name where _account_typed reads one, else its
@@ -115,7 +130,7 @@ restart loads every written change.</p>
         other = [Path(f).name for f in self.fleets] if supervise else list(self.units)
         return confirm_dialog(
             "Start, stop or restart the account's engine, as chosen above.",
-            f'the account\'s name <span class="dim">({esc(names)}) — or its '
+            f'its name <span class="dim">({esc(names)}) — or its '
             + ('file name' if supervise else 'unit name; several go separated by commas')
             + '</span>', list(dict.fromkeys(_squash(n) for n in named + other)), 'do it',
             multi=not supervise)
@@ -510,6 +525,15 @@ restart loads every written change.</p>
             # time from the panel by typing both lines?"): several names,
             # each the decision; ALL must be units or nothing is done
             # D157: an account's name stands for its unit, off Mainnet
+            for part in str(form.get('confirm', '')).split(','):       # U194
+                want = ' '.join(part.lower().split())
+                real = [fi for fi in range(len(self.fleets)) if want and self._real(self.fleets[fi])
+                        and ' '.join(self._account(fi).lower().split()) == want]
+                if real:
+                    u = unit_for_fleet(self.fleets[real[0]], self.units) or 'its unit name'
+                    return self._page(f'<h1 class="neg">not done</h1><p><b>{html.escape(self._account(real[0]))}</b> '
+                                      'may reach Mainnet, so its name is not enough: type its unit name, '
+                                      f'<b>{html.escape(u)}</b>. <a href="/control">back</a></p>')
             typed = self._units_typed(form.get('confirm', ''))
             tombs = {}
             for _fi, _lb, _tp, rows in self._tombs_all():

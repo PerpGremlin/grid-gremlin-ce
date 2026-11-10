@@ -168,6 +168,32 @@ def spec_U125_controls_account_name_starts_its_unit_off_mainnet():
         close()
 
 
+def spec_U194_a_mainnet_account_asks_for_the_name_it_takes():
+    """The live panel's control said "type the account's name to confirm
+    (Hyperliquid MAINNET)", which D157 refuses on Mainnet: no restart could
+    be typed (owner 2026-11-10: "it wont let me restart the live fleet").
+    Now it names the unit, and the account's name typed says so; nothing
+    runs until the unit is typed. Sabotage: the old prompt is caught by its
+    words, the pop-up by the name it shows."""
+    import panel.routes as ps
+    from spec_words import visible
+    base, d, close = _served()
+    try:
+        _mainnet(d)
+        ps.Handler._cache.clear()
+        with _Systemctl('active') as sc:
+            page = _call(base, '/control')
+            shown = ' '.join(visible(page.split('</nav>')[-1]).split())
+            assert f'type to confirm: {UNIT}' in shown and 'confirm (demo)' not in shown
+            assert f'its name ({UNIT})' in shown and 'name (demo)' not in shown
+            got = _call(base, '/unit', {'action': 'restart', 'confirm': 'demo'})
+            assert 'not done' in got and f'type its unit name, <b>{UNIT}</b>' in got and sc.acts() == []
+            _call(base, '/unit', {'action': 'restart', 'confirm': UNIT})
+            assert sc.acts() == [['systemctl', '--user', 'restart', UNIT]]
+    finally:
+        close()
+
+
 def _mainnet_takes_the_plain_name(base, d):
     """The gates of a Mainnet fleet that took the plain name where only the
     code was taken before: create, stop, close and revive. [] when none."""
@@ -466,7 +492,7 @@ def spec_U129_control_speaks_of_accounts_and_shows_units_as_a_detail():
             page = _call(base, '/control')
         shown = visible(page.split('</nav>')[-1])
         assert f'<b>demo</b> <span class="dim">unit {UNIT}</span>: <span class="pos" title="active">running' in page
-        assert "type the account's name to confirm (demo)" in shown
+        assert "type to confirm: demo" in ' '.join(shown.split())
         assert 'restart — loads new and removed bots' in shown
         assert not re.search(r'\bfleets?\b', shown), re.findall(r'.{30}\bfleets?\b.{30}', shown)
     finally:
