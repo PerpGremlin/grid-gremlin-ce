@@ -1038,6 +1038,12 @@ eventually pin (T1).
   the snapshot carries it for a live bot (`orders`). A wide grid rests one order
   and looks broken to anyone who does not know W1; the record lets the card say
   so.
+- **V19** (D182) A Hyperliquid account's display name goes out as one
+  `setDisplayName` action signed by the fleet's own key: at most 20
+  characters, no edge spaces, `''` removes it, a bad name refused before
+  signing. Refused while the fleet runs (X15b), on a fleet with no
+  Hyperliquid bot, and on Mainnet without both of D25's halves, said before
+  any client is built. test: `tests/spec_display_name.py`
 - **V16** A row's leverage is judged against the venue's own limit on its coin.
   Hyperliquid publishes a maximum per coin and marks some coins isolated-only.
   Past the maximum the panel's gate refuses the row; the build makes no

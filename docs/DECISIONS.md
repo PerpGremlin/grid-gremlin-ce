@@ -1735,6 +1735,13 @@ stands unless the owner corrects it.
   **3. Strategies around a position** (a scale-out ladder, a trailing
   stop, a hedge, a stepped buy-in): each its own decision when asked for.
 
+- **D182 — A Hyperliquid account's display name, set by its fleet's signer
+  (2026-11-12).** The owner: "i want to name the account i have the BTC bot
+  on". One `setDisplayName` action from a command, nothing in the panel: the
+  fleet's own key for the fleet's own account, refused while the fleet runs
+  (X15b) and on Mainnet without both of D25's halves. The name is public on
+  Hyperliquid's leaderboard beside the address; the owner chose it knowing.
+
 *Source documents: the owner's response file (local), the 2026-08-04 Q&A, and the
 2026-08-05 morning directives. Scrutiny was invited; scrutiny applied is recorded
 inline above.*
