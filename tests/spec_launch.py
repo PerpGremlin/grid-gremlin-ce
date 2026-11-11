@@ -76,3 +76,37 @@ def spec_U92_a_saved_key_keeps_its_cookie_so_a_bookmark_works():
         finally:
             srv.shutdown()
             Handler.keep_cookie = False
+
+
+def spec_P8b_each_panel_names_its_cookie_by_its_port():
+    """2026-11-11: the testnet panel (:41900) and the live one (:41901)
+    both named their cookie `gg`; a browser keeps one cookie per host
+    whatever the port, so signing in to one signed out the other. The
+    server names it by its port, and a panel refuses another's cookie."""
+    import urllib.error
+    import urllib.request
+    from spec_panel import CONTRACT, _serve
+    from panel.server import Handler
+    srv, base = _serve(CONTRACT)
+    port = base.rsplit(':', 1)[1]
+    Handler.cookie = f'gg{port}'
+    try:
+        host = base.split('//')[1].split(':')[0]
+        c = http.client.HTTPConnection(host, int(port))
+        c.request('GET', '/?t=tok123')
+        assert c.getresponse().getheader('Set-Cookie').startswith(f'gg{port}=tok123;')
+
+        def code(cookie):
+            try:
+                return urllib.request.urlopen(urllib.request.Request(
+                    base + '/', headers={'Cookie': cookie})).status
+            except urllib.error.HTTPError as e:
+                return e.code
+        assert code(f'gg{port}=tok123') == 200
+        assert code('gg=tok123') == 401                       # another port's name
+        assert code(f'gg{int(port) + 1}=tok123') == 401
+    finally:
+        srv.shutdown()
+        Handler.cookie = 'gg'
+    src = (Path(__file__).resolve().parents[1] / 'panel' / 'server.py').read_text()
+    assert "Handler.cookie = f'gg{srv.server_port}'" in src      # the server names it so

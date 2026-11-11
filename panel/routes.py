@@ -73,6 +73,7 @@ class Handler(RehearsePages, CarryFlowPages, CreateFlowPages, FleetAdminPages, C
     keep_cookie = False    # U92: a saved key (--token-file) keeps its cookie 30 days
     labels = ()
     host_ok = ''
+    cookie = 'gg'          # P8b: the server names it by its port — two panels, two keys
     fleet = ''
     hours = 24.0
     _cache = {}
@@ -269,7 +270,7 @@ class Handler(RehearsePages, CarryFlowPages, CreateFlowPages, FleetAdminPages, C
             jar.load(self.headers.get('Cookie') or '')
         except http.cookies.CookieError:
             return False
-        got = jar.get('gg')
+        got = jar.get(self.cookie)
         return bool(self.token) and got is not None and secrets.compare_digest(
             got.value.encode(), self.token.encode())
 
@@ -319,7 +320,7 @@ class Handler(RehearsePages, CarryFlowPages, CreateFlowPages, FleetAdminPages, C
             if secrets.compare_digest(self.path[4:], self.token):
                 self.send_response(303)
                 self.send_header('Set-Cookie',
-                                 f'gg={self.token}; HttpOnly; SameSite=Strict'
+                                 f'{self.cookie}={self.token}; HttpOnly; SameSite=Strict'
                                  + ('; Max-Age=2592000' if self.keep_cookie else ''))   # U92: 30 days
                 self.send_header('Location', '/')
                 self.end_headers()

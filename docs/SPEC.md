@@ -4430,6 +4430,10 @@ that pins it (T1).
   the token file and never prints the key (a terminal, or a one-off key,
   still shows the whole address); the launcher reopens a running panel
   signed in from the saved key, never from a key others can read.
+- **P8b** Each panel's cookie is named by its port (`gg41900`, `gg41901`):
+  a browser keeps one cookie per host whatever the port, and two panels
+  naming theirs alike signed each other out (2026-11-11, the testnet panel
+  over the live one). A cookie made by another port's panel is refused.
 - **P7** Names that come from files — fleet and unit names, tombstone ids,
   the money, margin and settle coins — are drawn as escaped text; a
   refusal's reason goes raw into `refusal_box`, which escapes it once.

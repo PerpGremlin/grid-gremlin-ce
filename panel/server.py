@@ -77,6 +77,9 @@ def main(argv):
         return 2
     srv = http.server.ThreadingHTTPServer(('127.0.0.1', port), Handler)
     Handler.host_ok = f'127.0.0.1:{srv.server_port}'
+    # P8b: a browser keeps one cookie per host, whatever the port — named
+    # alike, the testnet panel's key overwrote the live one's (2026-11-11)
+    Handler.cookie = f'gg{srv.server_port}'
     url = f'http://{Handler.host_ok}/?t={Handler.token}'
     tf = argv[argv.index('--token-file') + 1] if '--token-file' in argv else None
     print(start_line(Handler.host_ok, Handler.token, tf, sys.stdout.isatty()),
