@@ -224,6 +224,15 @@ class _HLVenue(_Venue):
     def set_trading_stop(self, *a, **kw):
         raise AssertionError('Hyperliquid has no position-level stop')
 
+    def open_orders(self, coin=None):
+        """frontendOpenOrders' shape (D183): every trigger resting, ours
+        and the hand's alike, none carrying a cloid."""
+        return [{'coin': 'ETH', 'oid': oid, 'isTrigger': True, 'reduceOnly': True,
+                 'side': 'B' if t['side'] == 'Buy' else 'A', 'cloid': None,
+                 'orderType': 'Take Profit Market' if t['kind'] == 'tp' else 'Stop Market',
+                 'triggerPx': t['trigger'], 'sz': t['qty'], 'isPositionTpsl': t.get('whole', False)}
+                for oid, t in self.triggers.items()]
+
 
 HL_KEY = 'hyperliquid:linear:ETH:short'
 
@@ -544,7 +553,7 @@ def spec_U180_the_trade_manager_names_the_market_fully_and_every_write_is_typed(
         h._manage_page()
         page = shown[-1]
         assert 'ETHUSDT Perpetual Futures Trade · SHORT' in page and 'not covered by a bot <b>2</b>' in page
-        assert 'Adopting places no order' in page and 'class="ggconfirm"' in page     # D159's pop-up
+        assert 'Adopting places and cancels no order' in page and 'class="ggconfirm"' in page     # D159's pop-up
         h._manage_post({'fleet': '0', 'key': KEY, 'action': 'adopt', 'confirm': 'yes'})
         assert 'not done' in shown[-1] and not managed_path(f).exists()           # a click is not a decision
         h._manage_post({'fleet': '0', 'key': KEY, 'action': 'adopt',
@@ -586,3 +595,99 @@ def spec_U180_venue_writes_need_control_and_a_bots_side_is_not_managed():
         assert 'not covered by a bot <b>0</b>' in shown[-1] and 'manage it' not in shown[-1]
         h._manage_post({'fleet': '0', 'key': key, 'action': 'adopt', 'confirm': f"lin{row['symbol']}{row['side'][0]}"})
         assert 'nothing is uncovered' in shown[-1]
+
+
+# --- L16: the exits already resting on the exchange (D183) ---------------------
+
+def _hl_row(oid, kind, side, trig, coin='ETH', cloid=None, ro=True, trigger=True, whole=True):
+    return {'coin': coin, 'oid': oid, 'isTrigger': trigger, 'reduceOnly': ro, 'side': side,
+            'cloid': cloid, 'orderType': 'Take Profit Market' if kind == 'tp' else 'Stop Market',
+            'triggerPx': str(trig), 'sz': '0.0', 'isPositionTpsl': whole}
+
+
+def spec_L16_the_hand_exits_are_the_reduce_only_triggers_no_bot_placed():
+    """D183: of a coin's resting orders, the hand's exits are the
+    reduce-only trigger orders on the side that closes the position and
+    carrying no cloid. A bot's order carries its link (I1) and is never
+    one; nor an opening trigger, a plain limit, another coin's. Sabotage:
+    drop the cloid test -> the bot's order is read as the hand's -> red."""
+    from gridgremlin.exchange.hyperliquid.truth import attach_hand_exits, hand_exits
+    rows = [_hl_row(1, 'sl', 'B', 3150), _hl_row(2, 'tp', 'B', 2800, whole=False),
+            _hl_row(3, 'sl', 'B', 3200, cloid='0x6c696e455448732d31'),      # a bot's
+            _hl_row(4, 'sl', 'A', 2900),                                   # closes a long, not this short
+            _hl_row(5, 'sl', 'B', 3300, ro=False),                         # opens
+            _hl_row(6, 'sl', 'B', 3400, trigger=False),                    # a plain order
+            _hl_row(7, 'sl', 'B', 9, coin='SOL')]
+    got = hand_exits(rows, 'ETH', 'short')
+    assert [(e['oid'], e['kind'], e['trigger'], e['whole']) for e in got] == \
+        [('1', 'sl', 3150.0, True), ('2', 'tp', 2800.0, False)], got
+    assert [e['oid'] for e in hand_exits(rows, 'ETH', 'long')] == ['4']
+    pos = attach_hand_exits([{'symbol': 'ETH', 'side': 'short'}, {'symbol': 'SOL', 'side': 'long'}], rows)
+    assert [e['oid'] for e in pos[0]['exits']] == ['1', '2'] and pos[1]['exits'] == []
+
+
+def spec_L16_adopting_takes_the_exits_already_resting():
+    """Adopting a position with exits on the exchange makes them the
+    trade's: its stop and take profit read the first each would fire, and
+    their orders are the trade's to replace. It places and cancels
+    nothing."""
+    from gridgremlin.managed import adopt
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / 'managed-x.json'
+        found = [{'oid': 'a', 'kind': 'sl', 'trigger': 3150.0, 'qty': 0.0, 'whole': True},
+                 {'oid': 'b', 'kind': 'sl', 'trigger': 3100.0, 'qty': 0.0, 'whole': True},
+                 {'oid': 'c', 'kind': 'tp', 'trigger': 2800.0, 'qty': 0.0, 'whole': True}]
+        _key, rec = adopt(path, 'hyperliquid', dict(POS, symbol='ETH', exits=found), NOBODY)
+        assert (rec['sl'], rec['tp']) == (3100.0, 2800.0), rec       # a short's lowest stop fires first
+        assert rec['orders'] == ['a', 'b', 'c'] and rec['found'] == found
+        _key, bare = adopt(Path(d) / 'm2.json', 'hyperliquid', dict(POS, symbol='ETH'), NOBODY)
+        assert (bare['sl'], bare['tp'], bare['orders']) == (None, None, [])
+
+
+def spec_L16_a_new_exit_replaces_the_hands_of_its_kind_and_only_its_kind():
+    """The adopted hand stop goes once the new one rests (L14's order).
+    A take profit set on the exchange by hand after the adoption stays
+    while only the stop is set, and goes when a take profit is. Sabotage:
+    drop the kind test -> setting the stop cancels the hand's take
+    profit -> red."""
+    from gridgremlin.managed import adopt, set_exits
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / 'managed-x.json'
+        venue = _HLVenue(_short())
+        venue.triggers['hand-sl'] = {'side': 'Buy', 'qty': '0.0', 'trigger': '3150', 'kind': 'sl',
+                                     'whole': True}
+        from gridgremlin.exchange.hyperliquid.truth import hand_exits
+        _key, rec = adopt(path, 'hyperliquid',
+                          dict(POS, symbol='ETH', exits=hand_exits(venue.open_orders(), 'ETH', 'short')),
+                          NOBODY)
+        assert rec['sl'] == 3150.0 and rec['orders'] == ['hand-sl']
+        venue.triggers['hand-tp'] = {'side': 'Buy', 'qty': '0.0', 'trigger': '2800', 'kind': 'tp'}
+        set_exits(path, HL_KEY, rec, venue, ADAPTER, NOBODY, sl=3100.0)
+        assert venue.log == [('place', 'sl', 'h1'), ('cancel', 'hand-sl')], venue.log
+        assert sorted(venue.triggers) == ['h1', 'hand-tp']               # the hand's take profit stays
+        rec = json.loads(path.read_text())[HL_KEY]
+        venue.log.clear()
+        set_exits(path, HL_KEY, rec, venue, ADAPTER, NOBODY, tp=2750.0, sl=3100.0)
+        assert venue.log[:2] == [('place', 'sl', 'h2'), ('place', 'tp', 'h3')], venue.log
+        assert sorted(venue.triggers) == ['h2', 'h3']                    # both replaced, after
+
+
+def spec_L16_the_panel_says_the_exits_resting_before_adoption():
+    """The account box's row and the trade's page say the hand's exits on
+    the exchange before "manage it", and the page says adopting takes
+    them; with none, the page says the exits stay unset."""
+    from panel.strip_view import account_change_lines
+    found = [{'oid': 'a', 'kind': 'sl', 'trigger': 3150.0, 'qty': 0.0, 'whole': True}]
+    pos = dict(POS, exits=found)
+    c = dict(_contract(), account={'bybit': {'tier': 'demo', 'positions': [pos]}},
+             account_change={'bybit': {'windows': {}, 'not_from_a_bot': [pos]}})
+    assert '>manage</a> · on the exchange: SL 3,150' in account_change_lines(c, idx=1)
+    with tempfile.TemporaryDirectory() as d:
+        h, f, shown, runs = _handler(d)
+        h._contract = lambda fleet: c
+        h.path = f'/manage?fleet=0&key={KEY}'
+        h._manage_page()
+        assert 'takes the exits already on the exchange as its own: <b>SL 3,150</b>' in shown[-1]
+        h._contract = lambda fleet: _contract()
+        h._manage_page()
+        assert 'stay unset until you set them' in shown[-1]

@@ -209,6 +209,13 @@ def _window(w, venue):
     return f'{head}{btab}{ptab}<h4>money in/out of the account</h4><p>{money}</p>'
 
 
+def exits_words(exits):
+    """D183: the exits resting on the exchange that no bot placed, said
+    short — "SL 80.519 · TP 90" — or '' when there are none."""
+    return ' · '.join(f'{"TP" if e.get("kind") == "tp" else "SL"} {_q(e.get("trigger"))}'
+                      for e in exits or ())
+
+
 def _manage_cell(idx, venue, p, managed):
     """D164 (U155): the trade manager's link for a position no bot runs —
     "manage", or once adopted "managed" with its exits as set."""
@@ -220,7 +227,8 @@ def _manage_cell(idx, venue, p, managed):
     rec = managed.get(key)
     href = f'/manage?fleet={idx}&amp;key={quote(key)}'
     if not current(rec, p):
-        return f'<a href="{href}">manage</a>'
+        found = exits_words(p.get('exits'))
+        return f'<a href="{href}">manage</a>' + (f' · on the exchange: {found}' if found else '')
     return f'<a href="{href}">managed</a> · TP {_q(rec.get("tp"))} · SL {_q(rec.get("sl"))}'
 
 

@@ -1735,6 +1735,18 @@ stands unless the owner corrects it.
   **3. Strategies around a position** (a scale-out ladder, a trailing
   stop, a hedge, a stepped buy-in): each its own decision when asked for.
 
+- **D183 — A managed trade takes the exits already on the exchange
+  (2026-11-12).** The owner, of hand positions with stops set on the
+  exchange: "this should see them. maybe it needs to scan for orders
+  already existing on that ticker if they are managed". On Hyperliquid the
+  readout reads each position's resting exits that no bot placed: the
+  reduce-only trigger orders on its closing side carrying no link. The
+  panel says them; adopting makes them the trade's own, its stop and take
+  profit the first of each to fire. A new exit is placed before the old
+  are cancelled (L14), and replaces a hand exit of its own kind only, so a
+  stop set by hand after the adoption is never lifted by setting a take
+  profit. A bot's orders carry its link and are never taken. Bybit later.
+
 - **D182 — A Hyperliquid account's display name, set by its fleet's signer
   (2026-11-12).**
   One `setDisplayName` action from a command, nothing in the panel: the

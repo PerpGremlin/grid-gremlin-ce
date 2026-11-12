@@ -3514,6 +3514,15 @@ eventually pin (T1).
   passed both halves (D25); a request older than ten minutes is refused,
   never carried out late; each write is said on the phone, a refusal as a
   warning; a request that fails never stops the fleet.
+- **L16** (D183) The exits already on the exchange. On Hyperliquid a
+  position's hand exits are the reduce-only trigger orders on its closing
+  side carrying no cloid; a bot's order (its link, I1), an opening trigger,
+  a plain order or another coin's never is one. The readout attaches them to
+  each position and the panel says them before "manage it". Adopting makes
+  them the trade's: its stop and take profit read the first of each kind to
+  fire, their orders the trade's to replace; nothing is placed or
+  cancelled. A new exit replaces, after it rests, the hand exits of its own
+  kind only. test: `tests/spec_managed.py` (L16)
 ## J — the agent (D80)
 
 - **J1** The agent's one door is a forced command behind a restricted ssh

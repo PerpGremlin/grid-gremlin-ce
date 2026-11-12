@@ -142,9 +142,14 @@ class ManagePages:
                 'not managed', 'a bot of this account runs this side: by I2 its whole position '
                 'there is the bot\'s, so nothing is uncovered'))
         if not current(rec, pos):
+            from panel.strip_view import exits_words
+            found = exits_words(pos.get('exits'))
+            took = (f'It takes the exits already on the exchange as its own: <b>{esc(found)}</b>. '
+                    'Setting a new stop or take profit later places it first, then cancels these.'
+                    if found else 'Its take profit and stop stay unset until you set them.')
             return self._page(
-                head + '<p class="say">Adopting places no order and sets no exit: the trade is '
-                'yours to manage from here, its take profit and stop unset until you set them. '
+                head + '<p class="say">Adopting places and cancels no order: the trade is '
+                f'yours to manage from here. {took} '
                 'Only the part no bot covers is ever managed.</p>'
                 + self._manage_form(fi, key, 'adopt', row, botid,
                                     f'Manage {symbol} {side} on {acct} as a trade. No order is placed.',

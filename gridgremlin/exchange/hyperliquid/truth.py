@@ -103,6 +103,33 @@ def account_positions(state):
     return out
 
 
+def hand_exits(orders, symbol, side):
+    """D183: the exits resting on a coin that no bot and no managed trade
+    placed by link — Hyperliquid's reduce-only trigger orders on the side
+    that closes `side`, carrying no cloid (every bot order carries its
+    link, I1) — as [{oid, kind 'tp'|'sl', trigger, qty, whole}]. `whole`
+    is HL's position TP/SL: it closes whatever is held when it fires.
+    From frontendOpenOrders rows already read; reads nothing."""
+    close = 'A' if side == 'long' else 'B'
+    out = []
+    for o in orders or []:
+        if (o.get('coin') != symbol or not o.get('isTrigger') or not o.get('reduceOnly')
+                or o.get('side') != close or o.get('cloid')):
+            continue
+        kind = 'tp' if 'take profit' in str(o.get('orderType') or '').lower() else 'sl'
+        out.append({'oid': str(o.get('oid')), 'kind': kind,
+                    'trigger': _f(o.get('triggerPx')), 'qty': _f(o.get('sz'), 0.0),
+                    'whole': bool(o.get('isPositionTpsl'))})
+    return sorted(out, key=lambda x: (x['kind'], x['trigger'] or 0.0))
+
+
+def attach_hand_exits(positions, orders):
+    """D183: each position's hand exits (`hand_exits`), in place."""
+    for p in positions or []:
+        p['exits'] = hand_exits(orders, p.get('symbol'), p.get('side'))
+    return positions
+
+
 def _addr_eq(a, b):
     return bool(a) and bool(b) and str(a).lower() == str(b).lower()
 

@@ -1396,6 +1396,11 @@ def main(argv):
                 client = InfoClient()
                 account[venue] = dict(account_figures(client),
                                       tier=client.env)          # D65
+                try:                                    # D183: the hand exits resting
+                    from .exchange.hyperliquid.truth import attach_hand_exits
+                    attach_hand_exits(account[venue].get('positions'), client.open_orders())
+                except (VenueError, OSError, KeyError, ValueError, TypeError) as e:
+                    print(f'[warn] {venue}: resting exits unread — {e}', file=sys.stderr)
             else:
                 from .exchange.bybit.client import Client
                 from .exchange.bybit.truth import account_figures

@@ -128,10 +128,25 @@ def adopt(path, venue, position, run, by='owner'):
         # an earlier adoption's exits may still rest on the venue (the entry
         # moved with an add): kept, so the next set cancels them first
         kept = list((got.get(key) or {}).get('orders') or [])
+        found = list(position.get('exits') or [])        # D183: the exits already resting
+        kept += [e['oid'] for e in found if e['oid'] not in kept]
         got[key] = {'adopted': utc_stamp(), 'by': str(by), 'size': free,
-                    'entry': position.get('entry'), 'tp': None, 'sl': None, 'orders': kept}
+                    'entry': position.get('entry'), 'tp': first_to_fire(found, 'tp', side),
+                    'sl': first_to_fire(found, 'sl', side), 'orders': kept,
+                    'found': found}
         write_json(path, got)
     return key, got[key]
+
+
+def first_to_fire(exits, kind, side):
+    """D183: of the exits of one kind, the trigger the price reaches first
+    — a long's highest stop and lowest take profit, a short's the other
+    way; None when there is none."""
+    px = [e['trigger'] for e in exits or () if e.get('kind') == kind and e.get('trigger')]
+    if not px:
+        return None
+    high = (kind == 'sl') == (side == 'long')
+    return max(px) if high else min(px)
 
 
 def drop(path, key):
@@ -213,7 +228,14 @@ def set_exits(path, key, record, client, adapter, run, tp=None, sl=None, allow_m
     if float(qty) <= 0:
         raise ManagedError(f'{free:.10g} rounds to nothing at the venue\'s step; nothing was sent')
     if venue == 'hyperliquid':
-        placed = _hl_exits(client, adapter, symbol, side, qty, tp, sl, record.get('orders') or [])
+        old = list(record.get('orders') or [])
+        # D183: an exit set on the exchange by hand since the adoption is
+        # replaced by the new one of its kind; of a kind left empty it stays
+        from .exchange.hyperliquid.truth import hand_exits
+        setting = {k for k, px in (('tp', tp), ('sl', sl)) if px is not None}
+        old += [e['oid'] for e in hand_exits(client.open_orders(), symbol, side)
+                if e['kind'] in setting and e['oid'] not in old]
+        placed = _hl_exits(client, adapter, symbol, side, qty, tp, sl, old)
         return _exits_kept(path, key, record, tp, sl, qty, placed, size, free, mark)
     idx = adapter.position_idx('Buy' if side == 'long' else 'Sell', False) or 0
     from .exchange.errors import VenueError
