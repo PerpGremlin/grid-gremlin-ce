@@ -1735,6 +1735,19 @@ stands unless the owner corrects it.
   **3. Strategies around a position** (a scale-out ladder, a trailing
   stop, a hedge, a stepped buy-in): each its own decision when asked for.
 
+- **D184 — A managed trade scales out the exchange's way (2026-11-12).**
+  The owner: "could we see if we are able to use the exchanges scalein/out
+  tool as a default. i guess the deault to scale out without it becoming a
+  bot would be just that." Hyperliquid's Scale is its app placing several
+  limit orders over a price range, not an action of its API; the panel
+  places the same ladder: a start and an end price, a number of orders (2
+  to 50, 5 offered), a size skew (the last order's size over the first's, 1
+  even), together the part no bot covers. Each order is a reduce-only,
+  post-only limit with no bot's link. A new ladder rests before the old is
+  cancelled; 0 orders clears it; closing the whole position cancels it. The
+  stop is not touched. Hyperliquid only for now; on Mainnet each number is
+  typed twice.
+
 - **D183 — A managed trade takes the exits already on the exchange
   (2026-11-12).** The owner, of hand positions with stops set on the
   exchange: "this should see them. maybe it needs to scan for orders

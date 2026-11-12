@@ -4,6 +4,8 @@
 #
 #   python3 -m gridgremlin.managed <fleet.json> exits <venue:market:SYMBOL:side> [--tp P] [--sl P]
 #   python3 -m gridgremlin.managed <fleet.json> close <venue:market:SYMBOL:side> [--qty Q]
+#   python3 -m gridgremlin.managed <fleet.json> scale <venue:market:SYMBOL:side>
+#                                  --start P --end P --count N [--skew K]   (--count 0 clears)
 #
 # Adopting is a record only (`adopt`, the panel's): it places no order and
 # sets no exit. Every write below re-reads the venue first and acts only on
@@ -329,7 +331,7 @@ def close_part(path, key, record, client, adapter, run, qty=None, allow_mainnet=
     left, mark, _ = _held(client, adapter, market, symbol, side)      # X4: re-read
     if left <= EPS:
         from .exchange.errors import VenueError
-        for oid in record.get('orders') or []:
+        for oid in (record.get('orders') or []) + list((record.get('ladder') or {}).get('orders') or []):
             try:
                 client.cancel_order(market, symbol, oid)
             except VenueError as e:
@@ -339,26 +341,138 @@ def close_part(path, key, record, client, adapter, run, qty=None, allow_mainnet=
     return {'key': key, 'closed': size - left, 'left': left, 'mark': mark}
 
 
-def command(fleet_path, action, key, tp=None, sl=None, qty=None):
+SCALE_MAX = 50              # orders in one ladder
+
+
+def scale_sizes(total, count, skew=1.0):
+    """D184: Hyperliquid's Scale: `count` sizes summing to `total`, the
+    last `skew` times the first, the steps between even. Unrounded."""
+    if count == 1:
+        return [total]
+    w = [1.0 + (skew - 1.0) * i / (count - 1) for i in range(count)]
+    return [total * x / sum(w) for x in w]
+
+
+def scale_prices(start, end, count):
+    """Evenly spaced from `start` to `end`, both included."""
+    if count == 1:
+        return [start]
+    return [start + (end - start) * i / (count - 1) for i in range(count)]
+
+
+def check_scale(side, mark, start, end, count, skew):
+    """A scale out's terms, refused in words before anything is sent: its
+    prices beyond the mark on the trade's side (a long sells above it, a
+    short buys below), 2 to SCALE_MAX orders, a skew above nothing."""
+    if not isinstance(count, int) or not 2 <= count <= SCALE_MAX:
+        raise ManagedError(f'a scale out is 2 to {SCALE_MAX} orders, not {count!r}')
+    if not skew or not 0 < skew <= 100:
+        raise ManagedError(f'the size skew is above 0 and at most 100 (1 is even), not {skew!r}')
+    if not mark:
+        raise ManagedError('the mark is not read, so the prices cannot be checked; nothing was sent')
+    for name, px in (('start', start), ('end', end)):
+        if not px or not px > 0:
+            raise ManagedError(f'the {name} price is above nothing')
+        if (px > mark) != (side == 'long'):
+            where = 'above' if side == 'long' else 'below'
+            raise ManagedError(f'a {side} scales out {where} the mark ({mark:.10g}); '
+                               f'the {name} {px:.10g} is not')
+    if start == end:
+        raise ManagedError('the start and end are one price: that is one order, not a scale')
+
+
+def scale_out(path, key, record, client, adapter, run, start=None, end=None, count=0, skew=1.0,
+              allow_mainnet=False):
+    """L17 (D184): Hyperliquid's Scale as a managed trade's exit — `count`
+    reduce-only post-only limits from `start` to `end`, sized by `skew`
+    to sum to the uncovered part (re-read now), each carrying no bot's
+    link. A new ladder rests before the old is cancelled; a placement
+    refused part-way cancels what it placed and the old stands. `count`
+    0 clears the ladder. The stop is not touched."""
+    venue, market, symbol, side = parse_key(key)
+    if venue != 'hyperliquid':
+        raise ManagedError('a scale out is Hyperliquid only for now (D184); nothing was sent')
+    _refuse_mainnet(client, allow_mainnet)
+    size, mark, avg = _held(client, adapter, market, symbol, side)
+    if not current(record, {'size': size, 'entry': avg}):
+        raise ManagedError(f'{symbol} {side}: the position is not the one adopted (closed, or its '
+                           'entry moved with an add) — adopt it again first; nothing was sent')
+    free = uncovered(size, bot_shares(run, venue, market, symbol, side, size))
+    if free <= EPS:
+        raise ManagedError(f'{symbol} {side}: nothing uncovered — a bot of this account runs this '
+                           'side (I2); nothing was sent')
+    old = list((record.get('ladder') or {}).get('orders') or [])
+    from .exchange.errors import VenueError
+    plan = []
+    if count:
+        check_scale(side, mark, start, end, count, skew)
+        for px, q in zip(scale_prices(start, end, count), scale_sizes(free, count, skew)):
+            qs, ps = adapter.fmt_qty(q), adapter.fmt_price(px)
+            if float(qs) <= 0 or not adapter.meets_minimum(float(qs), float(ps)):
+                raise ManagedError(f'{q:.10g} at {ps} is below the venue\'s smallest order: fewer '
+                                   'orders, or a larger skew; nothing was sent')
+            plan.append((ps, qs))
+    exit_ = 'Sell' if side == 'long' else 'Buy'
+    placed = []
+    try:
+        for ps, qs in plan:
+            got = client.place_order(market, symbol, exit_, qs, ps, None, reduce_only=True,
+                                     post_only=True)
+            placed.append(str(got['oid'] if isinstance(got, dict) else got))
+    except VenueError as e:
+        for oid in placed:
+            try:
+                client.cancel_order(market, symbol, oid)
+            except VenueError:
+                pass
+        raise ManagedError(f'the exchange refused order {len(placed) + 1} of {len(plan)}: {e} — the '
+                           'ladder set before still stands; nothing new rests') from e
+    for oid in old:
+        try:
+            client.cancel_order(market, symbol, oid)
+        except VenueError as e:
+            if e.kind != 'gone':
+                raise ManagedError(f'the new ladder rests, but an old order ({oid}) did not cancel: '
+                                   f'{e} — cancel it on the exchange') from e
+    ladder = ({'start': start, 'end': end, 'count': count, 'skew': skew, 'orders': placed,
+               'set': utc_stamp(), 'plan': [[float(p), float(q)] for p, q in plan]}
+              if count else None)
+    with locked(path):
+        got = load(path)
+        rec = dict(got.get(key) or record)
+        if ladder:
+            rec['ladder'] = ladder
+        else:
+            rec.pop('ladder', None)
+        got[key] = rec
+        write_json(path, got)
+    return {'key': key, 'held': size, 'uncovered': free, 'mark': mark,
+            'ladder': [[float(p), float(q)] for p, q in plan]}
+
+
+def command(fleet_path, action, key, tp=None, sl=None, qty=None, **scale):
     """The argv for the panel: the keys stay with the engine (X15's way)."""
     out = [sys.executable, '-m', 'gridgremlin.managed', str(fleet_path), action, key]
-    for flag, v in (('--tp', tp), ('--sl', sl), ('--qty', qty)):
+    for flag, v in (('--tp', tp), ('--sl', sl), ('--qty', qty), ('--start', scale.get('start')),
+                    ('--end', scale.get('end')), ('--skew', scale.get('skew'))):
         if v is not None:
             out += [flag, f'{float(v):.10g}']
+    if scale.get('count') is not None:
+        out += ['--count', str(int(scale['count']))]
     return out
 
 
-ASK_ACTIONS = ('exits', 'close')
+ASK_ACTIONS = ('exits', 'close', 'scale')
 ASK_STALE_S = 600           # an ask no fleet took in ten minutes is not carried out late
 
 
-def ask(path, key, action, by='owner', tp=None, sl=None, qty=None, now=None):
+def ask(path, key, action, by='owner', tp=None, sl=None, qty=None, now=None, **scale):
     """L15 (D181): a request for the running fleet — one at a time per
     trade, answered in the record (`answer`, the same id). Returns its id.
     Places nothing itself: the panel holds no key."""
     import os
     if action not in ASK_ACTIONS:
-        raise ManagedError(f'{action}: a request sets exits or closes')
+        raise ManagedError(f'{action}: a request sets exits, scales out or closes')
     now = time.time() if now is None else now
     with locked(path):
         got = load(path)
@@ -371,7 +485,8 @@ def ask(path, key, action, by='owner', tp=None, sl=None, qty=None, now=None):
                                'read its answer on the trade\'s page first')
         rid = f'{int(now * 1000)}-{os.urandom(4).hex()}'
         rec['ask'] = {'id': rid, 'action': action, 'by': str(by), 't': now,
-                      'tp': tp, 'sl': sl, 'qty': qty}
+                      'tp': tp, 'sl': sl, 'qty': qty,
+                      **{k: scale.get(k) for k in ('start', 'end', 'count', 'skew')}}
         got[key] = rec
         write_json(path, got)
     return rid
@@ -449,6 +564,13 @@ class ManagedWatch:
                                 allow_mainnet=self.allow_mainnet)
                 said = (f'{symbol} {side}: exits set by {a.get("by")} — take profit '
                         f'{_or_none(a.get("tp"))}, stop {_or_none(a.get("sl"))}, for {out["sized"]:.10g} (D181)')
+            elif a['action'] == 'scale':
+                out = scale_out(self.path, key, rec, client, adapter, run, a.get('start'),
+                                a.get('end'), int(a.get('count') or 0), a.get('skew') or 1.0,
+                                allow_mainnet=self.allow_mainnet)
+                said = (f'{symbol} {side}: scale out set by {a.get("by")} — '
+                        + (f'{len(out["ladder"])} orders from {_or_none(a.get("start"))} to '
+                           f'{_or_none(a.get("end"))}' if out['ladder'] else 'cleared') + ' (D184)')
             else:
                 out = close_part(self.path, key, rec, client, adapter, run, a.get('qty'),
                                  allow_mainnet=self.allow_mainnet)
@@ -516,15 +638,17 @@ def _client(fleet_path, venue):
 def main(argv):
     opts, rest, i = {}, [], 0
     while i < len(argv):
-        if argv[i] in ('--tp', '--sl', '--qty') and i + 1 < len(argv):
+        if argv[i] in ('--tp', '--sl', '--qty', '--start', '--end', '--count', '--skew') \
+                and i + 1 < len(argv):
             opts[argv[i][2:]] = argv[i + 1]
             i += 2
         else:
             rest.append(argv[i])
             i += 1
-    if len(rest) != 3 or rest[1] not in ('exits', 'close') or '--allow-mainnet' in argv:
-        print('usage: python3 -m gridgremlin.managed <fleet.json> exits|close '
-              '<venue:market:SYMBOL:side> [--tp P] [--sl P] [--qty Q] (Demo and Testnet only)')
+    if len(rest) != 3 or rest[1] not in ('exits', 'close', 'scale') or '--allow-mainnet' in argv:
+        print('usage: python3 -m gridgremlin.managed <fleet.json> exits|close|scale '
+              '<venue:market:SYMBOL:side> [--tp P] [--sl P] [--qty Q] '
+              '[--start P --end P --count N --skew K] (Demo and Testnet only)')
         return 2
     fleet_path, action, key = rest
     try:
@@ -561,6 +685,9 @@ def main(argv):
             adapter = adapter_for(market, parse_instrument(market, client.instruments_info(market, symbol)))
         if action == 'exits':
             out = set_exits(path, key, record, client, adapter, run, nums.get('tp'), nums.get('sl'))
+        elif action == 'scale':
+            out = scale_out(path, key, record, client, adapter, run, nums.get('start'),
+                            nums.get('end'), int(nums.get('count') or 0), nums.get('skew') or 1.0)
         else:
             out = close_part(path, key, record, client, adapter, run, nums.get('qty'))
     except Exception as e:                                   # noqa: BLE001

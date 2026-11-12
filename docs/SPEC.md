@@ -3523,6 +3523,14 @@ eventually pin (T1).
   fire, their orders the trade's to replace; nothing is placed or
   cancelled. A new exit replaces, after it rests, the hand exits of its own
   kind only. test: `tests/spec_managed.py` (L16)
+- **L17** (D184) A scale out is Hyperliquid's Scale: `count` (2 to 50)
+  reduce-only post-only limits on the closing side, priced evenly from
+  `start` to `end` beyond the mark, sized evenly by `skew` (last over first)
+  to sum to the uncovered part, each at the venue's minimum or refused. A
+  new ladder rests before the old is cancelled; one refused part-way cancels
+  what it placed and the old stands; 0 clears it; a whole close cancels it.
+  The running fleet carries it as a request; the panel asks each number
+  twice on Mainnet. Bybit refused for now. test: `tests/spec_managed.py` (L17)
 ## J — the agent (D80)
 
 - **J1** The agent's one door is a forced command behind a restricted ssh

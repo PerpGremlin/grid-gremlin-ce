@@ -181,6 +181,21 @@ class ManagePages:
             + ('<span class="dim">on Mainnet the size is typed, twice</span></p>' if real else
                '<span class="dim">empty closes all of the uncovered part</span></p>'),
             danger=True, real=real)
+        scale = ''
+        if venue == 'hyperliquid':
+            lad = rec.get('ladder') or {}
+            scale = self._manage_form(
+                fi, key, 'scale', row, botid,
+                f'Scale out of {symbol} {side} on {acct}: reduce-only limit orders from the start to the '
+                f'end price, together the {free:.10g} no bot covers. A ladder set before is replaced, '
+                'the new placed before the old is cancelled. 0 orders clears it. The stop is not touched.',
+                'set scale out',
+                f'<p>from <input name="start" size="10" value="{esc(_blank(lad.get("start")))}">{again("start")} '
+                f'to <input name="end" size="10" value="{esc(_blank(lad.get("end")))}">{again("end")} '
+                f'· orders <input name="count" size="3" value="{esc(str(lad.get("count") or 5))}">{again("count")} '
+                f'· size skew <input name="skew" size="4" value="{esc(_blank(lad.get("skew") or 1.0))}">{again("skew")} '
+                '<span class="dim">Hyperliquid\'s Scale: 1 is even sizes, 2 makes the last order twice '
+                'the first; each order rests as a reduce-only limit</span></p>', real=real)
         if not armed:
             writes = ('<p class="dim">control is not armed on this panel (--units or --supervise): '
                       'setting exits and closing reach the exchange and need it.</p>')
@@ -188,11 +203,11 @@ class ManagePages:
             writes = ('<p class="dim">this Mainnet account\'s fleet is stopped: on Mainnet only its '
                       'running fleet sets exits or closes (D181) — start it, or act on the exchange.</p>')
         else:
-            writes = f'<p class="dim">a write here: {how}.</p>' + exits + close
+            writes = f'<p class="dim">a write here: {how}.</p>' + exits + scale + close
         return self._page(
             head + f'<p class="say">managed since {esc(rec.get("adopted") or "—")} · take profit '
             f'<b>{_q(rec.get("tp"))}</b> · stop <b>{_q(rec.get("sl"))}</b></p>'
-            + self._ask_lines(_f0, key, rec) + writes
+            + _ladder_line(rec) + self._ask_lines(_f0, key, rec) + writes
             + '<p><a href="/">back to your bots</a></p>')
 
     def _ask_lines(self, f, key, rec):
@@ -221,7 +236,7 @@ class ManagePages:
         from gridgremlin.apply import make_botid
         from gridgremlin.managed import ManagedError, adopt, managed_path
         fi, key, act = int(_f(form.get('fleet')) or 0), form.get('key', ''), form.get('action', '')
-        if act not in ('adopt', 'exits', 'close'):
+        if act not in ('adopt', 'exits', 'close', 'scale'):
             return self._deny(403, 'unknown action')
         try:
             f, (venue, market, symbol, side), pos, rec, run, free = self._managed_ctx(fi, key)
@@ -246,6 +261,13 @@ class ManagePages:
                                    'this account\'s fleet is stopped — start it, or act on the exchange')
             if act == 'exits':
                 nums = {'tp': _price(form.get('tp')), 'sl': _price(form.get('sl'))}
+            elif act == 'scale':
+                nums = {'start': _price(form.get('start')), 'end': _price(form.get('end')),
+                        'count': _price(form.get('count')), 'skew': _price(form.get('skew'))}
+                if nums['count'] is None or nums['count'] != int(nums['count']):
+                    raise ManagedError('the number of orders is a whole number (0 clears the ladder)')
+                if nums['count'] and (nums['start'] is None or nums['end'] is None):
+                    raise ManagedError('a scale out needs its start and end prices')
             else:
                 nums = {'qty': _price(form.get('qty'))}
                 if real and nums['qty'] is None:
@@ -255,6 +277,9 @@ class ManagePages:
                                        'a trade closes only its own part')
             if real:
                 _retyped(nums, form)                                    # D64: each number twice
+            if act == 'scale':
+                nums['count'] = int(nums['count'])
+                nums['skew'] = nums['skew'] or 1.0
             if route == 'fleet':
                 got = self._ask_fleet(f, key, act, **nums)
             else:
@@ -275,6 +300,13 @@ class ManagePages:
                               f'profit {got.get("tp") or "none"} · stop {got.get("sl") or "none"}, for '
                               f'{got.get("sized"):.10g} — the part no bot covers.</p>'
                               '<p><a href="/">back to your bots</a></p>')
+        if act == 'scale':
+            lad = got.get('ladder') or []
+            return self._page(f'<h1>{esc(symbol)} {esc(side)}: scale out '
+                              + ('set' if lad else 'cleared') + '</h1>'
+                              + (f'<p class="say">{len(lad)} reduce-only orders: '
+                                 + ' · '.join(f'{q:.10g} at {px:.10g}' for px, q in lad) + '</p>' if lad else '')
+                              + '<p><a href="/">back to your bots</a></p>')
         left = got.get('left') or 0.0
         return self._page(f'<h1>{esc(symbol)} {esc(side)}: closed {got.get("closed", 0.0):.10g}</h1>'
                           + (f'<p class="say">{left:.10g} is still open.</p>' if left > 0 else
@@ -292,9 +324,21 @@ def _retyped(nums, form):
     for k, v in nums.items():
         again = _price(form.get(f'retype_{k}'))
         if (v is None) != (again is None) or (v is not None and abs(v - again) > 1e-9 * max(1.0, abs(v))):
-            name = {'tp': 'take profit', 'sl': 'stop', 'qty': 'size'}[k]
+            name = {'tp': 'take profit', 'sl': 'stop', 'qty': 'size', 'start': 'start price',
+                    'end': 'end price', 'count': 'number of orders', 'skew': 'size skew'}[k]
             raise ManagedError(f'{name}: type it a second time, the same — on Mainnet each number is '
                                'typed twice (D64)' + ('' if v is not None else '; left empty, leave both empty'))
+
+
+def _ladder_line(rec):
+    """D184: the scale out resting, said on the trade's page."""
+    lad = (rec or {}).get('ladder')
+    if not lad:
+        return ''
+    plan = ' · '.join(f'{q:.10g} at {px:.10g}' for px, q in lad.get('plan') or [])
+    return (f'<p class="say">scale out: <b>{len(lad.get("orders") or [])} orders</b> from '
+            f'{lad.get("start"):.10g} to {lad.get("end"):.10g}, skew {lad.get("skew"):.10g} — {esc(plan)} '
+            f'<span class="dim">(set {esc(lad.get("set") or "—")})</span></p>')
 
 
 def _blank(x):

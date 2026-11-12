@@ -206,6 +206,7 @@ class _HLVenue(_Venue):
     def __init__(self, positions, mark=2990.0, env='testnet', refuse=()):
         super().__init__(positions, mark, env)
         self.triggers, self.log, self.refuse = {}, [], set(refuse)
+        self.limits, self.refuse_at = {}, set()
 
     def place_exit(self, market_type, symbol, side, qty, trigger_px, kind):
         if kind in self.refuse:
@@ -216,13 +217,25 @@ class _HLVenue(_Venue):
         self.log.append(('place', kind, oid))
         return oid
 
-    def cancel_order(self, category, symbol, order_id):
-        self.log.append(('cancel', order_id))
-        if self.triggers.pop(order_id, None) is None:
-            raise VenueError('never placed', kind='gone')
-
     def set_trading_stop(self, *a, **kw):
         raise AssertionError('Hyperliquid has no position-level stop')
+
+    def place_order(self, market_type, symbol, side, qty, price, link_id, position_idx=0,
+                    reduce_only=False, post_only=True, borrow=False):
+        """D184: a limit, as HLVenueClient's: {'status', 'oid'}."""
+        self.n += 1
+        oid = f'L{self.n}'
+        if 'limit' in self.refuse and self.n in self.refuse_at:
+            raise VenueError('Post only order would have immediately matched', kind='post_only_reject')
+        self.limits[oid] = {'side': side, 'qty': qty, 'price': price, 'reduce_only': reduce_only,
+                            'post_only': post_only, 'link': link_id}
+        self.log.append(('place', 'limit', oid))
+        return {'status': 'resting', 'oid': oid}
+
+    def cancel_order(self, category, symbol, order_id):
+        self.log.append(('cancel', order_id))
+        if self.triggers.pop(order_id, None) is None and self.limits.pop(order_id, None) is None:
+            raise VenueError('never placed', kind='gone')
 
     def open_orders(self, coin=None):
         """frontendOpenOrders' shape (D183): every trigger resting, ours
@@ -691,3 +704,180 @@ def spec_L16_the_panel_says_the_exits_resting_before_adoption():
         h._contract = lambda fleet: _contract()
         h._manage_page()
         assert 'stay unset until you set them' in shown[-1]
+
+
+# --- L17: a scale out, Hyperliquid's Scale (D184) -------------------------------
+
+def spec_L17_the_scale_is_hyperliquids_even_steps_and_skew():
+    """Sizes sum to the part, the last `skew` times the first, the steps
+    even; prices even from start to end, both included."""
+    from gridgremlin.managed import scale_prices, scale_sizes
+    assert scale_sizes(2.0, 4) == [0.5] * 4
+    a, b = scale_sizes(2.0, 2, 3.0)
+    assert abs(a - 0.5) < 1e-12 and abs(b - 1.5) < 1e-12
+    got = scale_sizes(3.0, 3, 2.0)
+    assert abs(sum(got) - 3.0) < 1e-12 and abs(got[2] / got[0] - 2.0) < 1e-12
+    assert abs((got[1] - got[0]) - (got[2] - got[1])) < 1e-12
+    assert scale_prices(2900.0, 2600.0, 4) == [2900.0, 2800.0, 2700.0, 2600.0]
+
+
+def _hl_managed(d, stop=True):
+    """A short adopted on Hyperliquid, its hand stop taken (D183)."""
+    from gridgremlin.exchange.hyperliquid.truth import hand_exits
+    from gridgremlin.managed import adopt
+    path = Path(d) / 'managed-x.json'
+    venue = _HLVenue(_short())
+    if stop:
+        venue.triggers['hand-sl'] = {'side': 'Buy', 'qty': '0.0', 'trigger': '3150', 'kind': 'sl',
+                                     'whole': True}
+    _k, rec = adopt(path, 'hyperliquid',
+                    dict(POS, symbol='ETH', exits=hand_exits(venue.open_orders(), 'ETH', 'short')),
+                    NOBODY)
+    return path, rec, venue
+
+
+def spec_L17_a_scale_out_is_reduce_only_post_only_limits_sized_to_the_part():
+    """A short scales out below the mark: `count` buys, reduce-only and
+    post-only, no bot's link, summing to the uncovered part; the stop is
+    untouched. Sabotage: reduce_only=False -> red (a ladder that could
+    open the other side)."""
+    from gridgremlin.managed import scale_out
+    with tempfile.TemporaryDirectory() as d:
+        path, rec, venue = _hl_managed(d)
+        got = scale_out(path, HL_KEY, rec, venue, ADAPTER, NOBODY, 2900.0, 2600.0, 4)
+        assert [(o['side'], o['qty'], o['price'], o['reduce_only'], o['post_only'], o['link'])
+                for o in venue.limits.values()] == [
+            ('Buy', '0.5', p, True, True, None) for p in ('2900', '2800', '2700', '2600')], venue.limits
+        assert list(venue.triggers) == ['hand-sl']                       # the stop stands
+        lad = json.loads(path.read_text())[HL_KEY]['ladder']
+        assert lad['orders'] == ['L1', 'L2', 'L3', 'L4'] and lad['count'] == 4
+        assert got['ladder'] == [[2900.0, 0.5], [2800.0, 0.5], [2700.0, 0.5], [2600.0, 0.5]]
+
+
+def spec_L17_a_new_ladder_rests_before_the_old_goes_and_zero_clears():
+    from gridgremlin.managed import scale_out
+    with tempfile.TemporaryDirectory() as d:
+        path, rec, venue = _hl_managed(d)
+        scale_out(path, HL_KEY, rec, venue, ADAPTER, NOBODY, 2900.0, 2800.0, 2)
+        rec = json.loads(path.read_text())[HL_KEY]
+        venue.log.clear()
+        scale_out(path, HL_KEY, rec, venue, ADAPTER, NOBODY, 2950.0, 2850.0, 2, 3.0)
+        assert venue.log == [('place', 'limit', 'L3'), ('place', 'limit', 'L4'),
+                             ('cancel', 'L1'), ('cancel', 'L2')], venue.log
+        assert [o['qty'] for o in venue.limits.values()] == ['0.5', '1.5']
+        rec = json.loads(path.read_text())[HL_KEY]
+        scale_out(path, HL_KEY, rec, venue, ADAPTER, NOBODY, count=0)
+        assert venue.limits == {} and 'ladder' not in json.loads(path.read_text())[HL_KEY]
+        assert list(venue.triggers) == ['hand-sl']
+
+
+def spec_L17_a_ladder_refused_part_way_leaves_the_old_standing():
+    from gridgremlin.managed import ManagedError, scale_out
+    with tempfile.TemporaryDirectory() as d:
+        path, rec, venue = _hl_managed(d, stop=False)
+        scale_out(path, HL_KEY, rec, venue, ADAPTER, NOBODY, 2900.0, 2800.0, 2)
+        rec = json.loads(path.read_text())[HL_KEY]
+        venue.refuse, venue.refuse_at = {'limit'}, {5}
+        try:
+            scale_out(path, HL_KEY, rec, venue, ADAPTER, NOBODY, 2950.0, 2750.0, 3)
+            raise AssertionError('a half-placed ladder was kept')
+        except ManagedError as e:
+            assert 'refused order 3 of 3' in str(e) and 'still stands' in str(e), e
+        assert sorted(venue.limits) == ['L1', 'L2'] and json.loads(path.read_text())[HL_KEY] == rec
+
+
+def spec_L17_a_scale_out_is_refused_in_words_before_anything_is_sent():
+    """Prices on the wrong side of the mark, one order or past fifty, a
+    skew of nothing, orders below the venue's smallest, and Bybit (not
+    yet): refused, nothing sent."""
+    from gridgremlin.managed import ManagedError, scale_out
+    with tempfile.TemporaryDirectory() as d:
+        path, rec, venue = _hl_managed(d, stop=False)
+        for args, said in (((3000.0, 2800.0, 3), 'scales out below the mark'),
+                           ((2900.0, 3100.0, 3), 'the end 3100 is not'),
+                           ((2900.0, 2800.0, 1), '2 to 50 orders'),
+                           ((2900.0, 2800.0, 51), '2 to 50 orders'),
+                           ((2900.0, 2900.0, 2), 'one price'),
+                           ((2900.0, 2800.0, 50, 100.0), 'smallest order')):
+            try:
+                scale_out(path, HL_KEY, rec, venue, ADAPTER, NOBODY, *args)
+                raise AssertionError(args)
+            except ManagedError as e:
+                assert said in str(e), (args, e)
+        try:
+            scale_out(path, HL_KEY, rec, venue, ADAPTER, NOBODY, 2900.0, 2800.0, 2, 0.0)
+            raise AssertionError('skew 0')
+        except ManagedError as e:
+            assert 'skew' in str(e)
+        assert venue.limits == {} and venue.log == []
+        p2, rec2 = _adopted(d)
+        try:
+            scale_out(p2, KEY, rec2, _Venue(_short()), ADAPTER, NOBODY, 2900.0, 2800.0, 2)
+            raise AssertionError('Bybit')
+        except ManagedError as e:
+            assert 'Hyperliquid only' in str(e)
+
+
+def spec_L17_closing_all_cancels_the_ladder_too():
+    from gridgremlin.managed import close_part, scale_out
+    with tempfile.TemporaryDirectory() as d:
+        path, rec, venue = _hl_managed(d, stop=False)
+        scale_out(path, HL_KEY, rec, venue, ADAPTER, NOBODY, 2900.0, 2800.0, 2)
+        rec = json.loads(path.read_text())[HL_KEY]
+        close_part(path, HL_KEY, rec, venue, ADAPTER, NOBODY)
+        assert venue.limits == {} and HL_KEY not in json.loads(path.read_text())
+
+
+def spec_L17_the_running_fleet_carries_a_scale_request():
+    from gridgremlin.managed import ManagedWatch, adopt, answer_of, ask, managed_path
+    import gridgremlin.managed as m
+    with tempfile.TemporaryDirectory() as d:
+        f = _fleet_dir(d)
+        path = managed_path(f)
+        adopt(path, 'hyperliquid', dict(POS, symbol='ETH'), NOBODY)
+        venue, notes = _HLVenue(_short(), env='mainnet'), _Notes()
+        saved = m.adapter_of
+        m.adapter_of = lambda client, venue_, market, symbol: ADAPTER
+        try:
+            watch = ManagedWatch(f, {'hyperliquid': venue}, notes, allow_mainnet=True,
+                                 run_of=lambda fp: NOBODY)
+            rid = ask(path, HL_KEY, 'scale', start=2900.0, end=2800.0, count=2, skew=1.0)
+            watch.poll()
+            got = answer_of(f, HL_KEY, rid)
+            assert got['ladder'] == [[2900.0, 1.0], [2800.0, 1.0]], got
+            assert notes.said[-1][0] == 'fleet' and '2 orders from 2900 to 2800' in notes.said[-1][2]
+        finally:
+            m.adapter_of = saved
+
+
+def spec_L17_the_panel_offers_the_scale_out_on_hyperliquid_typed_twice_on_mainnet():
+    """The trade's page has a scale-out form on Hyperliquid (not Bybit);
+    a post goes to the running fleet as a request with its four numbers;
+    on Mainnet each is typed twice, a mismatch refused before any ask."""
+    from gridgremlin.managed import adopt, managed_path
+    hl = dict(POS, symbol='ETH')
+    with tempfile.TemporaryDirectory() as d:
+        h, f, shown, runs = _handler(d, fleet={'allow_mainnet': True, 'bots': []})
+        h._contract = lambda fleet: dict(_contract(), account={'hyperliquid': {'tier': 'mainnet',
+                                                                               'positions': [hl]}})
+        h._manage_route = lambda fleet, venue: 'fleet'
+        asks = []
+        h._ask_fleet = lambda fl, key, act, **nums: asks.append((act, nums)) or {
+            'ladder': [[2900.0, 1.0], [2800.0, 1.0]]}
+        adopt(managed_path(f), 'hyperliquid', hl, NOBODY)
+        h.path = f'/manage?fleet=0&key={HL_KEY}'
+        h._manage_page()
+        assert 'set scale out' in shown[-1] and 'name="retype_count"' in shown[-1]
+        form = {'fleet': '0', 'key': HL_KEY, 'action': 'scale', 'confirm': 'linETHs',
+                'start': '2,900', 'end': '2800', 'count': '2', 'skew': '1',
+                'retype_start': '2900', 'retype_end': '2800', 'retype_count': '2', 'retype_skew': '1'}
+        h._manage_post(dict(form, retype_end='2700'))
+        assert 'end price: type it a second time' in shown[-1] and asks == []
+        h._manage_post(form)
+        assert asks == [('scale', {'start': 2900.0, 'end': 2800.0, 'count': 2, 'skew': 1.0})], asks
+        assert 'scale out set' in shown[-1] and '1 at 2900 · 1 at 2800' in shown[-1]
+        h2, _f2, shown2, _r2 = _handler(Path(d) / 'b')
+        h2.path = f'/manage?fleet=0&key={KEY}'
+        adopt(managed_path(_f2), 'bybit', POS, NOBODY)
+        h2._manage_page()
+        assert 'set scale out' not in shown2[-1]                    # Bybit: not yet
